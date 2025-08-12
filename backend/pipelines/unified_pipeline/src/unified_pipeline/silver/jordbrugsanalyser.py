@@ -25,6 +25,7 @@ from shapely.geometry import MultiPolygon, Polygon
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class JordbrugsanalyserSilverConfig(BaseJobConfig):
     """
     Configuration for the Jordbrugsanalyser Silver processing.
@@ -78,6 +79,7 @@ class JordbrugsanalyserSilverConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+
 class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJobInterface):
     """
     Silver layer processing for Jordbrugsanalyser marker data.
@@ -107,7 +109,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
         Initialize the JordbrugsanalyserSilver processor.
 
         Args:
-            config (JordbrugsanalyserSilverConfig): Configuration for the processor        """
+            config (JordbrugsanalyserSilverConfig): Configuration for the processor"""
         super().__init__(config)
 
     def _clean_text_value(self, value: Optional[str]) -> Optional[str]:
@@ -455,7 +457,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             try:
                 bronze_conn.execute("INSTALL spatial")
                 bronze_conn.execute("LOAD spatial")
-            except:
+            except Exception:
                 pass  # May already be installed
 
             # Create processed table with spatial geometries

@@ -89,9 +89,15 @@ class FVMWFSSilverConfig(BaseJobConfig):
     marker_years: List[int] = list(range(2008, 2026))  # 2008-2025 (18 years)
     smaabiotoper_years: List[int] = [2023, 2024, 2025]  # Special biotope layers
     organic_areas_years: List[int] = list(range(2012, 2025))  # 2012-2024 (13 years of organic data)
-    organic_subsidies_years: List[int] = list(range(2019, 2025))  # 2019-2024 (6 years of organic subsidies)
-    grassland_subsidies_years: List[int] = list(range(2019, 2025))  # 2019-2024 (6 years of grassland subsidies)
-    environmental_subsidies_years: List[int] = list(range(2019, 2024))  # 2019-2023 (5 years of environmental subsidies)
+    organic_subsidies_years: List[int] = list(
+        range(2019, 2025)
+    )  # 2019-2024 (6 years of organic subsidies)
+    grassland_subsidies_years: List[int] = list(
+        range(2019, 2025)
+    )  # 2019-2024 (6 years of grassland subsidies)
+    environmental_subsidies_years: List[int] = list(
+        range(2019, 2024)
+    )  # 2019-2023 (5 years of environmental subsidies)
 
     # Column mapping for standardization
     # Markblokke fields
@@ -176,7 +182,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
     grassland_subsidies_column_mapping: Dict[str, str] = {
         "CVR": "cvr_number",
         "Marknr": "field_id",
-        "Geometrisk": "area_ha",  # Geometric area in hectares  
+        "Geometrisk": "area_ha",  # Geometric area in hectares
         "Foranstalt": "subsidy_measure",  # Subsidy measure description
         "Tilsagnsty": "subsidy_type_code",  # Subsidy type code (e.g., "67 Afgræsning med grundbetaling")
         "Graesnings": "grazing_info",  # Grazing-specific information
@@ -222,38 +228,38 @@ class FVMWFSSilverConfig(BaseJobConfig):
             if cli_config.fvm_year:
                 # For enrichment, preserve all layer types but filter to specific year
                 year = cli_config.fvm_year
-                
+
                 # Filter all year lists to only the specified year (if it exists in the original range)
                 if year in self.markblokke_years:
                     object.__setattr__(self, "markblokke_years", [year])
                 else:
                     object.__setattr__(self, "markblokke_years", [])
-                    
+
                 if year in self.marker_years:
                     object.__setattr__(self, "marker_years", [year])
                 else:
                     object.__setattr__(self, "marker_years", [])
-                    
+
                 if year in self.smaabiotoper_years:
                     object.__setattr__(self, "smaabiotoper_years", [year])
                 else:
                     object.__setattr__(self, "smaabiotoper_years", [])
-                    
+
                 if year in self.organic_areas_years:
                     object.__setattr__(self, "organic_areas_years", [year])
                 else:
                     object.__setattr__(self, "organic_areas_years", [])
-                    
+
                 if year in self.organic_subsidies_years:
                     object.__setattr__(self, "organic_subsidies_years", [year])
                 else:
                     object.__setattr__(self, "organic_subsidies_years", [])
-                    
+
                 if year in self.grassland_subsidies_years:
                     object.__setattr__(self, "grassland_subsidies_years", [year])
                 else:
                     object.__setattr__(self, "grassland_subsidies_years", [])
-                    
+
                 if year in self.environmental_subsidies_years:
                     object.__setattr__(self, "environmental_subsidies_years", [year])
                 else:
@@ -823,7 +829,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     f"CREATE OR REPLACE TABLE {fallback_table} AS SELECT *, NULL as block_id FROM {marker_table}"
                 )
                 return fallback_table
-            except:
+            except Exception:
                 pass
             return marker_data if isinstance(marker_data, str) else "temp_marker_input"
 
@@ -949,14 +955,20 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # ✅ MIGRATION: Create table with unique name per year and layer type to prevent overwrites
             final_table_name = f"final_processed_{layer_type.lower()}_{year}"
-            
+
             # For Marker data, log the filtering impact
             if layer_type == "Marker":
-                total_before_filter = self.conn.execute("SELECT COUNT(*) FROM combined_temp").fetchone()[0]
-                null_crop_codes = self.conn.execute("SELECT COUNT(*) FROM combined_temp WHERE crop_code IS NULL").fetchone()[0]
+                total_before_filter = self.conn.execute(
+                    "SELECT COUNT(*) FROM combined_temp"
+                ).fetchone()[0]
+                null_crop_codes = self.conn.execute(
+                    "SELECT COUNT(*) FROM combined_temp WHERE crop_code IS NULL"
+                ).fetchone()[0]
                 if null_crop_codes > 0:
-                    self.log.info(f"Filtering out {null_crop_codes:,} records with null crop_code from {total_before_filter:,} total records for {year}")
-            
+                    self.log.info(
+                        f"Filtering out {null_crop_codes:,} records with null crop_code from {total_before_filter:,} total records for {year}"
+                    )
+
             self.conn.execute(f"CREATE OR REPLACE TABLE {final_table_name} AS {final_query}")
 
             # Clean up temporary table to avoid registration conflicts
@@ -1176,79 +1188,91 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     async def _enrich_marker_with_organic_data(self) -> None:
         """
         Enrich marker fields with organic farming information.
-        
+
         This method performs spatial matching between marker fields and organic areas
         to identify which fields are organic. It uses centroid-within-polygon matching
         combined with Marknr validation to ensure accurate matches.
-        
+
         Based on analysis, ~92% of organic fields have corresponding marker fields.
         """
         self.log.info("Starting organic enrichment of marker fields")
-        
+
         try:
             # Find overlapping years between marker and organic data
-            overlapping_years = sorted(set(self.config.marker_years) & set(self.config.organic_areas_years))
+            overlapping_years = sorted(
+                set(self.config.marker_years) & set(self.config.organic_areas_years)
+            )
             if not overlapping_years:
-                self.log.warning("No overlapping years between marker and organic data - skipping enrichment")
+                self.log.warning(
+                    "No overlapping years between marker and organic data - skipping enrichment"
+                )
                 return
-                
+
             self.log.info(f"Enriching marker fields for years: {overlapping_years}")
-            
+
             enriched_count = 0
             for year in overlapping_years:
                 try:
                     # Load marker and organic data for this year
                     marker_table = f"fvm_marker_{year}"
                     organic_table = f"fvm_organic_areas_{year}"
-                    
+
                     # Check if both datasets exist for this year
                     marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
                     organic_path = f"gs://{self.config.bucket}/silver/{organic_table}/"
-                    
+
                     # Load marker data using GCSDataAccess
                     try:
                         # Find the latest timestamped file
                         marker_pattern = f"{marker_path}*/data.parquet"
                         marker_files = self.gcs_access.list_files(marker_pattern)
                         if not marker_files:
-                            raise FileNotFoundError(f"No files found matching pattern: {marker_pattern}")
-                        
+                            raise FileNotFoundError(
+                                f"No files found matching pattern: {marker_pattern}"
+                            )
+
                         latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
                         self.gcs_access.query_parquet_direct(
-                            latest_marker_file,
-                            "SELECT *",
-                            f"temp_marker_{year}"
+                            latest_marker_file, "SELECT *", f"temp_marker_{year}"
                         )
-                        marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_{year}").fetchone()[0]
-                        self.log.info(f"Loaded {marker_count:,} marker fields for {year} from {latest_marker_file}")
+                        marker_count = self.conn.execute(
+                            f"SELECT COUNT(*) FROM temp_marker_{year}"
+                        ).fetchone()[0]
+                        self.log.info(
+                            f"Loaded {marker_count:,} marker fields for {year} from {latest_marker_file}"
+                        )
                     except Exception as e:
                         self.log.warning(f"Could not load marker data for {year}: {e}")
                         continue
-                    
+
                     # Load organic data using GCSDataAccess
                     try:
                         # Find the latest timestamped file
                         organic_pattern = f"{organic_path}*/data.parquet"
                         organic_files = self.gcs_access.list_files(organic_pattern)
                         if not organic_files:
-                            raise FileNotFoundError(f"No files found matching pattern: {organic_pattern}")
-                        
+                            raise FileNotFoundError(
+                                f"No files found matching pattern: {organic_pattern}"
+                            )
+
                         latest_organic_file = sorted(organic_files)[-1]  # Latest by timestamp
                         self.gcs_access.query_parquet_direct(
-                            latest_organic_file,
-                            "SELECT *",
-                            f"temp_organic_{year}"
+                            latest_organic_file, "SELECT *", f"temp_organic_{year}"
                         )
-                        organic_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_organic_{year}").fetchone()[0]
-                        self.log.info(f"Loaded {organic_count:,} organic fields for {year} from {latest_organic_file}")
+                        organic_count = self.conn.execute(
+                            f"SELECT COUNT(*) FROM temp_organic_{year}"
+                        ).fetchone()[0]
+                        self.log.info(
+                            f"Loaded {organic_count:,} organic fields for {year} from {latest_organic_file}"
+                        )
                     except Exception as e:
                         self.log.warning(f"Could not load organic data for {year}: {e}")
                         continue
-                    
+
                     if marker_count == 0 or organic_count == 0:
                         self.log.warning(f"Insufficient data for {year} - skipping")
                         continue
-                    
+
                     # Pre-filter to remove NULL geometries for optimal SPATIAL_JOIN performance
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE temp_marker_filtered_{year} AS 
@@ -1258,12 +1282,18 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         CREATE OR REPLACE TABLE temp_organic_filtered_{year} AS 
                         SELECT * FROM temp_organic_{year} WHERE geometry IS NOT NULL
                     """)
-                    
-                    filtered_marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_filtered_{year}").fetchone()[0]
-                    filtered_organic_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_organic_filtered_{year}").fetchone()[0]
-                    
-                    self.log.info(f"Filtered to {filtered_marker_count:,} marker and {filtered_organic_count:,} organic fields with valid geometries")
-                    
+
+                    filtered_marker_count = self.conn.execute(
+                        f"SELECT COUNT(*) FROM temp_marker_filtered_{year}"
+                    ).fetchone()[0]
+                    filtered_organic_count = self.conn.execute(
+                        f"SELECT COUNT(*) FROM temp_organic_filtered_{year}"
+                    ).fetchone()[0]
+
+                    self.log.info(
+                        f"Filtered to {filtered_marker_count:,} marker and {filtered_organic_count:,} organic fields with valid geometries"
+                    )
+
                     # Add organic columns to marker table if they don't exist
                     self.conn.execute(f"""
                         ALTER TABLE temp_marker_{year} 
@@ -1281,7 +1311,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         ALTER TABLE temp_marker_{year} 
                         ADD COLUMN IF NOT EXISTS organic_conversion_status VARCHAR
                     """)
-                    
+
                     # Verify SPATIAL_JOIN operator is available (DuckDB Spatial PR #545)
                     try:
                         explain_result = self.conn.execute(f"""
@@ -1292,12 +1322,16 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         """).fetchall()
                         explain_text = " ".join([str(row) for row in explain_result])
                         if "SPATIAL_JOIN" in explain_text:
-                            self.log.info(f"✅ SPATIAL_JOIN operator detected for {year} - using optimized spatial indexing")
+                            self.log.info(
+                                f"✅ SPATIAL_JOIN operator detected for {year} - using optimized spatial indexing"
+                            )
                         else:
-                            self.log.warning(f"⚠️ SPATIAL_JOIN operator not detected for {year} - falling back to nested loop")
+                            self.log.warning(
+                                f"⚠️ SPATIAL_JOIN operator not detected for {year} - falling back to nested loop"
+                            )
                     except Exception:
                         self.log.debug(f"Could not verify SPATIAL_JOIN operator for {year}")
-                    
+
                     # Perform spatial matching to enrich marker fields
                     # Optimized for DuckDB Spatial PR #545 SPATIAL_JOIN operator
                     # Using single spatial predicate to trigger SPATIAL_JOIN operator
@@ -1327,19 +1361,21 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         ) AS organic_matches
                         WHERE temp_marker_{year}.rowid = organic_matches.marker_rowid
                     """
-                    
+
                     matches_updated = self.conn.execute(enrichment_query).fetchone()[0]
                     enriched_count += matches_updated
-                    
-                    self.log.info(f"Enriched {matches_updated:,} marker fields with organic data for {year}")
-                    
+
+                    self.log.info(
+                        f"Enriched {matches_updated:,} marker fields with organic data for {year}"
+                    )
+
                     # Save the enriched marker data back to GCS
                     enriched_marker_table = f"enriched_marker_{year}"
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE {enriched_marker_table} AS 
                         SELECT * FROM temp_marker_{year}
                     """)
-                    
+
                     # Save using the standard pattern
                     self._save_data(
                         enriched_marker_table,
@@ -1348,20 +1384,22 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         "silver",
                         conn=self.conn,
                     )
-                    
+
                     # Clean up temporary tables
                     self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
                     self.conn.execute(f"DROP TABLE IF EXISTS temp_organic_{year}")
                     self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_filtered_{year}")
                     self.conn.execute(f"DROP TABLE IF EXISTS temp_organic_filtered_{year}")
                     self.conn.execute(f"DROP TABLE IF EXISTS {enriched_marker_table}")
-                    
+
                 except Exception as e:
                     self.log.error(f"Error enriching marker data for year {year}: {e}")
                     continue
-            
-            self.log.info(f"Organic enrichment completed - enriched {enriched_count:,} total marker fields")
-            
+
+            self.log.info(
+                f"Organic enrichment completed - enriched {enriched_count:,} total marker fields"
+            )
+
         except Exception as e:
             self.log.error(f"Error during organic enrichment: {e}")
             # Don't fail the entire pipeline if enrichment fails
@@ -1370,23 +1408,23 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     async def run_enrichment_only(self) -> Optional[Dict[str, Any]]:
         """
         Run only the enrichment functions without processing bronze/silver data.
-        
+
         This method is designed for matrix jobs that need to run enrichment
         on already-processed silver data without re-running the entire pipeline.
-        
+
         Returns:
             Optional[Dict[str, Any]]: Summary information about enrichment operations
         """
         self.log.info("Running FVM WFS enrichment-only job")
-        
+
         # Enrich marker fields with organic information
         await self._enrich_marker_with_organic_data()
-        
+
         # Enrich subsidy fields with field UUIDs from matching FVM marker fields
         await self._enrich_subsidies_with_field_uuid()
-        
+
         self.log.info("FVM WFS enrichment-only job completed")
-        
+
         return {
             "dataset": self.config.dataset,
             "mode": "enrichment-only",
@@ -1397,81 +1435,99 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     async def _enrich_subsidies_with_field_uuid(self) -> None:
         """
         Enrich subsidy tables with field UUIDs from matching FVM marker fields.
-        
+
         This method performs spatial matching between subsidy fields and FVM marker fields
-        to add field_uuid for direct field linkage. It uses centroid-within-polygon matching 
+        to add field_uuid for direct field linkage. It uses centroid-within-polygon matching
         combined with Marknr (field_id) validation to ensure accurate matches.
-        
+
         The matching logic:
         1. Find the centroid of each subsidy field geometry
-        2. Check which FVM marker field contains this centroid 
+        2. Check which FVM marker field contains this centroid
         3. Validate that the Marknr matches between subsidy and marker
         4. If match is found, add the field_uuid from marker to subsidy record
         """
         self.log.info("Starting field UUID enrichment of subsidy tables")
-        
+
         try:
             # Define subsidy layer types to process
             subsidy_layers = [
-                ("OrganicSubsidies", self.config.organic_subsidies_years, self.config.dataset_organic_subsidies),
-                ("GrasslandSubsidies", self.config.grassland_subsidies_years, self.config.dataset_grassland_subsidies), 
-                ("EnvironmentalSubsidies", self.config.environmental_subsidies_years, self.config.dataset_environmental_subsidies)
+                (
+                    "OrganicSubsidies",
+                    self.config.organic_subsidies_years,
+                    self.config.dataset_organic_subsidies,
+                ),
+                (
+                    "GrasslandSubsidies",
+                    self.config.grassland_subsidies_years,
+                    self.config.dataset_grassland_subsidies,
+                ),
+                (
+                    "EnvironmentalSubsidies",
+                    self.config.environmental_subsidies_years,
+                    self.config.dataset_environmental_subsidies,
+                ),
             ]
-            
+
             total_enriched = 0
-            
+
             for layer_type, layer_years, dataset_name in subsidy_layers:
                 # Find overlapping years with marker data
                 overlapping_years = sorted(set(layer_years) & set(self.config.marker_years))
                 if not overlapping_years:
-                    self.log.warning(f"No overlapping years between {layer_type} and marker data - skipping")
+                    self.log.warning(
+                        f"No overlapping years between {layer_type} and marker data - skipping"
+                    )
                     continue
-                    
+
                 self.log.info(f"Enriching {layer_type} fields for years: {overlapping_years}")
-                
+
                 for year in overlapping_years:
                     try:
                         # Define table names
                         subsidy_table = f"{dataset_name}_{year}"
                         marker_table = f"fvm_marker_{year}"
-                        
+
                         # Check if both datasets exist for this year
-                        subsidy_path = f"gs://{self.config.bucket}/silver/{subsidy_table}/"  
+                        subsidy_path = f"gs://{self.config.bucket}/silver/{subsidy_table}/"
                         marker_path = f"gs://{self.config.bucket}/silver/{marker_table}/"
-                        
+
                         # Load subsidy data using GCSDataAccess
                         try:
                             # Find the latest timestamped file
                             subsidy_pattern = f"{subsidy_path}*/data.parquet"
                             subsidy_files = self.gcs_access.list_files(subsidy_pattern)
                             if not subsidy_files:
-                                raise FileNotFoundError(f"No files found matching pattern: {subsidy_pattern}")
-                            
+                                raise FileNotFoundError(
+                                    f"No files found matching pattern: {subsidy_pattern}"
+                                )
+
                             latest_subsidy_file = sorted(subsidy_files)[-1]  # Latest by timestamp
                             self.gcs_access.query_parquet_direct(
-                                latest_subsidy_file,
-                                "SELECT *",
-                                f"temp_subsidy_{year}"
+                                latest_subsidy_file, "SELECT *", f"temp_subsidy_{year}"
                             )
-                            subsidy_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_subsidy_{year}").fetchone()[0]
-                            self.log.info(f"Loaded {subsidy_count:,} {layer_type} records for {year} from {latest_subsidy_file}")
+                            subsidy_count = self.conn.execute(
+                                f"SELECT COUNT(*) FROM temp_subsidy_{year}"
+                            ).fetchone()[0]
+                            self.log.info(
+                                f"Loaded {subsidy_count:,} {layer_type} records for {year} from {latest_subsidy_file}"
+                            )
                         except Exception as e:
                             self.log.warning(f"Could not load {layer_type} data for {year}: {e}")
                             continue
-                        
+
                         # Load marker data
                         try:
                             # Find the latest timestamped file
                             marker_pattern = f"{marker_path}*/data.parquet"
                             marker_files = self.gcs_access.list_files(marker_pattern)
                             if not marker_files:
-                                raise FileNotFoundError(f"No files found matching pattern: {marker_pattern}")
-                            
+                                raise FileNotFoundError(
+                                    f"No files found matching pattern: {marker_pattern}"
+                                )
+
                             latest_marker_file = sorted(marker_files)[-1]  # Latest by timestamp
                             self.gcs_access.query_parquet_direct(
-                                latest_marker_file,
-                                "SELECT *",
-                                f"temp_marker_{year}"
+                                latest_marker_file, "SELECT *", f"temp_marker_{year}"
                             )
                             # Filter the loaded data in DuckDB
                             self.conn.execute(f"""
@@ -1479,31 +1535,41 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                                 SELECT * FROM temp_marker_{year}
                                 WHERE field_uuid IS NOT NULL AND geometry IS NOT NULL
                             """)
-                            marker_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_marker_{year}").fetchone()[0]
-                            self.log.info(f"Loaded {marker_count:,} marker fields with UUID for {year} from {latest_marker_file}")
+                            marker_count = self.conn.execute(
+                                f"SELECT COUNT(*) FROM temp_marker_{year}"
+                            ).fetchone()[0]
+                            self.log.info(
+                                f"Loaded {marker_count:,} marker fields with UUID for {year} from {latest_marker_file}"
+                            )
                         except Exception as e:
                             self.log.warning(f"Could not load marker data for {year}: {e}")
                             continue
-                        
+
                         if subsidy_count == 0 or marker_count == 0:
-                            self.log.warning(f"Insufficient data for {layer_type} {year} - skipping")
+                            self.log.warning(
+                                f"Insufficient data for {layer_type} {year} - skipping"
+                            )
                             continue
-                        
+
                         # Pre-filter to remove NULL geometries for optimal performance
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE temp_subsidy_filtered_{year} AS 
                             SELECT * FROM temp_subsidy_{year} WHERE geometry IS NOT NULL AND field_id IS NOT NULL
                         """)
-                        
-                        filtered_subsidy_count = self.conn.execute(f"SELECT COUNT(*) FROM temp_subsidy_filtered_{year}").fetchone()[0]
-                        self.log.info(f"Filtered to {filtered_subsidy_count:,} {layer_type} records with valid geometry and field_id")
-                        
+
+                        filtered_subsidy_count = self.conn.execute(
+                            f"SELECT COUNT(*) FROM temp_subsidy_filtered_{year}"
+                        ).fetchone()[0]
+                        self.log.info(
+                            f"Filtered to {filtered_subsidy_count:,} {layer_type} records with valid geometry and field_id"
+                        )
+
                         # Add field_uuid column to subsidy table if it doesn't exist
                         self.conn.execute(f"""
                             ALTER TABLE temp_subsidy_{year} 
                             ADD COLUMN IF NOT EXISTS field_uuid VARCHAR
                         """)
-                        
+
                         # Perform spatial matching with field_id validation
                         # Find marker fields that contain the centroid of subsidy fields AND have matching field_id
                         enrichment_query = f"""
@@ -1519,19 +1585,21 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             ) AS field_matches
                             WHERE temp_subsidy_{year}.rowid = field_matches.subsidy_rowid
                         """
-                        
+
                         matches_updated = self.conn.execute(enrichment_query).fetchone()[0]
                         total_enriched += matches_updated
-                        
-                        self.log.info(f"Enriched {matches_updated:,} {layer_type} records with field_uuid for {year}")
-                        
+
+                        self.log.info(
+                            f"Enriched {matches_updated:,} {layer_type} records with field_uuid for {year}"
+                        )
+
                         # Save the enriched subsidy data back to GCS
                         enriched_subsidy_table = f"enriched_{dataset_name}_{year}"
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE {enriched_subsidy_table} AS 
                             SELECT * FROM temp_subsidy_{year}
                         """)
-                        
+
                         # Save using the standard pattern (overwrite the original)
                         self._save_data(
                             enriched_subsidy_table,
@@ -1540,19 +1608,21 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             "silver",
                             conn=self.conn,
                         )
-                        
+
                         # Clean up temporary tables
                         self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_{year}")
                         self.conn.execute(f"DROP TABLE IF EXISTS temp_marker_{year}")
                         self.conn.execute(f"DROP TABLE IF EXISTS temp_subsidy_filtered_{year}")
                         self.conn.execute(f"DROP TABLE IF EXISTS {enriched_subsidy_table}")
-                        
+
                     except Exception as e:
                         self.log.error(f"Error enriching {layer_type} data for year {year}: {e}")
                         continue
-            
-            self.log.info(f"Subsidy field UUID enrichment completed - enriched {total_enriched:,} total subsidy records")
-            
+
+            self.log.info(
+                f"Subsidy field UUID enrichment completed - enriched {total_enriched:,} total subsidy records"
+            )
+
         except Exception as e:
             self.log.error(f"Error during subsidy field UUID enrichment: {e}")
             # Don't fail the entire pipeline if enrichment fails
@@ -1648,7 +1718,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Enrich marker fields with organic information
             await self._enrich_marker_with_organic_data()
-            
+
             # Enrich subsidy fields with field UUIDs from matching FVM marker fields
             await self._enrich_subsidies_with_field_uuid()
 

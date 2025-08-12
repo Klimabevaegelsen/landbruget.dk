@@ -7,10 +7,26 @@ from typing import Any
 import duckdb
 
 
+# Try to import optimized GCS access with fallback
+def _get_optimized_gcs_access():
+    """Get optimized GCS access with robust import handling."""
+    try:
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        logging.info("✅ Successfully imported optimized GCSDataAccess for BBR buildings")
+        return GCSDataAccess
+    except ImportError as e:
+        logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
+        return None
+
+
+OptimizedGCSDataAccess = _get_optimized_gcs_access()
+
+
 class BuildingProcessor:
     """Process BBR building data in the silver layer."""
 
-    def __init__(self, settings, logger: logging.Logger):
+    def __init__(self, settings, logger: logging.Logger) -> None:
         """Initialize the building processor."""
         self.settings = settings
         self.logger = logger
@@ -24,7 +40,7 @@ class BuildingProcessor:
             self.conn.execute("LOAD spatial")
         return self.conn
 
-    def process_buildings_from_data(self, bronze_data: dict[str, Any], output_dir: Path):
+    def process_buildings_from_data(self, bronze_data: dict[str, Any], output_dir: Path) -> None:
         """Process buildings from in-memory bronze data."""
         self.logger.info("Processing buildings from in-memory bronze data")
 
@@ -41,7 +57,7 @@ class BuildingProcessor:
         # Process the buildings from the bronze output directory
         self._process_buildings_directory(output_dir_path, output_dir)
 
-    def process_buildings(self, input_dir: Path, output_dir: Path):
+    def process_buildings(self, input_dir: Path, output_dir: Path) -> None:
         """Process buildings from disk-based bronze data."""
         self.logger.info(f"Processing buildings from disk: {input_dir}")
 
@@ -50,7 +66,7 @@ class BuildingProcessor:
 
         self._process_buildings_directory(input_dir, output_dir)
 
-    def _process_buildings_directory(self, input_dir: Path, output_dir: Path):
+    def _process_buildings_directory(self, input_dir: Path, output_dir: Path) -> None:
         """Process buildings from a bronze output directory."""
         conn = self._get_connection()
 
@@ -90,6 +106,7 @@ class BuildingProcessor:
                     ia.floors,
                     ia.dwellings,
                     ia.address,
+                    ia.bbr_usage_code,
                     ia.category_group
                 FROM joined_buildings jb
                 LEFT JOIN inspire_attributes ia ON jb.BBRUUID::VARCHAR = ia.building_uuid::VARCHAR
@@ -125,6 +142,9 @@ class BuildingProcessor:
                 floors as inspire_floors,
                 dwellings as inspire_dwellings,
                 address as address_full,
+                -- Pesticide proximity pipeline compatibility
+                address as inspire_address,
+                bbr_usage_code,
                 category_group as inspire_category_group,
                 CURRENT_DATE as last_updated
             FROM {processing_table}
@@ -156,6 +176,29 @@ class BuildingProcessor:
         output_dir.mkdir(parents=True, exist_ok=True)
         output_file = output_dir / "buildings_processed.geoparquet"
 
+        # 🚀 ENHANCED: Try native GCS export first if available
+        gcs_export_success = False
+        if OptimizedGCSDataAccess:
+            try:
+                gcs_access = OptimizedGCSDataAccess()
+                timestamp = Path(output_dir).name  # Extract timestamp from output directory
+                gcs_path = f"gs://landbrugsdata-raw-data/silver/bbr_buildings/{timestamp}/buildings_processed.geoparquet"
+
+                # Use native GCS export with server-side compression
+                gcs_access.export_to_gcs_native(
+                    connection=conn,
+                    table_name="processed_buildings",
+                    gcs_path=gcs_path,
+                    compression="zstd",
+                    query="SELECT * FROM processed_buildings ORDER BY building_floor_area_sqm DESC",
+                )
+
+                self.logger.info(f"✅ Native GCS export successful: {gcs_path}")
+                gcs_export_success = True
+            except Exception as e:
+                self.logger.warning(f"Native GCS export failed, using local export: {e}")
+
+        # Always create local file as well (for compatibility)
         conn.execute(f"""
             COPY (
                 SELECT * FROM processed_buildings
@@ -163,9 +206,12 @@ class BuildingProcessor:
             ) TO '{output_file}' (FORMAT PARQUET)
         """)
 
-        self.logger.info(f"Saved processed buildings to: {output_file}")
+        export_location = (
+            f"GCS and local: {output_file}" if gcs_export_success else f"local: {output_file}"
+        )
+        self.logger.info(f"Saved processed buildings to: {export_location}")
 
-    def close(self):
+    def close(self) -> None:
         """Close database connection."""
         if self.conn:
             self.conn.close()

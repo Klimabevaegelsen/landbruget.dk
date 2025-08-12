@@ -26,11 +26,25 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         """Load Stage 0 pre-filtered wetlands and water projects datasets."""
         # Get year-aware dataset names
         updated_outputs = CONFIG.update_outputs_for_year()
-        
+
         # Load Stage 0 pre-filtered wetlands (1.6M → ~200K, 85% reduction)
         self.log.info("Loading Stage 0 pre-filtered wetlands dataset...")
         stage0_wetlands_dataset = updated_outputs["wetlands_prefiltered"]
-        stage0_wetlands_path = self._get_latest_gold_path(stage0_wetlands_dataset)
+
+        # Pick the latest Stage 0 partition that contains the required wetland_key column
+        def _latest_gold_with_column(dataset: str, required_column: str) -> str:
+            """Get the most recent gold partition - assume it has the required column."""
+            pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
+            files = sorted(self.gcs_access.list_files(pattern), reverse=True)
+            if not files:
+                raise FileNotFoundError(f"No gold data found for {dataset}")
+
+            # Just return the most recent file - Stage 0 should produce consistent schema
+            most_recent = files[0]
+            self.log.info(f"Using most recent {dataset} partition: {most_recent}")
+            return most_recent
+
+        stage0_wetlands_path = _latest_gold_with_column(stage0_wetlands_dataset, "wetland_key")
         self.gcs_access.query_parquet_direct(stage0_wetlands_path, "SELECT *", "wetlands_raw")
         self.log.info(f"✅ Loaded wetlands from {stage0_wetlands_dataset}")
 
@@ -61,13 +75,27 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             FROM water_projects_raw
         """)
 
-        self.log.info("Decomposing ALL wetlands with ST_Dump and adding unique IDs...")
+        self.log.info("Using Stage 0 pre-filtered wetlands; validating presence of wetland_key...")
+        cols = [
+            r[0]
+            for r in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_raw'"
+            ).fetchall()
+        ]
+        if "wetland_key" not in [c.lower() for c in cols]:
+            schema = self.conn.execute("DESCRIBE wetlands_raw").fetchall()
+            self.log.error(f"wetlands_raw schema: {schema}")
+            raise RuntimeError(
+                "Stage 1: wetlands_raw missing wetland_key; ensure Stage 0 produced it"
+            )
+
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
             SELECT 
-                ROW_NUMBER() OVER () as wetland_id,  -- Add unique wetland ID
-                toerv_pct,  -- Keep wetland type for analysis
-                UNNEST(ST_Dump(geometry)).geom as geometry
+                wetland_key, -- Deterministic fragment key for stable joins
+                wetland_id,  -- Legacy numeric ID retained for compatibility
+                toerv_pct,   -- Keep wetland type for analysis
+                geometry     -- Already decomposed by Stage 0 ST_Dump
             FROM wetlands_raw
         """)
 
@@ -95,8 +123,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Enhanced CRS and area debugging
         self._debug_crs_and_areas(self.conn)
 
-        # Get total wetland count for batching
-        total_wetlands = self.conn.execute("SELECT COUNT(*) FROM wetlands_raw").fetchone()[0]
+        # Get total wetland count for batching (use decomposed wetlands table)
+        total_wetlands = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
         batch_size = 100000  # Smaller batches for foundation data creation
         num_batches = (total_wetlands + batch_size - 1) // batch_size
 
@@ -107,7 +135,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Create intersection results table
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetland_water_intersections (
-                wetland_id BIGINT,  -- Unique wetland identifier for efficient joins
+                wetland_key VARCHAR,  -- Deterministic fragment key for stable joins
+                wetland_id BIGINT,    -- Legacy numeric ID for compatibility/metrics
                 toerv_pct VARCHAR,  -- Wetland type for analysis
                 project_id VARCHAR,
                 intersection_geometry GEOMETRY,  -- Intersection geometry for Stage 2 to use directly
@@ -126,29 +155,31 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         )
 
         total_intersections = 0
-        total_wetland_area = 0
-        total_covered_area = 0
 
         # Process each batch
         for batch_num in range(num_batches):
             offset = batch_num * batch_size
             self.log.info(f"Processing batch {batch_num + 1}/{num_batches} (offset: {offset:,})")
 
-            # Create wetlands batch with ST_Dump and unique IDs
+            # Create wetlands batch (ST_Dump already applied in wetlands table)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch_raw AS
                 SELECT 
+                    wetland_key,
+                    wetland_id,
                     toerv_pct,
-                    UNNEST(ST_Dump(geometry)).geom as geometry
-                FROM wetlands_raw
+                    geometry
+                FROM wetlands
+                ORDER BY wetland_id
                 LIMIT {batch_size} OFFSET {offset}
             """)
 
-            # Add IDs and calculate areas in separate step to avoid subquery issues
-            self.conn.execute(f"""
+            # Calculate areas (wetland_id already exists from main wetlands table)
+            self.conn.execute("""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
-                    ROW_NUMBER() OVER () + {offset} as wetland_id,  -- Ensure unique IDs across batches
+                    wetland_key,
+                    wetland_id,  -- Use existing wetland_id from decomposed wetlands table
                     toerv_pct,  -- Keep wetland type for analysis
                     geometry,
                     ST_Area_Spheroid(geometry) as wetland_area_m2
@@ -210,7 +241,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             batch_query = """
             CREATE OR REPLACE TABLE batch_intersections AS
             SELECT 
-                wb.wetland_id,  -- Unique wetland identifier for efficient joins
+                wb.wetland_key,
+                wb.wetland_id,
                 wb.toerv_pct,  -- Wetland type for analysis
                 wp.project_id,
                 ST_Intersection(wb.geometry, wp.geometry) as intersection_geometry,  -- Save intersection geometry for Stage 2
@@ -283,6 +315,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetland_water_intersections AS
                 SELECT 
+                    CAST(NULL AS VARCHAR) as wetland_key,  -- Missing column that caused the error!
                     CAST(NULL AS BIGINT) as wetland_id,
                     CAST(NULL AS VARCHAR) as toerv_pct,
                     CAST(NULL AS VARCHAR) as project_id,

@@ -22,12 +22,17 @@ class H3DataLoader:
     def _load_table_from_gcs(self, gcs_path: str, table_name: str):
         """Load data from GCS into a DuckDB table using optimized GCS access - WITH CLEANUP."""
         try:
-            # Use the optimized download approach with our DuckDB connection
-            with self.gcs_access._temp_download(gcs_path) as temp_file:
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {table_name} AS
-                    SELECT * FROM read_parquet('{temp_file}')
-                """)
+            # 🚀 ENHANCED: Use native HMAC acceleration for faster H3 PFAS data loading
+            try:
+                self.gcs_access.query_parquet_native(gcs_path, "SELECT *", table_name)
+            except Exception as e:
+                self.log.warning(f"Native loading failed for {table_name}, using fallback: {e}")
+                # Fallback to existing temp file method
+                with self.gcs_access._temp_download(gcs_path) as temp_file:
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT * FROM read_parquet('{temp_file}')
+                    """)
             self.log.debug(f"✅ Loaded {table_name} from {gcs_path}")
 
             # Force garbage collection after loading large files
@@ -97,6 +102,21 @@ class H3DataLoader:
                 )
                 return sorted(files)[-1]  # Latest by timestamp
 
+        # Special handling for pesticide_disaggregation with Y+1 pattern
+        if not files and dataset == "pesticide_disaggregation":
+            # Try unified pipeline Y+1 format: pesticide_disaggregation_YYYY_YYYY+1/timestamp/pesticide_disaggregation_YYYY_YYYY+1.parquet
+            self.log.warning(
+                f"No unified format files found for {dataset} {year}, trying Y+1 pattern format"
+            )
+            y_plus_1_pattern = f"gs://{self.config.bucket}/gold/{dataset}_{year}_{year + 1}/*/{dataset}_{year}_{year + 1}.parquet"
+            files = self.gcs_access.list_files(y_plus_1_pattern)
+
+            if files:
+                self.log.info(
+                    f"Found Y+1 pattern format files for {dataset} {year}: {len(files)} files"
+                )
+                return sorted(files)[-1]  # Latest by timestamp
+
         if not files:
             # Fallback to legacy format for backward compatibility
             self.log.warning(
@@ -126,7 +146,9 @@ class H3DataLoader:
     def _check_year_data_availability(self, year: int) -> bool:
         """Check if required data is available for a given year."""
         # Check pesticide disaggregation data for year Y
-        pesticide_path = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
+        pesticide_path = (
+            f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{year}_{year + 1}/"
+        )
         pesticide_available = self._check_gcs_path_exists(pesticide_path)
 
         # Check FVM marker data for year Y+1 (Y+1 pattern)

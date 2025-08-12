@@ -25,7 +25,7 @@ class BronzeProcessor:
         storage_manager: DriveStorageManager,
         progress_callback: Callable[[int, bool, int], None] | None = None,
         pipeline_start_time: datetime.datetime | None = None,
-    ):
+    ) -> None:
         """Initialize the Bronze processor.
 
         Args:

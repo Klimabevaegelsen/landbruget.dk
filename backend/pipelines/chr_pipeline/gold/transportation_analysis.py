@@ -10,6 +10,7 @@ import duckdb
 try:
     from unified_pipeline.util.gcs_access import GCSDataAccess
     from unified_pipeline.util.migration_helpers import migrate_save_data_pattern
+
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
@@ -32,46 +33,43 @@ def load_transportation_data_sources(gcs_access) -> Dict[str, bool]:
     """
     Load all transportation data sources dynamically using GCS patterns.
     Uses unified pipeline pattern: shared DuckDB connection with GCSDataAccess.
-    
+
     Args:
         gcs_access: GCS access instance with shared DuckDB connection
-        
+
     Returns:
         Dict mapping table names to whether they were loaded successfully
     """
     bucket = "landbrugsdata-raw-data"
     loaded_tables = {}
-    
+
     # Define data source patterns for transportation analysis
     data_source_patterns = [
         # Core CHR data
         ("chr_properties", "silver/chr/*/properties*.parquet"),
         ("chr_herds", "silver/chr/*/herds*.parquet"),
         ("chr_dyr_movements", "silver/chr/*/chr_dyr_movement_summaries*.parquet"),
-        
         # Svineflytning (domestic pig movements)
         ("svineflytning", "silver/svineflytning/*/movements*.parquet"),
-        
         # International animal movements (cattle traces)
         ("intl_cattle_traces_cl", "silver/animal international movements/*/Kvaeg_udfoersel_2017_2024_cl*.parquet"),
         ("intl_cattle_traces_nt", "silver/animal international movements/*/Kvaeg_udfoersel_2017_2024_nt*.parquet"),
         ("intl_combined_traces_2024_2025", "silver/animal international movements/*/Dyr_udfoersel_2024_2025*.parquet"),
-        
         # International pig movements
         ("intl_pig_cl", "silver/pig international movements/*/Grise_udfoersel_2017_2024_cl*.parquet"),
         ("intl_pig_nt", "silver/pig international movements/*/Grise_udfoersel_2017_2024_nt*.parquet"),
         ("intl_pig_2024_2025", "silver/pig international movements/*/Dyr_udfoersel_2024_2025*.parquet"),
     ]
-    
+
     for table_name, pattern in data_source_patterns:
         try:
             # Use GCS pattern matching to find files
             full_pattern = f"gs://{bucket}/{pattern}"
             files = gcs_access.list_files(full_pattern)
-            
+
             if files:
                 # Filter out old "run_" directories and prioritize proper timestamps
-                timestamp_files = [f for f in files if '/run_' not in f]
+                timestamp_files = [f for f in files if "/run_" not in f]
                 if timestamp_files:
                     # Use proper timestamp files first
                     latest_file = sorted(timestamp_files, reverse=True)[0]
@@ -79,46 +77,48 @@ def load_transportation_data_sources(gcs_access) -> Dict[str, bool]:
                     # Fallback to any file if no timestamp files found
                     latest_file = sorted(files, reverse=True)[0]
                 logger.info(f"📥 Loading {table_name} from: {latest_file}")
-                
-                # Use unified pipeline pattern: query_parquet_direct with shared connection
-                gcs_access.query_parquet_direct(latest_file, "SELECT *", table_name)
+
+                # 🚀 ENHANCED: Use native HMAC acceleration for faster CHR data loading
+                gcs_access.query_parquet_native(latest_file, "SELECT *", table_name)
                 loaded_tables[table_name] = True
-                
+
                 # Log row count using shared connection
                 count = gcs_access.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                 logger.info(f"   ✅ {table_name}: {count:,} records")
             else:
                 logger.warning(f"⚠️ No files found for {table_name} with pattern: {pattern}")
                 loaded_tables[table_name] = False
-                
+
         except Exception as e:
             logger.error(f"❌ Failed to load {table_name}: {e}")
             loaded_tables[table_name] = False
-    
+
     # Create empty tables for failed loads to prevent SQL errors
     for table_name, loaded in loaded_tables.items():
         if not loaded:
-            gcs_access.duckdb_conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE")
-    
+            gcs_access.duckdb_conn.execute(
+                f"CREATE OR REPLACE TABLE {table_name} AS SELECT NULL as dummy_column WHERE FALSE"
+            )
+
     return loaded_tables
 
 
 def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -> None:
     """
     Create comprehensive certificate matching using all parsing methods discovered.
-    
+
     Matches international transport with svineflytning using:
     1. Standard A,EU.DK format parsing
-    2. Alternative DK/EU.DK format parsing  
+    2. Alternative DK/EU.DK format parsing
     3. Certificate reconstruction for malformed certificates
     4. Deduplication to ensure 1:1 matching (fixes 127% issue)
-    
+
     Includes comprehensive data from svineflytning with all available fields.
     """
     logger.info("🔗 Creating comprehensive certificate matching...")
-    
+
     # First create all matches (including duplicates) - RAW table with comprehensive columns
-    conn.execute('''
+    conn.execute("""
         CREATE OR REPLACE TABLE certificate_matched_movements_raw AS
         SELECT DISTINCT
             sv.traces_document,
@@ -773,11 +773,11 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK' 
         AND sv.traces_document ~ '^[0-9]{4}\\.[0-9]+$'
         AND new.i_2_imsoc_reference IS NOT NULL
-    ''')
-    
+    """)
+
     # Now deduplicate to create final table - priority: 2024-2025 > NT > CL
     # Include all comprehensive columns in the final deduplicated table
-    conn.execute('''
+    conn.execute("""
         CREATE OR REPLACE TABLE certificate_matched_movements AS
         SELECT 
             traces_document,
@@ -845,11 +845,13 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             FROM certificate_matched_movements_raw
         ) ranked
         WHERE rn = 1
-    ''')
-    
-    matched_count = conn.execute('SELECT COUNT(*) FROM certificate_matched_movements').fetchone()[0]
-    intl_matched = conn.execute("SELECT COUNT(*) FROM certificate_matched_movements WHERE movement_type = 'international_export'").fetchone()[0]
-    
+    """)
+
+    matched_count = conn.execute("SELECT COUNT(*) FROM certificate_matched_movements").fetchone()[0]
+    intl_matched = conn.execute(
+        "SELECT COUNT(*) FROM certificate_matched_movements WHERE movement_type = 'international_export'"
+    ).fetchone()[0]
+
     logger.info(f"  ✅ Created certificate_matched_movements: {matched_count:,} total movements")
     logger.info(f"  🌍 International movements matched: {intl_matched:,}")
 
@@ -857,10 +859,10 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
 def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
     """Match cattle movements using address/date/country matching with all three traces files."""
     logger.info("🐄 Performing cattle traces matching using address/date/country...")
-    
+
     # Create a unified cattle traces table from all three files with normalized schemas
     # Use only the most recent version of each certificate to handle duplicates/edits
-    conn.execute('''
+    conn.execute("""
         CREATE OR REPLACE TABLE unified_cattle_traces AS
         SELECT * FROM (
             -- CL version (2017-2024) - has different schema
@@ -920,11 +922,11 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
         ) all_traces
         -- Final deduplication across all files - use most recent record for each certificate
         QUALIFY ROW_NUMBER() OVER (PARTITION BY certificate ORDER BY raw_datetime DESC) = 1
-    ''')
-    
+    """)
+
     # Match cattle traces with CHR movements using address/date/country strategy
     # IMPROVED: Only match CHR movements that are flagged as international
-    conn.execute('''
+    conn.execute("""
         INSERT INTO certificate_matched_movements
         SELECT DISTINCT
             ct.certificate as traces_document,
@@ -1028,35 +1030,37 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
             )
         -- Limit to one match per CHR movement to avoid duplicates
         QUALIFY ROW_NUMBER() OVER (PARTITION BY chr.movement_summary_id ORDER BY ct.certificate) = 1
-    ''')
-    
+    """)
+
     # Report matching results with improved metrics
-    cattle_matches = conn.execute("SELECT COUNT(*) FROM certificate_matched_movements WHERE source_dataset = 'chr_cattle'").fetchone()[0]
-    intl_chr_cattle = conn.execute('SELECT COUNT(*) FROM chr_dyr_movements WHERE is_international = true').fetchone()[0]
-    total_chr_cattle = conn.execute('SELECT COUNT(*) FROM chr_dyr_movements').fetchone()[0]
-    total_cattle_traces = conn.execute('SELECT COUNT(*) FROM unified_cattle_traces').fetchone()[0]
-    
+    cattle_matches = conn.execute(
+        "SELECT COUNT(*) FROM certificate_matched_movements WHERE source_dataset = 'chr_cattle'"
+    ).fetchone()[0]
+    intl_chr_cattle = conn.execute("SELECT COUNT(*) FROM chr_dyr_movements WHERE is_international = true").fetchone()[0]
+    total_chr_cattle = conn.execute("SELECT COUNT(*) FROM chr_dyr_movements").fetchone()[0]
+    total_cattle_traces = conn.execute("SELECT COUNT(*) FROM unified_cattle_traces").fetchone()[0]
+
     logger.info(f"   ✅ Matched {cattle_matches:,} cattle movements using traces files")
     logger.info(f"   📊 International CHR cattle movements: {intl_chr_cattle:,}")
     logger.info(f"   📊 Total CHR cattle movements: {total_chr_cattle:,}")
     logger.info(f"   📊 Cattle traces available: {total_cattle_traces:,}")
     if intl_chr_cattle > 0:
-        logger.info(f"   📈 International CHR → Traces matching rate: {(cattle_matches/intl_chr_cattle*100):.1f}%")
+        logger.info(f"   📈 International CHR → Traces matching rate: {(cattle_matches / intl_chr_cattle * 100):.1f}%")
 
 
 def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
     """
     Create comprehensive destination and origin type classifications based on CHR business types.
-    
+
     Uses improved classification logic that properly categorizes:
-    - Rendering plants (Forarbejdningsanlæg) 
+    - Rendering plants (Forarbejdningsanlæg)
     - Collection centers and logistics facilities
     - Specialized farm types (breeding, piglet, etc.)
     - Research and quarantine facilities
     """
     logger.info("🏭 Creating destination type classifications...")
-    
-    conn.execute('''
+
+    conn.execute("""
         CREATE OR REPLACE TABLE unified_transportation_dataset AS
         SELECT 
             cm.*,
@@ -1184,9 +1188,9 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
         LEFT JOIN chr_herds receiver_h ON cm.receiver_chr_number = receiver_h.chr_number
         LEFT JOIN chr_properties sender_p ON cm.sender_chr_number = sender_p.chr_number
         LEFT JOIN chr_properties receiver_p ON cm.receiver_chr_number = receiver_p.chr_number
-    ''')
-    
-    total_count = conn.execute('SELECT COUNT(*) FROM unified_transportation_dataset').fetchone()[0]
+    """)
+
+    total_count = conn.execute("SELECT COUNT(*) FROM unified_transportation_dataset").fetchone()[0]
     logger.info(f"  ✅ Created unified dataset: {total_count:,} movements")
 
 
@@ -1194,33 +1198,37 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
     """Generate comprehensive summary statistics for the unified dataset."""
     logger.info("\n📊 UNIFIED TRANSPORTATION DATASET SUMMARY")
     logger.info("=" * 60)
-    
+
     # Overall statistics
-    total_movements = conn.execute('SELECT COUNT(*) FROM unified_transportation_dataset').fetchone()[0]
-    total_animals = conn.execute('SELECT SUM(total_animals) FROM unified_transportation_dataset WHERE total_animals IS NOT NULL').fetchone()[0]
-    date_range = conn.execute('SELECT MIN(movement_date), MAX(movement_date) FROM unified_transportation_dataset').fetchone()
-    
+    total_movements = conn.execute("SELECT COUNT(*) FROM unified_transportation_dataset").fetchone()[0]
+    total_animals = conn.execute(
+        "SELECT SUM(total_animals) FROM unified_transportation_dataset WHERE total_animals IS NOT NULL"
+    ).fetchone()[0]
+    date_range = conn.execute(
+        "SELECT MIN(movement_date), MAX(movement_date) FROM unified_transportation_dataset"
+    ).fetchone()
+
     logger.info("📈 Overall Statistics:")
     logger.info(f"  Total movements: {total_movements:,}")
     logger.info(f"  Total animals: {total_animals:,}")
     logger.info(f"  Date range: {date_range[0]} to {date_range[1]}")
-    
+
     # Movement type breakdown
     logger.info("\n🔄 Movement Types:")
-    movement_types = conn.execute('''
+    movement_types = conn.execute("""
         SELECT movement_type, COUNT(*) as count, SUM(total_animals) as animals
         FROM unified_transportation_dataset 
         GROUP BY movement_type 
         ORDER BY count DESC
-    ''').fetchall()
-    
+    """).fetchall()
+
     for movement_type, count, animals in movement_types:
         animals_str = f"{animals:,}" if animals else "N/A"
         logger.info(f"  {movement_type}: {count:,} movements, {animals_str} animals")
-    
+
     # Species breakdown
     logger.info("\n🐷🐄 Species Distribution:")
-    species_codes = conn.execute('''
+    species_codes = conn.execute("""
         SELECT 
             species_code,
             CASE 
@@ -1233,22 +1241,22 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
         FROM unified_transportation_dataset 
         GROUP BY species_code 
         ORDER BY count DESC
-    ''').fetchall()
-    
+    """).fetchall()
+
     for species_code, species_name, count, animals in species_codes:
         animals_str = f"{animals:,}" if animals else "N/A"
         logger.info(f"  {species_name} (code {species_code}): {count:,} movements, {animals_str} animals")
-    
+
     # Destination type distribution
     logger.info("\n🏭 Top Destination Types:")
-    dest_types = conn.execute('''
+    dest_types = conn.execute("""
         SELECT destination_type, COUNT(*) as count, SUM(total_animals) as animals
         FROM unified_transportation_dataset 
         GROUP BY destination_type 
         ORDER BY count DESC 
         LIMIT 10
-    ''').fetchall()
-    
+    """).fetchall()
+
     for dest_type, count, animals in dest_types:
         animals_str = f"{animals:,}" if animals else "N/A"
         logger.info(f"  {dest_type}: {count:,} movements, {animals_str} animals")
@@ -1257,67 +1265,66 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
 def create_transportation_analysis(gcs_access) -> bool:
     """
     Create comprehensive transportation analysis combining all sources.
-    
+
     Args:
         gcs_access: GCS access instance with shared DuckDB connection
-        
+
     Returns:
         True if successful, False otherwise
     """
     try:
         logger.info("🏗️ Creating comprehensive transportation analysis...")
-        
+
         # Setup database with spatial extension
         setup_database(gcs_access.duckdb_conn)
-        
+
         # Load all data sources from GCS
         loaded_tables = load_transportation_data_sources(gcs_access)
-        
+
         # Log loaded tables
         successful_loads = [table for table, success in loaded_tables.items() if success]
         failed_loads = [table for table, success in loaded_tables.items() if not success]
-        
+
         logger.info(f"📥 Successfully loaded: {len(successful_loads)} datasets")
         logger.info(f"⚠️  Failed to load: {len(failed_loads)} datasets")
-        
+
         if failed_loads:
             logger.warning(f"Failed datasets: {failed_loads}")
-        
+
         # Execute pipeline steps
         create_comprehensive_certificate_matching(gcs_access.duckdb_conn)
         perform_cattle_traces_matching(gcs_access.duckdb_conn)
         create_destination_classifications(gcs_access.duckdb_conn)
         generate_summary_statistics(gcs_access.duckdb_conn)
-        
+
         logger.info("✅ Transportation analysis created successfully")
         return True
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to create transportation analysis: {e}")
         return False
 
 
-def process_transportation_analysis(export_timestamp: str, 
-                                  gold_dir: Optional[Path] = None,
-                                  gcs_access = None) -> bool:
+def process_transportation_analysis(export_timestamp: str, gold_dir: Optional[Path] = None, gcs_access=None) -> bool:
     """
     Main function to process transportation analysis for gold layer.
-    
+
     Args:
         export_timestamp: Export timestamp for file naming
         gold_dir: Output directory for gold data (optional)
         gcs_access: GCS access instance (optional)
-        
+
     Returns:
         True if successful, False otherwise
     """
     try:
         logger.info("🚀 Starting transportation analysis processing...")
-        
+
         # Setup directories - use local data directory for testing
         if gold_dir is None:
-            from pathlib import Path
             import os
+            from pathlib import Path
+
             if os.getenv("GITHUB_ACTIONS"):
                 base_dir = Path(os.getenv("LOCAL_DATA_PATH", "/tmp"))
             else:
@@ -1325,40 +1332,48 @@ def process_transportation_analysis(export_timestamp: str,
                 base_dir = Path.cwd() / "data"
             gold_dir = base_dir / "gold" / "chr" / export_timestamp
         gold_dir.mkdir(parents=True, exist_ok=True)
-            
+
         # Initialize DuckDB connection with spatial extension first (unified pipeline pattern)
         conn = duckdb.connect()
         setup_database(conn)
-        
+
         # Initialize GCS access with shared connection (unified pipeline pattern)
         if gcs_access is None and GCS_AVAILABLE:
             gcs_access = GCSDataAccess(connection=conn)
-        
+
         if gcs_access is None:
             logger.error("❌ GCS access is required for data loading")
             return False
-        
+
         # Create transportation analysis using dynamic data loading
         success = create_transportation_analysis(gcs_access)
-        
+
         if success:
             # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
             if gcs_access and migrate_save_data_pattern:
                 bucket = "landbrugsdata-raw-data"
                 # Use subdataset parameter to create separate filenames
-                migrate_save_data_pattern(gcs_access, "unified_transportation_dataset", "chr", bucket, "gold", export_timestamp, "transportation_analysis")
-                
+                migrate_save_data_pattern(
+                    gcs_access,
+                    "unified_transportation_dataset",
+                    "chr",
+                    bucket,
+                    "gold",
+                    export_timestamp,
+                    "transportation_analysis",
+                )
+
                 logger.info("✅ Transportation analysis processing completed successfully")
             else:
                 # Fallback to local export
                 logger.warning("⚠️ GCS not available, exporting locally only")
-            
+
         else:
             logger.error("❌ Transportation analysis processing failed")
-            
+
         # Connection will be closed when gcs_access is destroyed
         return success
-        
+
     except Exception as e:
         logger.error(f"❌ Error processing transportation analysis: {e}")
         return False
@@ -1367,7 +1382,7 @@ def process_transportation_analysis(export_timestamp: str,
 if __name__ == "__main__":
     import sys
     from datetime import datetime
-    
+
     # Simple test with current timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     success = process_transportation_analysis(timestamp)

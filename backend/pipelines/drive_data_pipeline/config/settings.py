@@ -65,14 +65,14 @@ class Settings(BaseModel):
         case_sensitive = False
 
     @validator("gcs_bucket")
-    def validate_gcs_bucket(cls, v: str | None, values: dict) -> str | None:
+    def validate_gcs_bucket(self, v: str | None, values: dict) -> str | None:
         """Validate that GCS bucket is provided when using GCS storage."""
         if values.get("storage_type") == StorageType.GCS and not v:
             raise ValueError("GCS bucket must be specified when using GCS storage")
         return v
 
     @validator("google_application_credentials")
-    def validate_credentials_file(cls, v: Path | None, values: dict) -> Path | None:
+    def validate_credentials_file(self, v: Path | None, values: dict) -> Path | None:
         """Validate that the credentials file exists if provided and not using public access."""
         use_public_access = values.get("use_public_access", False)
 

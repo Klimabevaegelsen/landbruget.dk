@@ -13,7 +13,7 @@ from shapely.geometry import Polygon
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
 
 # Alias for geopandas.GeoDataFrame to match usage in tests
-gGeo = gpd.GeoDataFrame
+g_geo = gpd.GeoDataFrame
 
 
 @pytest.fixture
@@ -93,7 +93,7 @@ def simple_geodataframe() -> Any:
             Polygon([(1, 2), (2, 2), (2, 3), (1, 3)]),  # Shares edge with polygon 3
         ],
     }
-    return gGeo(data, crs="EPSG:25832")
+    return g_geo(data, crs="EPSG:25832")
 
 
 def test_analyze_geometry(silver_source: WetlandsSilver) -> None:
@@ -119,7 +119,7 @@ def test_analyze_geometry(silver_source: WetlandsSilver) -> None:
 
 def test_log_geometry_statistics(silver_source: WetlandsSilver) -> None:
     """Test logging geometry statistics."""
-    gdf = gGeo(
+    gdf = g_geo(
         {
             "geometry": [
                 Polygon([(0, 0), (100, 0), (100, 100), (0, 100), (0, 0)]),
@@ -343,7 +343,7 @@ def test_process_xml_data_success(silver_source: WetlandsSilver, sample_datafram
     result = silver_source._process_xml_data(sample_dataframe)
 
     assert result is not None
-    assert isinstance(result, gGeo)
+    assert isinstance(result, g_geo)
     assert len(result) == 2
     assert "id" in result.columns
     assert "gridcode" in result.columns
@@ -353,7 +353,7 @@ def test_process_xml_data_success(silver_source: WetlandsSilver, sample_datafram
 
 @patch("unified_pipeline.silver.wetlands.validate_and_transform_geometries")
 def test_create_dissolved_df(
-    mock_validate: MagicMock, silver_source: WetlandsSilver, simple_geodataframe: gGeo
+    mock_validate: MagicMock, silver_source: WetlandsSilver, simple_geodataframe: g_geo
 ) -> None:
     """Test creating dissolved dataframe."""
     # Create mock result with expected dissolution - two features from four
@@ -401,7 +401,7 @@ def test_create_dissolved_df_neighbor_checking_and_edge_sharing(
             Polygon([(42, 30), (52, 30), (52, 40), (42, 40)]),
         ],
     }
-    test_gdf = gGeo(data, crs="EPSG:25832")
+    test_gdf = g_geo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -444,7 +444,7 @@ def test_create_dissolved_df_spatial_index_efficiency(
             Polygon([(250, 250), (260, 250), (260, 260), (250, 260)]),
         ],
     }
-    test_gdf = gGeo(data, crs="EPSG:25832")
+    test_gdf = g_geo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -482,7 +482,7 @@ def test_create_dissolved_df_edge_sharing_criteria(
             Polygon([(10, 10), (20, 10), (20, 20), (10, 20)]),
         ],
     }
-    test_gdf = gGeo(data, crs="EPSG:25832")
+    test_gdf = g_geo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -516,7 +516,7 @@ def test_create_dissolved_df_merged_tracking(
             Polygon([(30, 0), (40, 0), (40, 10), (30, 10)]),  # 4 (adjacent to 3)
         ],
     }
-    test_gdf = gGeo(data, crs="EPSG:25832")
+    test_gdf = g_geo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -704,7 +704,7 @@ def test_create_dissolved_df_neighbor_iteration_and_edge_check(
             Polygon([(-5, 0), (0, 0), (0, 5), (-5, 5)]),
         ],
     }
-    test_gdf = gGeo(data, crs="EPSG:25832")
+    test_gdf = g_geo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -742,7 +742,7 @@ def test_create_dissolved_df_merged_set_prevents_double_processing(
             Polygon([(20, 0), (30, 0), (30, 10), (20, 10)]),  # 3 (touches 2)
         ],
     }
-    test_gdf = gGeo(data, crs="EPSG:25832")
+    test_gdf = g_geo(data, crs="EPSG:25832")
 
     # Mock the validate_and_transform_geometries to return the input as-is
     mock_validate.side_effect = lambda gdf, name: gdf
@@ -764,7 +764,7 @@ def test_create_dissolved_df_merged_set_prevents_double_processing(
 
 @patch("unified_pipeline.silver.wetlands.validate_and_transform_geometries")
 def test_create_dissolved_df_exception_handling(
-    mock_validate: MagicMock, silver_source: WetlandsSilver, simple_geodataframe: gGeo
+    mock_validate: MagicMock, silver_source: WetlandsSilver, simple_geodataframe: g_geo
 ) -> None:
     """Test that _create_dissolved_df properly handles and re-raises exceptions."""
     # Mock validate_and_transform_geometries to raise an exception

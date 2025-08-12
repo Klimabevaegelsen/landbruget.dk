@@ -24,6 +24,7 @@ on:
           - transportation_analysis
           - stamdata
           - herds
+          - herd_discovery
           - herd_details
           - diko
           - animal_movements
@@ -136,7 +137,7 @@ jobs:
   # Job 1: Foundation Steps (stamdata, herds)
   bronze-foundation:
     runs-on: ubuntu-latest
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_discovery' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
     
     permissions:
       contents: 'read'
@@ -179,7 +180,11 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -188,6 +193,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           # Generate proper timestamp in YYYYMMDD_HHMMSS format like other pipelines
           BRONZE_TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
@@ -205,8 +218,8 @@ jobs:
         run: |
           # Determine which foundation step to run
           INPUT_STEP="${{ inputs.step || 'all' }}"
-          if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
-            STEP="herds"  # This will run stamdata -> herds
+          if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_discovery" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
+            STEP="herd_discovery"  # This will run stamdata -> herds -> herd_discovery
           elif [[ "$INPUT_STEP" == "stamdata" || "$INPUT_STEP" == "herds" ]]; then
             STEP="$INPUT_STEP"
           else
@@ -329,7 +342,11 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -338,6 +355,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
@@ -490,7 +515,11 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -499,6 +528,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           # Use the shared bronze timestamp from foundation job
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
@@ -639,7 +676,11 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -648,6 +689,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           # Use the shared bronze timestamp from foundation job
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
@@ -751,7 +800,11 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -761,6 +814,14 @@ jobs:
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context_with_details.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           # Use the shared bronze timestamp from foundation job
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
@@ -872,6 +933,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -1316,7 +1379,7 @@ jobs:
   # Job 7: Single Step Execution (for individual steps not covered above)
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "veterinary_timeline", "transportation_analysis", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
+    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "veterinary_timeline", "transportation_analysis", "stamdata", "herds", "herd_discovery", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
     
     permissions:
       contents: 'read'
@@ -1362,6 +1425,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env

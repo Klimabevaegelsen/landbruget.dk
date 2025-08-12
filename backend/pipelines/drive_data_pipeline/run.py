@@ -13,4 +13,4 @@ if parent_dir not in sys.path:
 from drive_data_pipeline.main import main
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    sys.exit(main())

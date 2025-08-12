@@ -48,7 +48,7 @@ _data_buffer: Dict[str, Dict[str, List[Any]]] = {}
 
 # Get timestamp for this export run - use shared timestamp from workflow if available
 EXPORT_TIMESTAMP = os.getenv("BRONZE_EXPORT_TIMESTAMP") or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-timestamp_source = 'environment' if os.getenv('BRONZE_EXPORT_TIMESTAMP') else 'current time'
+timestamp_source = "environment" if os.getenv("BRONZE_EXPORT_TIMESTAMP") else "current time"
 logger.info(f"Using export timestamp: {EXPORT_TIMESTAMP} (from {timestamp_source})")
 
 
@@ -333,7 +333,7 @@ def finalize_export(clear_buffer: bool = True):
 
 def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str = ""):
     """Save large datasets to GCS using streaming to avoid memory issues.
-    
+
     Args:
         filename: Target filename in GCS
         data_list: List of data items to save

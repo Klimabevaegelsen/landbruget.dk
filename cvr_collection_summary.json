@@ -1,9 +1,0 @@
-{
-  "pipelines_processed": 3,
-  "total_files_found": 3,
-  "total_cvr_numbers_collected": 14144,
-  "collection_timestamp": "2025-08-02T22:11:30.235769",
-  "unique_cvr_numbers": 13844,
-  "duplicates_removed": 300,
-  "deduplication_rate": 2.1210407239819005
-}

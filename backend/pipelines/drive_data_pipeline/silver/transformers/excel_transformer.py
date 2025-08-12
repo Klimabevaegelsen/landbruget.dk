@@ -14,7 +14,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
     from silver.transformers.base import BaseTransformer, FileMetadata, TransformResult
 
@@ -24,7 +26,7 @@ logger = get_logger()
 class ExcelTransformer(BaseTransformer, DuckDBProcessor):
     """Transform Excel files using pandas for reading, then DuckDB for processing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         BaseTransformer.__init__(self)
         DuckDBProcessor.__init__(self)
         logger.info("Initialized ExcelTransformer with DuckDB")
@@ -222,7 +224,6 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                         # Try to create table manually with explicit column types
                         try:
                             # Create table manually using DuckDB's CREATE TABLE AS
-                            temp_table = f"temp_{table_name}"
 
                             # Convert DataFrame to a format DuckDB can handle
                             df_clean = df.copy()
@@ -281,7 +282,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             for i, col_info in enumerate(columns_info):
                 # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
                 col_name = col_info[0]
-                col_type = col_info[1]
+                col_info[1]
 
                 # Apply domain-specific column name mappings first
                 mapped_name = self._apply_domain_specific_mappings(col_name)
@@ -479,7 +480,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             for col_info in columns_info:
                 # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
                 col_name = col_info[0]
-                col_type = col_info[1]
+                col_info[1]
 
                 # Properly quote column name for DuckDB and escape quotes
                 escaped_col_name = str(col_name).replace('"', '""')

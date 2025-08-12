@@ -1,6 +1,5 @@
 import json
 import os
-from io import BytesIO
 
 # Import the optimized GCS access layer
 try:
@@ -94,7 +93,8 @@ class LocalStorage(StorageInterface):
             conn.execute(f"COPY temp_data TO '{full_path}' (FORMAT PARQUET)")
         else:
             raise ValueError(
-                f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
+                f"Unsupported data type for parquet export: {type(data)}. "
+                f"Only DuckDB tables, dicts, and lists are supported."
             )
 
         conn.close()
@@ -181,7 +181,8 @@ class GCSStorage(StorageInterface):
                         conn.register("temp_parquet_data", data)
                 else:
                     raise ValueError(
-                        f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
+                        f"Unsupported data type for parquet export: {type(data)}. "
+                        f"Only DuckDB tables, dicts, and lists are supported."
                     )
 
                 self.gcs_access.upload_from_duckdb_table("temp_parquet_data", gcs_path)
@@ -191,9 +192,8 @@ class GCSStorage(StorageInterface):
 
             if isinstance(data, str):
                 # Table name - export to memory buffer
-                buffer = BytesIO()
-                conn.execute(f"COPY {data} TO 'buffer' (FORMAT PARQUET)")
                 # Note: This approach would need modification for actual buffer writing
+                conn.execute(f"COPY {data} TO 'buffer' (FORMAT PARQUET)")
                 # For now, raise an error suggesting the optimized path
                 raise ValueError(
                     "Non-optimized GCS storage requires optimized GCS access layer for DuckDB table uploads"
@@ -209,7 +209,8 @@ class GCSStorage(StorageInterface):
                 raise ValueError("Non-optimized GCS storage requires optimized GCS access layer for DuckDB operations")
             else:
                 raise ValueError(
-                    f"Unsupported data type for parquet export: {type(data)}. Only DuckDB tables, dicts, and lists are supported."
+                    f"Unsupported data type for parquet export: {type(data)}. "
+                    f"Only DuckDB tables, dicts, and lists are supported."
                 )
 
             conn.close()

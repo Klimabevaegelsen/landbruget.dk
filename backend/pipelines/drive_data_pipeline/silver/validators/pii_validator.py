@@ -11,7 +11,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
 from .base import BaseValidator, ValidationResult
 
@@ -61,7 +63,7 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
         action: PIIAction = PIIAction.REPORT,
         threshold: float = 0.3,
         column_name_hints: dict[PIIType, list[str]] = None,
-    ):
+    ) -> None:
         """Initialize the PII validator.
 
         Args:

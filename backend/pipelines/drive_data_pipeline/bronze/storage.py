@@ -20,7 +20,7 @@ class BronzeStorageManager:
         self,
         storage_manager: DriveStorageManager,
         base_path: Path,
-    ):
+    ) -> None:
         """Initialize the Bronze storage manager.
 
         Args:

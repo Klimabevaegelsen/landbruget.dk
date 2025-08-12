@@ -236,27 +236,27 @@ class CVRCollectionManager:
     def _get_latest_timestamp(self, timestamps: List[str]) -> str:
         """
         Get the latest timestamp from a list, handling different timestamp formats.
-        
+
         Args:
             timestamps: List of timestamp strings
-            
+
         Returns:
             Latest timestamp string
         """
         if not timestamps:
             raise ValueError("No timestamps provided")
-        
+
         # Separate different timestamp formats and filter out non-timestamp folders
         standard_timestamps = []  # Format: YYYYMMDD_HHMMSS
-        run_timestamps = []       # Format: run_XX_XXXXXXXXXX
-        
+        run_timestamps = []  # Format: run_XX_XXXXXXXXXX
+
         for ts in timestamps:
-            if ts.startswith('run_'):
+            if ts.startswith("run_"):
                 run_timestamps.append(ts)
             elif self._is_standard_timestamp(ts):
                 standard_timestamps.append(ts)
             # Skip non-timestamp folders like 'test', 'temp', etc.
-        
+
         # Prefer standard timestamps (they're more recent format)
         if standard_timestamps:
             return sorted(standard_timestamps)[-1]
@@ -264,9 +264,10 @@ class CVRCollectionManager:
             # For run timestamps, sort by the numeric part after the last underscore
             def extract_run_number(run_ts):
                 try:
-                    return int(run_ts.split('_')[-1])
+                    return int(run_ts.split("_")[-1])
                 except (ValueError, IndexError):
                     return 0
+
             return sorted(run_timestamps, key=extract_run_number)[-1]
         else:
             # If no valid timestamps found, raise an error
@@ -275,16 +276,16 @@ class CVRCollectionManager:
     def _is_standard_timestamp(self, timestamp: str) -> bool:
         """
         Check if a string matches the standard timestamp format YYYYMMDD_HHMMSS.
-        
+
         Args:
             timestamp: String to check
-            
+
         Returns:
             True if it matches the standard format
         """
-        if len(timestamp) != 15 or timestamp[8] != '_':
+        if len(timestamp) != 15 or timestamp[8] != "_":
             return False
-        
+
         try:
             # Check if date part (YYYYMMDD) and time part (HHMMSS) are numeric
             date_part = timestamp[:8]
@@ -352,7 +353,8 @@ def save_pipeline_cvr_numbers(
     # Create default GCS access if none provided
     if gcs_access is None:
         from unified_pipeline.util.gcs_access import GCSDataAccess
+
         gcs_access = GCSDataAccess()
-    
+
     manager = CVRCollectionManager(gcs_access, bucket)
     return manager.save_pipeline_cvr_numbers(pipeline_name, cvr_numbers, timestamp)

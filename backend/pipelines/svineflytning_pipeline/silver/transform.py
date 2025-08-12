@@ -542,22 +542,50 @@ class SvineflytningSilverProcessor:
         local_destination = self.output_dir / export_timestamp
         local_destination.mkdir(parents=True, exist_ok=True)
 
-        # Export each table to local files first
+        # 🚀 ENHANCED: Try native GCS export first if available
+        gcs_export_success = False
         tables = ["silver_movements", "silver_properties", "silver_vehicles"]
         exported_files = []
 
-        for table in tables:
-            filename = f"{table.replace('silver_', '')}.parquet"
-            local_path = local_destination / filename
-
-            # Export to local file using DuckDB COPY
-            self.conn.execute(f"""
-                COPY {table} TO '{local_path}' (FORMAT PARQUET)
-            """)
-            logger.info(f"Exported {table} to local file: {local_path}")
-
-        # If using GCS, upload the local files
         if USE_GCS:
+            try:
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                gcs_access = GCSDataAccess()
+
+                # Try native DuckDB HTTPFS GCS export for each table
+                for table in tables:
+                    filename = f"{table.replace('silver_', '')}.parquet"
+                    gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+
+                    gcs_access.export_to_gcs_native(
+                        connection=self.conn, table_name=table, gcs_path=gcs_path, compression="zstd"
+                    )
+                    exported_files.append(gcs_path)
+                    logger.info(f"✅ Native GCS export successful: {gcs_path}")
+
+                gcs_export_success = True
+                destination_base = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
+                storage_type = "gcs"
+
+            except Exception as e:
+                logger.warning(f"Native GCS export failed, using fallback: {e}")
+                gcs_export_success = False
+
+        if not gcs_export_success:
+            # Fallback: Export each table to local files first
+            for table in tables:
+                filename = f"{table.replace('silver_', '')}.parquet"
+                local_path = local_destination / filename
+
+                # Export to local file using DuckDB COPY
+                self.conn.execute(f"""
+                    COPY {table} TO '{local_path}' (FORMAT PARQUET)
+                """)
+                logger.info(f"Exported {table} to local file: {local_path}")
+
+        # If using GCS and native export didn't work, upload the local files
+        if USE_GCS and not gcs_export_success:
             success = self._upload_silver_data_to_gcs(local_destination, export_timestamp)
             if success:
                 # Build GCS paths for return
@@ -575,14 +603,15 @@ class SvineflytningSilverProcessor:
                     exported_files.append(str(local_path))
                 destination_base = str(local_destination)
                 storage_type = "local"
-        else:
-            # Local storage only
-            for table in tables:
-                filename = f"{table.replace('silver_', '')}.parquet"
-                local_path = local_destination / filename
-                exported_files.append(str(local_path))
-            destination_base = str(local_destination)
-            storage_type = "local"
+        elif not gcs_export_success:
+            # Local storage only (populate files list if not done already)
+            if not exported_files:
+                for table in tables:
+                    filename = f"{table.replace('silver_', '')}.parquet"
+                    local_path = local_destination / filename
+                    exported_files.append(str(local_path))
+                destination_base = str(local_destination)
+                storage_type = "local"
 
         return {
             "destination": destination_base,

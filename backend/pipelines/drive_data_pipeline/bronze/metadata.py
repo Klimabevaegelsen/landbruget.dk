@@ -51,7 +51,7 @@ class FileMetadata(BaseModel):
     validation_errors: list[str] = Field(default_factory=list, description="Validation errors")
 
     @validator("file_extension")
-    def validate_file_extension(cls, v: str) -> str:
+    def validate_file_extension(self, v: str) -> str:
         """Ensure file extension starts with a dot."""
         if v and not v.startswith("."):
             v = f".{v}"
@@ -61,7 +61,7 @@ class FileMetadata(BaseModel):
 class MetadataManager:
     """Manager for file metadata."""
 
-    def __init__(self, base_path: Path, storage_manager=None):
+    def __init__(self, base_path: Path, storage_manager=None) -> None:
         """Initialize the metadata manager.
 
         Args:

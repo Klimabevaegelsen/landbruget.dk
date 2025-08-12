@@ -5,7 +5,6 @@ The functionality has been separated into focused modules for better maintainabi
 """
 
 import logging
-import os
 from datetime import date, timedelta
 from typing import Any, Optional
 
@@ -161,18 +160,27 @@ def finalize_consolidated_processing():
         logger.info(f"Saving {record_count:,} consolidated movement records to GCS")
 
         # MINIMAL FIX: Create unique parquet file per matrix job to prevent overwrites
-        from .export import EXPORT_TIMESTAMP
         import os
 
+        from .export import EXPORT_TIMESTAMP
+
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-        
+
         # Add month suffix if matrix job (environment variable set by GitHub Actions)
         month_suffix = os.getenv("BRONZE_MONTH_SUFFIX", "")
         bronze_dir = f"{EXPORT_TIMESTAMP}{month_suffix}"
         gcs_path = f"gs://{bucket_name}/bronze/chr/{bronze_dir}/chr_dyr_movement_summaries.parquet"
 
-        # Use the unified GCS access pattern - export directly to parquet
-        _gcs_access.export_table_to_gcs_direct("consolidated_movements", gcs_path)
+        # 🚀 ENHANCED: Use native HMAC acceleration for faster CHR bronze export
+        native_used = _gcs_access.export_to_gcs_native(
+            "consolidated_movements",
+            gcs_path,
+            compression="zstd",  # Optimal compression for movement data
+            row_group_size=75000,  # Optimized for CHR data volume
+        )
+        if not native_used:
+            # Fallback to existing method
+            _gcs_access.export_table_to_gcs_direct("consolidated_movements", gcs_path)
 
         logger.info(f"✅ Saved consolidated movement data to {gcs_path}")
 

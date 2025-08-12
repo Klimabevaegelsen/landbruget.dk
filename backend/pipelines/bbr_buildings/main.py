@@ -39,7 +39,7 @@ except ImportError:
     GCS_AVAILABLE = False
 
 
-def check_memory_usage():
+def check_memory_usage() -> None:
     """Monitor memory and disk usage."""
     if not PSUTIL_AVAILABLE:
         return
@@ -118,65 +118,33 @@ def perform_uuid_join_optimized(
             SELECT * FROM read_parquet('{geodanmark_path}')
         """)
 
-        # Early filtering optimization: only load buildings we actually need
-        building_ids_str = "', '".join(building_ids)
-        print(f"🎯 Filtering to only needed buildings ({len(building_ids):,} IDs)...")
-        conn.execute(f"""
-            CREATE OR REPLACE TABLE geodanmark_buildings_filtered AS
-            SELECT * FROM geodanmark_buildings_raw
-            WHERE BBRUUID IN ('{building_ids_str}')
-        """)
-
-        # Drop the full table to save memory
-        conn.execute("DROP TABLE geodanmark_buildings_raw")
-
-        # Check how much we filtered
-        filtered_count = conn.execute(
-            "SELECT COUNT(*) FROM geodanmark_buildings_filtered"
-        ).fetchone()[0]
-        print(f"✅ Filtered to {filtered_count:,} buildings (from ~2.7M total)")
-
-        # Apply ST_Dump optimization for complex geometries
+        # OPTIMIZATION: Skip expensive ST_Union_Agg - use buildings directly for faster processing
+        print("🎯 Using all GeoDanmark buildings directly (no expensive aggregation)...")
         conn.execute("""
             CREATE OR REPLACE TABLE geodanmark_buildings AS
-            WITH dumped_geometries AS (
-                SELECT 
-                    BBRUUID,
-                    bygningstype,
-                    UNNEST(ST_Dump(geometri)).geom as geometry
-                FROM geodanmark_buildings_filtered
-                WHERE ST_IsValid(geometri)
-            )
             SELECT 
                 BBRUUID,
-                geometry,
                 bygningstype,
-                ST_Area_Spheroid(geometry) as building_area_m2
-            FROM dumped_geometries
+                geometri as geometry,
+                ST_Area_Spheroid(geometri) as building_area_m2
+            FROM geodanmark_buildings_raw
+            WHERE ST_IsValid(geometri)
+            AND ST_Area_Spheroid(geometri) > 5  -- Basic size filter
         """)
 
-        # Create INSPIRE building IDs table for efficient UUID matching
-        print("📋 Creating INSPIRE buildings table for UUID-based join...")
+        # Drop the raw table to save memory
+        conn.execute("DROP TABLE geodanmark_buildings_raw")
 
-        # Convert building IDs to table format for proper JOIN
-        building_ids_str = "', '".join(building_ids)
-        conn.execute(f"""
-            CREATE OR REPLACE TABLE inspire_building_ids AS
-            SELECT unnest(['{building_ids_str}']) as BBRUUID
-        """)
+        # Check how many buildings we have
+        building_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings").fetchone()[0]
+        print(f"✅ Loaded {building_count:,} valid GeoDanmark buildings")
 
-        inspire_count = conn.execute("SELECT COUNT(*) FROM inspire_building_ids").fetchone()[0]
-        geodanmark_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings").fetchone()[0]
+        # Skip building IDs table - we're doing direct join between attributes and GeoDanmark
+        print("⚡ Executing direct join (attributes ↔ GeoDanmark)...")
 
-        print("✅ Prepared data for UUID-based join:")
-        print(f"   INSPIRE building IDs: {inspire_count:,}")
-        print(f"   GeoDanmark buildings (filtered): {geodanmark_count:,}")
-
-        print("⚡ Executing optimized UUID-based join...")
-
-        # Create INSPIRE attributes table if available
+        # Direct join between INSPIRE attributes and GeoDanmark (skip building_ids)
         if attributes_df is not None:
-            print("📋 Including INSPIRE attributes in join...")
+            print("📋 Direct join: INSPIRE attributes ↔ GeoDanmark...")
 
             # Convert attributes to DuckDB table
             if isinstance(attributes_df, list):
@@ -187,7 +155,23 @@ def perform_uuid_join_optimized(
             # Register attributes DataFrame with DuckDB
             conn.register("inspire_attributes", attributes_df)
 
-            # Enhanced join with INSPIRE attributes
+            # OPTIMIZATION: Pre-compute UUID strings to avoid expensive join-time conversion
+            print("🔧 Pre-computing UUID strings for faster join...")
+            conn.execute("""
+                CREATE OR REPLACE TABLE inspire_attributes_with_uuid AS
+                SELECT 
+                    *,
+                    LOWER(CONCAT(
+                        SUBSTR(hex(building_uuid), 1, 8), '-',
+                        SUBSTR(hex(building_uuid), 9, 4), '-',
+                        SUBSTR(hex(building_uuid), 13, 4), '-',
+                        SUBSTR(hex(building_uuid), 17, 4), '-',
+                        SUBSTR(hex(building_uuid), 21, 12)
+                    )) as building_uuid_string
+                FROM inspire_attributes
+            """)
+
+            # Fast direct join using pre-computed UUID strings
             uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
             SELECT 
@@ -195,25 +179,25 @@ def perform_uuid_join_optimized(
                 g.geometry,
                 g.bygningstype,
                 g.building_area_m2,
-                'uuid_matched' as join_status,
+                'direct_uuid_matched' as join_status,
                 -- INSPIRE attributes
-                ia.current_use as inspire_current_use,
-                ia.building_nature as inspire_building_nature,
-                ia.construction_year as inspire_construction_year,
-                ia.floor_area as inspire_floor_area,
-                ia.floors as inspire_floors,
-                ia.dwellings as inspire_dwellings,
-                ia.address as inspire_address,
-                ia.category_group as inspire_category_group
-            FROM inspire_building_ids i
-            INNER JOIN geodanmark_buildings g ON i.BBRUUID = g.BBRUUID
-            LEFT JOIN inspire_attributes ia ON g.BBRUUID = ia.building_uuid
+                ia.current_use,
+                ia.building_nature,
+                ia.construction_year,
+                ia.floor_area,
+                ia.floors,
+                ia.dwellings,
+                ia.address,
+                ia.bbr_usage_code,
+                ia.category_group
+            FROM geodanmark_buildings g
+            INNER JOIN inspire_attributes_with_uuid ia ON g.BBRUUID = ia.building_uuid_string
             WHERE ST_IsValid(g.geometry)
             AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
             """
         else:
-            print("📋 No INSPIRE attributes available - basic join only...")
-            # Basic join without attributes
+            print("📋 No INSPIRE attributes available - using all GeoDanmark buildings...")
+            # Basic table with all GeoDanmark buildings (no attributes join needed)
             uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
             SELECT 
@@ -221,9 +205,8 @@ def perform_uuid_join_optimized(
                 g.geometry,
                 g.bygningstype,
                 g.building_area_m2,
-                'uuid_matched' as join_status
-            FROM inspire_building_ids i
-            INNER JOIN geodanmark_buildings g ON i.BBRUUID = g.BBRUUID
+                'geodanmark_only' as join_status
+            FROM geodanmark_buildings g
             WHERE ST_IsValid(g.geometry)
             AND g.building_area_m2 > 5  -- GitHub Actions memory optimization
             """
@@ -260,7 +243,7 @@ def perform_uuid_join_optimized(
             column_names = [col[0] for col in columns]
 
             # Build SELECT statement based on available columns
-            if "inspire_current_use" in column_names:
+            if "current_use" in column_names:
                 # Full dataset with INSPIRE attributes
                 select_columns = """
                     BBRUUID,
@@ -268,14 +251,15 @@ def perform_uuid_join_optimized(
                     bygningstype,
                     building_area_m2,
                     join_status,
-                    inspire_current_use,
-                    inspire_building_nature,
-                    inspire_construction_year,
-                    inspire_floor_area,
-                    inspire_floors,
-                    inspire_dwellings,
-                    inspire_address,
-                    inspire_category_group
+                    current_use,
+                    building_nature,
+                    construction_year,
+                    floor_area,
+                    floors,
+                    dwellings,
+                    address,
+                    bbr_usage_code,
+                    category_group
                 """
             else:
                 # Basic dataset without INSPIRE attributes
@@ -298,16 +282,14 @@ def perform_uuid_join_optimized(
             print(f"💾 Saved UUID JOIN results to {output_file}")
 
             # Verify the join was UUID-based (not spatial)
-            explain_result = conn.execute("""
-                EXPLAIN SELECT * FROM geodanmark_buildings g
-                INNER JOIN inspire_building_ids i ON g.BBRUUID = i.BBRUUID
-                LIMIT 1
+            conn.execute("""
+                EXPLAIN SELECT * FROM joined_results LIMIT 1
             """).fetchall()
 
             print("🔍 Join type confirmed: UUID-based JOIN (not spatial)")
 
             # Final cleanup - use robust drop that handles both tables and views
-            def robust_drop(object_name: str):
+            def robust_drop(object_name: str) -> None:
                 """Drop a table or view, handling both types safely."""
                 try:
                     # Check if it's a table or view by querying information schema
@@ -494,34 +476,27 @@ def perform_chunked_spatial_join(
     ]
     print(f"✅ Filtered to {filtered_count:,} buildings (from ~2.7M total)")
 
-    # Apply ST_Dump optimization for complex geometries (like field analysis)
+    # Fix: Use ST_Union to merge multi-part geometries instead of ST_Dump
+    # This prevents duplicate rows for buildings with complex geometries
     conn.execute("""
         CREATE OR REPLACE TABLE geodanmark_buildings AS
-        WITH dumped_geometries AS (
-            SELECT 
-                BBRUUID,
-                bygningstype,
-                UNNEST(ST_Dump(geometri)).geom as geometry
-            FROM geodanmark_buildings_filtered
-            WHERE ST_IsValid(geometri)
-        )
         SELECT 
             BBRUUID,
-            geometry,
             bygningstype,
-            ST_Area_Spheroid(geometry) as building_area_m2
-        FROM dumped_geometries
-        WHERE ST_Area_Spheroid(geometry) > 1  -- Minimum 1m² building area
+            ST_Union_Agg(geometri) as geometry,
+            ST_Area_Spheroid(ST_Union_Agg(geometri)) as building_area_m2
+        FROM geodanmark_buildings_filtered
+        WHERE ST_IsValid(geometri)
+        GROUP BY BBRUUID, bygningstype
+        HAVING ST_Area_Spheroid(ST_Union_Agg(geometri)) > 1  -- Minimum 1m² building area
     """)
 
     # Get optimized building count
     optimized_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings").fetchone()[0]
-    raw_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings_raw").fetchone()[0]
 
-    print(f"✅ Optimized {raw_count:,} → {optimized_count:,} building geometries with ST_Dump")
-
-    # Drop raw table to save memory
-    conn.execute("DROP TABLE geodanmark_buildings_raw")
+    print(
+        f"✅ Optimized {filtered_count:,} → {optimized_count:,} building geometries with ST_Union"
+    )
 
     # Process in chunks with memory management
     # GitHub Actions optimization: Use smaller chunks for memory efficiency
@@ -706,7 +681,7 @@ def perform_chunked_spatial_join(
         conn.close()
 
 
-def main():
+def main() -> None:
     """Main entry point for the BBR buildings pipeline."""
     parser = argparse.ArgumentParser(
         description="BBR Buildings Data Pipeline - Now with bulk GeoDanmark download!",
@@ -848,7 +823,6 @@ def run_bronze_layer_bulk(
     # Step 2: INSPIRE BBR raw data - read from GCS or local artifacts
     logger.info("🏢 Step 2: Loading INSPIRE BBR data from artifacts or GCS...")
     building_ids = []
-    attributes_df = []
 
     # Try to load from local artifacts first (for GitHub Actions workflow)
     inspire_ids_file = Path("data/inspire_building_ids.json")
@@ -888,13 +862,13 @@ def run_bronze_layer_bulk(
             "timestamp": timestamp,
             "building_ids_count": len(building_ids),
             "geodanmark_path": geodanmark_path,
-            "metadata": inspire_result.get("metadata", {}),
+            "metadata": {},
         }
 
 
 def _upload_bronze_data_to_gcs(
     building_ids: list, attributes_df, timestamp: str, logger: logging.Logger
-):
+) -> None:
     """Upload bronze data to GCS for silver layer consumption."""
     if not GCS_AVAILABLE:
         logger.warning("⚠️ GCS not available - skipping bronze data upload")
@@ -1145,10 +1119,60 @@ def run_silver_layer(
         logger.error(f"❌ UUID join failed: {join_result.get('error', 'Unknown error')}")
         return None
 
-    # Step 4: Upload silver results to GCS (only the main joined file)
+    # Step 4: Use BuildingProcessor for final enrichment and transformations
+    logger.info("🔧 Step 4: Using BuildingProcessor for final enrichment...")
+
+    try:
+        from silver.building_processor import BuildingProcessor
+
+        processor = BuildingProcessor(settings, logger)
+
+        # Save joined buildings to temporary location for BuildingProcessor
+        temp_joined_file = silver_output_dir / "joined_buildings.geoparquet"
+
+        # Copy the main joined file to expected location
+        main_joined_file = silver_output_dir / "joined_buildings.parquet"
+        if main_joined_file.exists():
+            # Convert parquet to geoparquet for BuildingProcessor
+            import duckdb
+
+            temp_conn = duckdb.connect()
+            temp_conn.execute("INSTALL spatial")
+            temp_conn.execute("LOAD spatial")
+            temp_conn.execute(f"""
+                COPY (SELECT * FROM read_parquet('{main_joined_file}')) 
+                TO '{temp_joined_file}' (FORMAT PARQUET)
+            """)
+            temp_conn.close()
+
+            # Save attributes for BuildingProcessor
+            if attributes_df is not None:
+                if isinstance(attributes_df, list):
+                    import pandas as pd
+
+                    attributes_df = pd.DataFrame(attributes_df)
+
+                attributes_file = silver_output_dir / "inspire_attributes.parquet"
+                attributes_df.to_parquet(attributes_file, index=False)
+                logger.info(
+                    f"✅ Saved attributes for BuildingProcessor: {len(attributes_df)} records"
+                )
+
+            # Run BuildingProcessor for final enrichment
+            final_output_dir = silver_output_dir / "processed"
+            processor.process_buildings(silver_output_dir, final_output_dir)
+
+            logger.info("✅ BuildingProcessor completed final enrichment")
+        else:
+            logger.warning("⚠️ Main joined file not found, skipping BuildingProcessor")
+
+    except Exception as e:
+        logger.warning(f"⚠️ BuildingProcessor failed, continuing without enrichment: {e}")
+
+    # Step 5: Upload silver results to GCS
     _upload_silver_data_to_gcs(silver_output_dir, timestamp, logger)
 
-    # Step 5: Set GitHub Actions outputs
+    # Step 6: Set GitHub Actions outputs
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write(f"silver-output-dir={silver_output_dir}\n")
@@ -1265,7 +1289,9 @@ def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
         return [], None
 
 
-def _upload_silver_data_to_gcs(silver_output_dir: Path, timestamp: str, logger: logging.Logger):
+def _upload_silver_data_to_gcs(
+    silver_output_dir: Path, timestamp: str, logger: logging.Logger
+) -> None:
     """Upload silver results to GCS."""
     if not GCS_AVAILABLE:
         logger.warning("⚠️ GCS not available - skipping silver data upload")

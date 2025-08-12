@@ -1,7 +1,5 @@
 import argparse
 import asyncio
-
-# inside backend/pipelines/dma_scraper/fetch_company_data.py
 import os
 import sys
 import time
@@ -9,12 +7,12 @@ from datetime import datetime
 
 import nest_asyncio
 
+# inside backend/pipelines/dma_scraper/fetch_company_data.py
 ROOT = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
 sys.path.insert(0, ROOT)
 
 from bronze.fetch_company_data import DMAScraper
 from bronze.fetch_company_detail import DMACompanyDetailScraper
-
 from silver.transformation import transform_dma_json
 
 

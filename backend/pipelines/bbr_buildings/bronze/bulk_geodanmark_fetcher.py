@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class BulkGeoDanmarkFetcher:
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str) -> None:
         self.username = username
         self.password = password
         self.base_url = (
@@ -273,7 +273,7 @@ class BulkGeoDanmarkFetcher:
             logger.error(f"Manual GML parsing failed: {e}")
             return False
 
-    def bulk_download_buildings(self, batch_size: int = 30000):
+    def bulk_download_buildings(self, batch_size: int = 30000) -> None:
         """
         Download all GeoDanmark buildings in batches with progress tracking.
 
@@ -339,7 +339,8 @@ class BulkGeoDanmarkFetcher:
                 # Check if we got fewer records than requested - indicates end of dataset
                 if current_batch_size < batch_size:
                     logger.info(
-                        f"Got {current_batch_size:,} buildings (less than batch size {batch_size:,}) - reached end of dataset"
+                        f"Got {current_batch_size:,} buildings "
+                        f"(less than batch size {batch_size:,}) - reached end of dataset"
                     )
                     break
 
@@ -361,7 +362,7 @@ class BulkGeoDanmarkFetcher:
         # Combine all intermediate files into final result
         self._combine_intermediate_files()
 
-    def _save_intermediate_results(self, table_names: list, batch_num: int):
+    def _save_intermediate_results(self, table_names: list, batch_num: int) -> None:
         """Save intermediate results to avoid memory issues."""
         if not table_names:
             return
@@ -381,7 +382,8 @@ class BulkGeoDanmarkFetcher:
             all_columns = sorted(all_columns)
 
             logger.info(
-                f"Normalizing schemas across {len(table_names)} tables with {len(all_columns)} total columns"
+                f"Normalizing schemas across {len(table_names)} tables "
+                f"with {len(all_columns)} total columns"
             )
 
             # Build normalized SELECT statements for each table
@@ -441,10 +443,10 @@ class BulkGeoDanmarkFetcher:
                 for table_name in table_names:
                     columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
                     logger.info(f"  {table_name}: {[col[0] for col in columns_info]}")
-            except:
+            except Exception:
                 pass
 
-    def _combine_intermediate_files(self):
+    def _combine_intermediate_files(self) -> None:
         """Combine all intermediate files into final GeoParquet."""
         try:
             # Find all intermediate files
@@ -472,7 +474,7 @@ class BulkGeoDanmarkFetcher:
                         WHEN synligBygning IS NULL THEN NULL
                         WHEN synligBygning = 'true' OR synligBygning = '1' THEN true
                         WHEN synligBygning = 'false' OR synligBygning = '0' THEN false
-                        ELSE NULL  -- Handle 'Mangler afklaring' and other non-boolean values as NULL
+                        ELSE NULL  -- Handle 'Mangler afklaring' and other non-boolean values
                     END as synligBygning
                 FROM read_parquet(['{file_list}'], union_by_name=true)
             ) TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet' 
@@ -510,7 +512,7 @@ class BulkGeoDanmarkFetcher:
                         schema_query = f"DESCRIBE SELECT * FROM read_parquet('{file_path}') LIMIT 1"
                         schema_result = self.conn.execute(schema_query).fetchall()
                         logger.info(f"Schema for file {i + 1} ({Path(file_path).name}):")
-                        for col_name, col_type, null, key, default, extra in schema_result:
+                        for col_name, col_type, _null, _key, _default, _extra in schema_result:
                             logger.info(f"  {col_name}: {col_type}")
                 except Exception as debug_e:
                     logger.error(f"Failed to debug schema: {debug_e}")
@@ -569,13 +571,13 @@ class BulkGeoDanmarkFetcher:
 
             raise
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Clean up DuckDB connection."""
         if hasattr(self, "conn"):
             self.conn.close()
 
 
-def main():
+def main() -> None:
     """Main function to run bulk download."""
 
     # Get credentials from environment

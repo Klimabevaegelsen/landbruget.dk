@@ -367,7 +367,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                                             "SELECT CAST(date_str AS DATE) as parsed_date FROM temp_date"
                                         ).fetchone()
                                         value = result[0] if result else None
-                                    except:
+                                    except Exception:
                                         value = None
                             except (ValueError, TypeError):
                                 self.log.warning(f"Failed to convert {key} value: {value}")
@@ -611,9 +611,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     # Test the geometry conversion first
                     self.conn.execute("CREATE OR REPLACE TABLE temp_geom_test (wkt TEXT)")
                     self.conn.execute("INSERT INTO temp_geom_test VALUES (?)", [geom_wkt])
-                    result = self.conn.execute(
-                        "SELECT ST_GeomFromText(wkt) FROM temp_geom_test"
-                    ).fetchone()
+                    self.conn.execute("SELECT ST_GeomFromText(wkt) FROM temp_geom_test").fetchone()
 
                     # If successful, update the main table
                     self.conn.execute(

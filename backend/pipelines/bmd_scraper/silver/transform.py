@@ -192,7 +192,7 @@ class BMDTransformer:
         if self.conn is not None:
             try:
                 self.conn.close()
-            except:
+            except Exception:
                 pass
 
     def read_excel(self) -> str:
@@ -663,7 +663,7 @@ class BMDTransformer:
 
     def save_parquet(self, table_name: str) -> Path:
         """
-        Save the processed data as a Parquet file.
+        Save the processed data as a Parquet file with enhanced GCS export.
 
         Args:
             table_name: Name of the DuckDB table
@@ -678,7 +678,25 @@ class BMDTransformer:
         logger.info(f"Saving Parquet file to {output_path}")
 
         try:
-            # Export directly from DuckDB to Parquet
+            # 🚀 ENHANCED: Try native GCS export first if OptimizedGCSDataAccess is available
+            gcs_export_success = False
+            if OptimizedGCSDataAccess:
+                try:
+                    gcs_access = OptimizedGCSDataAccess()
+                    bucket_name = "landbrugsdata-raw-data"
+                    gcs_path = f"gs://{bucket_name}/silver/bmd/{self.timestamp}/pesticide_products.parquet"
+
+                    # Use native GCS export with server-side compression
+                    gcs_access.export_to_gcs_native(
+                        connection=self.conn, table_name=table_name, gcs_path=gcs_path, compression="zstd"
+                    )
+
+                    logger.info(f"✅ Native GCS export successful: {gcs_path}")
+                    gcs_export_success = True
+                except Exception as e:
+                    logger.warning(f"Native GCS export failed, using local export: {e}")
+
+            # Always create local file as well (for compatibility)
             self.conn.execute(f"""
                 COPY (SELECT * FROM {table_name})
                 TO '{output_path}' (FORMAT 'parquet')
@@ -692,6 +710,7 @@ class BMDTransformer:
             metadata_path = self.output_dir / "metadata.json"
             self.silver_metadata["output_file"] = str(output_path)
             self.silver_metadata["output_size_bytes"] = os.path.getsize(output_path)
+            self.silver_metadata["gcs_native_export"] = gcs_export_success
 
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(self.silver_metadata, f, indent=2, ensure_ascii=False)

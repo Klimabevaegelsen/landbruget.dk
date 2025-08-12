@@ -17,6 +17,7 @@ import duckdb
 from unified_pipeline.common.native_schema_manager import NativeSchemaManager
 from unified_pipeline.util.log_util import Logger
 
+
 class SchemaToGitHub:
     """Manages automatic schema generation and GitHub commits."""
 
@@ -189,7 +190,7 @@ class SchemaToGitHub:
                     count_result = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
                     if count_result:
                         context_lines.append(f"-- Row count: {count_result[0]:,}")
-                except:
+                except Exception:
                     pass
 
                 context_lines.extend(["```", ""])
@@ -340,6 +341,7 @@ class SchemaToGitHub:
         except Exception as e:
             self.logger.error(f"Failed to generate and commit schemas: {e}")
             return generated_files
+
 
 class SchemaGitHubMixin:
     """Mixin to add GitHub schema integration to pipeline sources."""

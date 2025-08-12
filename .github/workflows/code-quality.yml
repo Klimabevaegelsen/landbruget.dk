@@ -1,0 +1,146 @@
+# Code Quality Checks
+# This workflow runs linting, formatting, and basic tests on pull requests
+
+name: Code Quality
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths: 
+      - '**.py'
+      - 'pyproject.toml'
+      - 'ruff.toml' 
+      - '.github/workflows/code-quality.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - '**.py'
+
+jobs:
+  lint:
+    name: Python Linting
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install ruff
+      run: pip install ruff==0.8.0
+      
+    - name: Run ruff linting (critical errors only)
+      run: |
+        # Focus on critical errors that break functionality
+        ruff check . --select E722,F401,F841,E402,F811 --output-format github
+      continue-on-error: false
+      
+    - name: Run ruff linting (all errors, informational)
+      run: |
+        # Show all issues but don't fail the build
+        echo "## Full Linting Report" >> $GITHUB_STEP_SUMMARY
+        echo "The following issues were found but don't block the PR:" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        ruff check . --output-format concise | head -50 >> $GITHUB_STEP_SUMMARY || true
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        
+        # Count total issues
+        TOTAL_ISSUES=$(ruff check . --output-format concise | wc -l)
+        echo "Total linting issues found: $TOTAL_ISSUES" >> $GITHUB_STEP_SUMMARY
+      continue-on-error: true
+      
+  format-check:
+    name: Python Formatting
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install ruff
+      run: pip install ruff==0.8.0
+      
+    - name: Check formatting (informational only)
+      run: |
+        echo "## Formatting Check Results" >> $GITHUB_STEP_SUMMARY
+        if ruff format --check --diff .; then
+          echo "✅ All files are properly formatted" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "ℹ️ Some files could benefit from formatting, but this doesn't block the PR" >> $GITHUB_STEP_SUMMARY
+          echo "Run \`ruff format .\` locally to auto-format" >> $GITHUB_STEP_SUMMARY
+        fi
+      continue-on-error: true
+
+  import-check:
+    name: Import Organization
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install ruff
+      run: pip install ruff==0.8.0
+      
+    - name: Check import organization
+      run: |
+        echo "## Import Organization Check" >> $GITHUB_STEP_SUMMARY
+        # Focus only on import-related issues
+        if ruff check . --select I --output-format github; then
+          echo "✅ Import organization looks good" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "ℹ️ Some import organization issues found" >> $GITHUB_STEP_SUMMARY
+          echo "These don't block the PR but improve code organization" >> $GITHUB_STEP_SUMMARY
+        fi
+      continue-on-error: true
+
+  pipeline-specific:
+    name: Pipeline-Specific Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install ruff
+      run: pip install ruff==0.8.0
+        
+    - name: Check for common pipeline issues
+      run: |
+        echo "## Pipeline-Specific Checks" >> $GITHUB_STEP_SUMMARY
+        
+        # Check for bare except statements
+        BARE_EXCEPT=$(grep -r "except:" --include="*.py" . | wc -l || echo "0")
+        echo "- Bare except statements found: $BARE_EXCEPT" >> $GITHUB_STEP_SUMMARY
+        
+        # Check for potential duplicate functions
+        DUPLICATE_FUNCTIONS=$(grep -r "def create_base_request" --include="*.py" . | wc -l || echo "0")
+        echo "- create_base_request functions found: $DUPLICATE_FUNCTIONS" >> $GITHUB_STEP_SUMMARY
+        
+        # Check for mixed import styles in CHR pipeline
+        if [ -d "backend/pipelines/chr_pipeline" ]; then
+          RELATIVE_IMPORTS=$(grep -r "from \." backend/pipelines/chr_pipeline/ --include="*.py" | wc -l || echo "0")
+          echo "- CHR pipeline relative imports: $RELATIVE_IMPORTS" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "These metrics help track code quality improvements over time." >> $GITHUB_STEP_SUMMARY

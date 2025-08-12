@@ -11,17 +11,15 @@ class FieldAreaAnalysisConfig(BaseModel):
 
     # GCS Configuration
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
-    
+
     # Year configuration for agricultural fields
-    agricultural_fields_year: int = int(os.getenv("AGRICULTURAL_FIELDS_YEAR", "2025"))
+    agricultural_fields_year: int = int(os.getenv("AGRICULTURAL_FIELDS_YEAR", "2024"))
 
     # Dataset names - using consistent naming from silver layer
     properties_dataset: str = "property_cadastral_merged"
     soil_types_dataset: str = "soil_types"
     bnbo_status_dataset: str = "bnbo_status_dissolved"
-    wetlands_dataset: str = (
-        "wetlands"  # Use original wetlands to preserve gridcode/toerv_pct attributes
-    )
+    wetlands_dataset: str = "wetlands_dissolved"  # Use dissolved wetlands - now preserves toerv_pct AND eliminates overlaps
     water_projects_dataset: str = "water_projects_dissolved"
 
     # Stage 0 pre-filtered dataset names (dramatically reduced sizes)
@@ -72,9 +70,7 @@ class FieldAreaAnalysisConfig(BaseModel):
         "water_projects_wetlands_intersections": "field_analysis_water_projects_wetlands_intersections",
         "field_property_intersections": "field_analysis_property_intersections",
         "field_soil_intersections": "field_analysis_soil_intersections",
-        # Stage 2 outputs (field-level analysis with pre-filtered data)
-        "fields_bnbo_water": "field_analysis_fields_bnbo_water",
-        "fields_wetland_water": "field_analysis_fields_wetland_water",
+        # Stage 2 outputs (field-level intersection geometries only - aggregations moved to Stage 4)
         "field_bnbo_intersections": "field_analysis_field_bnbo_intersections",  # For Stage 3 optimization
         "field_bnbo_water_intersections": "field_analysis_field_bnbo_water_intersections",  # For Stage 3 optimization
         "field_wetland_intersections": "field_analysis_field_wetland_intersections",  # For Stage 3 optimization
@@ -99,17 +95,20 @@ class FieldAreaAnalysisConfig(BaseModel):
     parquet_row_group_size: int = 100000
 
     model_config = ConfigDict(frozen=True)
-    
+
     def get_agricultural_fields_dataset(self) -> str:
         """Get agricultural fields dataset name for the configured year."""
         return f"fvm_marker_{self.agricultural_fields_year}"
-    
+
     def update_outputs_for_year(self) -> Dict[str, str]:
         """Update output dataset names to include year suffix."""
         updated_outputs = {}
         for key, dataset_name in self.stage_outputs.items():
-            # Add year suffix to main field analysis outputs
-            if "field_analysis" in dataset_name and "stage0" not in dataset_name:
+            # Add year suffix to field analysis outputs AND stage0 outputs for isolation
+            # Match "field_analysis", "field_environmental_analysis", and "stage0" patterns
+            if (
+                "field_analysis" in dataset_name or "field_environmental_analysis" in dataset_name
+            ) or "stage0" in dataset_name:
                 updated_outputs[key] = f"{dataset_name}_{self.agricultural_fields_year}"
             else:
                 updated_outputs[key] = dataset_name

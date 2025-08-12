@@ -69,7 +69,7 @@ class PropertyDataProcessor:
         if self.conn:
             try:
                 self.conn.close()
-            except:
+            except Exception:
                 pass
 
     def detect_and_setup_crs_transformer(self, sample_geometry):
@@ -270,15 +270,13 @@ class PropertyDataProcessor:
             for key, value in obj.items():
                 cleaned_value = self.clean_empty_structures(value)
                 # Only keep non-empty values
-                if cleaned_value or cleaned_value == 0 or cleaned_value == False or cleaned_value == "":
+                if cleaned_value or cleaned_value == 0 or not cleaned_value or cleaned_value == "":
                     # Keep primitive values and non-empty containers
                     if not isinstance(cleaned_value, (dict, list)) or cleaned_value:
                         cleaned[key] = cleaned_value
             return cleaned
         elif isinstance(obj, list):
-            return [
-                self.clean_empty_structures(item) for item in obj if item or item == 0 or item == False or item == ""
-            ]
+            return [self.clean_empty_structures(item) for item in obj if item or item == 0 or not item or item == ""]
         else:
             return obj
 

@@ -9,15 +9,16 @@ from tenacity import stop_after_attempt
 
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 
+
 @pytest.fixture
 def config() -> WaterProjectsBronzeConfig:
     return WaterProjectsBronzeConfig()
 
+
 @pytest.fixture
-def water_projects_bronze(
-    config: WaterProjectsBronzeConfig
-) -> WaterProjectsBronze:
+def water_projects_bronze(config: WaterProjectsBronzeConfig) -> WaterProjectsBronze:
     return WaterProjectsBronze(config)
+
 
 def get_async_mock_session(response: AsyncMock) -> MagicMock:
     """
@@ -35,6 +36,7 @@ def get_async_mock_session(response: AsyncMock) -> MagicMock:
     mock_session.get = MagicMock(return_value=MockGetContextManager())
     return mock_session
 
+
 def test_water_projects_bronze_config() -> None:
     """Test the WaterProjectsBronzeConfig has expected default values."""
     config = WaterProjectsBronzeConfig()
@@ -49,6 +51,7 @@ def test_water_projects_bronze_config() -> None:
     assert isinstance(config.url_mapping, dict)
     assert isinstance(config.service_types, dict)
 
+
 def test_get_params(water_projects_bronze: WaterProjectsBronze) -> None:
     """Test the _get_params method returns correct parameter dictionary."""
     layer = "N2000_projekter:Hydrologi_E"
@@ -61,6 +64,7 @@ def test_get_params(water_projects_bronze: WaterProjectsBronze) -> None:
     assert params["STARTINDEX"] == "10"
     assert params["COUNT"] == str(water_projects_bronze.config.batch_size)
     assert params["SRSNAME"] == "urn:ogc:def:crs:EPSG::25832"
+
 
 @pytest.mark.asyncio
 async def test_fetch_chunk_success(water_projects_bronze: WaterProjectsBronze) -> None:
@@ -87,6 +91,7 @@ async def test_fetch_chunk_success(water_projects_bronze: WaterProjectsBronze) -
         params=water_projects_bronze._get_params(layer, 0),
     )
 
+
 @pytest.mark.asyncio
 @patch(
     "unified_pipeline.bronze.water_projects.WaterProjectsBronze._fetch_chunk.retry.stop",
@@ -107,6 +112,7 @@ async def test_fetch_chunk_http_error(water_projects_bronze: WaterProjectsBronze
         with pytest.raises(Exception) as excinfo:
             await water_projects_bronze._fetch_chunk(mock_session, layer, url, 0)
             assert "Failed to fetch data. Status: 500" in str(excinfo.value)
+
 
 @pytest.mark.asyncio
 @patch(
@@ -129,6 +135,7 @@ async def test_fetch_chunk_xml_parse_error(water_projects_bronze: WaterProjectsB
             await water_projects_bronze._fetch_chunk(mock_session, layer, url, 0)
             assert "Failed to parse XML response" in str(excinfo.value)
 
+
 @pytest.mark.asyncio
 @patch(
     "unified_pipeline.bronze.water_projects.WaterProjectsBronze._fetch_chunk.retry.stop",
@@ -148,6 +155,7 @@ async def test_fetch_chunk_unicode_decode_error(water_projects_bronze: WaterProj
 
     result = await water_projects_bronze._fetch_chunk(mock_session, layer, url, 0)
     assert result["text"] == "<xml>replaced</xml>"
+
 
 @pytest.mark.asyncio
 async def test_fetch_arcgis_data_success(water_projects_bronze: WaterProjectsBronze) -> None:
@@ -174,6 +182,7 @@ async def test_fetch_arcgis_data_success(water_projects_bronze: WaterProjectsBro
     assert args[0] == f"{url}/0/query"
     assert kwargs["params"]["f"] == "json"
 
+
 @pytest.mark.asyncio
 @patch(
     "unified_pipeline.bronze.water_projects.WaterProjectsBronze._fetch_arcgis_data.retry.stop",
@@ -192,6 +201,7 @@ async def test_fetch_arcgis_data_http_error(water_projects_bronze: WaterProjects
     with pytest.raises(Exception) as excinfo:
         await water_projects_bronze._fetch_arcgis_data(mock_session, layer, url)
         assert "Failed to fetch ArcGIS data. Status: 404" in str(excinfo.value)
+
 
 @pytest.mark.asyncio
 @patch(
@@ -219,6 +229,7 @@ async def test_fetch_arcgis_data_unicode_decode_error(
 
     assert len(result) == 1
     assert json.loads(result[0]) == json_data
+
 
 @pytest.mark.asyncio
 async def test_fetch_wfs_data_single_batch(water_projects_bronze: WaterProjectsBronze) -> None:
@@ -253,6 +264,7 @@ async def test_fetch_wfs_data_single_batch(water_projects_bronze: WaterProjectsB
         assert len(result) == 1
         assert result[0] == xml_content
         mock_fetch_chunk.assert_called_once_with(mock_session, layer, url, 0)
+
 
 @pytest.mark.asyncio
 async def test_fetch_wfs_data_multiple_batches(water_projects_bronze: WaterProjectsBronze) -> None:
@@ -305,6 +317,7 @@ async def test_fetch_wfs_data_multiple_batches(water_projects_bronze: WaterProje
         assert result[1] == chunk_responses[1]["text"]
         assert result[2] == chunk_responses[2]["text"]
 
+
 @pytest.mark.asyncio
 async def test_fetch_wfs_data_with_error(water_projects_bronze: WaterProjectsBronze) -> None:
     """Test the _fetch_wfs_data method handles errors during fetching."""
@@ -319,6 +332,7 @@ async def test_fetch_wfs_data_with_error(water_projects_bronze: WaterProjectsBro
         with pytest.raises(Exception) as excinfo:
             await water_projects_bronze._fetch_wfs_data(mock_session, layer, url)
         assert "Fetch error" in str(excinfo.value)
+
 
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.water_projects.aiohttp.ClientSession")
@@ -367,6 +381,7 @@ async def test_fetch_raw_data_success(
         # Second layer with ArcGIS data
         assert result[1] == ("Klima_lavbund_demarkation___offentlige_projekter:0", arcgis_data[0])
 
+
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.water_projects.aiohttp.ClientSession")
 @patch("unified_pipeline.bronze.water_projects.aiohttp.TCPConnector")
@@ -390,6 +405,7 @@ async def test_fetch_raw_data_empty_result(
         result = await water_projects_bronze_test._fetch_raw_data()
 
         assert result is None
+
 
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.water_projects.aiohttp.ClientSession")
@@ -418,6 +434,7 @@ async def test_fetch_raw_data_with_error(
         with pytest.raises(Exception) as excinfo:
             await water_projects_bronze_test._fetch_raw_data()
         assert "Fetch error" in str(excinfo.value)
+
 
 def test_create_dataframe(water_projects_bronze: WaterProjectsBronze) -> None:
     """Test the create_dataframe method converts raw data to a table with metadata."""
@@ -470,6 +487,7 @@ def test_create_dataframe(water_projects_bronze: WaterProjectsBronze) -> None:
     assert len(sources) == 1
     assert sources[0][0] == water_projects_bronze.config.name
 
+
 @pytest.mark.asyncio
 async def test_run_success(water_projects_bronze: WaterProjectsBronze) -> None:
     """Test the run method successfully completes the job."""
@@ -487,7 +505,9 @@ async def test_run_success(water_projects_bronze: WaterProjectsBronze) -> None:
     # Verify the  was created correctly
     args, kwargs = water_projects_bronze._save_raw_data.call_args
     df = args[0]
-    assert isinstance(df, )
+    assert isinstance(
+        df,
+    )
     assert len(df) == 1
     assert df["payload"].iloc[0] == "<xml>data</xml>"
     assert df["layer"].iloc[0] == "N2000_projekter:Hydrologi_E"
@@ -495,6 +515,7 @@ async def test_run_success(water_projects_bronze: WaterProjectsBronze) -> None:
     # Verify the correct dataset and bucket were used
     assert args[1] == water_projects_bronze.config.dataset
     assert args[2] == water_projects_bronze.config.bucket
+
 
 @pytest.mark.asyncio
 async def test_run_no_data(water_projects_bronze: WaterProjectsBronze) -> None:
@@ -507,6 +528,7 @@ async def test_run_no_data(water_projects_bronze: WaterProjectsBronze) -> None:
 
     water_projects_bronze._fetch_raw_data.assert_called_once()
     water_projects_bronze._save_raw_data.assert_not_called()
+
 
 @pytest.mark.asyncio
 async def test_run_with_fetch_error(water_projects_bronze: WaterProjectsBronze) -> None:
@@ -521,6 +543,7 @@ async def test_run_with_fetch_error(water_projects_bronze: WaterProjectsBronze) 
     assert "Fetch error" in str(excinfo.value)
     water_projects_bronze._fetch_raw_data.assert_called_once()
     water_projects_bronze._save_raw_data.assert_not_called()
+
 
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.water_projects.wait_exponential")
@@ -582,6 +605,7 @@ async def test_fetch_chunk_retry_behavior(
             assert args[0] == url
             assert kwargs["params"] == water_projects_bronze._get_params(layer, 0)
 
+
 @pytest.mark.asyncio
 async def test_fetch_wfs_data_with_mixed_results(
     water_projects_bronze: WaterProjectsBronze,
@@ -627,6 +651,7 @@ async def test_fetch_wfs_data_with_mixed_results(
         with pytest.raises(Exception) as excinfo:
             await water_projects_bronze._fetch_wfs_data(mock_session, layer, url)
         assert "Network error" in str(excinfo.value)
+
 
 @pytest.mark.asyncio
 async def test_fetch_wfs_data_with_realistic_xml(
@@ -736,6 +761,7 @@ async def test_fetch_wfs_data_with_realistic_xml(
         assert project_name is not None
         assert project_name.text == "Test Project 1"
 
+
 @pytest.mark.asyncio
 async def test_url_construction_for_different_services(
     water_projects_bronze: WaterProjectsBronze,
@@ -797,6 +823,7 @@ async def test_url_construction_for_different_services(
         assert result[0] == ("N2000_projekter:Hydrologi_E", wfs_data[0])
         assert result[1] == ("vandprojekter:kla_projektforslag", custom_wfs_data[0])
         assert result[2] == ("Klima_lavbund_demarkation___offentlige_projekter:0", arcgis_data[0])
+
 
 @pytest.mark.asyncio
 @patch(

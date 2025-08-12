@@ -21,13 +21,13 @@ except ImportError:
 class DuckDBProcessor:
     """Base class for DuckDB-based data processing in drive data pipeline."""
 
-    def __init__(self, db_path: str = ":memory:", dataset_name: str = "drive_data"):
+    def __init__(self, db_path: str = ":memory:", dataset_name: str = "drive_data") -> None:
         self.conn = duckdb.connect(db_path)
         self.dataset_name = dataset_name
         self._setup_extensions()
         logger.info(f"Initialized DuckDB processor for {dataset_name}")
 
-    def _setup_extensions(self):
+    def _setup_extensions(self) -> None:
         """Setup required DuckDB extensions."""
         try:
             self.conn.execute("INSTALL spatial")
@@ -86,7 +86,7 @@ class DuckDBProcessor:
         logger.info(f"Created spatial table {table_name} from: {geospatial_path}")
         return table_name
 
-    def export_to_parquet(self, table_name: str, output_path: str | Path):
+    def export_to_parquet(self, table_name: str, output_path: str | Path) -> None:
         """Export table to parquet file."""
         # Ensure the output directory exists before saving
         output_path = Path(output_path)
@@ -97,7 +97,7 @@ class DuckDBProcessor:
         """)
         logger.info(f"Exported table {table_name} to parquet: {output_path}")
 
-    def export_to_geoparquet(self, table_name: str, output_path: str | Path):
+    def export_to_geoparquet(self, table_name: str, output_path: str | Path) -> None:
         """Export spatial table to GeoParquet file."""
         # Ensure the output directory exists before saving
         output_path = Path(output_path)
@@ -116,7 +116,7 @@ class DuckDBProcessor:
 
         return self.export_to_parquet(table_name, output_path)
 
-    def save_table_to_csv(self, table_name: str, output_path: str | Path):
+    def save_table_to_csv(self, table_name: str, output_path: str | Path) -> None:
         """Save table to CSV file."""
         # Ensure the output directory exists before saving
         output_path = Path(output_path)
@@ -144,10 +144,10 @@ class DuckDBProcessor:
         try:
             self.conn.execute(f"SELECT 1 FROM {table_name} LIMIT 1")
             return True
-        except:
+        except Exception:
             return False
 
-    def drop_table(self, table_name: str):
+    def drop_table(self, table_name: str) -> None:
         """Drop a table or view if it exists."""
         try:
             # Check if it's a table or view by querying information schema
@@ -188,7 +188,7 @@ class DuckDBProcessor:
                     logger.warning(f"Failed to drop table/view {table_name}: {str(e)}")
                     # Don't raise exception since this is cleanup
 
-    def close(self):
+    def close(self) -> None:
         """Close database connection."""
         if self.conn:
             self.conn.close()

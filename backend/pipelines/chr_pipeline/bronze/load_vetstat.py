@@ -7,6 +7,7 @@ import os
 import secrets
 import uuid
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 import requests
@@ -27,7 +28,6 @@ logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_vetstat")
 load_dotenv()
 
 # Also try to load from the pipeline directory in case working directory is different
-from pathlib import Path
 
 pipeline_dir = Path(__file__).parent.parent
 env_path = pipeline_dir / ".env"
