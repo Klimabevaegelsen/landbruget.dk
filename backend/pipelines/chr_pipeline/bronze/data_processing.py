@@ -150,7 +150,7 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                         )
 
                     # Extract key movement information
-                    ckr_nr = getattr(animal, "CkrNr", None)
+                    getattr(animal, "CkrNr", None)
                     entry_date = getattr(animal, "DatoIndgaaet", None)
                     exit_date = getattr(animal, "DatoAfgaaet", None)
                     source_herd = getattr(animal, "BesaetningsNummerFra", None)

@@ -87,7 +87,7 @@ class SchemaDocumentationManager:
             try:
                 count_result = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
                 schema_info["row_count"] = count_result[0] if count_result else 0
-            except:
+            except Exception:
                 schema_info["row_count"] = None
 
             # Table size (if available)
@@ -95,7 +95,7 @@ class SchemaDocumentationManager:
                 size_query = f"SELECT pg_size_pretty(pg_total_relation_size('{table_name}'))"
                 size_result = self.conn.execute(size_query).fetchone()
                 schema_info["table_size"] = size_result[0] if size_result else None
-            except:
+            except Exception:
                 schema_info["table_size"] = None
 
             # Summary statistics using SUMMARIZE (if table has data)

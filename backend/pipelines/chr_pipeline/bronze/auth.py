@@ -8,7 +8,6 @@ from typing import Any, Tuple
 
 import certifi
 import requests
-from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
 from dotenv import load_dotenv
 from requests import Session
