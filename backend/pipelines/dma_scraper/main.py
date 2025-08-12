@@ -14,7 +14,6 @@ sys.path.insert(0, ROOT)
 
 from bronze.fetch_company_data import DMAScraper
 from bronze.fetch_company_detail import DMACompanyDetailScraper
-
 from silver.transformation import transform_dma_json
 
 

@@ -4,6 +4,7 @@ import time
 
 from .duckdb_processor import DuckDBProcessor
 
+
 class SilverBase(DuckDBProcessor):
     """Base class for silver layer data processing."""
 

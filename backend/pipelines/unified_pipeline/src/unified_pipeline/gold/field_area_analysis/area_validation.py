@@ -1,8 +1,8 @@
 """Area validation utilities for Field Area Analysis pipeline."""
 
 import time
-from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 from unified_pipeline.util.log_util import Logger
 
@@ -371,7 +371,7 @@ class FieldAreaValidator:
                     
                     self.log.error(f"    ❌ {violation_count:,} violations found (max ratio: {max_ratio:.1f}x)")
                 else:
-                    self.log.info(f"    ✅ No violations found")
+                    self.log.info("    ✅ No violations found")
             
             # Overall validation result
             is_valid = total_violations == 0
@@ -449,7 +449,7 @@ class FieldAreaValidator:
         try:
             # Properly prefix group columns with table aliases
             group_by_clause_detail = ", ".join([f"d.{col}" for col in group_columns])
-            group_by_clause_plain = ", ".join(group_columns)
+            ", ".join(group_columns)
             join_conditions = " AND ".join([f"d.{col} = a.{col}" for col in group_columns])
             
             validation_query = f"""

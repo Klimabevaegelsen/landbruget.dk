@@ -41,7 +41,7 @@ class TestDSTIntegration:
         """Test integration between DST bronze and silver layers."""
 
         # Create bronze instance
-        bronze = DSTBronze(dst_bronze_config)
+        DSTBronze(dst_bronze_config)
 
         # Mock bronze data processing
         mock_bronze_data = {

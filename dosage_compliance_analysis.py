@@ -209,7 +209,11 @@ class DosageComplianceAnalyzer:
             
             result = {
                 'our_crop_code': row['crop_code'],
-                'our_crop_name': self.crop_mapping[self.crop_mapping['our_crop_code'] == row['crop_code']]['our_crop_name'].iloc[0] if len(self.crop_mapping[self.crop_mapping['our_crop_code'] == row['crop_code']]) > 0 else '',
+                'our_crop_name': (
+                    self.crop_mapping[self.crop_mapping['our_crop_code'] == row['crop_code']]['our_crop_name'].iloc[0]
+                    if len(self.crop_mapping[self.crop_mapping['our_crop_code'] == row['crop_code']]) > 0 
+                    else ''
+                ),
                 'api_crop_id': api_crop_id,
                 'api_crop_name': row['api_crop_name'],
                 'pesticide_registration_number': reg_number,
@@ -305,7 +309,7 @@ class DosageComplianceAnalyzer:
     def _generate_summary_stats(self, results: pd.DataFrame) -> Dict:
         """Generate summary statistics."""
         total_applications = len(results)
-        api_found = len(results[results['api_found'] == True])
+        api_found = len(results[results['api_found']])
         
         compliance_stats = results['compliance_status'].value_counts().to_dict()
         
@@ -365,7 +369,11 @@ For applications where API limits are available:
         major_excesses = results[results['compliance_status'] == 'MAJOR_EXCESS'].nlargest(10, 'dosage_ratio')
         if len(major_excesses) > 0:
             for _, row in major_excesses.iterrows():
-                report += f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: {row['dosage_ratio']:.1f}x limit ({row['our_dosage_per_ha']:.2f} {row['our_unit']}/ha vs {row['api_max_dosage_app']:.2f} {row['api_dosage_unit']}/ha)\n"
+                report += (
+                    f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: "
+                    f"{row['dosage_ratio']:.1f}x limit ({row['our_dosage_per_ha']:.2f} {row['our_unit']}/ha vs "
+                    f"{row['api_max_dosage_app']:.2f} {row['api_dosage_unit']}/ha)\n"
+                )
         else:
             report += "None found.\n"
         
@@ -376,14 +384,18 @@ For applications where API limits are available:
         unit_mismatches = results[results['compliance_status'] == 'UNIT_MISMATCH']
         if len(unit_mismatches) > 0:
             for _, row in unit_mismatches.head(10).iterrows():
-                report += f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: Our unit: {row['our_unit']}, API unit: {row['api_dosage_unit']}\n"
+                report += (
+                    f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: "
+                    f"Our unit: {row['our_unit']}, API unit: {row['api_dosage_unit']}\n"
+                )
         else:
             report += "None found.\n"
         
         report += f"""
 ## Methodology Notes
 
-1. **Dosage Calculation**: Our data contains total dosage per application, converted to per-hectare by dividing by area_ha
+1. **Dosage Calculation**: Our data contains total dosage per application, 
+   converted to per-hectare by dividing by area_ha
 2. **Unit Mapping**: 2=kg, 4=l, 5=tablets (based on codebase analysis)
 3. **Crop Matching**: Used comprehensive crop code mapping with {len(self.crop_mapping)} validated matches
 4. **API Source**: Plante IT Pesticide Service (pesticideservice.dlbr.dk)
@@ -395,7 +407,9 @@ For applications where API limits are available:
 
 ## Data Quality Assessment
 
-This analysis validates **{summary['api_match_rate_pct']}%** of our pesticide applications against official API dosage recommendations, providing strong regulatory compliance insights for Danish agricultural pesticide usage.
+This analysis validates **{summary['api_match_rate_pct']}%** of our pesticide applications 
+against official API dosage recommendations, providing strong regulatory compliance insights 
+for Danish agricultural pesticide usage.
 """
         
         with open(output_path, 'w') as f:
@@ -425,11 +439,11 @@ def main():
     compliant = len(results[results['compliance_status'] == 'COMPLIANT'])
     major_issues = len(results[results['compliance_status'] == 'MAJOR_EXCESS'])
     
-    print(f"\n🎯 QUICK SUMMARY:")
+    print("\n🎯 QUICK SUMMARY:")
     print(f"📊 Total applications analyzed: {total:,}")
     print(f"✅ Compliant: {compliant:,} ({compliant/total*100:.1f}%)")
     print(f"🚨 Major excesses: {major_issues:,} ({major_issues/total*100:.1f}%)")
-    print(f"📁 Detailed results saved to: dosage_compliance_results/")
+    print("📁 Detailed results saved to: dosage_compliance_results/")
 
 if __name__ == "__main__":
     main()

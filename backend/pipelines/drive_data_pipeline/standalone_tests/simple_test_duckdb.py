@@ -6,18 +6,18 @@ Simple test for DuckDB functionality.
 import duckdb
 
 
-def test_duckdb():
+def test_duckdb() -> bool:
     """Test basic DuckDB functionality."""
     print("Testing basic DuckDB functionality...")
     
+    # Create a DuckDB connection
+    conn = duckdb.connect(":memory:")
+    
     # Create a test DataFrame
-    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
+    df = conn.execute("CREATE TABLE temp_table AS SELECT 1 as id, 'test' as name").fetchdf()
     
     print("Created test DataFrame:")
     print(df.head())
-    
-    # Create a DuckDB connection
-    conn = duckdb.connect(":memory:")
     
     # Register the DataFrame with DuckDB
     conn.register("test_df", df)

@@ -20,12 +20,12 @@ parallel execution via GitHub Actions job matrices.
 # Note: Legacy CVREnrichmentGold classes are imported directly in app.py to avoid circular imports
 
 # New modular CVR enrichment steps
-from .cvr_collection import CVRCollection, CVRCollectionConfig
-from .company_fetching import CompanyFetching, CompanyFetchingConfig
-from .pnumber_fetching import PNumberFetching, PNumberFetchingConfig
-from .financial_documents import FinancialDocuments, FinancialDocumentsConfig
 from .address_geocoding import AddressGeocoding, AddressGeocodingConfig
+from .company_fetching import CompanyFetching, CompanyFetchingConfig
+from .cvr_collection import CVRCollection, CVRCollectionConfig
 from .data_consolidation import DataConsolidation, DataConsolidationConfig
+from .financial_documents import FinancialDocuments, FinancialDocumentsConfig
+from .pnumber_fetching import PNumberFetching, PNumberFetchingConfig
 
 __all__ = [
     # New modular steps

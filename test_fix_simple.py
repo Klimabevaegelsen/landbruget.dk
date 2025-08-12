@@ -45,13 +45,13 @@ def test_code_changes():
     
     # Report results
     if issues_found:
-        logger.error(f"❌ FAIL: Found problematic code that should have been removed:")
+        logger.error("❌ FAIL: Found problematic code that should have been removed:")
         for issue in issues_found:
             logger.error(f"  - {issue}")
         return False
     
     if missing_positives:
-        logger.error(f"❌ FAIL: Missing expected positive changes:")
+        logger.error("❌ FAIL: Missing expected positive changes:")
         for missing in missing_positives:
             logger.error(f"  - {missing}")
         return False
@@ -82,7 +82,7 @@ def test_volume_management_exists():
                 missing_functions.append(func)
         
         if missing_functions:
-            logger.error(f"❌ FAIL: Missing volume management functions:")
+            logger.error("❌ FAIL: Missing volume management functions:")
             for func in missing_functions:
                 logger.error(f"  - {func}")
             return False
@@ -115,7 +115,7 @@ def test_chunking_integration():
                 missing_patterns.append(pattern)
         
         if missing_patterns:
-            logger.error(f"❌ FAIL: Missing chunking integration:")
+            logger.error("❌ FAIL: Missing chunking integration:")
             for pattern in missing_patterns:
                 logger.error(f"  - {pattern}")
             return False

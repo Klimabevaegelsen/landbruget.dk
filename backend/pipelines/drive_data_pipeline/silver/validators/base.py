@@ -11,7 +11,8 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
 
 # Get logger
 logger = get_logger()
@@ -36,7 +37,7 @@ class ValidationResult:
 class BaseValidator(abc.ABC):
     """Base class for all validators."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the validator."""
         logger.debug(f"Initialized {self.__class__.__name__}")
 
@@ -52,7 +53,7 @@ class BaseValidator(abc.ABC):
         """
         pass
 
-    def add_error(self, result: ValidationResult, error: str):
+    def add_error(self, result: ValidationResult, error: str) -> None:
         """Add an error to the validation result.
 
         Args:
@@ -63,7 +64,7 @@ class BaseValidator(abc.ABC):
         result.is_valid = False
         logger.warning(f"Validation error: {error}")
 
-    def add_warning(self, result: ValidationResult, warning: str):
+    def add_warning(self, result: ValidationResult, warning: str) -> None:
         """Add a warning to the validation result.
 
         Args:
@@ -77,7 +78,7 @@ class BaseValidator(abc.ABC):
 class SchemaValidator(BaseValidator):
     """Validator for checking data schema."""
 
-    def __init__(self, required_columns: set[str] | None = None):
+    def __init__(self, required_columns: set[str] | None = None) -> None:
         """Initialize the schema validator.
 
         Args:
@@ -131,7 +132,7 @@ class SchemaValidator(BaseValidator):
 class DataTypeValidator(BaseValidator):
     """Validator for checking data types."""
 
-    def __init__(self, expected_types: dict[str, str]):
+    def __init__(self, expected_types: dict[str, str]) -> None:
         """Initialize the data type validator.
 
         Args:

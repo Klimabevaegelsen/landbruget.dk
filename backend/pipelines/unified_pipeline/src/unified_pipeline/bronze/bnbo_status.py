@@ -27,6 +27,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class BNBOStatusBronzeConfig(BaseJobConfig):
     """
     Configuration for BNBO (Boringsnære Beskyttelsesområder) status data source in the bronze layer.

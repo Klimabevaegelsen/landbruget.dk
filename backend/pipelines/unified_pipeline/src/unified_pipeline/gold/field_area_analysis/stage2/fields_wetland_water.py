@@ -56,7 +56,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             "water_projects_wetlands_intersections",
         )
 
-        self.log.info(f"✅ Loaded foundation data for redesigned Stage 2B")
+        self.log.info("✅ Loaded foundation data for redesigned Stage 2B")
 
         # Input validation
         field_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
@@ -65,7 +65,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             "SELECT COUNT(*) FROM water_projects_wetlands_intersections"
         ).fetchone()[0]
 
-        self.log.info(f"📊 Foundation data loaded:")
+        self.log.info("📊 Foundation data loaded:")
         self.log.info(f"  Fields: {field_count:,}")
         self.log.info(f"  Wetlands (pre-filtered): {wetland_count:,}")
         self.log.info(f"  Water-covered wetland intersections: {water_wetland_count:,}")
@@ -160,7 +160,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         # Validation: Geometry validity checks
         self._validate_geometric_output()
 
-        self.log.info(f"✅ REDESIGNED STAGE 2B COMPLETE:")
+        self.log.info("✅ REDESIGNED STAGE 2B COMPLETE:")
         self.log.info(f"📊 Total field-wetland intersections: {total_wetland_intersections:,}")
         self.log.info(f"📊 Water-covered intersections: {water_covered_intersections:,}")
         self.log.info(f"📊 Unique fields with wetlands: {unique_fields_with_wetlands:,}")

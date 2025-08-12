@@ -21,11 +21,8 @@ The processing includes:
 5. Saving processed data back to GCS (without dissolving)
 """
 
-import logging
 import xml.etree.ElementTree as ET
 from typing import Any, Optional
-
-from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
@@ -661,7 +658,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                     # Read from GCS storage
                     raw_data_list = []
                     for layer in self.config.layers:
-                        layer_table = f"{layer.replace(':', '_')}_raw"
+                        f"{layer.replace(':', '_')}_raw"
                         dataset_name = f"{self.config.dataset}_{layer.replace(':', '_')}"
                         
                         try:

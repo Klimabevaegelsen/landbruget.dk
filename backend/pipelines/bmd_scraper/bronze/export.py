@@ -239,7 +239,7 @@ class GCSStorage:
     def _check_gcs_available(self):
         """Check if GCS is available (Google Cloud Storage library is installed)."""
         try:
-            from google.cloud import storage
+            from google.cloud import storage  # noqa: F401
 
             return True
         except ImportError:

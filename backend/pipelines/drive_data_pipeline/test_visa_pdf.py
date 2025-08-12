@@ -7,8 +7,8 @@ Usage:
 """
 
 import sys
-import os
 from pathlib import Path
+
 import pandas as pd
 
 # Add the parent directory to sys.path to enable imports
@@ -17,8 +17,8 @@ sys.path.insert(0, str(parent_dir))
 
 # Try to import the required modules with better error handling
 try:
-    import tabula
     import pdfplumber
+    import tabula
     print("✅ PDF processing libraries available")
 except ImportError as e:
     print(f"❌ Missing PDF processing libraries: {e}")
@@ -79,7 +79,7 @@ def extract_tables_with_pdfplumber(pdf_path: Path):
         print(f"❌ PDFplumber extraction failed: {e}")
         return []
 
-def test_visa_pdf_extraction(pdf_path: Path):
+def test_visa_pdf_extraction(pdf_path: Path) -> None:
     """Test PDF extraction on a VISA file."""
     
     print(f"🧪 Testing PDF extraction on: {pdf_path}")

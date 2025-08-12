@@ -24,7 +24,7 @@ logger = get_logger()
 class DuckDBHelper:
     """Helper class for DuckDB and Ibis operations."""
     
-    def __init__(self, database_path=None):
+    def __init__(self, database_path=None) -> None:
         """Initialize the DuckDB helper."""
         # Create DuckDB connection
         if database_path:
@@ -121,7 +121,7 @@ class DuckDBHelper:
             logger.error(f"Failed to cast column types: {str(e)}")
             raise
     
-    def close(self):
+    def close(self) -> None:
         """Close the DuckDB connection."""
         try:
             self.conn.close()
@@ -131,7 +131,7 @@ class DuckDBHelper:
             raise 
 
 
-def test_duckdb_helper():
+def test_duckdb_helper() -> bool:
     """Test the DuckDBHelper class."""
     print("Testing DuckDBHelper class...")
     
@@ -139,7 +139,7 @@ def test_duckdb_helper():
     helper = DuckDBHelper()
     
     # Create a test DataFrame
-    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
+    df = helper.conn.execute("CREATE TABLE temp_table AS SELECT ...")
     
     print("Created test DataFrame:")
     print(df.head())

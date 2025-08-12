@@ -117,7 +117,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
               AND first_permits_count <= {self.config.max_permits_per_record}
             """
             
-            result = self.conn.execute(create_table_sql)
+            self.conn.execute(create_table_sql)
             
             # Get count and basic stats
             count_result = self.conn.execute("SELECT COUNT(*) as count FROM work_permits").fetchone()
@@ -154,7 +154,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             
             if stats_result:
                 total_records, companies, nationalities, min_year, max_year, total_permits = stats_result
-                self.log.info(f"📊 Loaded work permits data:")
+                self.log.info("📊 Loaded work permits data:")
                 self.log.info(f"   • {total_records:,} records")
                 self.log.info(f"   • {companies:,} unique companies")
                 self.log.info(f"   • {nationalities} nationalities")

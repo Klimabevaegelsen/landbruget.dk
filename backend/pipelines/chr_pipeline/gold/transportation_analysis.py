@@ -1316,8 +1316,8 @@ def process_transportation_analysis(export_timestamp: str,
         
         # Setup directories - use local data directory for testing
         if gold_dir is None:
-            from pathlib import Path
             import os
+            from pathlib import Path
             if os.getenv("GITHUB_ACTIONS"):
                 base_dir = Path(os.getenv("LOCAL_DATA_PATH", "/tmp"))
             else:

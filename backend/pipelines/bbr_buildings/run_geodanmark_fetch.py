@@ -10,15 +10,15 @@ from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 
 # GCS upload functionality
 try:
-    from google.cloud import storage
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from google.cloud import storage  # noqa: F401
+    from unified_pipeline.util.gcs_access import GCSDataAccess  # noqa: F401
 
     GCS_AVAILABLE = True
 except ImportError:
     GCS_AVAILABLE = False
 
 
-def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str):
+def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str) -> bool | None:
     """Upload file to GCS using the standard pattern from other pipelines."""
     if not GCS_AVAILABLE:
         print("⚠️ GCS not available - skipping upload")
@@ -40,7 +40,7 @@ def upload_to_gcs(file_path: str, gcs_bucket: str, gcs_path: str):
         return False
 
 
-def main():
+def main() -> None:
     username = os.getenv("DATAFORDELER_USERNAME")
     password = os.getenv("DATAFORDELER_PASSWORD")
     gcs_bucket = os.getenv("GCS_BUCKET")

@@ -192,7 +192,7 @@ class BMDTransformer:
         if self.conn is not None:
             try:
                 self.conn.close()
-            except:
+            except Exception:
                 pass
 
     def read_excel(self) -> str:

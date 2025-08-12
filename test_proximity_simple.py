@@ -3,8 +3,10 @@
 Simplified proximity test to isolate the DuckDB spatial join issue.
 """
 
-import duckdb
 from pathlib import Path
+
+import duckdb
+
 
 def test_simple_proximity():
     print("🧪 Testing simplified proximity analysis")

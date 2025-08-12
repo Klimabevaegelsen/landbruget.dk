@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-def main():
+def main() -> int:
     """Install dependencies and run tests."""
     # Get the directory of this script
     script_dir = Path(__file__).parent.absolute()

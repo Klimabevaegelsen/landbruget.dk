@@ -229,7 +229,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             validate_and_transform_geometries_duckdb(
                 self.conn,
                 processed_table,
-                f"dagi_{division_type}",
+                f"dagi_{layer_type}",
                 geometry_column="geometry"
             )
             

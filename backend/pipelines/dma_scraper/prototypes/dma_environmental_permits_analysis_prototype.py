@@ -43,19 +43,19 @@ TODO FOR PRODUCTION:
 - [ ] Add monitoring and alerting
 """
 
-import os
 import json
 import logging
-import tempfile
+import os
 import subprocess
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
-from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import tempfile
 from collections import defaultdict
-import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -1101,7 +1101,7 @@ def main():
         json.dump(results, f, indent=2, ensure_ascii=False)
     
     logger.info(f"\n💾 Analysis results saved to: {output_file}")
-    logger.info(f"✅ DMA Environmental Permit Analysis Complete!")
+    logger.info("✅ DMA Environmental Permit Analysis Complete!")
     
     # Summary with new facility-based structure
     total_companies = len(results)
@@ -1116,7 +1116,7 @@ def main():
             if facility_result.get("status") == "facility_analysis_complete":
                 successful_facilities += 1
     
-    logger.info(f"\n📊 ENHANCED ANALYSIS SUMMARY:")
+    logger.info("\n📊 ENHANCED ANALYSIS SUMMARY:")
     logger.info(f"    Companies analyzed: {total_companies}")
     logger.info(f"    Total documents processed: {total_documents}")
     logger.info(f"    Total facilities identified: {total_facilities}")

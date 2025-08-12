@@ -89,7 +89,7 @@ def mock_bronze_data(test_settings):
 
 
 @pytest.mark.integration
-def test_silver_processor(test_settings, mock_bronze_data):
+def test_silver_processor(test_settings, mock_bronze_data) -> None:
     """Test silver processor end-to-end functionality."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -145,7 +145,7 @@ def test_silver_processor(test_settings, mock_bronze_data):
 
 
 @pytest.mark.integration
-def test_silver_specific_subfolders(test_settings, mock_bronze_data):
+def test_silver_specific_subfolders(test_settings, mock_bronze_data) -> None:
     """Test silver processor with specific subfolders filter."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -189,7 +189,7 @@ def test_silver_specific_subfolders(test_settings, mock_bronze_data):
 
 
 @pytest.mark.integration
-def test_silver_specific_file_types(test_settings, mock_bronze_data):
+def test_silver_specific_file_types(test_settings, mock_bronze_data) -> None:
     """Test silver processor with specific file types filter."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -233,7 +233,7 @@ def test_silver_specific_file_types(test_settings, mock_bronze_data):
 
 
 @pytest.mark.integration
-def test_silver_error_handling(test_settings, mock_bronze_data):
+def test_silver_error_handling(test_settings, mock_bronze_data) -> None:
     """Test silver processor error handling capabilities."""
     # Create storage manager
     storage_manager = LocalStorageManager()

@@ -14,6 +14,7 @@ from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.timing import timed
+
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
 
 
@@ -78,7 +79,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         self._setup_company_uuid_function()
         
         self.log.info("Data consolidation step initialized")
-        self.log.info(f"📋 Configuration:")
+        self.log.info("📋 Configuration:")
         self.log.info(f"   • Create normalized tables: {self.config.create_normalized_tables}")
         self.log.info(f"   • Include raw JSON: {self.config.include_raw_json}")
     
@@ -152,7 +153,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.log.info("=" * 60)
             self.log.info("🎉 CVR ENRICHMENT PIPELINE COMPLETED SUCCESSFULLY")
             self.log.info("=" * 60)
-            self.log.info(f"📊 FINAL SUMMARY:")
+            self.log.info("📊 FINAL SUMMARY:")
             self.log.info(f"   • Total companies processed: {total_companies:,}")
             self.log.info(f"   • Total P-numbers processed: {total_pnumbers:,}")
             self.log.info(f"   • Total addresses found: {total_addresses:,}")
@@ -160,10 +161,10 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.log.info(f"   • Financial documents: {financial_docs:,}")
             self.log.info(f"   • Database tables created: {tables_created}")
             self.log.info(f"   • Main output table: {main_table}")
-            self.log.info(f"")
-            self.log.info(f"🚀 PIPELINE SUCCESS!")
-            self.log.info(f"   The CVR enrichment pipeline has completed successfully.")
-            self.log.info(f"   All data is now available in the gold layer tables.")
+            self.log.info("")
+            self.log.info("🚀 PIPELINE SUCCESS!")
+            self.log.info("   The CVR enrichment pipeline has completed successfully.")
+            self.log.info("   All data is now available in the gold layer tables.")
             self.log.info("=" * 60)
             
             return main_table
@@ -173,8 +174,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.log.error("❌ DATA CONSOLIDATION FAILED")
             self.log.error("=" * 60)
             self.log.error(f"💥 Error: {e}")
-            self.log.error(f"🔍 Check the logs above for detailed error information")
-            self.log.error(f"⚠️  This is the final step - previous steps may have succeeded")
+            self.log.error("🔍 Check the logs above for detailed error information")
+            self.log.error("⚠️  This is the final step - previous steps may have succeeded")
             self.log.error("=" * 60)
             raise
     
@@ -1169,13 +1170,13 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 LIMIT 5
             """).fetchall()
             
-            self.log.info(f"🎉 Successfully created sophisticated normalized CVR tables using chunked processing!")
+            self.log.info("🎉 Successfully created sophisticated normalized CVR tables using chunked processing!")
             self.log.info(f"   📋 Companies: {main_count}")
             self.log.info(f"   👥 Leadership entries: {leadership_count}")
             self.log.info(f"   💰 Financial documents: {financial_count}")
             self.log.info(f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)")
             self.log.info(f"   🏭 Industry entries: {industries_count}")
-            self.log.info(f"   👷 Employment data:")
+            self.log.info("   👷 Employment data:")
             for table_suffix, count in employment_counts.items():
                 self.log.info(f"      📈 {table_suffix.replace('_', ' ').title()}: {count} records")
             

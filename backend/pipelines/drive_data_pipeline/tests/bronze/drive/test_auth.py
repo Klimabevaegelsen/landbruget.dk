@@ -54,7 +54,7 @@ def mock_service_account():
         yield mock_creds
 
 
-def test_get_drive_service_with_valid_credentials(mock_credentials, mock_build, mock_service_account):
+def test_get_drive_service_with_valid_credentials(mock_credentials, mock_build, mock_service_account) -> None:
     """Test get_drive_service with valid credentials."""
     # Call the function
     result = get_drive_service(mock_credentials)
@@ -72,13 +72,13 @@ def test_get_drive_service_with_valid_credentials(mock_credentials, mock_build, 
     assert result is mock_build.return_value
 
 
-def test_get_drive_service_with_nonexistent_file():
+def test_get_drive_service_with_nonexistent_file() -> None:
     """Test get_drive_service with a nonexistent credentials file."""
     with pytest.raises(FileNotFoundError):
         get_drive_service(Path("/nonexistent/path.json"))
 
 
-def test_get_drive_service_with_invalid_credentials(mock_credentials, mock_service_account):
+def test_get_drive_service_with_invalid_credentials(mock_credentials, mock_service_account) -> None:
     """Test get_drive_service with invalid credentials."""
     # Mock service_account.Credentials.from_service_account_file to raise an exception
     mock_service_account.from_service_account_file.side_effect = ValueError("Invalid credentials")
