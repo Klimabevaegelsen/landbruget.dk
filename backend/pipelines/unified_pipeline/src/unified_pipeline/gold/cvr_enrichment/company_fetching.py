@@ -382,7 +382,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             data=table_name,
             dataset=self.config.dataset,
             bucket=self.config.bucket,
-            stage="gold"
+            stage="gold",
+            filename="company_fetching.parquet"
         )
         
         # Also save locally for GitHub Actions artifact sharing

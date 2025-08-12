@@ -248,7 +248,7 @@ def _get_latest_input_paths_from_gcs(
         
         elif step == CVREnrichmentStep.COMPANY_FETCHING:
             # Company fetching depends on collection step
-            pattern = f"{base_pattern}/*/collection.parquet"
+            pattern = f"gs://{bucket}/gold/cvr_enrichment_collection/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
         
@@ -303,6 +303,102 @@ def _get_latest_input_paths_from_gcs(
         logger = Logger.get_logger()
         logger.warning(f"Error finding latest files from GCS: {e}")
         return []
+
+
+def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int) -> Optional[str]:
+    """
+    Find the latest file matching a pattern that contains company data (has company_data_json column).
+    
+    Args:
+        gcs_access: GCSDataAccess instance
+        pattern: GCS file pattern to search
+        max_days_back: Maximum days to look back
+        
+    Returns:
+        Path to latest company data file or None
+    """
+    from datetime import datetime, timedelta
+    
+    try:
+        # Get files with timestamps using existing utility
+        files_with_timestamps = gcs_access.list_files_with_timestamps(pattern)
+        
+        if not files_with_timestamps:
+            return None
+        
+        # Filter files within the time window and check for company data
+        cutoff_date = datetime.now() - timedelta(days=max_days_back)
+        company_files = []
+        
+        for filepath, timestamp in files_with_timestamps:
+            try:
+                # Handle timezone-aware vs timezone-naive comparison
+                if timestamp.tzinfo is not None:
+                    # timestamp is timezone-aware, make cutoff_date timezone-aware too
+                    from datetime import timezone
+                    if cutoff_date.tzinfo is None:
+                        cutoff_date = cutoff_date.replace(tzinfo=timezone.utc)
+                else:
+                    # timestamp is timezone-naive, ensure cutoff_date is timezone-naive
+                    if cutoff_date.tzinfo is not None:
+                        cutoff_date = cutoff_date.replace(tzinfo=None)
+                
+                if timestamp >= cutoff_date:
+                    # Check if this file contains company data
+                    if _has_company_data(gcs_access, filepath):
+                        company_files.append((filepath, timestamp))
+            except Exception as e:
+                from unified_pipeline.util.log_util import Logger
+                logger = Logger.get_logger()
+                logger.warning(f"Error checking file {filepath}: {e}")
+                continue
+        
+        if not company_files:
+            return None
+        
+        # Sort by timestamp and return the latest
+        company_files.sort(key=lambda x: x[1], reverse=True)
+        return company_files[0][0]
+        
+    except Exception as e:
+        from unified_pipeline.util.log_util import Logger
+        logger = Logger.get_logger()
+        logger.warning(f"Error finding latest company data file with pattern {pattern}: {e}")
+        return None
+
+
+def _has_company_data(gcs_access, filepath: str) -> bool:
+    """
+    Check if a file contains company data by looking for company_data_json column.
+    
+    Args:
+        gcs_access: GCSDataAccess instance
+        filepath: Path to the file
+        
+    Returns:
+        True if file contains company data, False otherwise
+    """
+    try:
+        import duckdb
+        import gcsfs
+        
+        # Create a temporary connection for checking file structure
+        temp_conn = duckdb.connect()
+        temp_conn.install_extension('spatial')
+        temp_conn.load_extension('spatial')
+        fs = gcsfs.GCSFileSystem()
+        temp_conn.register_filesystem(fs)
+        
+        columns_result = temp_conn.execute(f'''
+            DESCRIBE (SELECT * FROM read_parquet('{filepath}') LIMIT 1)
+        ''').fetchall()
+        
+        column_names = [col[0] for col in columns_result]
+        temp_conn.close()
+        return 'company_data_json' in column_names
+        
+    except Exception:
+        return False
 
 
 def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int) -> Optional[str]:
