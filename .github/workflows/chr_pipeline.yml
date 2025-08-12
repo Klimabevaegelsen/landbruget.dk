@@ -182,6 +182,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -342,6 +344,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -513,6 +517,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -672,6 +678,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -794,6 +802,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -922,6 +932,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
@@ -1412,6 +1424,8 @@ jobs:
           VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
           VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env

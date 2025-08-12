@@ -76,6 +76,8 @@ jobs:
 
     env:
       ENVIRONMENT: production
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
     outputs:
       buildings-count: ${{ steps.fetch-geodanmark.outputs.buildings-count }}
@@ -179,6 +181,8 @@ jobs:
 
     env:
       ENVIRONMENT: production
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
     outputs:
       buildings-count: ${{ steps.fetch-inspire.outputs.buildings-count }}
@@ -269,6 +273,8 @@ jobs:
 
     env:
       ENVIRONMENT: production
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
     steps:
     - uses: actions/checkout@v4
