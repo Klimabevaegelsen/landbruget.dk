@@ -24,7 +24,6 @@ The processing includes:
 import xml.etree.ElementTree as ET
 from typing import Any, Optional
 
-
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.timing import AsyncTimer, timed

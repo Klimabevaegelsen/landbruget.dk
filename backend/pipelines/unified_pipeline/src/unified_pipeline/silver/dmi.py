@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import timed
 
+
 class DMISilverConfig(BaseJobConfig):
     """
     Configuration for DMI Silver data processing.

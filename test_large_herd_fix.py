@@ -74,8 +74,9 @@ def test_volume_management_integration():
     """Test that volume management system is properly configured for large herds."""
     
     sys.path.insert(0, 'backend/pipelines/chr_pipeline')
-    from bronze.volume_management import is_high_volume_herd, add_high_volume_herd, get_optimal_date_range
     from datetime import date
+
+    from bronze.volume_management import add_high_volume_herd, get_optimal_date_range, is_high_volume_herd
     
     logger.info("🔧 Testing volume management integration...")
     
@@ -132,7 +133,7 @@ def main():
             failed += 1
     
     logger.info(f"\n{'='*50}")
-    logger.info(f"TEST SUMMARY")
+    logger.info("TEST SUMMARY")
     logger.info(f"{'='*50}")
     logger.info(f"✅ Passed: {passed}")
     logger.info(f"❌ Failed: {failed}")

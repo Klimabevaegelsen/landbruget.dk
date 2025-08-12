@@ -154,7 +154,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             
             if stats_result:
                 total_records, companies, nationalities, min_year, max_year, total_permits = stats_result
-                self.log.info(f"📊 Loaded work permits data:")
+                self.log.info("📊 Loaded work permits data:")
                 self.log.info(f"   • {total_records:,} records")
                 self.log.info(f"   • {companies:,} unique companies")
                 self.log.info(f"   • {nationalities} nationalities")

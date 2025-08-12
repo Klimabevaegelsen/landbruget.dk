@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-def run_test(test_script):
+def run_test(test_script) -> bool | None:
     """Run a test script and return True if it succeeds."""
     print(f"\n{'-' * 80}")
     print(f"Running test: {test_script}")
@@ -23,7 +23,7 @@ def run_test(test_script):
         return False
 
 
-def run_all_tests():
+def run_all_tests() -> int:
     """Run all test scripts."""
     # Get the directory of this script
     script_dir = Path(__file__).parent.absolute()

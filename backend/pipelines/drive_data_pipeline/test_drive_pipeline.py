@@ -3,24 +3,23 @@
 Test the drive pipeline with a local PDF file.
 """
 
-import sys
-import os
-from pathlib import Path
-import tempfile
 import shutil
+import sys
+import tempfile
+from pathlib import Path
 
 # Add paths for imports
 parent_dir = Path(__file__).parent
 sys.path.insert(0, str(parent_dir))
 
-from config.settings import get_settings
-from bronze.processor import BronzeProcessor  
 from bronze.metadata import MetadataManager
+from config.settings import get_settings
 from silver.processor import SilverProcessor
+from utils.logging import get_logger, setup_logging
 from utils.storage import get_storage_manager
-from utils.logging import setup_logging, get_logger
 
-def test_drive_pipeline_with_pdf(pdf_path: Path):
+
+def test_drive_pipeline_with_pdf(pdf_path: Path) -> None:
     """Test the drive pipeline with a local PDF file."""
     
     # Setup logging
@@ -100,7 +99,7 @@ def test_drive_pipeline_with_pdf(pdf_path: Path):
         try:
             # Process the file from bronze to silver
             from bronze.metadata import FileMetadata
-            metadata = FileMetadata(**metadata_dict)
+            FileMetadata(**metadata_dict)
             
             success = silver_processor._process_file(
                 file_path=bronze_pdf_path,

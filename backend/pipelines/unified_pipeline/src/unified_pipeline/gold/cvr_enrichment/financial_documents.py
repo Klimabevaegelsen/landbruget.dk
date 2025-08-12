@@ -15,6 +15,7 @@ from pydantic import Field
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.cvr_api_client import CVRAPIClient
 from unified_pipeline.util.timing import timed
+
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
 
 
@@ -110,8 +111,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         )
         
         self.log.info("Financial documents step initialized")
-        self.log.info(f"📋 Configuration:")
-        self.log.info(f"   • Processing mode: Single job (no batching)")
+        self.log.info("📋 Configuration:")
+        self.log.info("   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Max documents per company: {self.config.max_financial_documents}")
         self.log.info(f"   • Parse XML: {self.config.parse_financial_xml}")
         self.log.info(f"   • XML only: {self.config.xml_only}")

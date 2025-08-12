@@ -61,8 +61,7 @@ def load_herd_list(
         - Optional[int]: The last herd number received in this batch (TilBesNr),
                          or None if not available or no herds found.
     """
-    operation_name = "listBesaetningerMedBrugsart"
-    base_request = create_base_request(username)
+    create_base_request(username)
     request_data = {
         "DyreArtKode": str(species_code),
         "BrugsArtKode": str(usage_code),
@@ -71,10 +70,6 @@ def load_herd_list(
         request_data["BesNrFra"] = str(start_herd_number)
 
     # Create the payload dictionary expected by the operation elements
-    payload = {
-        "GLRCHRWSInfoInbound": base_request,
-        "Request": request_data,
-    }
 
     logger.info(
         f"Fetching herd list for species {species_code}, usage {usage_code}, starting from herd {start_herd_number or 'beginning'}..."

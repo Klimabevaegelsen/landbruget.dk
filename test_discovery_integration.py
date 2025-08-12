@@ -5,7 +5,6 @@ Test the discovery system integration with main pipeline.
 
 import logging
 import sys
-from unittest.mock import Mock, MagicMock
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -76,7 +75,7 @@ def test_discovery_imports():
         sys.path.insert(0, 'backend/pipelines/chr_pipeline')
         
         # Test imports
-        from bronze.herd_discovery import discover_herd_volumes_for_year, classify_herd_volume
+        from bronze.herd_discovery import classify_herd_volume, discover_herd_volumes_for_year
         from bronze.volume_management import add_high_volume_herd, get_optimal_date_range
         
         logger.info("✅ All discovery modules imported successfully")

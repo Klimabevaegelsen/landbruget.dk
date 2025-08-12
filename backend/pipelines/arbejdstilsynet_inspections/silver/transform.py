@@ -663,7 +663,7 @@ class SilverPipeline:
             )
 
             # Generate documentation for the table
-            schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+            schema_manager.generate_all_documentation([table_name], stage="silver")
             self.logger.info("Generated schema documentation for arbejdstilsynet inspections")
 
             # Commit to GitHub

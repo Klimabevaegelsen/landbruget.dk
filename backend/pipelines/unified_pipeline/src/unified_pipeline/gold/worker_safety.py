@@ -230,7 +230,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
         total_only_cvrs = self.conn.execute("SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean WHERE injury_type = 'TOTAL'").fetchone()[0]
         privacy_records = self.conn.execute(f"SELECT COUNT(*) FROM worker_safety_clean WHERE injury_count = '{self.config.privacy_value_replacement}'").fetchone()[0]
         
-        self.log.info(f"✅ Clean data created:")
+        self.log.info("✅ Clean data created:")
         self.log.info(f"   • Total records: {total_records}")
         self.log.info(f"   • Unique CVR numbers: {unique_cvrs}")
         self.log.info(f"   • CVRs with detailed injury types: {detailed_cvrs}")

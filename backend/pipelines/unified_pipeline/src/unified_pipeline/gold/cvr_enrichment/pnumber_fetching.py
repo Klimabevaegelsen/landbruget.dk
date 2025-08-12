@@ -16,6 +16,7 @@ from pydantic import Field
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.cvr_api_client import CVRAPIClient
 from unified_pipeline.util.timing import timed
+
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
 
 
@@ -105,8 +106,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         )
         
         self.log.info("P-number fetching step initialized")
-        self.log.info(f"📋 Configuration:")
-        self.log.info(f"   • Processing mode: Single job (no batching)")
+        self.log.info("📋 Configuration:")
+        self.log.info("   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}")
     

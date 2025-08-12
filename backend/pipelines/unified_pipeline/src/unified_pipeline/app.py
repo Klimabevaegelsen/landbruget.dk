@@ -7,6 +7,12 @@ data pipeline application. It orchestrates different data processing stages
 """
 
 import asyncio
+import importlib.util
+import os
+
+# Import legacy monolithic CVR enrichment from the specific .py file
+# Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory
+import sys
 
 import click
 from dotenv import load_dotenv
@@ -34,11 +40,6 @@ from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
     ArbjdstilsynetInspectionsGoldConfig,
 )
-# Import legacy monolithic CVR enrichment from the specific .py file
-# Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory
-import sys
-import importlib.util
-import os
 
 # Get the path to the specific cvr_enrichment.py file
 cvr_enrichment_file = os.path.join(os.path.dirname(__file__), 'gold', 'cvr_enrichment.py')
@@ -50,12 +51,27 @@ CVREnrichmentGold = cvr_enrichment_legacy.CVREnrichmentGold
 CVREnrichmentGoldConfig = cvr_enrichment_legacy.CVREnrichmentGoldConfig
 
 # Import new modular CVR enrichment steps from the package directory
+from unified_pipeline.gold.cvr_enrichment.address_geocoding import (
+    AddressGeocoding,
+    AddressGeocodingConfig,
+)
+from unified_pipeline.gold.cvr_enrichment.company_fetching import (
+    CompanyFetching,
+    CompanyFetchingConfig,
+)
 from unified_pipeline.gold.cvr_enrichment.cvr_collection import CVRCollection, CVRCollectionConfig
-from unified_pipeline.gold.cvr_enrichment.company_fetching import CompanyFetching, CompanyFetchingConfig
-from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import PNumberFetching, PNumberFetchingConfig
-from unified_pipeline.gold.cvr_enrichment.financial_documents import FinancialDocuments, FinancialDocumentsConfig
-from unified_pipeline.gold.cvr_enrichment.address_geocoding import AddressGeocoding, AddressGeocodingConfig
-from unified_pipeline.gold.cvr_enrichment.data_consolidation import DataConsolidation, DataConsolidationConfig
+from unified_pipeline.gold.cvr_enrichment.data_consolidation import (
+    DataConsolidation,
+    DataConsolidationConfig,
+)
+from unified_pipeline.gold.cvr_enrichment.financial_documents import (
+    FinancialDocuments,
+    FinancialDocumentsConfig,
+)
+from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import (
+    PNumberFetching,
+    PNumberFetchingConfig,
+)
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
     FieldAreaAnalysisGoldConfig,
@@ -63,6 +79,10 @@ from unified_pipeline.gold.field_area_analysis import (
 from unified_pipeline.gold.field_production import (
     FieldProductionGold,
     FieldProductionGoldConfig,
+)
+from unified_pipeline.gold.pesticide_compliance import (
+    PesticideComplianceGold,
+    PesticideComplianceGoldConfig,
 )
 from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
@@ -72,21 +92,17 @@ from unified_pipeline.gold.pesticide_proximity import (
     PesticideProximityGold,
     PesticideProximityGoldConfig,
 )
-from unified_pipeline.gold.pesticide_compliance import (
-    PesticideComplianceGold,
-    PesticideComplianceGoldConfig,
-)
-from unified_pipeline.gold.worker_safety import (
-    WorkerSafetyGold,
-    WorkerSafetyGoldConfig,
+from unified_pipeline.gold.property_cadastral_merge import (
+    PropertyCadastralMergeGold,
+    PropertyCadastralMergeGoldConfig,
 )
 from unified_pipeline.gold.work_permits import (
     WorkPermitsGold,
     WorkPermitsGoldConfig,
 )
-from unified_pipeline.gold.property_cadastral_merge import (
-    PropertyCadastralMergeGold,
-    PropertyCadastralMergeGoldConfig,
+from unified_pipeline.gold.worker_safety import (
+    WorkerSafetyGold,
+    WorkerSafetyGoldConfig,
 )
 from unified_pipeline.model import cli
 from unified_pipeline.silver.agricultural_fields import (
@@ -157,7 +173,7 @@ async def execute_pipeline_jobs(
 
         print(f"🚨 APP: Creating instance of {job_cls.__name__}")
         instance = job_cls(config=config_instance)
-        print(f"🚨 APP: Instance created successfully")
+        print("🚨 APP: Instance created successfully")
         job_successful = False
 
         try:
@@ -487,7 +503,7 @@ def execute(cli_config: cli.CliConfig) -> int:
         jobs = pipeline_map[cli_config.source][cli_config.stage]
         print(f"🚨 APP: Found {len(jobs)} jobs: {[job[0].__name__ for job in jobs]}")
     except KeyError:
-        print(f"🚨 APP: KeyError - source/stage combination not found in pipeline_map")
+        print("🚨 APP: KeyError - source/stage combination not found in pipeline_map")
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
 
     # Execute jobs with support for in-memory data passing

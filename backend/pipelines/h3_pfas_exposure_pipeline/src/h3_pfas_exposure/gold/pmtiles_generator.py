@@ -278,7 +278,7 @@ class H3PMTilesGenerator:
 
             self.conn.execute(f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         'Feature' as type,
                         ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt({h3_col})))::JSON as geometry,
                         json_object(
@@ -297,15 +297,15 @@ class H3PMTilesGenerator:
                             'coverage', ROUND({coverage_value}, 3),
                             'area_ha', ROUND(h3_area_ha, 3),
                             'agricultural_area_ha', ROUND(COALESCE(total_intersection_area_ha, 0), 3),
-                            
+
                             -- Use pre-calculated intensity fields (grams per hectare)
                             'pfas_intensity', ROUND({pfas_intensity_value}, 6),
                             'pesticide_intensity', ROUND({pesticide_intensity_value}, 6),
                             'diquat_intensity', ROUND({diquat_intensity_value}, 6),
                             'glyphosate_intensity', ROUND({glyphosate_intensity_value}, 6),
-                            
+
                             -- Zoom classification for level-of-detail rendering (based on total pesticide load)
-                            'zoom_class', CASE 
+                            'zoom_class', CASE
                                 WHEN {pesticide_value} > 1000 THEN 'very_high'
                                 WHEN {pesticide_value} > 100 THEN 'high'
                                 WHEN {pesticide_value} > 10 THEN 'medium'
@@ -409,7 +409,7 @@ class H3PMTilesGenerator:
                 geojson_path,
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Clean up GeoJSON to save space
             os.remove(geojson_path)
@@ -490,7 +490,7 @@ class H3PMTilesGenerator:
                 # Fallback to gsutil command if google-cloud-storage is not available
                 import subprocess
 
-                result = subprocess.run(
+                subprocess.run(
                     ["gsutil", "acl", "ch", "-u", "AllUsers:R", gcs_path],
                     capture_output=True,
                     text=True,
@@ -524,7 +524,7 @@ class H3PMTilesGenerator:
                 tables = self.conn.execute("SHOW TABLES").fetchall()
                 table_names = [table[0] for table in tables]
                 self.log.info(f"🔍 Available tables: {table_names}")
-                
+
                 count = self.conn.execute(f"SELECT COUNT(*) FROM {kommune_boundaries_table}").fetchone()[0]
                 has_kommune_boundaries = True
                 self.log.info(
@@ -561,7 +561,7 @@ class H3PMTilesGenerator:
 
             query = f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         'Feature' as type,
                         {geometry_select} as geometry,
                         json_object(
@@ -588,18 +588,18 @@ class H3PMTilesGenerator:
                             'glyphosate_applications', COALESCE(r.glyphosate_containing_applications, 0),
                             'crop_diversity', COALESCE(r.crop_diversity, 0),
                             'crop_types', COALESCE(r.crop_types, ''),
-                            
+
                             -- Classification for visualization
-                            'pfas_class', CASE 
+                            'pfas_class', CASE
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 10000 THEN 'very_high'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 1000 THEN 'high'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 100 THEN 'medium'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 0 THEN 'low'
                                 ELSE 'none'
                             END,
-                            
+
                             -- Color coding for visualization
-                            'pfas_color', CASE 
+                            'pfas_color', CASE
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 10000 THEN '#8c2d04'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 1000 THEN '#d73027'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 100 THEN '#f46d43'
@@ -710,7 +710,7 @@ class H3PMTilesGenerator:
                 geojson_path,
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Clean up GeoJSON to save space
             os.remove(geojson_path)

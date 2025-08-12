@@ -15,6 +15,7 @@ from pydantic import Field
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.dawa_api_client import DAWAAPIClient
 from unified_pipeline.util.timing import timed
+
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
 
 
@@ -94,8 +95,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         self.dawa_client = DAWAAPIClient()
         
         self.log.info("Address geocoding step initialized")
-        self.log.info(f"📋 Configuration:")
-        self.log.info(f"   • Processing mode: Single job (no batching)")
+        self.log.info("📋 Configuration:")
+        self.log.info("   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Geocode current only: {self.config.geocode_current_only}")
         self.log.info(f"   • Max addresses per batch: {self.config.max_addresses_per_batch}")
     

@@ -305,7 +305,7 @@ class DosageComplianceAnalyzer:
     def _generate_summary_stats(self, results: pd.DataFrame) -> Dict:
         """Generate summary statistics."""
         total_applications = len(results)
-        api_found = len(results[results['api_found'] == True])
+        api_found = len(results[results['api_found']])
         
         compliance_stats = results['compliance_status'].value_counts().to_dict()
         
@@ -425,11 +425,11 @@ def main():
     compliant = len(results[results['compliance_status'] == 'COMPLIANT'])
     major_issues = len(results[results['compliance_status'] == 'MAJOR_EXCESS'])
     
-    print(f"\n🎯 QUICK SUMMARY:")
+    print("\n🎯 QUICK SUMMARY:")
     print(f"📊 Total applications analyzed: {total:,}")
     print(f"✅ Compliant: {compliant:,} ({compliant/total*100:.1f}%)")
     print(f"🚨 Major excesses: {major_issues:,} ({major_issues/total*100:.1f}%)")
-    print(f"📁 Detailed results saved to: dosage_compliance_results/")
+    print("📁 Detailed results saved to: dosage_compliance_results/")
 
 if __name__ == "__main__":
     main()

@@ -33,7 +33,7 @@ from config import Settings
 class InspireBBRFetcher:
     """Fetches INSPIRE BBR data from SDFE FTP server and enriches with GraphQL API."""
 
-    def __init__(self, settings: Settings, logger: logging.Logger):
+    def __init__(self, settings: Settings, logger: logging.Logger) -> None:
         """
         Initialize the INSPIRE BBR fetcher.
 
@@ -935,7 +935,7 @@ class InspireBBRFetcher:
 
     def _extract_and_process_streaming(
         self, zip_path: Path, sample_size: int | None, building_queue
-    ):
+    ) -> None:
         """
         Extract GPKG and process it with streaming to building queue.
         """
@@ -964,7 +964,7 @@ class InspireBBRFetcher:
 
     def _load_and_stream_with_graphql(
         self, gpkg_path: Path, sample_size: int | None, building_queue
-    ):
+    ) -> None:
         """
         Load INSPIRE BBR data and stream building IDs to queue as they are processed.
 
@@ -1080,7 +1080,7 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to load and stream with GraphQL: {e}")
             raise
 
-    def _enrich_and_stream_category(self, building_uuids, category_name, building_queue, conn):
+    def _enrich_and_stream_category(self, building_uuids, category_name, building_queue, conn) -> None:
         """
         Enrich buildings with GraphQL data and stream to queue in batches.
         """

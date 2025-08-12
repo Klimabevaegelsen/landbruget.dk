@@ -170,7 +170,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             """)
 
             # Calculate areas (wetland_id already exists from main wetlands table)
-            self.conn.execute(f"""
+            self.conn.execute("""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
                     wetland_key,

@@ -4,10 +4,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from .config import GOLD_BASE_DIR, SILVER_BASE_DIR
-from .veterinary_timeline import process_veterinary_timeline
+from .config import GOLD_BASE_DIR
 from .transportation_analysis import process_transportation_analysis
-
+from .veterinary_timeline import process_veterinary_timeline
 
 logger = logging.getLogger(__name__)
 

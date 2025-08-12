@@ -14,6 +14,7 @@ from shapely.geometry import MultiPolygon, Polygon
 
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 
+
 @pytest.fixture
 def config() -> WaterProjectsSilverConfig:
     """Return a test configuration."""

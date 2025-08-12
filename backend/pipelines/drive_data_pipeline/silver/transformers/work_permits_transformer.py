@@ -8,9 +8,8 @@ with company CVR numbers, nationalities, years, and permit counts.
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
-import duckdb
 import pandas as pd
 
 try:
@@ -18,8 +17,8 @@ try:
 except ImportError:
     pdfplumber = None
 
-from ..transformers.base import BaseTransformer
 from ...utils.logging import get_logger
+from ..transformers.base import BaseTransformer
 
 logger = get_logger()
 
@@ -27,7 +26,7 @@ logger = get_logger()
 class WorkPermitsTransformer(BaseTransformer):
     """Transformer for extracting agricultural work permits data from PDFs."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the work permits transformer."""
         super().__init__()
         self.name = "WorkPermitsTransformer"
@@ -45,7 +44,7 @@ class WorkPermitsTransformer(BaseTransformer):
         # Expected years in the pivot table
         self.expected_years = ['2019', '2020', '2021', '2022', '2023']
     
-    def can_handle(self, file_path: Path, file_metadata: Dict[str, Any]) -> bool:
+    def can_handle(self, file_path: Path, file_metadata: dict[str, Any]) -> bool:
         """
         Check if this transformer can handle the given file.
         
@@ -175,7 +174,7 @@ class WorkPermitsTransformer(BaseTransformer):
         logger.debug(f"Extracted {len(full_text)} characters from PDF")
         return full_text
     
-    def _parse_work_permits_data(self, text: str) -> List[Dict[str, Any]]:
+    def _parse_work_permits_data(self, text: str) -> list[dict[str, Any]]:
         """
         Parse work permits data from extracted text.
         
@@ -287,7 +286,7 @@ class WorkPermitsTransformer(BaseTransformer):
         logger.info(f"Found {cvr_count} CVR entries and {country_matches} country matches during parsing")
         return visa_records
     
-    def _clean_work_permits_data(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _clean_work_permits_data(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Clean and validate the work permits data."""
         if not records:
             return []
@@ -319,7 +318,7 @@ class WorkPermitsTransformer(BaseTransformer):
         logger.info(f"Cleaned data: {len(cleaned_records)} unique company-nationality-year combinations")
         return cleaned_records
     
-    def get_output_schema(self) -> Dict[str, str]:
+    def get_output_schema(self) -> dict[str, str]:
         """Get the expected output schema for work permits data."""
         return {
             'company_id': 'VARCHAR',
