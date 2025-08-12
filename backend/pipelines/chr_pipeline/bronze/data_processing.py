@@ -84,22 +84,11 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
 
         logger.info(f"Herd {reporting_herd}: Processing {animals_count} individual animals...")
 
-        # Skip extremely large datasets
+        # Auto-detect and configure high-volume herds for chunking (but don't skip them!)
         if animals_count > 100000:
             logger.warning(
-                f"Herd {reporting_herd}: Dataset too large ({animals_count} animals) - skipping to prevent performance issues"
+                f"Herd {reporting_herd}: Very large dataset ({animals_count} animals) - will process using volume management chunking"
             )
-            return {
-                "reporting_herd_number": reporting_herd,
-                "movements": [],
-                "skipped_reason": "dataset_too_large",
-                "summary_stats": {
-                    "total_animals_processed": 0,
-                    "unique_movement_dates": 0,
-                    "counterparty_herds": 0,
-                    "dataset_size": animals_count,
-                },
-            }
 
         # Auto-detect high-volume herds
         if animals_count > 50000:
@@ -119,20 +108,10 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
             if not is_high_volume_herd(reporting_herd):
                 add_high_volume_herd(reporting_herd, suggested_days, volume_estimate=animals_count)
 
-            # Skip processing if extremely large
-            if animals_count > 100000:
-                return {
-                    "reporting_herd_number": reporting_herd,
-                    "movements": [],
-                    "skipped_reason": "auto_chunking_required",
-                    "suggested_chunk_days": suggested_days,
-                    "summary_stats": {
-                        "total_animals_processed": 0,
-                        "unique_movement_dates": 0,
-                        "counterparty_herds": 0,
-                        "dataset_size": animals_count,
-                    },
-                }
+            # Configure chunking but continue processing (don't skip!)
+            logger.info(
+                f"Herd {reporting_herd}: Auto-configured for {suggested_days}-day chunking - processing will continue"
+            )
 
         # Group movements by date and counterparty
         movement_groups = defaultdict(
