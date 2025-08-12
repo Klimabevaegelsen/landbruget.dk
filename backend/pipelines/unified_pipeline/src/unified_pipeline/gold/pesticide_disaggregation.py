@@ -1126,7 +1126,6 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # =======================================================
             # This strategy tried to group nearby fields and match against pesticide applications
             # Removed because it was complex and didn't provide sufficient additional coverage
-            processed_5 = 0
             self.log.info(
                 "ℹ️ Strategy 5: Spatial clustering removed for simplification - strategies 1-4 provide sufficient coverage"
             )

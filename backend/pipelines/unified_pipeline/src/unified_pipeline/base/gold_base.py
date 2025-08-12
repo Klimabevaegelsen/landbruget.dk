@@ -1,8 +1,7 @@
 """Base class for gold layer processing."""
 
 from .duckdb_processor import DuckDBProcessor
-from typing import Union, Optional, List
-from pathlib import Path
+from typing import List
 
 class GoldBase(DuckDBProcessor):
     """Base class for gold layer analytics and aggregations."""

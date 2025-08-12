@@ -8,7 +8,6 @@ import os
 from datetime import datetime
 from typing import Dict, Optional
 
-import duckdb
 import pandas as pd
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
