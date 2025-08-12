@@ -5,7 +5,6 @@ The functionality has been separated into focused modules for better maintainabi
 """
 
 import logging
-import os
 from datetime import date, timedelta
 from typing import Any, Optional
 
@@ -161,8 +160,9 @@ def finalize_consolidated_processing():
         logger.info(f"Saving {record_count:,} consolidated movement records to GCS")
 
         # MINIMAL FIX: Create unique parquet file per matrix job to prevent overwrites
-        from .export import EXPORT_TIMESTAMP
         import os
+
+        from .export import EXPORT_TIMESTAMP
 
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
         

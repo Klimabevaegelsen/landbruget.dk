@@ -1,7 +1,6 @@
 """Module for loading CHR Ejendom data (Properties) - Bronze Layer."""
 
 import logging
-import uuid
 from typing import Any, Dict, Optional
 
 from zeep import Client
@@ -9,27 +8,10 @@ from zeep import Client
 # Import the exporter and auth
 from .auth import create_ejendom_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_ejendom")
-
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
-
-
-# --- Base Request Structure ---
-
-
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_ejendom") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
-
 
 # --- Generic SOAP Fetcher ---
 
@@ -58,7 +40,7 @@ def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> 
     logger.info(f"Fetching property details for CHR: {chr_number}...")
 
     request_structure = {
-        "GLRCHRWSInfoInbound": _create_base_request(username, track_id="load_ejendom_oplysninger"),
+        "GLRCHRWSInfoInbound": create_base_request(username, track_id="load_ejendom_oplysninger"),
         "Request": {
             "ChrNummer": str(chr_number),
             "vis": None,  # Optional: Keep as None unless specific view is needed
@@ -81,7 +63,7 @@ def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> O
     logger.info(f"Fetching veterinary events for CHR: {chr_number}...")
 
     request_structure = {
-        "GLRCHRWSInfoInbound": _create_base_request(username, track_id="load_ejendom_vet_events"),
+        "GLRCHRWSInfoInbound": create_base_request(username, track_id="load_ejendom_vet_events"),
         "Request": {"ChrNummer": str(chr_number)},
     }
 
