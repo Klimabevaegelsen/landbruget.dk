@@ -72,6 +72,7 @@ class WetlandsBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+
 class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for wetlands data.
@@ -94,7 +95,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
         Initialize the WetlandsBronze source.
 
         Args:
-            config (WetlandsBronzeConfig): Configuration for the data source        """
+            config (WetlandsBronzeConfig): Configuration for the data source"""
         super().__init__(config)
 
     def _get_params(self, start_index: int = 0) -> dict:

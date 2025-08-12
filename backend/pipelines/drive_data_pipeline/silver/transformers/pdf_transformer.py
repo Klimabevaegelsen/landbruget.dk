@@ -15,6 +15,7 @@ except ImportError:
 
     def get_logger():
         return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
 from .base import BaseTransformer, TransformResult
 
@@ -374,20 +375,18 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
         visa_mappings = {
             # Year variations
             "aar": "year",
-            "år": "year", 
+            "år": "year",
             "year": "year",
             "aarig": "year",
             "årig": "year",
-            
             # Nationality variations
             "nationalitet": "nationality",
             "nationality": "nationality",
             "land": "nationality",
-            "country": "nationality", 
+            "country": "nationality",
             "oprindelsesland": "nationality",
             "statsborger": "nationality",
             "citizenship": "nationality",
-            
             # First permits count variations
             "foerstetilladelser": "first_permits_count",
             "førstegangsarbejdstilladelser": "first_permits_count",
@@ -401,7 +400,6 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             "count": "count",
             "tael": "count",
             "tal": "count",
-            
             # CVR mappings (for company identification)
             "cvr": "cvr_number",
             "cvrno": "cvr_number",
@@ -412,10 +410,9 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
             "company_id": "cvr_number",
             "firmaid": "cvr_number",
             "firma_id": "cvr_number",
-            
             # Company name variations
             "virksomhedsnavn": "company_name",
-            "firmanavn": "company_name",  
+            "firmanavn": "company_name",
             "companyname": "company_name",
             "arbejdsgiver": "company_name",
             "employer": "company_name",
@@ -428,17 +425,20 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
         # Check for partial matches on common VISA terms
         visa_partial_patterns = {
             "tilladelse": "permits",
-            "permit": "permits", 
+            "permit": "permits",
             "arbejds": "work",
             "work": "work",
             "visa": "visa",
             "visum": "visa",
         }
-        
+
         for pattern, mapped in visa_partial_patterns.items():
             if pattern in normalized_name:
                 # If it contains count/number indicators, add _count suffix
-                if any(count_term in normalized_name for count_term in ["antal", "count", "tal", "tael", "number"]):
+                if any(
+                    count_term in normalized_name
+                    for count_term in ["antal", "count", "tal", "tael", "number"]
+                ):
                     return f"{mapped}_count"
                 return mapped
 

@@ -24,12 +24,14 @@ def config() -> WetlandsBronzeConfig:
         storage_batch_size=500,
     )
 
+
 @pytest.fixture
 def wetlands_bronze(config: WetlandsBronzeConfig) -> WetlandsBronze:
     """Return a test WetlandsBronze instance."""
     source = WetlandsBronze(config)
     source.log = MagicMock()
     return source
+
 
 @pytest.fixture
 def mock_response() -> MagicMock:
@@ -49,6 +51,7 @@ def mock_response() -> MagicMock:
     )
     return mock_resp
 
+
 def get_async_mock_session(response: AsyncMock) -> MagicMock:
     """
     Create a mock aiohttp session.
@@ -65,6 +68,7 @@ def get_async_mock_session(response: AsyncMock) -> MagicMock:
     mock_session.get = MagicMock(return_value=MockGetContextManager())
     return mock_session
 
+
 def test_get_params(wetlands_bronze: WetlandsBronze) -> None:
     """Test generating request parameters."""
     params = wetlands_bronze._get_params(500)
@@ -75,6 +79,7 @@ def test_get_params(wetlands_bronze: WetlandsBronze) -> None:
     assert params["STARTINDEX"] == "500"
     assert params["COUNT"] == str(wetlands_bronze.config.batch_size)
     assert params["SRSNAME"] == "urn:ogc:def:crs:EPSG::25832"
+
 
 @pytest.mark.asyncio
 async def test_fetch_chunck_success(wetlands_bronze: WetlandsBronze) -> None:
@@ -98,6 +103,7 @@ async def test_fetch_chunck_success(wetlands_bronze: WetlandsBronze) -> None:
         params=wetlands_bronze._get_params(0),
     )
 
+
 @pytest.mark.asyncio
 @patch(
     "unified_pipeline.bronze.wetlands.WetlandsBronze._fetch_chunck.retry.stop",
@@ -112,6 +118,7 @@ async def test_fetch_chunck_http_error(wetlands_bronze: WetlandsBronze) -> None:
     with pytest.raises(Exception) as excinfo:
         await wetlands_bronze._fetch_chunck(mock_session, 0)
         assert "Failed to fetch data. Status: 500" in str(excinfo.value)
+
 
 @pytest.mark.asyncio
 @patch(
@@ -128,6 +135,7 @@ async def test_fetch_chunck_xml_parse_error(wetlands_bronze: WetlandsBronze) -> 
     with pytest.raises(Exception) as excinfo:
         await wetlands_bronze._fetch_chunck(mock_session, 0)
         assert "Failed to parse XML response" in str(excinfo.value)
+
 
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.wetlands.WetlandsBronze._fetch_chunck")
@@ -163,6 +171,7 @@ async def test_fetch_raw_data_success(
     assert result[0] == "<xml>chunk1</xml>"
     assert result[1] == "<xml>chunk2</xml>"
 
+
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.wetlands.WetlandsBronze._fetch_chunck")
 @patch("aiohttp.ClientSession")
@@ -188,6 +197,7 @@ async def test_fetch_raw_data_error(
     with pytest.raises(Exception):
         await wetlands_bronze._fetch_raw_data()
 
+
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.wetlands.WetlandsBronze._fetch_raw_data")
 async def test_run_success(mock_fetch_raw_data: AsyncMock, wetlands_bronze: WetlandsBronze) -> None:
@@ -199,6 +209,7 @@ async def test_run_success(mock_fetch_raw_data: AsyncMock, wetlands_bronze: Wetl
 
     mock_fetch_raw_data.assert_called_once()
     wetlands_bronze._save_raw_data.assert_called_once()
+
 
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.wetlands.WetlandsBronze._fetch_raw_data")
@@ -214,6 +225,7 @@ async def test_run_fetch_error(
     mock_fetch_raw_data.assert_called_once()
     wetlands_bronze._save_raw_data.assert_not_called()
 
+
 @pytest.mark.asyncio
 @patch("unified_pipeline.bronze.wetlands.WetlandsBronze._fetch_raw_data")
 async def test_run_exception(
@@ -228,6 +240,7 @@ async def test_run_exception(
 
     mock_fetch_raw_data.assert_called_once()
     wetlands_bronze._save_raw_data.assert_not_called()
+
 
 def test_create_dataframe(wetlands_bronze: WetlandsBronze) -> None:
     """Test creating a raw table."""

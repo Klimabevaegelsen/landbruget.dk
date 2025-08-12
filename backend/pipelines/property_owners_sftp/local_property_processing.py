@@ -276,9 +276,7 @@ class PropertyDataProcessor:
                         cleaned[key] = cleaned_value
             return cleaned
         elif isinstance(obj, list):
-            return [
-                self.clean_empty_structures(item) for item in obj if item or item == 0 or not item or item == ""
-            ]
+            return [self.clean_empty_structures(item) for item in obj if item or item == 0 or not item or item == ""]
         else:
             return obj
 

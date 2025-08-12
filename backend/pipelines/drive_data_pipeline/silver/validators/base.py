@@ -14,6 +14,7 @@ except ImportError:
     def get_logger():
         return logging.getLogger(__name__)
 
+
 # Get logger
 logger = get_logger()
 

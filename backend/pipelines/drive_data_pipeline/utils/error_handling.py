@@ -52,13 +52,11 @@ def retry_with_exponential_backoff(
                     f"after error: {retry_state.outcome.exception()}"
                 ),
             )
-            
+
             try:
                 return retry_decorator(func)(*args, **kwargs)
             except RetryError as e:
-                logger.error(
-                    f"Failed all {max_attempts} attempts to execute {func.__name__}"
-                )
+                logger.error(f"Failed all {max_attempts} attempts to execute {func.__name__}")
                 if e.last_attempt.exception():
                     raise e.last_attempt.exception()
                 raise e
@@ -89,4 +87,4 @@ class FileProcessingError(Exception):
 class StorageError(Exception):
     """Error during storage operations."""
 
-    pass 
+    pass

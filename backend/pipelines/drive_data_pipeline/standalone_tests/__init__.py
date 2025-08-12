@@ -1,1 +1,1 @@
-"""Standalone test module for running tests outside the package.""" 
+"""Standalone test module for running tests outside the package."""

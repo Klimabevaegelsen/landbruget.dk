@@ -18,7 +18,7 @@ __all__ = [
     "FieldProductionGoldConfig",
     "PropertyCadastralMergeGold",
     "PropertyCadastralMergeGoldConfig",
-    "PesticideDisaggregationGold", 
+    "PesticideDisaggregationGold",
     "PesticideDisaggregationGoldConfig",
     "PesticideProximityGold",
     "PesticideProximityGoldConfig",

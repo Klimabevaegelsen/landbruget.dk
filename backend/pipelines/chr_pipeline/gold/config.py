@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-# Base paths - handle both local and GCS environments  
+# Base paths - handle both local and GCS environments
 if os.getenv("GITHUB_ACTIONS"):
     # In GitHub Actions, use LOCAL_DATA_PATH if set, otherwise /tmp
     local_data_path = os.getenv("LOCAL_DATA_PATH", "/tmp")
@@ -16,7 +16,7 @@ PIPELINE_DIR = Path(__file__).resolve().parent
 
 # Configuration overrides
 # Specify the date folder for silver data, or use the latest
-# Set to None to automatically find the latest dated folder  
+# Set to None to automatically find the latest dated folder
 # Example: SILVER_DATE_FOLDER_OVERRIDE = "20231027_100000"
 SILVER_DATE_FOLDER_OVERRIDE = None
 

@@ -25,26 +25,29 @@ def _get_gcs_access():
         return GCSDataAccess
     except ImportError as e:
         logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
-        
+
         # Try alternative import paths that might work in different environments
         try:
             import os
             import sys
-            
+
             # Add unified pipeline to path if it exists
-            current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            current_dir = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
             unified_pipeline_path = os.path.join(current_dir, "unified_pipeline", "src")
             if os.path.exists(unified_pipeline_path) and unified_pipeline_path not in sys.path:
                 sys.path.insert(0, unified_pipeline_path)
                 logger.info(f"Added unified pipeline path: {unified_pipeline_path}")
-            
+
             from unified_pipeline.util.gcs_access import GCSDataAccess
+
             logger.info("✅ Successfully imported GCSDataAccess via alternative path")
             return GCSDataAccess
-            
+
         except ImportError as e2:
             logger.warning(f"⚠️ Alternative import also failed: {e2}")
-        
+
         logger.warning(
             "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
         )
@@ -58,7 +61,9 @@ GCSDataAccess = _get_gcs_access()
 class DriveStorageManager:
     """Storage manager wrapper that uses optimized GCS access for drive pipeline needs."""
 
-    def __init__(self, storage_type: str, bucket_name: str | None = None, base_dir: str = "") -> None:
+    def __init__(
+        self, storage_type: str, bucket_name: str | None = None, base_dir: str = ""
+    ) -> None:
         """Initialize with storage configuration.
 
         Args:
@@ -139,8 +144,8 @@ class DriveStorageManager:
                 gcs_relative_path = str(path)
                 if str(self.base_dir) != "." and gcs_relative_path.startswith(str(self.base_dir)):
                     # Remove base_dir prefix to get relative path
-                    gcs_relative_path = gcs_relative_path[len(str(self.base_dir)):].lstrip("/\\")
-                
+                    gcs_relative_path = gcs_relative_path[len(str(self.base_dir)) :].lstrip("/\\")
+
                 # Ensure we have the correct layer prefix based on the path
                 if not gcs_relative_path.startswith(("bronze/", "silver/")):
                     # Determine the correct prefix based on the path content
@@ -149,7 +154,7 @@ class DriveStorageManager:
                     else:
                         # Default to silver for drive data pipeline output
                         gcs_relative_path = f"silver/{gcs_relative_path}"
-                
+
                 if self.use_optimized and self.gcs_access:
                     # Use optimized GCS access
                     gcs_path = f"gs://{self.bucket_name}/{gcs_relative_path}"

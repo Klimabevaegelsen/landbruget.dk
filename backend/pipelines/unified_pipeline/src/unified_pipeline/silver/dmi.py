@@ -43,6 +43,7 @@ class DMISilverConfig(BaseJobConfig):
     target_crs: str = "EPSG:4326"  # Required target CRS
     source_crs: str = "EPSG:25832"  # DMI's native CRS
 
+
 class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
     """
     Silver layer processor for DMI monthly climate data using DuckDB-spatial.
@@ -65,7 +66,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
         Initialize the DMISilver processor.
 
         Args:
-            config: Configuration for the silver processing job        """
+            config: Configuration for the silver processing job"""
         super().__init__(config)
         # Setup DuckDB with spatial extension
         self._setup_duckdb_spatial()
@@ -386,7 +387,9 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                 self.log.error("No DMI parameters were successfully processed")
                 return None
 
-            self.log.info(f"Successfully processed {len(all_processed_data)} DMI monthly parameters")
+            self.log.info(
+                f"Successfully processed {len(all_processed_data)} DMI monthly parameters"
+            )
             return all_processed_data
 
         except Exception as e:

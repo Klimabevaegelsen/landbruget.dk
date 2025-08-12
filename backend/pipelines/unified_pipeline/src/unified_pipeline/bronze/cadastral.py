@@ -16,12 +16,14 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInt
 
 logger = logging.getLogger(__name__)
 
+
 def clean_value(value):
     """Clean string values"""
     if not isinstance(value, str):
         return value
     value = value.strip()
     return value if value else None
+
 
 class CadastralBronzeConfig(BaseJobConfig):
     """Configuration for the Cadastral Bronze source."""
@@ -47,6 +49,7 @@ class CadastralBronzeConfig(BaseJobConfig):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()
     save_local: bool = os.getenv("SAVE_LOCAL", False)
+
 
 class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
     def __init__(self, config: CadastralBronzeConfig) -> None:

@@ -73,6 +73,7 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+
 class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processor for BNBO status data.
@@ -90,7 +91,7 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
         Initialize the BNBOStatusBronze processor.
 
         Args:
-            config (BNBOStatusBronzeConfig): Configuration object for the processor.        """
+            config (BNBOStatusBronzeConfig): Configuration object for the processor."""
         super().__init__(config)
 
     def _get_params(self, start_index: int = 0) -> dict:

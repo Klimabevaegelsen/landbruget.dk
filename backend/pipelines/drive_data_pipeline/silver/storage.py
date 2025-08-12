@@ -16,6 +16,7 @@ except ImportError:
 
     def get_logger():
         return logging.getLogger(__name__)
+
     def generate_timestamp():
         return int(time.time())
 

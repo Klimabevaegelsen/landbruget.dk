@@ -32,7 +32,7 @@ class DriveFile(BaseModel):
         """
         parents = file_data.get("parents", [])
         path = f"{parent_path}/{file_data['name']}" if parent_path else file_data["name"]
-        
+
         return cls(
             id=file_data["id"],
             name=file_data["name"],
@@ -69,10 +69,10 @@ class DriveFolder(BaseModel):
         """
         parents = folder_data.get("parents", [])
         path = f"{parent_path}/{folder_data['name']}" if parent_path else folder_data["name"]
-        
+
         return cls(
             id=folder_data["id"],
             name=folder_data["name"],
             parent_ids=parents,
             path=path,
-        ) 
+        )

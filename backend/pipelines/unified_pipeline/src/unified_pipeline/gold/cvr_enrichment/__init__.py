@@ -30,10 +30,10 @@ from .pnumber_fetching import PNumberFetching, PNumberFetchingConfig
 __all__ = [
     # New modular steps
     "CVRCollection",
-    "CVRCollectionConfig", 
+    "CVRCollectionConfig",
     "CompanyFetching",
     "CompanyFetchingConfig",
-    "PNumberFetching", 
+    "PNumberFetching",
     "PNumberFetchingConfig",
     "FinancialDocuments",
     "FinancialDocumentsConfig",

@@ -57,7 +57,7 @@ __all__ = [
     # Authentication
     "create_chr_dyr_client",
     "create_stamdata_client",
-    "create_diko_client", 
+    "create_diko_client",
     "create_ejendom_client",
     "create_besaetning_client",
     "create_robust_soap_client",
@@ -76,7 +76,7 @@ __all__ = [
     "is_high_volume_herd",
     # Herd discovery
     "discover_herd_volumes_for_year",
-    "load_previous_discovery_results", 
+    "load_previous_discovery_results",
     "classify_herd_volume",
     # Utilities
     "create_base_request",

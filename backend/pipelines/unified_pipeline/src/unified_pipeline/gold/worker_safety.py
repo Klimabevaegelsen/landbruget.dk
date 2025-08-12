@@ -6,7 +6,7 @@ It cleans and structures the silver layer worker safety data into a proper
 normalized format with CVR, year, and injury type.
 
 The processor handles:
-- Unpivoting yearly data columns into proper temporal records  
+- Unpivoting yearly data columns into proper temporal records
 - Handling privacy-protected values (e.g., '<5')
 - Clean structure: CVR, year, injury_type, injury_count
 """
@@ -36,11 +36,11 @@ class WorkerSafetyGoldConfig(BaseJobConfig):
     # Processing configuration
     start_year: int = Field(default=2020, description="Start year for analysis")
     end_year: int = Field(default=2024, description="End year for analysis")
-    
+
     # Handle privacy protection values - keep as range string
     privacy_value_replacement: str = Field(
-        default="1-5", 
-        description="String to use for '<5' privacy-protected counts (preserves range info)"
+        default="1-5",
+        description="String to use for '<5' privacy-protected counts (preserves range info)",
     )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -49,80 +49,80 @@ class WorkerSafetyGoldConfig(BaseJobConfig):
 class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
     """
     Gold layer processor for worker safety data.
-    
+
     Cleans and structures worker safety silver data into normalized format:
     CVR, year, injury_type, injury_count
     """
 
     def __init__(self, config: WorkerSafetyGoldConfig):
         super().__init__(config)
-        
+
         # Configure DuckDB for data processing
         self.conn.execute("SET memory_limit = '8GB'")
-        self.conn.execute("SET threads = 4") 
+        self.conn.execute("SET threads = 4")
         self.conn.execute("SET temp_directory = '/tmp'")
 
     @timed
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
         """Execute worker safety gold layer processing."""
-        
+
         self.log.info("🚀 Starting Worker Safety Gold processing")
-        
+
         try:
             # Load silver data
             await self._load_silver_data(silver_data)
-            
+
             # Process and aggregate data
             await self._process_injury_data()
-            
+
             # Save gold layer outputs
             output_paths = await self._save_gold_data()
-            
+
             self.log.info("✅ Worker Safety Gold processing completed successfully")
             return output_paths
-            
+
         except Exception as e:
             self.log.error(f"❌ Worker Safety Gold processing failed: {e}")
             raise
 
     async def _load_silver_data(self, silver_data: Optional[Dict[str, Any]]) -> None:
         """Load worker safety silver data from GCS."""
-        
+
         if silver_data:
             self.log.warning("In-memory data passing not implemented for worker safety - using GCS")
-        
+
         # Get latest silver data path
         silver_path = self._get_latest_silver_path(self.config.worker_safety_dataset)
         if not silver_path:
             raise ValueError(f"No silver data found for {self.config.worker_safety_dataset}")
-        
+
         self.log.info(f"Loading worker safety data from: {silver_path}")
-        
+
         # Load both parquet files using temp download pattern (like field_production.py)
         mv_path = f"{silver_path}/worker_safety_2020-2024_mv.parquet"
         skadeart_path = f"{silver_path}/worker_safety_2020-2024_skadeart.parquet"
-        
+
         # Load main injury data (total by CVR and year)
         with self.gcs_access._temp_download(mv_path) as temp_mv_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE worker_safety_raw AS 
                 SELECT * FROM read_parquet('{temp_mv_file}')
             """)
-        
-        # Load injury type data (detailed by CVR, year, and injury type) 
+
+        # Load injury type data (detailed by CVR, year, and injury type)
         with self.gcs_access._temp_download(skadeart_path) as temp_skadeart_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE worker_safety_injury_types_raw AS 
                 SELECT * FROM read_parquet('{temp_skadeart_file}')
             """)
-        
+
         self.log.info("✅ Silver data loaded successfully")
 
     async def _process_injury_data(self) -> None:
         """Process and transform worker safety data into clean structured format."""
-        
+
         self.log.info("📊 Processing and cleaning worker safety data...")
-        
+
         # Create clean injury data table combining both data sources
         self.log.info("Creating clean worker safety data from both main and injury type data...")
         self.conn.execute(f"""
@@ -221,71 +221,83 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
                 AND injury_count_raw != '0'  -- Only include records with actual injuries
             ORDER BY cvr_number, year, injury_type
         """)
-        
+
         # Log processing results
         total_records = self.conn.execute("SELECT COUNT(*) FROM worker_safety_clean").fetchone()[0]
-        unique_cvrs = self.conn.execute("SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean").fetchone()[0]
-        unique_injury_types = self.conn.execute("SELECT COUNT(DISTINCT injury_type) FROM worker_safety_clean").fetchone()[0]
-        detailed_cvrs = self.conn.execute("SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean WHERE injury_type != 'TOTAL'").fetchone()[0]
-        total_only_cvrs = self.conn.execute("SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean WHERE injury_type = 'TOTAL'").fetchone()[0]
-        privacy_records = self.conn.execute(f"SELECT COUNT(*) FROM worker_safety_clean WHERE injury_count = '{self.config.privacy_value_replacement}'").fetchone()[0]
-        
+        unique_cvrs = self.conn.execute(
+            "SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean"
+        ).fetchone()[0]
+        unique_injury_types = self.conn.execute(
+            "SELECT COUNT(DISTINCT injury_type) FROM worker_safety_clean"
+        ).fetchone()[0]
+        detailed_cvrs = self.conn.execute(
+            "SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean WHERE injury_type != 'TOTAL'"
+        ).fetchone()[0]
+        total_only_cvrs = self.conn.execute(
+            "SELECT COUNT(DISTINCT cvr_number) FROM worker_safety_clean WHERE injury_type = 'TOTAL'"
+        ).fetchone()[0]
+        privacy_records = self.conn.execute(
+            f"SELECT COUNT(*) FROM worker_safety_clean WHERE injury_count = '{self.config.privacy_value_replacement}'"
+        ).fetchone()[0]
+
         self.log.info("✅ Clean data created:")
         self.log.info(f"   • Total records: {total_records}")
         self.log.info(f"   • Unique CVR numbers: {unique_cvrs}")
         self.log.info(f"   • CVRs with detailed injury types: {detailed_cvrs}")
         self.log.info(f"   • CVRs with total only: {total_only_cvrs}")
         self.log.info(f"   • Unique injury types: {unique_injury_types}")
-        self.log.info(f"   • Records with privacy values ('{self.config.privacy_value_replacement}'): {privacy_records}")
+        self.log.info(
+            f"   • Records with privacy values ('{self.config.privacy_value_replacement}'): {privacy_records}"
+        )
 
     async def _save_gold_data(self) -> Dict[str, str]:
         """Save clean worker safety data to gold layer."""
-        
+
         self.log.info("💾 Saving clean worker safety data...")
-        
+
         # Create output directory
         output_dir = f"gold/{self.config.dataset}/{self.date_pattern}"
-        
+
         # Save clean structured data
         clean_data_path = f"{output_dir}/worker_safety_clean.parquet"
         await self._save_table_to_gcs("worker_safety_clean", clean_data_path)
-        
+
         self.log.info("✅ Clean worker safety data saved successfully")
-        
-        return {
-            "worker_safety_clean": clean_data_path
-        }
+
+        return {"worker_safety_clean": clean_data_path}
 
     async def _save_table_to_gcs(self, table_name: str, gcs_path: str) -> None:
         """Save a DuckDB table to GCS as parquet."""
-        
+
         # Upload directly from DuckDB table to GCS (more efficient)
         full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
         self.gcs_access.upload_from_duckdb_table(table_name, full_gcs_path)
-        
+
         self.log.info(f"✅ Saved {table_name} to {full_gcs_path}")
 
     def _get_latest_silver_path(self, dataset: str) -> Optional[str]:
         """Get the latest silver data directory path for a dataset."""
         try:
             # Look for the specific worker safety files
-            pattern = f"gs://{self.config.bucket}/silver/{dataset}/*/worker_safety_2020-2024_mv.parquet"
+            pattern = (
+                f"gs://{self.config.bucket}/silver/{dataset}/*/worker_safety_2020-2024_mv.parquet"
+            )
             files = self.gcs_access.list_files(pattern)
-            
+
             if not files:
                 self.log.warning(f"No worker safety files found for dataset: {dataset}")
                 return None
-            
+
             # Get the latest file and extract its directory
             latest_file = sorted(files)[-1]
             # Extract directory from file path
             # Example: gs://bucket/silver/worker safety/20240802_224643/worker_safety_2020-2024_mv.parquet
             # Should return: gs://bucket/silver/worker safety/20240802_224643
-            directory_path = '/'.join(latest_file.split('/')[:-1])
-            
+            directory_path = "/".join(latest_file.split("/")[:-1])
+
             self.log.info(f"Found latest worker safety silver data directory: {directory_path}")
             return directory_path
-            
+
         except Exception as e:
             self.log.error(f"Error finding latest silver path for {dataset}: {e}")
             return None

@@ -20,11 +20,11 @@ class SchemaManager:
         """
         self.schema_dir = schema_dir
         self.schemas = {}
-        
+
         # Load schemas if directory is provided
         if schema_dir and schema_dir.exists():
             self._load_schemas()
-            
+
         logger.info(f"Initialized schema manager with {len(self.schemas)} schemas")
 
     def _load_schemas(self) -> None:
@@ -32,23 +32,23 @@ class SchemaManager:
         try:
             # Look for JSON schema files
             schema_files = list(self.schema_dir.glob("*.json"))
-            
+
             for schema_file in schema_files:
                 try:
                     with open(schema_file, encoding="utf-8") as f:
                         schema = json.load(f)
-                    
+
                     # Schema name is the filename without extension
                     schema_name = schema_file.stem
                     self.schemas[schema_name] = schema
-                    
+
                     logger.debug(f"Loaded schema: {schema_name}")
-                
+
                 except Exception as e:
                     logger.warning(f"Failed to load schema {schema_file}: {str(e)}")
-            
+
             logger.info(f"Loaded {len(self.schemas)} schemas from {self.schema_dir}")
-        
+
         except Exception as e:
             logger.error(f"Failed to load schemas: {str(e)}")
 
@@ -63,9 +63,7 @@ class SchemaManager:
         """
         return self.schemas.get(schema_name)
 
-    def create_schema(
-        self, schema_name: str, schema: dict, save_to_file: bool = True
-    ) -> bool:
+    def create_schema(self, schema_name: str, schema: dict, save_to_file: bool = True) -> bool:
         """Create a new schema.
 
         Args:
@@ -79,30 +77,28 @@ class SchemaManager:
         try:
             # Add schema to the manager
             self.schemas[schema_name] = schema
-            
+
             # Save to file if requested
             if save_to_file and self.schema_dir:
                 schema_file = self.schema_dir / f"{schema_name}.json"
-                
+
                 # Ensure directory exists
                 self.schema_dir.mkdir(parents=True, exist_ok=True)
-                
+
                 # Save schema as JSON
                 with open(schema_file, "w", encoding="utf-8") as f:
                     json.dump(schema, f, indent=2, ensure_ascii=False)
-                
+
                 logger.info(f"Saved schema to {schema_file}")
-            
+
             logger.info(f"Created schema: {schema_name}")
             return True
-        
+
         except Exception as e:
             logger.error(f"Failed to create schema {schema_name}: {str(e)}")
             return False
 
-    def update_schema(
-        self, schema_name: str, schema: dict, save_to_file: bool = True
-    ) -> bool:
+    def update_schema(self, schema_name: str, schema: dict, save_to_file: bool = True) -> bool:
         """Update an existing schema.
 
         Args:
@@ -117,7 +113,7 @@ class SchemaManager:
         if schema_name not in self.schemas:
             logger.warning(f"Schema {schema_name} does not exist")
             return False
-        
+
         # Update the schema
         return self.create_schema(schema_name, schema, save_to_file)
 
@@ -136,20 +132,20 @@ class SchemaManager:
             if schema_name not in self.schemas:
                 logger.warning(f"Schema {schema_name} does not exist")
                 return False
-            
+
             # Remove from memory
             del self.schemas[schema_name]
-            
+
             # Delete file if requested
             if delete_file and self.schema_dir:
                 schema_file = self.schema_dir / f"{schema_name}.json"
                 if schema_file.exists():
                     schema_file.unlink()
                     logger.info(f"Deleted schema file: {schema_file}")
-            
+
             logger.info(f"Deleted schema: {schema_name}")
             return True
-        
+
         except Exception as e:
             logger.error(f"Failed to delete schema {schema_name}: {str(e)}")
             return False
@@ -168,17 +164,17 @@ class SchemaManager:
         # Try exact match
         if subfolder in self.schemas:
             return self.schemas[subfolder]
-        
+
         # Try normalized name (lowercase, underscores)
         normalized = subfolder.lower().replace(" ", "_")
         if normalized in self.schemas:
             return self.schemas[normalized]
-        
+
         # Try prefix match
         for name, schema in self.schemas.items():
             if subfolder.startswith(name) or name.startswith(subfolder):
                 return schema
-        
+
         logger.warning(f"No schema found for subfolder: {subfolder}")
         return None
 
@@ -188,4 +184,4 @@ class SchemaManager:
         Returns:
             List of schema names
         """
-        return list(self.schemas.keys()) 
+        return list(self.schemas.keys())

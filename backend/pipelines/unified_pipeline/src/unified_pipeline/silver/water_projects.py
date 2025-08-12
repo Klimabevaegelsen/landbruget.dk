@@ -611,9 +611,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     # Test the geometry conversion first
                     self.conn.execute("CREATE OR REPLACE TABLE temp_geom_test (wkt TEXT)")
                     self.conn.execute("INSERT INTO temp_geom_test VALUES (?)", [geom_wkt])
-                    self.conn.execute(
-                        "SELECT ST_GeomFromText(wkt) FROM temp_geom_test"
-                    ).fetchone()
+                    self.conn.execute("SELECT ST_GeomFromText(wkt) FROM temp_geom_test").fetchone()
 
                     # If successful, update the main table
                     self.conn.execute(

@@ -71,6 +71,7 @@ class DAGIBronzeConfig(BaseJobConfig):
 
     retries: int = Field(default=3, description="Number of retry attempts for failed requests")
 
+
 class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
     """
     Bronze layer implementation for DAGI (Danish Administrative Geographic Division) data.

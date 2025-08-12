@@ -141,7 +141,9 @@ class WetlandsPreFilter(PreFilteringStageBase):
             )
 
             # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
-        self.log.info("Adding deterministic keys to filtered wetland polygons (and keeping legacy IDs)...")
+        self.log.info(
+            "Adding deterministic keys to filtered wetland polygons (and keeping legacy IDs)..."
+        )
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_filtered AS
             SELECT 
@@ -157,10 +159,13 @@ class WetlandsPreFilter(PreFilteringStageBase):
             FROM wetlands_intersecting
         """)
         # DIAGNOSTIC: Assert wetland_key exists immediately; fail fast to expose root cause
-        cols = [r[0] for r in self.conn.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_filtered'"
-        ).fetchall()]
-        if 'wetland_key' not in [c.lower() for c in cols]:
+        cols = [
+            r[0]
+            for r in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_filtered'"
+            ).fetchall()
+        ]
+        if "wetland_key" not in [c.lower() for c in cols]:
             schema = self.conn.execute("DESCRIBE wetlands_filtered").fetchall()
             self.log.error(f"wetlands_filtered schema: {schema}")
             raise RuntimeError("Stage 0: wetlands_filtered missing wetland_key after creation")

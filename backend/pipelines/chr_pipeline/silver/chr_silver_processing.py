@@ -149,7 +149,7 @@ logging.basicConfig(
 )
 
 # Add the backend directory to sys.path for imports
-from pathlib import Path
+# Note: pathlib.Path already imported at top of file
 
 # Load environment variables
 load_dotenv()
@@ -359,26 +359,30 @@ def process_chr_data_streaming(
             if "*" in dataset_info["file"]:
                 # This is a pattern for streaming files
                 pattern = dataset_info["file"]
-                
+
                 # MINIMAL FIX: For CHR movement data, search across month-suffixed directories
                 if dataset_key == "cattle_movements":
                     logging.info("🔍 Looking for CHR movement files across month-suffixed bronze directories...")
-                    
+
                     try:
                         # Find all month-suffixed directories for this bronze timestamp
                         all_dirs = gcs_access.list_files(f"gs://{bucket_name}/bronze/chr/")
                         bronze_dirs = [d for d in all_dirs if d.startswith(f"bronze/chr/{bronze_timestamp}")]
-                        
+
                         logging.info(f"Found bronze directories: {bronze_dirs}")
-                        
+
                         matching_files = []
                         for bronze_path in bronze_dirs:
                             dir_files = gcs_access.list_files(f"gs://{bucket_name}/{bronze_path}")
                             pattern_prefix = pattern.replace("*", "").replace(".parquet", "")
-                            dir_matches = [f"gs://{bucket_name}/{f}" for f in dir_files if pattern_prefix in f and f.endswith(".parquet")]
+                            dir_matches = [
+                                f"gs://{bucket_name}/{f}"
+                                for f in dir_files
+                                if pattern_prefix in f and f.endswith(".parquet")
+                            ]
                             matching_files.extend(dir_matches)
                             logging.info(f"Found {len(dir_matches)} CHR movement files in {bronze_path}")
-                            
+
                     except Exception as e:
                         logging.error(f"Error discovering month-suffixed bronze directories: {e}")
                         matching_files = []
@@ -386,7 +390,7 @@ def process_chr_data_streaming(
                     # Original logic for other datasets
                     gcs_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/{pattern}"
                     logging.info(f"🔍 Looking for files matching pattern: {gcs_pattern}")
-                    
+
                     try:
                         gcs_list_pattern = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/*"
                         all_files = gcs_access.list_files(gcs_list_pattern)
@@ -398,7 +402,7 @@ def process_chr_data_streaming(
                         else:
                             pattern_prefix = pattern.replace("*", "").replace(".json", "")
                             matching_files = [f for f in all_files if pattern_prefix in f and f.endswith(".json")]
-                            
+
                     except Exception as e:
                         logging.error(f"Error listing files for pattern {pattern}: {e}")
                         matching_files = []
@@ -772,9 +776,7 @@ def process_chr_data_streaming(
                 elif step == "silver_animal_movements":
                     # Process DIKO movements (always available)
                     if context.get("diko_flyt_table") is not None:
-                        animal_movements.create_animal_movements_table(
-                            con, context.get("diko_flyt_table"), silver_dir
-                        )
+                        animal_movements.create_animal_movements_table(con, context.get("diko_flyt_table"), silver_dir)
 
                     # Process CHR_dyr cattle movements (optional - aggregated summaries format)
                     if context.get("cattle_movements_table") is not None:
@@ -810,9 +812,7 @@ def process_chr_data_streaming(
                         try:
                             from . import spf_su
 
-                            spf_su.create_spf_su_herds_table(
-                                con, context.get("spf_su_table"), silver_dir
-                            )
+                            spf_su.create_spf_su_herds_table(con, context.get("spf_su_table"), silver_dir)
                         except ImportError:
                             logging.warning("SPF-SU processing module not available - skipping")
                     else:
@@ -823,9 +823,7 @@ def process_chr_data_streaming(
                         try:
                             from . import spf_su
 
-                            spf_su.create_spf_su_health_controls_table(
-                                con, context.get("spf_su_table"), silver_dir
-                            )
+                            spf_su.create_spf_su_health_controls_table(con, context.get("spf_su_table"), silver_dir)
                         except ImportError:
                             logging.warning("SPF-SU processing module not available - skipping")
                     else:
@@ -836,9 +834,7 @@ def process_chr_data_streaming(
                         try:
                             from . import spf_su
 
-                            spf_su.create_spf_su_salmonella_data_table(
-                                con, context.get("spf_su_table"), silver_dir
-                            )
+                            spf_su.create_spf_su_salmonella_data_table(con, context.get("spf_su_table"), silver_dir)
                         except ImportError:
                             logging.warning("SPF-SU processing module not available - skipping")
                     else:
