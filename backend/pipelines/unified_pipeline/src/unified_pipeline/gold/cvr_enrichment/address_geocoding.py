@@ -141,18 +141,29 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         Returns:
             Dictionary containing extracted addresses and metadata
         """
-        self.log.info("Extracting addresses from company and P-number data")
+        if self.config.shared_config.enable_independent_execution:
+            self.log.info("Extracting addresses from latest available data (independent execution mode)")
+        else:
+            self.log.info("Extracting addresses from company and P-number data (pipeline dependency mode)")
         
-        # Get input paths for company and P-number data (no batching)
+        # Get input paths for company and P-number data (with independent execution support)
         input_paths = get_step_input_paths(
             CVREnrichmentStep.ADDRESS_GEOCODING,
             self.date_pattern,
             total_batches=None,  # No batching
-            bucket=self.config.bucket
+            bucket=self.config.bucket,
+            enable_independent_execution=self.config.shared_config.enable_independent_execution,
+            max_days_back=self.config.shared_config.max_days_back_for_inputs
         )
         
         if not input_paths:
-            self.log.warning("No input paths found for address geocoding step")
+            if self.config.shared_config.enable_independent_execution:
+                self.log.warning(
+                    f"No company/P-number data found within {self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"Returning empty address data."
+                )
+            else:
+                self.log.warning("No input paths found for address geocoding step")
             return {
                 "addresses": [],
                 "company_addresses": 0,

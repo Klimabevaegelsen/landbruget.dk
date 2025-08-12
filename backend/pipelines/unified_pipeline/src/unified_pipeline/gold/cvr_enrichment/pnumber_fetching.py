@@ -153,16 +153,29 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         """
         self.log.info("Extracting P-numbers from company data")
         
-        # Get input paths from company fetching step (no batching)
+        # Get input paths from company fetching step (with independent execution support)
+        if self.config.shared_config.enable_independent_execution:
+            self.log.info("Loading company data from latest available file (independent execution mode)")
+        else:
+            self.log.info("Loading company data from company fetching step (pipeline dependency mode)")
+            
         input_paths = get_step_input_paths(
             CVREnrichmentStep.PNUMBER_FETCHING,
             self.date_pattern,
             total_batches=None,  # No batching
-            bucket=self.config.bucket
+            bucket=self.config.bucket,
+            enable_independent_execution=self.config.shared_config.enable_independent_execution,
+            max_days_back=self.config.shared_config.max_days_back_for_inputs
         )
         
         if not input_paths:
-            self.log.warning("No input paths found for P-number fetching step")
+            if self.config.shared_config.enable_independent_execution:
+                self.log.warning(
+                    f"No company data found within {self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"Returning empty P-number data."
+                )
+            else:
+                self.log.warning("No input paths found for P-number fetching step")
             return {
                 "pnumbers": set(),
                 "pnumber_to_cvr": {},
