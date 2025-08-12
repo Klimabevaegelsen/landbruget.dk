@@ -25,6 +25,7 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInt
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class DAGIBronzeConfig(BaseJobConfig):
     """
     Configuration for DAGI bronze layer data extraction.
@@ -69,6 +70,7 @@ class DAGIBronzeConfig(BaseJobConfig):
     )
 
     retries: int = Field(default=3, description="Number of retry attempts for failed requests")
+
 
 class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
     """

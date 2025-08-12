@@ -14,8 +14,11 @@ except ImportError:
     import logging
     import time
 
-    get_logger = lambda: logging.getLogger(__name__)
-    generate_timestamp = lambda: int(time.time())
+    def get_logger():
+        return logging.getLogger(__name__)
+
+    def generate_timestamp():
+        return int(time.time())
 
     class StorageError(Exception):
         pass
@@ -34,7 +37,7 @@ class SilverStorageManager(DuckDBProcessor):
         self,
         storage_manager: Any,  # DriveStorageManager
         base_path: Path,
-    ):
+    ) -> None:
         """Initialize the Silver storage manager.
 
         Args:

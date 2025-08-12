@@ -192,7 +192,7 @@ class BMDTransformer:
         if self.conn is not None:
             try:
                 self.conn.close()
-            except:
+            except Exception:
                 pass
 
     def read_excel(self) -> str:
@@ -685,20 +685,17 @@ class BMDTransformer:
                     gcs_access = OptimizedGCSDataAccess()
                     bucket_name = "landbrugsdata-raw-data"
                     gcs_path = f"gs://{bucket_name}/silver/bmd/{self.timestamp}/pesticide_products.parquet"
-                    
+
                     # Use native GCS export with server-side compression
                     gcs_access.export_to_gcs_native(
-                        connection=self.conn,
-                        table_name=table_name,
-                        gcs_path=gcs_path,
-                        compression="zstd"
+                        connection=self.conn, table_name=table_name, gcs_path=gcs_path, compression="zstd"
                     )
-                    
+
                     logger.info(f"✅ Native GCS export successful: {gcs_path}")
                     gcs_export_success = True
                 except Exception as e:
                     logger.warning(f"Native GCS export failed, using local export: {e}")
-            
+
             # Always create local file as well (for compatibility)
             self.conn.execute(f"""
                 COPY (SELECT * FROM {table_name})

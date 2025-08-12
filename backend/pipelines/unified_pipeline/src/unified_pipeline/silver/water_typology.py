@@ -21,11 +21,8 @@ The processing includes:
 5. Saving processed data back to GCS (without dissolving)
 """
 
-import logging
 import xml.etree.ElementTree as ET
 from typing import Any, Optional
-
-from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
@@ -62,9 +59,9 @@ class WaterTypologySilverConfig(BaseJobConfig):
     }
     gml_ns: str = "{http://www.opengis.net/gml/3.2}"  # This is not a f-string.
     layers: list[str] = [
-        "vp3endelig2022:vp3e2022_soe_samlet",      # Lakes typology (Søer typologi)
-        "vp3endelig2022:vp3e2022_marin_samlet",    # Coastal waters typology (Kystvande typologi)
-        "vp3endelig2022:vp3e2022_vandloeb_samlet", # Watercourses typology (Åer typologi)
+        "vp3endelig2022:vp3e2022_soe_samlet",  # Lakes typology (Søer typologi)
+        "vp3endelig2022:vp3e2022_marin_samlet",  # Coastal waters typology (Kystvande typologi)
+        "vp3endelig2022:vp3e2022_vandloeb_samlet",  # Watercourses typology (Åer typologi)
     ]
     service_types: dict[str, str] = {}  # All layers use default WFS service type
 
@@ -150,60 +147,60 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
             return None
         cleaned = str(value).strip()
         return cleaned if cleaned else None
-        
+
     def _parse_gml_to_wkt(self, gml_xml: str) -> Optional[str]:
         """
         Parse GML geometry XML to WKT format.
-        
+
         This method handles the common GML geometry types found in water typology data:
         - MultiSurface (lakes, coastal waters) -> MULTIPOLYGON
         - MultiCurve (watercourses) -> MULTILINESTRING
         - Simple polygons and linestrings
-        
+
         Args:
             gml_xml (str): GML geometry XML string
-            
+
         Returns:
             Optional[str]: WKT geometry string, or None if parsing fails
         """
         try:
             # Parse the GML XML
             root = ET.fromstring(gml_xml)
-            
+
             # Find posList elements which contain the coordinates
             pos_lists = []
             for elem in root.iter():
-                if elem.tag.endswith('posList') and elem.text:
+                if elem.tag.endswith("posList") and elem.text:
                     coordinates = elem.text.strip()
                     if coordinates:
                         pos_lists.append(coordinates)
-                        
+
             if not pos_lists:
                 return None
-                
+
             # Determine geometry type based on GML structure
             gml_text = gml_xml.lower()
-            
-            if 'multisurface' in gml_text or 'multipolygon' in gml_text:
+
+            if "multisurface" in gml_text or "multipolygon" in gml_text:
                 # Handle MultiSurface (lakes, coastal waters)
                 return self._create_multipolygon_wkt(pos_lists)
-            elif 'multicurve' in gml_text or 'multilinestring' in gml_text:
+            elif "multicurve" in gml_text or "multilinestring" in gml_text:
                 # Handle MultiCurve (watercourses)
                 return self._create_multilinestring_wkt(pos_lists)
-            elif 'polygon' in gml_text:
+            elif "polygon" in gml_text:
                 # Handle simple Polygon
                 return self._create_polygon_wkt(pos_lists[0]) if pos_lists else None
-            elif 'linestring' in gml_text:
+            elif "linestring" in gml_text:
                 # Handle simple LineString
                 return self._create_linestring_wkt(pos_lists[0]) if pos_lists else None
             else:
                 # Default to polygon for unknown types
                 return self._create_polygon_wkt(pos_lists[0]) if pos_lists else None
-                
+
         except Exception as e:
             self.log.debug(f"Error parsing GML geometry: {e}")
             return None
-            
+
     def _create_multipolygon_wkt(self, pos_lists: list[str]) -> Optional[str]:
         """Create MULTIPOLYGON WKT from coordinate lists."""
         try:
@@ -214,17 +211,17 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                     # Ensure polygon is closed
                     if polygon_coords[0] != polygon_coords[-1]:
                         polygon_coords.append(polygon_coords[0])
-                    
+
                     coord_pairs = [f"{x} {y}" for x, y in polygon_coords]
                     polygons.append(f"(({', '.join(coord_pairs)}))")
-                    
+
             if polygons:
                 return f"MULTIPOLYGON({', '.join(polygons)})"
             return None
-            
+
         except Exception:
             return None
-            
+
     def _create_multilinestring_wkt(self, pos_lists: list[str]) -> Optional[str]:
         """Create MULTILINESTRING WKT from coordinate lists."""
         try:
@@ -234,14 +231,14 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 if line_coords and len(line_coords) >= 2:
                     coord_pairs = [f"{x} {y}" for x, y in line_coords]
                     linestrings.append(f"({', '.join(coord_pairs)})")
-                    
+
             if linestrings:
                 return f"MULTILINESTRING({', '.join(linestrings)})"
             return None
-            
+
         except Exception:
             return None
-            
+
     def _create_polygon_wkt(self, coords: str) -> Optional[str]:
         """Create POLYGON WKT from coordinate string."""
         try:
@@ -250,14 +247,14 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 # Ensure polygon is closed
                 if polygon_coords[0] != polygon_coords[-1]:
                     polygon_coords.append(polygon_coords[0])
-                
+
                 coord_pairs = [f"{x} {y}" for x, y in polygon_coords]
                 return f"POLYGON(({', '.join(coord_pairs)}))"
             return None
-            
+
         except Exception:
             return None
-            
+
     def _create_linestring_wkt(self, coords: str) -> Optional[str]:
         """Create LINESTRING WKT from coordinate string."""
         try:
@@ -266,26 +263,26 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 coord_pairs = [f"{x} {y}" for x, y in line_coords]
                 return f"LINESTRING({', '.join(coord_pairs)})"
             return None
-            
+
         except Exception:
             return None
-            
+
     def _parse_coordinates(self, coord_string: str) -> list[tuple[float, float]]:
         """
         Parse coordinate string into list of (x, y) tuples.
-        
+
         Args:
             coord_string (str): Space-separated coordinate values "x1 y1 x2 y2 ..."
-            
+
         Returns:
             list[tuple[float, float]]: List of coordinate pairs
         """
         try:
             # Clean up the coordinate string
-            coords = coord_string.strip().replace('\n', ' ').replace('\t', ' ')
+            coords = coord_string.strip().replace("\n", " ").replace("\t", " ")
             # Split by whitespace and filter out empty strings
             values = [v for v in coords.split() if v]
-            
+
             # Group into coordinate pairs
             coord_pairs = []
             for i in range(0, len(values) - 1, 2):
@@ -295,9 +292,9 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                     coord_pairs.append((x, y))
                 except (ValueError, IndexError):
                     continue
-                    
+
             return coord_pairs
-            
+
         except Exception:
             return []
 
@@ -320,37 +317,42 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
         try:
             # Parse XML
             root = ET.fromstring(payload)
-            
+
             # Register namespaces for XPath queries
             for prefix, uri in self.config.namespaces.items():
                 ET.register_namespace(prefix, uri)
 
             # Find all feature members
             features = []
-            
+
             # Look for features in the XML structure
             # WFS responses typically have features under wfs:FeatureCollection/wfs:member
             for member in root.findall(".//wfs:member", self.config.namespaces):
                 for feature in member:
                     feature_data = {}
-                    
+
                     # Extract geometry
                     geometry_elem = feature.find(".//gml:*", self.config.namespaces)
                     if geometry_elem is not None:
                         # Store the raw geometry XML for DuckDB processing
-                        feature_data["geometry_xml"] = ET.tostring(geometry_elem, encoding="unicode")
-                    
+                        feature_data["geometry_xml"] = ET.tostring(
+                            geometry_elem, encoding="unicode"
+                        )
+
                     # Extract attributes (all child elements that are not geometries)
                     for child in feature:
-                        if not any(child.tag.startswith(f"{{{ns}}}") for ns in ["http://www.opengis.net/gml/3.2"]):
+                        if not any(
+                            child.tag.startswith(f"{{{ns}}}")
+                            for ns in ["http://www.opengis.net/gml/3.2"]
+                        ):
                             # This is an attribute, not a geometry
                             tag_name = child.tag.split("}")[-1] if "}" in child.tag else child.tag
                             feature_data[tag_name] = self.clean_value(child.text)
-                    
+
                     # Add metadata
                     feature_data["layer"] = layer
                     feature_data["source"] = self.config.dataset
-                    
+
                     features.append(feature_data)
 
             if not features:
@@ -361,12 +363,12 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
             # Create DuckDB table from features
             table_name = f"{layer.replace(':', '_')}_processed"
-            
+
             # Get all unique column names from all features
             all_columns = set()
             for feature in features:
                 all_columns.update(feature.keys())
-            
+
             # Create table schema
             columns_sql = []
             for col in sorted(all_columns):
@@ -374,14 +376,14 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                     columns_sql.append(f"{col} TEXT")
                 else:
                     columns_sql.append(f"{col} VARCHAR")
-            
+
             # Create table
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {table_name} (
-                    {', '.join(columns_sql)}
+                    {", ".join(columns_sql)}
                 )
             """)
-            
+
             # Insert features
             for feature in features:
                 # Prepare values for all columns
@@ -394,12 +396,14 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                         # Escape single quotes
                         escaped_value = str(value).replace("'", "''")
                         values.append(f"'{escaped_value}'")
-                
+
                 self.conn.execute(f"""
-                    INSERT INTO {table_name} VALUES ({', '.join(values)})
+                    INSERT INTO {table_name} VALUES ({", ".join(values)})
                 """)
 
-            self.log.info(f"Successfully processed {len(features)} features into table {table_name}")
+            self.log.info(
+                f"Successfully processed {len(features)} features into table {table_name}"
+            )
             return table_name
 
         except Exception as e:
@@ -419,15 +423,15 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
         """
         try:
             all_tables = []
-            
+
             for entry in raw_data:
                 payload = entry.get("payload", "")
                 layer = entry.get("layer", "unknown")
-                
+
                 if not payload:
                     self.log.warning(f"Empty payload for layer {layer}")
                     continue
-                
+
                 # Process the XML payload
                 table_name = self.process_xml_payload(payload, layer)
                 if table_name:
@@ -439,7 +443,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
             # Combine all tables into one, handling different schemas
             combined_table = f"{self.config.dataset}_combined"
-            
+
             if len(all_tables) == 1:
                 # If only one table, just rename it
                 self.conn.execute(f"""
@@ -453,19 +457,19 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                     columns = self.conn.execute(f"DESCRIBE {table}").fetchall()
                     for col in columns:
                         all_columns.add(col[0])  # column name is first element
-                
+
                 all_columns = sorted(all_columns)
                 self.log.info(f"Combining tables with unified schema: {len(all_columns)} columns")
-                
+
                 # Create union with NULL for missing columns
                 union_parts = []
                 for table in all_tables:
                     # Get existing columns for this table
                     existing_columns = set()
-                    table_columns = self.conn.execute(f"DESCRIBE {table}").fetchall() 
+                    table_columns = self.conn.execute(f"DESCRIBE {table}").fetchall()
                     for col in table_columns:
                         existing_columns.add(col[0])
-                    
+
                     # Build SELECT with NULL for missing columns
                     select_parts = []
                     for col in all_columns:
@@ -473,12 +477,12 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                             select_parts.append(f"{col}")
                         else:
                             select_parts.append(f"NULL as {col}")
-                    
+
                     union_parts.append(f"SELECT {', '.join(select_parts)} FROM {table}")
-                
+
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {combined_table} AS
-                    {' UNION ALL '.join(union_parts)}
+                    {" UNION ALL ".join(union_parts)}
                 """)
 
             # Clean up individual tables
@@ -490,20 +494,18 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 ALTER TABLE {combined_table} 
                 ADD COLUMN geometry_spatial GEOMETRY
             """)
-            
+
             # Convert GML geometries to WKT using Python-based parser
             # DuckDB doesn't have ST_GeomFromGML, so we need to parse coordinates manually
             total_feature_count = self.conn.execute(
                 f"SELECT COUNT(*) FROM {combined_table}"
             ).fetchone()[0]
-            self.log.info(
-                f"Converting {total_feature_count} GML geometries to spatial objects..."
-            )
-            
+            self.log.info(f"Converting {total_feature_count} GML geometries to spatial objects...")
+
             # Process geometries row by row using Python for reliable parsing
             converted_count = 0
             failed_count = 0
-            
+
             # Get all records with geometry_xml
             rows = self.conn.execute(f"""
                 SELECT 
@@ -513,27 +515,30 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 FROM {combined_table} 
                 WHERE geometry_xml IS NOT NULL
             """).fetchall()
-            
+
             for rowid, geometry_xml, layer in rows:
                 try:
                     # Parse the GML XML to extract coordinates
                     wkt_geom = self._parse_gml_to_wkt(geometry_xml)
-                    
+
                     if wkt_geom:
                         # Convert to spatial geometry using DuckDB with validation & repair
                         try:
                             # First try direct conversion
-                            self.conn.execute(f"""
+                            self.conn.execute(
+                                f"""
                                 UPDATE {combined_table} 
                                 SET geometry_spatial = ST_GeomFromText(?)
                                 WHERE ROWID = ?
-                            """, [wkt_geom, rowid])
-                            
+                            """,
+                                [wkt_geom, rowid],
+                            )
+
                             # Check if geometry is valid using proper type casting
                             is_valid = self.conn.execute(
                                 "SELECT ST_IsValid(ST_GeomFromText(?))", [wkt_geom]
                             ).fetchone()
-                            
+
                             if is_valid and is_valid[0]:
                                 # Geometry is valid - success!
                                 converted_count += 1
@@ -541,22 +546,27 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                                 # Geometry is invalid - fix with ST_MakeValid
                                 try:
                                     repaired_wkt = self.conn.execute(
-                                        "SELECT ST_AsText(ST_MakeValid(ST_GeomFromText(?)))", [wkt_geom]
+                                        "SELECT ST_AsText(ST_MakeValid(ST_GeomFromText(?)))",
+                                        [wkt_geom],
                                     ).fetchone()
-                                    
+
                                     if repaired_wkt and repaired_wkt[0]:
                                         # Update with repaired geometry
-                                        self.conn.execute(f"""
+                                        self.conn.execute(
+                                            f"""
                                             UPDATE {combined_table} 
                                             SET geometry_spatial = ST_GeomFromText(?)
                                             WHERE ROWID = ?
-                                        """, [repaired_wkt[0], rowid])
-                                        
+                                        """,
+                                            [repaired_wkt[0], rowid],
+                                        )
+
                                         # Verify the repaired geometry is valid
                                         repair_valid = self.conn.execute(
-                                            "SELECT ST_IsValid(ST_GeomFromText(?))", [repaired_wkt[0]]
+                                            "SELECT ST_IsValid(ST_GeomFromText(?))",
+                                            [repaired_wkt[0]],
                                         ).fetchone()
-                                        
+
                                         if repair_valid and repair_valid[0]:
                                             converted_count += 1
                                             self.log.debug(
@@ -569,30 +579,32 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                                             )
                                     else:
                                         failed_count += 1
-                                        self.log.debug(f"ST_MakeValid returned null for row {rowid}")
-                                        
+                                        self.log.debug(
+                                            f"ST_MakeValid returned null for row {rowid}"
+                                        )
+
                                 except Exception as e:
                                     failed_count += 1
                                     self.log.debug(f"ST_MakeValid error for row {rowid}: {e}")
-                                    
+
                         except Exception as e:
                             # Even ST_GeomFromText failed - this is a parsing error
                             self.log.debug(f"Failed to parse WKT for row {rowid}: {e}")
                             failed_count += 1
                     else:
                         failed_count += 1
-                        
+
                 except Exception as e:
                     self.log.debug(f"Failed to convert geometry for row {rowid}: {e}")
                     failed_count += 1
-                    
+
             total_features = converted_count + failed_count
             success_rate = (converted_count / total_features * 100) if total_features > 0 else 0
             self.log.info(
                 f"GML→WKT conversion: {converted_count:,}/{total_features:,} "
                 f"({success_rate:.1f}% success)"
             )
-            
+
             if success_rate >= 95:
                 self.log.info("✅ Excellent geometry conversion rate!")
             elif success_rate >= 80:
@@ -601,7 +613,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 self.log.warning("⚠️ Moderate geometry conversion rate")
             else:
                 self.log.error("❌ Poor geometry conversion rate")
-                
+
             if failed_count > 0:
                 self.log.warning(
                     f"⚠️ {failed_count:,} geometries failed to convert even with ST_MakeValid repair"
@@ -614,7 +626,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 f"Combined {len(all_tables)} tables into {combined_table} "
                 f"with {final_feature_count} features"
             )
-            
+
             return combined_table
 
         except Exception as e:
@@ -642,7 +654,9 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                     # Bronze data is expected to be a list of tuples (layer, raw_data)
                     if isinstance(bronze_data, list):
                         # Create data structure compatible with _process_data
-                        current_timestamp = self.conn.execute("SELECT current_timestamp").fetchone()[0]
+                        current_timestamp = self.conn.execute(
+                            "SELECT current_timestamp"
+                        ).fetchone()[0]
 
                         raw_data_list = [
                             {
@@ -661,13 +675,13 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                     # Read from GCS storage
                     raw_data_list = []
                     for layer in self.config.layers:
-                        layer_table = f"{layer.replace(':', '_')}_raw"
+                        f"{layer.replace(':', '_')}_raw"
                         dataset_name = f"{self.config.dataset}_{layer.replace(':', '_')}"
-                        
+
                         try:
                             # Load data from GCS using the correct method
                             table_name = self._read_bronze_data(dataset_name, self.config.bucket)
-                            
+
                             if table_name:
                                 # Extract the payload from the loaded data
                                 result = self.conn.execute(f"""
@@ -675,15 +689,17 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                                     FROM {table_name}
                                     LIMIT 1
                                 """).fetchone()
-                                
+
                                 if result:
-                                    raw_data_list.append({
-                                        "payload": result[0],
-                                        "layer": result[1],
-                                        "source": result[2],
-                                        "created_at": result[3],
-                                        "updated_at": result[4],
-                                    })
+                                    raw_data_list.append(
+                                        {
+                                            "payload": result[0],
+                                            "layer": result[1],
+                                            "source": result[2],
+                                            "created_at": result[3],
+                                            "updated_at": result[4],
+                                        }
+                                    )
                         except Exception as e:
                             self.log.warning(f"Could not load data for layer {layer}: {e}")
 
@@ -696,7 +712,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 if table_name is None:
                     self.log.error("Failed to process raw data")
                     return None
-                
+
                 self.log.info("Processed raw data successfully")
 
                 # Apply geometry validation and transformation
@@ -704,7 +720,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 spatial_geom_count = self.conn.execute(
                     f"SELECT COUNT(*) FROM {table_name} WHERE geometry_spatial IS NOT NULL"
                 ).fetchone()[0]
-                
+
                 if spatial_geom_count > 0:
                     self.log.info(
                         f"Validating and transforming {spatial_geom_count:,} spatial geometries..."

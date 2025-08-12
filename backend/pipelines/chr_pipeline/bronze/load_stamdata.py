@@ -2,7 +2,6 @@
 
 import json
 import logging
-import uuid
 from typing import Any, Dict, Optional
 
 from zeep import Client
@@ -11,28 +10,10 @@ from zeep.helpers import serialize_object
 # Import the exporter and auth
 from .auth import create_stamdata_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_stamdata")
-
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
-
-
-# --- Base Request Structure ---
-
-
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_stamdata") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    # Consider making SessionId and TrackID more dynamic if needed
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
-
 
 # --- Generic SOAP Fetcher ---
 
@@ -64,7 +45,7 @@ def load_species_usage_combinations(client: Client, username: str) -> Optional[A
         "Fetching species/usage combinations (ListDyrearterMedBrugsarter). This provides all species and usage types."
     )
     request = {
-        "GLRCHRWSInfoInbound": _create_base_request(username),
+        "GLRCHRWSInfoInbound": create_base_request(username),
         "Request": {},  # Empty request gets all combinations according to WSDL
     }
     # Note: WSDL confirms Request key is needed, containing CHR_stamdataListDyrearterMedBrugsarterRequestType (which takes optional DyreArtKode)

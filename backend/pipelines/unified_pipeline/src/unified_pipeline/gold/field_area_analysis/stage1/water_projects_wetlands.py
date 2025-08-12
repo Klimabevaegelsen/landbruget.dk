@@ -26,7 +26,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         """Load Stage 0 pre-filtered wetlands and water projects datasets."""
         # Get year-aware dataset names
         updated_outputs = CONFIG.update_outputs_for_year()
-        
+
         # Load Stage 0 pre-filtered wetlands (1.6M → ~200K, 85% reduction)
         self.log.info("Loading Stage 0 pre-filtered wetlands dataset...")
         stage0_wetlands_dataset = updated_outputs["wetlands_prefiltered"]
@@ -38,7 +38,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             files = sorted(self.gcs_access.list_files(pattern), reverse=True)
             if not files:
                 raise FileNotFoundError(f"No gold data found for {dataset}")
-            
+
             # Just return the most recent file - Stage 0 should produce consistent schema
             most_recent = files[0]
             self.log.info(f"Using most recent {dataset} partition: {most_recent}")
@@ -76,13 +76,18 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         """)
 
         self.log.info("Using Stage 0 pre-filtered wetlands; validating presence of wetland_key...")
-        cols = [r[0] for r in self.conn.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_raw'"
-        ).fetchall()]
-        if 'wetland_key' not in [c.lower() for c in cols]:
+        cols = [
+            r[0]
+            for r in self.conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_raw'"
+            ).fetchall()
+        ]
+        if "wetland_key" not in [c.lower() for c in cols]:
             schema = self.conn.execute("DESCRIBE wetlands_raw").fetchall()
             self.log.error(f"wetlands_raw schema: {schema}")
-            raise RuntimeError("Stage 1: wetlands_raw missing wetland_key; ensure Stage 0 produced it")
+            raise RuntimeError(
+                "Stage 1: wetlands_raw missing wetland_key; ensure Stage 0 produced it"
+            )
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
@@ -150,15 +155,13 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         )
 
         total_intersections = 0
-        total_wetland_area = 0
-        total_covered_area = 0
 
         # Process each batch
         for batch_num in range(num_batches):
             offset = batch_num * batch_size
             self.log.info(f"Processing batch {batch_num + 1}/{num_batches} (offset: {offset:,})")
 
-            # Create wetlands batch (ST_Dump already applied in wetlands table)  
+            # Create wetlands batch (ST_Dump already applied in wetlands table)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch_raw AS
                 SELECT 
@@ -172,7 +175,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             """)
 
             # Calculate areas (wetland_id already exists from main wetlands table)
-            self.conn.execute(f"""
+            self.conn.execute("""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
                     wetland_key,

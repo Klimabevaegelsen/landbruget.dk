@@ -2,7 +2,6 @@
 
 import json
 import logging
-import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from zeep import Client
@@ -12,26 +11,13 @@ from zeep.helpers import serialize_object
 # Import the exporter and auth
 from .auth import create_besaetning_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_besaetning")
 
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
-
 # --- Base Request Structure ---
-
-
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_besaetning") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    # Note: Consider moving this to a shared utility module later
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
+# Using shared utility from .utils
 
 
 # --- Generic SOAP Fetcher ---
@@ -75,8 +61,7 @@ def load_herd_list(
         - Optional[int]: The last herd number received in this batch (TilBesNr),
                          or None if not available or no herds found.
     """
-    operation_name = "listBesaetningerMedBrugsart"
-    base_request = _create_base_request(username)
+    create_base_request(username)
     request_data = {
         "DyreArtKode": str(species_code),
         "BrugsArtKode": str(usage_code),
@@ -85,10 +70,6 @@ def load_herd_list(
         request_data["BesNrFra"] = str(start_herd_number)
 
     # Create the payload dictionary expected by the operation elements
-    payload = {
-        "GLRCHRWSInfoInbound": base_request,
-        "Request": request_data,
-    }
 
     logger.info(
         f"Fetching herd list for species {species_code}, usage {usage_code}, starting from herd {start_herd_number or 'beginning'}..."
@@ -97,14 +78,14 @@ def load_herd_list(
     # --- Construct the request structure precisely according to WSDL/XSD ---
     try:
         # 1. Get the factory for the innermost request parameters type
-        RequestParamsFactory = besaetning_client.get_type("ns0:CHR_besaetningListBesaetningerMedBrugsartRequestType")
-        request_params = RequestParamsFactory(
+        request_params_factory = besaetning_client.get_type("ns0:CHR_besaetningListBesaetningerMedBrugsartRequestType")
+        request_params = request_params_factory(
             DyreArtKode=species_code, BrugsArtKode=usage_code, FraBesNr=start_herd_number
         )
 
         # 2. Get the factory for the common inbound header type (Corrected type name)
-        GLRCHRWSInfoInboundFactory = besaetning_client.get_type("ns0:GLRCHRWSInfoInboundType")
-        common_header = GLRCHRWSInfoInboundFactory(**_create_base_request(username))
+        glr_chr_ws_info_inbound_factory = besaetning_client.get_type("ns0:GLRCHRWSInfoInboundType")
+        common_header = glr_chr_ws_info_inbound_factory(**create_base_request(username))
 
         # 3. Combine the header and request parameters into the structure expected by the operation argument
         #    We don't need a factory for the wrapping element itself.
@@ -202,14 +183,14 @@ def load_herd_details(client: Client, username: str, herd_number: int, species_c
     # Construct request using factories (similar pattern)
     try:
         # --- Use Factory for Header ---
-        GLRCHRWSInfoInboundFactory = client.get_type("ns0:GLRCHRWSInfoInboundType")
-        common_header = GLRCHRWSInfoInboundFactory(
-            **_create_base_request(username=username, track_id=f"load_details_{herd_number}")
+        glr_chr_ws_info_inbound_factory = client.get_type("ns0:GLRCHRWSInfoInboundType")
+        common_header = glr_chr_ws_info_inbound_factory(
+            **create_base_request(username=username, track_id=f"load_details_{herd_number}")
         )
 
         # --- Use Factory for Request Parameters with Integers ---
-        RequestParamsFactory = client.get_type("ns0:CHR_besaetningHentStamoplysningerRequestType")
-        request_params = RequestParamsFactory(
+        request_params_factory = client.get_type("ns0:CHR_besaetningHentStamoplysningerRequestType")
+        request_params = request_params_factory(
             BesaetningsNummer=herd_number,  # Use int
             DyreArtKode=species_code,  # Use int
         )
@@ -284,7 +265,7 @@ if __name__ == "__main__":
                             if chr_number_str:
                                 try:
                                     chr_number = int(chr_number_str)
-                                except:
+                                except (ValueError, TypeError):
                                     pass
                 logger.info(f"Attempted CHR extraction from test response: {chr_number}")
 

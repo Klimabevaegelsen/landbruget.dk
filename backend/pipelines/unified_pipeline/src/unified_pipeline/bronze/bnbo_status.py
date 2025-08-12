@@ -27,6 +27,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class BNBOStatusBronzeConfig(BaseJobConfig):
     """
     Configuration for BNBO (Boringsnære Beskyttelsesområder) status data source in the bronze layer.
@@ -72,6 +73,7 @@ class BNBOStatusBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
+
 class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processor for BNBO status data.
@@ -89,7 +91,7 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
         Initialize the BNBOStatusBronze processor.
 
         Args:
-            config (BNBOStatusBronzeConfig): Configuration object for the processor.        """
+            config (BNBOStatusBronzeConfig): Configuration object for the processor."""
         super().__init__(config)
 
     def _get_params(self, start_index: int = 0) -> dict:

@@ -212,12 +212,12 @@ def migrate_save_data_pattern(
     gcs_path = f"gs://{bucket}/{path}"
 
     # 🚀 ENHANCED: Try native HMAC export first, fallback to existing method
-    if hasattr(gcs_access, 'export_to_gcs_native'):
+    if hasattr(gcs_access, "export_to_gcs_native"):
         native_used = gcs_access.export_to_gcs_native(
-            table_name, 
-            gcs_path, 
+            table_name,
+            gcs_path,
             compression="zstd",  # Optimal compression
-            row_group_size=100000
+            row_group_size=100000,
         )
         if not native_used:
             # Fallback to existing method
@@ -244,12 +244,12 @@ def migrate_read_data_pattern(
     ```
     """
     gcs_path = f"gs://{bucket}/{blob_name}"
-    
+
     # 🚀 ENHANCED: Try native HMAC loading first, fallback to existing method
-    if hasattr(gcs_access, 'query_parquet_native'):
+    if hasattr(gcs_access, "query_parquet_native"):
         try:
             gcs_access.query_parquet_native(gcs_path, "SELECT *", table_name)
-        except Exception as e:
+        except Exception:
             # Fallback to existing method
             gcs_access.create_table_from_gcs(table_name, gcs_path)
     else:

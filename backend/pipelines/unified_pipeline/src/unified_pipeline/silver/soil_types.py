@@ -124,7 +124,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             import json
 
             # Save the GeoJSON to a temporary file that DuckDB can read
-            geojson_str = json.dumps(wfs_data)
+            json.dumps(wfs_data)
 
             # Stream process the features in batches to avoid memory issues
             features = wfs_data.get("features", [])

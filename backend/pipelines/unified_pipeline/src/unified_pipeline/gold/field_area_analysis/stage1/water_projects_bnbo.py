@@ -24,7 +24,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         """Load Stage 0 pre-filtered BNBO and water projects datasets."""
         # Get year-aware dataset names
         updated_outputs = CONFIG.update_outputs_for_year()
-        
+
         # Load Stage 0 pre-filtered BNBO (3.7K → ~1K, 70% reduction)
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
         stage0_bnbo_dataset = updated_outputs["bnbo_prefiltered"]

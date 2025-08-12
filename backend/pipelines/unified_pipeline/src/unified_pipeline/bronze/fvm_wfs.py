@@ -54,7 +54,7 @@ class FVMWFSBronzeConfig(BaseJobConfig):
         dataset_organic_areas (str): Name of the organic areas dataset in storage
         dataset_organic_subsidies (str): Name of the organic subsidies dataset in storage
         dataset_grassland_subsidies (str): Name of the grassland subsidies dataset in storage
-        dataset_environmental_subsidies (str): Name of the environmental subsidies dataset 
+        dataset_environmental_subsidies (str): Name of the environmental subsidies dataset
             in storage
         frequency (str): How often the data is updated
         bucket (str): GCS bucket name for raw data storage
@@ -62,11 +62,11 @@ class FVMWFSBronzeConfig(BaseJobConfig):
         marker_years (List[int]): Years available for Marker data (2008-2025)
         smaabiotoper_years (List[int]): Years available for Smaabiotoper data (2023-2025)
         organic_areas_years (List[int]): Years available for Organic Areas data (2012-2024)
-        organic_subsidies_years (List[int]): Years available for Organic Subsidies data 
+        organic_subsidies_years (List[int]): Years available for Organic Subsidies data
             (2019-2024)
-        grassland_subsidies_years (List[int]): Years available for Grassland Subsidies data 
+        grassland_subsidies_years (List[int]): Years available for Grassland Subsidies data
             (2019-2024)
-        environmental_subsidies_years (List[int]): Years available for Environmental Subsidies data 
+        environmental_subsidies_years (List[int]): Years available for Environmental Subsidies data
             (2019-2023)
         batch_size (int): Features per request (0 = unlimited, downloads full dataset)
         max_concurrent (int): Maximum concurrent requests
@@ -190,14 +190,14 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
 
     This class is responsible for fetching raw agricultural field data from the
     FVM WFS service for all available years. It handles Markblokke (field blocks),
-    Marker (field markers), Smaabiotoper (small biotopes), OrganicAreas, 
+    Marker (field markers), Smaabiotoper (small biotopes), OrganicAreas,
     OrganicSubsidies, GrasslandSubsidies, and EnvironmentalSubsidies layers.
 
     The class implements retry logic for resilience against transient failures
     and uses semaphores to control the number of concurrent requests.
 
     Processing flow:
-    1. For each layer type (Markblokke, Marker, Smaabiotoper, OrganicAreas, 
+    1. For each layer type (Markblokke, Marker, Smaabiotoper, OrganicAreas,
        OrganicSubsidies, GrasslandSubsidies, EnvironmentalSubsidies), iterate through years
     2. Get total feature count from WFS service
     3. Fetch complete dataset in single request (optimal based on testing)
@@ -217,8 +217,8 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         Get the WFS layer name for a specific type and year.
 
         Args:
-            layer_type (str): Type of layer ('Markblokke', 'Marker', 'Smaabiotoper', 
-                             'OrganicAreas', 'OrganicSubsidies', 'GrasslandSubsidies', 
+            layer_type (str): Type of layer ('Markblokke', 'Marker', 'Smaabiotoper',
+                             'OrganicAreas', 'OrganicSubsidies', 'GrasslandSubsidies',
                              or 'EnvironmentalSubsidies')
             year (int): Year for the layer
 
@@ -230,11 +230,11 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         elif layer_type == "OrganicAreas":
             return f"Miljoe_og_oekologitilsagn:Oekologiske_arealer_{year}"
         elif layer_type == "OrganicSubsidies":
-            return (f"Miljoe_og_oekologitilsagn:"
-                   f"Tilsagn_til_oekologiske_arealtilskud_2015-2020_{year}")
+            return (
+                f"Miljoe_og_oekologitilsagn:Tilsagn_til_oekologiske_arealtilskud_2015-2020_{year}"
+            )
         elif layer_type == "GrasslandSubsidies":
-            return (f"Miljoe_og_oekologitilsagn:"
-                   f"Tilsagn_til_pleje_af_graes_2015-2020_{year}")
+            return f"Miljoe_og_oekologitilsagn:Tilsagn_til_pleje_af_graes_2015-2020_{year}"
         elif layer_type == "EnvironmentalSubsidies":
             return f"Miljoe_og_oekologitilsagn:Miljoetilsagn_oevrige_typer_{year}"
         else:
@@ -482,7 +482,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         9. Returns all processed data for potential in-memory passing
 
         Returns:
-            Optional[Dict]: Dictionary containing all processed data organized by layer type 
+            Optional[Dict]: Dictionary containing all processed data organized by layer type
                            and year,
                            or None if processing fails
         """
@@ -502,13 +502,13 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
             AsyncTimer("Total FVM WFS run time"),
         ):
             all_data = {
-                "markblokke": {}, 
-                "marker": {}, 
-                "smaabiotoper": {}, 
+                "markblokke": {},
+                "marker": {},
+                "smaabiotoper": {},
                 "organic_areas": {},
                 "organic_subsidies": {},
                 "grassland_subsidies": {},
-                "environmental_subsidies": {}
+                "environmental_subsidies": {},
             }
 
             # Process Markblokke data (field blocks) 2005-2026

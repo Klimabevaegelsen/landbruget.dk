@@ -16,7 +16,10 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
+
+
 from .pdf_transformer import PDFTransformer
 
 # Get logger
@@ -32,7 +35,7 @@ class AdvancedPDFTransformer(PDFTransformer):
         ocr_language: str = "eng",
         min_table_size: int = 3,
         extraction_methods: list[str] = None,
-    ):
+    ) -> None:
         """Initialize the advanced PDF transformer.
 
         Args:
@@ -162,7 +165,7 @@ class AdvancedPDFTransformer(PDFTransformer):
             all_tables = []
 
             with pdfplumber.open(file_path) as pdf:
-                for page_num, page in enumerate(pdf.pages):
+                for _page_num, page in enumerate(pdf.pages):
                     # Extract tables from the page
                     tables = page.extract_tables()
 
@@ -204,10 +207,10 @@ class AdvancedPDFTransformer(PDFTransformer):
 
             for i, image in enumerate(images):
                 # Perform OCR
-                text = pytesseract.image_to_string(image, lang=self.ocr_language, config="--psm 6")
+                pytesseract.image_to_string(image, lang=self.ocr_language, config="--psm 6")
 
                 # Perform OCR with table detection
-                tables_data = pytesseract.image_to_data(
+                pytesseract.image_to_data(
                     image, lang=self.ocr_language, config="--psm 6", output_type="data.frame"
                 )
 
@@ -267,7 +270,7 @@ class AdvancedPDFTransformer(PDFTransformer):
                 # Check if columns are similar
                 if set(table.columns) == set(new_table.columns):
                     # Sample a few rows to compare
-                    sample_size = min(5, table.shape[0])
+                    min(5, table.shape[0])
                     if table.shape[0] > 0 and new_table.shape[0] > 0:
                         sample_rows = min(table.shape[0], new_table.shape[0])
                         if np.array_equal(

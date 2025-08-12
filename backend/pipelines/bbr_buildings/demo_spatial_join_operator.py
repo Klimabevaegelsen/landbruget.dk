@@ -144,7 +144,7 @@ def demonstrate_spatial_join_operator():
     return spatial_join_used
 
 
-def demonstrate_query_patterns():
+def demonstrate_query_patterns() -> None:
     """Show different query patterns that trigger SPATIAL_JOIN operator."""
     print("\n🌟 Demonstrating different SPATIAL_JOIN patterns...")
 
@@ -183,7 +183,7 @@ def demonstrate_query_patterns():
     conn.close()
 
 
-def demonstrate_performance_comparison():
+def demonstrate_performance_comparison() -> None:
     """Compare performance with and without SPATIAL_JOIN operator."""
     print("\n📈 Performance comparison demonstration...")
 
@@ -235,7 +235,7 @@ def demonstrate_performance_comparison():
     conn.close()
 
 
-def main():
+def main() -> None:
     """Run all demonstrations."""
     print("🎯 DuckDB Spatial v1.2.2 SPATIAL_JOIN Operator Demonstration")
     print("=" * 60)

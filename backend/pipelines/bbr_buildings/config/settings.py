@@ -7,7 +7,7 @@ from pathlib import Path
 class Settings:
     """Configuration settings for BBR Buildings Pipeline."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Data sources - use the original working URLs from the previous version
         self.inspire_bbr_url = os.getenv(
             "INSPIRE_BBR_URL",

@@ -113,7 +113,6 @@ class FieldAreaAnalysisRedesigned:
         column_names = [col[0] for col in columns_info]
 
         if "geometry" in column_names:
-            geometry_column = "geometry"
             self.log.info("Using 'geometry' column for field geometries")
             self.conn.execute("""
                 CREATE TABLE fields_clean AS
@@ -129,7 +128,6 @@ class FieldAreaAnalysisRedesigned:
                 AND crop_code IS NOT NULL
             """)
         elif "geometry_wkt" in column_names:
-            geometry_column = "geometry_wkt"
             self.log.info("Using 'geometry_wkt' column for field geometries")
             self.conn.execute("""
                 CREATE TABLE fields_clean AS
@@ -404,7 +402,7 @@ class FieldAreaAnalysisRedesigned:
         try:
             self.conn.execute("SELECT COUNT(*) FROM field_property_results").fetchone()
             has_properties = True
-        except:
+        except Exception:
             pass
 
         if has_properties:

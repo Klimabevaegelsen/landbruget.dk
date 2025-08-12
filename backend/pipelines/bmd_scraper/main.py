@@ -281,7 +281,7 @@ def main():
             )
 
             # Generate documentation for BMD table
-            schema_files = schema_manager.generate_all_documentation([table_name], stage="silver")
+            schema_manager.generate_all_documentation([table_name], stage="silver")
             logger.info("Generated schema documentation for BMD data")
 
             # Commit to GitHub

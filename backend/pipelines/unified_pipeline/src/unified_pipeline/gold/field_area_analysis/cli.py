@@ -229,25 +229,25 @@ Area validation (stages 1-4 only, ENABLED BY DEFAULT):
     )
 
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
-    
+
     # Area validation arguments (enabled by default for data integrity)
     parser.add_argument(
-        "--disable-area-validation", 
-        action="store_true", 
-        help="Disable area validation (validation is enabled by default)"
+        "--disable-area-validation",
+        action="store_true",
+        help="Disable area validation (validation is enabled by default)",
     )
-    
+
     parser.add_argument(
-        "--area-validation-tolerance-pct", 
-        type=float, 
-        default=1.0, 
-        help="Area validation tolerance percentage (default: 1.0%%)"
+        "--area-validation-tolerance-pct",
+        type=float,
+        default=1.0,
+        help="Area validation tolerance percentage (default: 1.0%%)",
     )
-    
+
     parser.add_argument(
-        "--no-fail-on-validation-error", 
-        action="store_true", 
-        help="Don't fail pipeline on validation errors, just warn (default: fails pipeline)"
+        "--no-fail-on-validation-error",
+        action="store_true",
+        help="Don't fail pipeline on validation errors, just warn (default: fails pipeline)",
     )
 
     return parser
@@ -261,7 +261,7 @@ async def main():
     # Configure logging level (logger already configured at module level)
     if args.verbose:
         # Get a new logger instance with DEBUG level for verbose output
-        verbose_logger = Logger.get_logger("DEBUG")
+        Logger.get_logger("DEBUG")
 
     # Create configuration
     config_kwargs = {
@@ -283,10 +283,14 @@ async def main():
     logger.info(f"   Max Memory: {config.max_memory_gb}GB")
     logger.info(f"   Max Threads: {config.max_threads}")
     logger.info(f"   Batch Size: {config.batch_size:,}")
-    logger.info(f"   Area Validation: {'ENABLED (default)' if config.enable_area_validation else 'DISABLED'}")
+    logger.info(
+        f"   Area Validation: {'ENABLED (default)' if config.enable_area_validation else 'DISABLED'}"
+    )
     if config.enable_area_validation:
         logger.info(f"   Validation Tolerance: {config.area_validation_tolerance_pct}%")
-        logger.info(f"   Fail on Validation Error: {'YES (default)' if config.fail_on_validation_error else 'NO (warn only)'}")
+        logger.info(
+            f"   Fail on Validation Error: {'YES (default)' if config.fail_on_validation_error else 'NO (warn only)'}"
+        )
 
     try:
         if args.stage == "all":

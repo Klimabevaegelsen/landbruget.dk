@@ -210,11 +210,11 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
         start_time = time.time()
 
         # Create request structure
-        GLRCHRWSInfoInboundFactory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
-        common_header = GLRCHRWSInfoInboundFactory(**create_base_request(username))
+        glr_chr_ws_info_inbound_factory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
+        common_header = glr_chr_ws_info_inbound_factory(**create_base_request(username))
 
-        CHR_dyrChrBesListeRequestTypeFactory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
-        request_params = CHR_dyrChrBesListeRequestTypeFactory(
+        chr_dyr_chr_bes_liste_request_type_factory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
+        request_params = chr_dyr_chr_bes_liste_request_type_factory(
             **{"BesaetningsNummer": herd_number, "PeriodeFra": start_date, "PeriodeTil": end_date}
         )
 

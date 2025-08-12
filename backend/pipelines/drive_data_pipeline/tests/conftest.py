@@ -27,11 +27,11 @@ def mock_settings(temp_dir):
     settings.google_drive_folder_id = "test-folder-id"
     settings.storage_type.value = "local"
     settings.gcs_bucket = None
-    
+
     # Create directories
     os.makedirs(settings.bronze_path, exist_ok=True)
     os.makedirs(settings.silver_path, exist_ok=True)
-    
+
     return settings
 
 
@@ -42,7 +42,7 @@ def storage_manager(temp_dir):
 
 
 @pytest.fixture
-def sample_file_content():
+def sample_file_content() -> bytes:
     """Create sample file content for testing."""
     return b"Sample file content for testing"
 
@@ -50,8 +50,4 @@ def sample_file_content():
 @pytest.fixture
 def sample_json_content():
     """Create sample JSON content for testing."""
-    return {
-        "id": "test-id",
-        "name": "test-file.pdf",
-        "description": "Test file for unit tests"
-    } 
+    return {"id": "test-id", "name": "test-file.pdf", "description": "Test file for unit tests"}

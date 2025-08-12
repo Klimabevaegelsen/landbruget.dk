@@ -10,13 +10,6 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from bronze.export import (
-    EXPORT_TIMESTAMP,
-    export_context_data,
-    get_data_buffer,
-    import_context_data,
-    save_raw_data,
-)
 from bronze.auth import (
     create_besaetning_client,
     create_chr_dyr_client,
@@ -26,18 +19,25 @@ from bronze.auth import (
     get_fvm_credentials,
     get_legacy_fvm_credentials,
 )
+from bronze.export import (
+    EXPORT_TIMESTAMP,
+    export_context_data,
+    get_data_buffer,
+    import_context_data,
+    save_raw_data,
+)
 from bronze.load_besaetning import load_herd_details, load_herd_list
 from bronze.load_diko import load_diko_flytninger
 from bronze.load_ejendom import load_ejendom_oplysninger, load_ejendom_vet_events
 from bronze.load_stamdata import load_species_usage_combinations
 from bronze.load_vetstat import load_vetstat_antibiotics
+
+# Import gold processing orchestrator
+from gold.chr_gold_processing import process_gold_data as run_gold_processing
 from silver import config
 
 # Import silver processing orchestrator
 from silver.chr_silver_processing import process_chr_data as run_silver_processing
-
-# Import gold processing orchestrator
-from gold.chr_gold_processing import process_gold_data as run_gold_processing
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -73,7 +73,7 @@ def get_client(context: Dict[str, Any], client_name: str):
     """Get a CHR client lazily, creating it only when needed."""
     if client_name not in context["clients"]:
         logging.info(f"Creating {client_name} client lazily")
-        
+
         client_creators = {
             "stamdata": create_stamdata_client,
             "besaetning": create_besaetning_client,
@@ -81,16 +81,16 @@ def get_client(context: Dict[str, Any], client_name: str):
             "ejendom": create_ejendom_client,
             "chr_dyr": create_chr_dyr_client,
         }
-        
+
         if client_name not in client_creators:
             raise ValueError(f"Unknown client type: {client_name}")
-            
+
         try:
             context["clients"][client_name] = client_creators[client_name]()
         except Exception as e:
             logging.error(f"Failed to create {client_name} client: {e}")
             raise
-            
+
     return context["clients"][client_name]
 
 
@@ -122,7 +122,9 @@ def parse_args() -> Dict[str, Any]:
     parser.add_argument("--progress", action="store_true", help="Show progress information")
     parser.add_argument("--start-date", type=str, help="Start date for data collection (YYYY-MM-DD)")
     parser.add_argument("--end-date", type=str, help="End date for data collection (YYYY-MM-DD)")
-    parser.add_argument("--discovery-year", type=int, help="Year to use for herd volume discovery (default: current year)")
+    parser.add_argument(
+        "--discovery-year", type=int, help="Year to use for herd volume discovery (default: current year)"
+    )
     parser.add_argument(
         "--skip-dependencies", action="store_true", help="Skip running dependency steps (for parallel job execution)"
     )
@@ -318,7 +320,7 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
             )
 
             # Track start time for performance monitoring
-            start_time = time.time()
+            time.time()
             running_tasks = {}  # future -> start_time
 
             try:
@@ -374,7 +376,11 @@ def get_required_steps(target_step: str) -> List[str]:
         "herd_discovery": ["stamdata", "herds"],  # Discovery needs to know which herds exist
         "herd_details": ["stamdata", "herds"],
         "diko": ["stamdata", "herds"],  # Assuming diko depends on knowing the herds
-        "animal_movements": ["stamdata", "herds", "herd_discovery"],  # CHR_dyr animal movements now use discovery results
+        "animal_movements": [
+            "stamdata",
+            "herds",
+            "herd_discovery",
+        ],  # CHR_dyr animal movements now use discovery results
         "ejendom": ["stamdata", "herds", "herd_details"],  # Assuming ejendom depends on CHR numbers from details
         "vetstat": ["stamdata", "herds", "herd_details"],  # Assuming vetstat depends on CHR numbers from details
         "spf_su": ["stamdata", "herds", "herd_details"],  # SPF-SU depends on CHR numbers from details
@@ -489,29 +495,30 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
     elif step == "herd_discovery":
         if "herd_to_species" not in context:
             raise ValueError("Cannot run 'herd_discovery' step without first running 'herds'")
-        
+
         # Import discovery functionality
         from bronze.herd_discovery import discover_herd_volumes_for_year, load_previous_discovery_results
-        
+
         logger.info("🔍 Starting intelligent herd volume discovery...")
-        
+
         # Determine year range for discovery
         current_year = datetime.now().year
         discovery_year = context["args"].get("discovery_year", current_year)
-        
+
         # Get list of herds to analyze (cattle herds only for CHR_dyr)
         cattle_herds = [
-            herd_num for herd_num, species_code in context["herd_to_species"].items()
+            herd_num
+            for herd_num, species_code in context["herd_to_species"].items()
             if species_code == 12  # Cattle only
         ]
-        
+
         if not cattle_herds:
             logger.warning("⚠️ No cattle herds found for discovery")
             context["discovery_results"] = {"large_herds": [], "normal_herds": []}
             return
-        
+
         logger.info(f"🐄 Analyzing {len(cattle_herds)} cattle herds for year {discovery_year}")
-        
+
         # Check for cached discovery results first
         cached_results = load_previous_discovery_results(discovery_year)
         if cached_results:
@@ -526,27 +533,29 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 cattle_herds,
                 discovery_year,
                 sample_weeks=3,  # Smart 3-week sampling
-                sample_strategy="seasonal"  # Seasonal sampling for best estimates
+                sample_strategy="seasonal",  # Seasonal sampling for best estimates
             )
-        
+
         # Store results in context for later use
         context["discovery_results"] = {
             "large_herds": large_herds,
             "normal_herds": normal_herds,
             "discovery_year": discovery_year,
-            "total_cattle_herds": len(cattle_herds)
+            "total_cattle_herds": len(cattle_herds),
         }
-        
+
         # Log discovery summary
         logger.info("✅ Discovery phase completed:")
         logger.info(f"  🐄 Large herds requiring chunking: {len(large_herds)}")
         logger.info(f"  🐄 Normal herds (standard processing): {len(normal_herds)}")
-        
+
         if large_herds:
             logger.info("📊 Large herds identified:")
             for herd_info in large_herds:
-                logger.info(f"  - Herd {herd_info['herd']}: {herd_info['volume_category']} "
-                           f"(~{herd_info['estimated_yearly']:,.0f}/year, {herd_info['suggested_chunk_days']}-day chunks)")
+                logger.info(
+                    f"  - Herd {herd_info['herd']}: {herd_info['volume_category']} "
+                    f"(~{herd_info['estimated_yearly']:,.0f}/year, {herd_info['suggested_chunk_days']}-day chunks)"
+                )
 
     elif step == "herd_details":
         if "herd_to_species" not in context:
@@ -644,13 +653,12 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         discovery_results = context.get("discovery_results", {"large_herds": [], "normal_herds": []})
         large_herds_info = discovery_results.get("large_herds", [])
         normal_herds = discovery_results.get("normal_herds", [])
-        
+
         # If no discovery was run, fall back to all cattle herds
         if not large_herds_info and not normal_herds:
             logger.warning("⚠️ No discovery results found, processing all cattle herds with standard method")
             cattle_herds = [
-                herd_num for herd_num, species_code in context["herd_to_species"].items()
-                if species_code == 12
+                herd_num for herd_num, species_code in context["herd_to_species"].items() if species_code == 12
             ]
             normal_herds = cattle_herds
             large_herds_info = []
@@ -671,7 +679,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         normal_results = []
         if normal_herds:
             logger.info(f"🔄 Processing {len(normal_herds)} normal herds in batch...")
-            
+
             normal_movement_tasks = [
                 (
                     get_client(context, "chr_dyr"),
@@ -682,13 +690,15 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 for herd_num in normal_herds
             ]
-            
+
             # Process normal herds in batches (efficient parallel processing)
             normal_results = process_parallel(
-                load_cattle_movement_summaries, normal_movement_tasks, 
-                context["args"]["workers"], "Processing Normal Herds"
+                load_cattle_movement_summaries,
+                normal_movement_tasks,
+                context["args"]["workers"],
+                "Processing Normal Herds",
             )
-            
+
             if context["args"]["progress"]:
                 successful_normal = sum(1 for r in normal_results if r)
                 logger.info(f"  ✅ Normal herds batch completed: {successful_normal}/{len(normal_herds)} successful")
@@ -697,13 +707,13 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         large_results = []
         if large_herds_info:
             logger.info(f"🐄 Processing {len(large_herds_info)} large herds individually...")
-            
+
             for herd_info in large_herds_info:
-                herd_num = herd_info['herd']
-                chunk_days = herd_info['suggested_chunk_days']
-                
+                herd_num = herd_info["herd"]
+                chunk_days = herd_info["suggested_chunk_days"]
+
                 logger.info(f"  🔄 Processing large herd {herd_num} with {chunk_days}-day chunking...")
-                
+
                 # Process large herd individually to avoid overwhelming the system
                 try:
                     result = load_cattle_movement_summaries(
@@ -711,15 +721,15 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
                         context["username"],
                         herd_num,
                         context["args"]["start_date"],
-                        context["args"]["end_date"]
+                        context["args"]["end_date"],
                     )
-                    
+
                     if result:
                         large_results.append(result)
                         logger.info(f"    ✅ Large herd {herd_num} processed successfully")
                     else:
                         logger.warning(f"    ⚠️ Large herd {herd_num} returned no results")
-                        
+
                 except Exception as e:
                     logger.error(f"    ❌ Large herd {herd_num} failed: {e}")
                     large_results.append(None)
@@ -728,15 +738,15 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         all_results = (normal_results if normal_herds else []) + large_results
         total_successful = sum(1 for r in all_results if r)
         total_processed = len(normal_herds) + len(large_herds_info)
-        
+
         logger.info("✅ Intelligent animal movements processing completed:")
         logger.info(f"  📊 Total herds processed: {total_processed}")
         logger.info(f"  ✅ Successful: {total_successful}")
         logger.info(f"  ❌ Failed: {total_processed - total_successful}")
-        
+
         if large_herds_info:
             logger.info(f"  🐄 Large herds processed with chunking: {len(large_herds_info)}")
-        
+
         # Store results in context
         context["animal_movements_results"] = all_results
 
@@ -896,7 +906,7 @@ def main():
                 except Exception as e:
                     logging.warning(f"Robust authentication failed, falling back to legacy: {e}")
                     username, password = get_legacy_fvm_credentials()
-                    
+
                 context = {
                     "args": args,
                     "username": username,
@@ -931,7 +941,7 @@ def main():
                 except Exception as e:
                     logging.warning(f"Robust authentication failed, falling back to legacy: {e}")
                     username, password = get_legacy_fvm_credentials()
-                    
+
                 context = {
                     "args": args,
                     "username": username,
@@ -981,7 +991,17 @@ def main():
 
         # Ensure unique bronze steps in order
         unique_bronze_steps = []
-        for step in ["stamdata", "herds", "herd_discovery", "herd_details", "diko", "animal_movements", "ejendom", "vetstat", "spf_su"]:
+        for step in [
+            "stamdata",
+            "herds",
+            "herd_discovery",
+            "herd_details",
+            "diko",
+            "animal_movements",
+            "ejendom",
+            "vetstat",
+            "spf_su",
+        ]:
             if step in bronze_steps_to_run and step not in unique_bronze_steps:
                 unique_bronze_steps.append(step)
 
@@ -1074,18 +1094,16 @@ def main():
                     raise RuntimeError("No bronze data source available for silver processing")
 
                 logging.warning(f"✅ Silver processing completed. Output in: {silver_dir}")
-                
+
                 # --- Gold Layer Processing ---
                 # Run gold processing if this is an "all" run or a specific gold step
                 if requested_step in ["all", "gold_processing", "veterinary_timeline", "transportation_analysis"]:
                     try:
                         logging.warning("🥇 Starting Gold Layer Processing...")
                         gold_success = run_gold_processing(
-                            export_timestamp=EXPORT_TIMESTAMP,
-                            silver_dir=silver_dir,
-                            step=requested_step
+                            export_timestamp=EXPORT_TIMESTAMP, silver_dir=silver_dir, step=requested_step
                         )
-                        
+
                         if gold_success:
                             logging.warning("✅ Gold processing completed successfully")
                         else:
@@ -1093,14 +1111,14 @@ def main():
                             # For gold-specific steps, fail the pipeline if gold processing fails
                             if requested_step in ["gold_processing", "veterinary_timeline", "transportation_analysis"]:
                                 raise RuntimeError("Gold processing failed")
-                                
+
                     except Exception as e:
                         logging.error(f"❌ Gold processing failed: {e}", exc_info=True)
                         # For gold-specific steps, fail the pipeline if gold processing fails
                         if requested_step in ["gold_processing", "veterinary_timeline", "transportation_analysis"]:
                             raise
                         # For "all" runs, don't fail the entire pipeline for gold processing failure
-                    
+
             except Exception as e:
                 logging.error(f"❌ Silver processing failed: {e}", exc_info=True)
                 raise  # Re-raise to indicate pipeline failure

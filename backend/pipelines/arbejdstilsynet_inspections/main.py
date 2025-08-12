@@ -71,7 +71,8 @@ if __name__ == "__main__":
             logger.info(f"Using GCS_BUCKET from environment variable: {actual_gcs_bucket}")
         else:
             logger.warning(
-                "GCS_BUCKET not provided via --gcs-bucket argument or GCS_BUCKET environment variable. GCS uploads will be skipped."
+                "GCS_BUCKET not provided via --gcs-bucket argument or GCS_BUCKET environment variable. "
+                "GCS uploads will be skipped."
             )
 
     bronze_success = True

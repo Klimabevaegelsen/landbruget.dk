@@ -550,26 +550,24 @@ class SvineflytningSilverProcessor:
         if USE_GCS:
             try:
                 from unified_pipeline.util.gcs_access import GCSDataAccess
+
                 gcs_access = GCSDataAccess()
-                
+
                 # Try native DuckDB HTTPFS GCS export for each table
                 for table in tables:
                     filename = f"{table.replace('silver_', '')}.parquet"
                     gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
-                    
+
                     gcs_access.export_to_gcs_native(
-                        connection=self.conn,
-                        table_name=table,
-                        gcs_path=gcs_path,
-                        compression="zstd"
+                        connection=self.conn, table_name=table, gcs_path=gcs_path, compression="zstd"
                     )
                     exported_files.append(gcs_path)
                     logger.info(f"✅ Native GCS export successful: {gcs_path}")
-                
+
                 gcs_export_success = True
                 destination_base = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
                 storage_type = "gcs"
-                
+
             except Exception as e:
                 logger.warning(f"Native GCS export failed, using fallback: {e}")
                 gcs_export_success = False

@@ -8,7 +8,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
 from .schema import ColumnSchema, DataType, TableSchema
 
@@ -19,7 +21,7 @@ logger = get_logger()
 class SchemaAdapter(DuckDBProcessor):
     """Adapter for applying schema definitions to data using DuckDB."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the schema adapter."""
         super().__init__()
         logger.info("Initialized SchemaAdapter with DuckDB")
@@ -54,7 +56,6 @@ class SchemaAdapter(DuckDBProcessor):
         result_table = f"{table_schema.name}_with_schema"
 
         # Get the schema as a dictionary
-        schema_dict = table_schema.column_dict
 
         # Get source table columns
         columns_info = self.conn.execute(f"DESCRIBE {source_table}").fetchall()
