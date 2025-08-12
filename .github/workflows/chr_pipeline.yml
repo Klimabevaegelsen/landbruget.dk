@@ -24,6 +24,7 @@ on:
           - transportation_analysis
           - stamdata
           - herds
+          - herd_discovery
           - herd_details
           - diko
           - animal_movements
@@ -71,6 +72,10 @@ on:
         default: true
       limit_herds_per_species:
         description: 'Limit number of herds processed per species'
+        type: string
+        default: ''
+      discovery_year:
+        description: 'Year for herd volume discovery (default: current year)'
         type: string
         default: ''
       max_concurrent_jobs:
@@ -136,7 +141,7 @@ jobs:
   # Job 1: Foundation Steps (stamdata, herds)
   bronze-foundation:
     runs-on: ubuntu-latest
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_discovery' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
     
     permissions:
       contents: 'read'
@@ -217,8 +222,8 @@ jobs:
         run: |
           # Determine which foundation step to run
           INPUT_STEP="${{ inputs.step || 'all' }}"
-          if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
-            STEP="herds"  # This will run stamdata -> herds
+          if [[ "$INPUT_STEP" == "all" || "$INPUT_STEP" == "bronze_foundation" || "$INPUT_STEP" == "bronze_data_collection" || "$INPUT_STEP" == "herd_discovery" || "$INPUT_STEP" == "herd_details" || "$INPUT_STEP" == "diko" || "$INPUT_STEP" == "animal_movements" || "$INPUT_STEP" == "spf_su" || "$INPUT_STEP" == "ejendom" || "$INPUT_STEP" == "vetstat" ]]; then
+            STEP="herd_discovery"  # This will run stamdata -> herds -> herd_discovery
           elif [[ "$INPUT_STEP" == "stamdata" || "$INPUT_STEP" == "herds" ]]; then
             STEP="$INPUT_STEP"
           else
@@ -241,6 +246,9 @@ jobs:
           fi
           if [[ -n "${{ inputs.species_codes }}" ]]; then
             CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          if [[ -n "${{ inputs.discovery_year }}" ]]; then
+            CMD="$CMD --discovery-year ${{ inputs.discovery_year }}"
           fi
           
           echo "Running foundation command: $CMD"
@@ -1378,7 +1386,7 @@ jobs:
   # Job 7: Single Step Execution (for individual steps not covered above)
   single-step:
     runs-on: ubuntu-latest
-    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "veterinary_timeline", "transportation_analysis", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
+    if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "veterinary_timeline", "transportation_analysis", "stamdata", "herds", "herd_discovery", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
     
     permissions:
       contents: 'read'
@@ -1484,6 +1492,9 @@ jobs:
           fi
           if [[ -n "${{ inputs.species_codes }}" ]]; then
             CMD="$CMD --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          if [[ -n "${{ inputs.discovery_year }}" ]]; then
+            CMD="$CMD --discovery-year ${{ inputs.discovery_year }}"
           fi
           
           echo "Running single step command: $CMD"
