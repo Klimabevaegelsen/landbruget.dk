@@ -7,7 +7,6 @@ that match the original CVR enrichment output format.
 """
 
 import json
-import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -1312,6 +1311,71 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     AND json_array_length(json_extract(json_data, '$.leadership')) > 0
                 """, [json_strings, leadership_schema[0]])
     
+    def _get_available_financial_fields(self, json_strings: list) -> set:
+        """Get the set of available fields in financial_metrics from actual data."""
+        try:
+            result = self.conn.execute("""
+                WITH financial_sample AS (
+                    SELECT 
+                        unnest(json_extract(json_data, '$.financial_documents')) as financial_doc
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+                    LIMIT 1
+                )
+                SELECT json_keys(financial_doc.financial_metrics) as available_fields
+                FROM financial_sample
+                WHERE financial_doc.financial_metrics IS NOT NULL
+                LIMIT 1
+            """, [json_strings]).fetchone()
+            
+            if result and result[0]:
+                return set(result[0])
+            else:
+                return set()
+        except Exception as e:
+            self.log.warning(f"Could not determine available financial fields: {e}")
+            return set()
+    
+    def _build_financial_select_fields(self, available_fields: set) -> str:
+        """Build the SELECT clause for financial fields based on available fields."""
+        # Define all possible financial fields we want to extract
+        all_financial_fields = {
+            'duration_context': 'duration_context',
+            'instant_context': 'instant_context', 
+            'parse_success': 'parse_success',
+            'operating_profit_loss': 'operating_profit_loss',
+            'profit_loss_before_tax': 'profit_loss_before_tax',
+            'employee_benefits_expense': 'employee_benefits_expense',
+            'average_number_of_employees': 'average_number_of_employees',
+            'depreciation_expense': 'depreciation_expense',
+            'other_finance_income': 'other_finance_income',
+            'other_finance_expenses': 'other_finance_expenses',
+            'tax_expense': 'tax_expense',
+            'total_assets': 'total_assets',
+            'total_equity': 'total_equity',
+            'noncurrent_assets': 'noncurrent_assets',
+            'current_assets': 'current_assets',
+            'cash_and_cash_equivalents': 'cash_and_cash_equivalents',
+            'liabilities_other_than_provisions': 'liabilities_other_than_provisions',
+            'shortterm_liabilities_other_than_provisions': 'shortterm_liabilities_other_than_provisions',
+            'longterm_liabilities_other_than_provisions': 'longterm_liabilities_other_than_provisions',
+            'provisions': 'provisions',
+            'property_plant_equipment': 'property_plant_equipment',
+            'contributed_capital': 'contributed_capital',
+            'net_profit_loss': 'net_profit_loss'
+        }
+        
+        # Build select fields only for available fields
+        select_fields = []
+        for field_name, column_name in all_financial_fields.items():
+            if field_name in available_fields:
+                select_fields.append(f"TRY(financial_parsed.financial_metrics.{field_name}) as {column_name}")
+            else:
+                select_fields.append(f"NULL as {column_name}")
+        
+        return ",\n                        ".join(select_fields)
+    
     def _process_financial_chunk(self, json_strings: list, table_name: str) -> None:
         """Process financial documents for a chunk of companies with sophisticated metrics (ported from original)."""
         financial_check = self.conn.execute("""
@@ -1322,6 +1386,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         """, [json_strings]).fetchone()[0]
         
         if financial_check > 0:
+            # Get available financial_metrics fields from actual data
+            available_fields = self._get_available_financial_fields(json_strings)
+            
             financial_schema = self.conn.execute("""
                 WITH financial_sample AS (
                     SELECT json_extract(json_data, '$.financial_documents') as financial_json
@@ -1334,6 +1401,12 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             """, [json_strings]).fetchone()
             
             if financial_schema and financial_schema[0]:
+                # Build dynamic financial fields based on available data
+                financial_fields = self._build_financial_select_fields(available_fields)
+                
+                # Log available fields for debugging
+                self.log.info(f"Available financial fields: {sorted(available_fields)}")
+                
                 self.conn.execute(f"""
                     INSERT INTO {table_name}_financial
                     WITH financial_flattened AS (
@@ -1355,40 +1428,22 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                         financial_parsed.document_count,
                         financial_parsed.xml_size_bytes,
                         financial_parsed.download_success,
-                        TRY(financial_parsed.financial_metrics.duration_context) as duration_context,
-                        TRY(financial_parsed.financial_metrics.instant_context) as instant_context,
-                        TRY(financial_parsed.financial_metrics.parse_success) as parse_success,
-                        TRY(financial_parsed.financial_metrics.operating_profit_loss) as operating_profit_loss,
-                        TRY(financial_parsed.financial_metrics.profit_loss_before_tax) as profit_loss_before_tax,
-                        TRY(financial_parsed.financial_metrics.employee_benefits_expense) as employee_benefits_expense,
-                        TRY(financial_parsed.financial_metrics.average_number_of_employees) as average_number_of_employees,
-                        TRY(financial_parsed.financial_metrics.depreciation_expense) as depreciation_expense,
-                        TRY(financial_parsed.financial_metrics.other_finance_income) as other_finance_income,
-                        TRY(financial_parsed.financial_metrics.other_finance_expenses) as other_finance_expenses,
-                        TRY(financial_parsed.financial_metrics.tax_expense) as tax_expense,
-                        TRY(financial_parsed.financial_metrics.total_assets) as total_assets,
-                        TRY(financial_parsed.financial_metrics.total_equity) as total_equity,
-                        TRY(financial_parsed.financial_metrics.noncurrent_assets) as noncurrent_assets,
-                        TRY(financial_parsed.financial_metrics.current_assets) as current_assets,
-                        TRY(financial_parsed.financial_metrics.cash_and_cash_equivalents) as cash_and_cash_equivalents,
-                        TRY(financial_parsed.financial_metrics.liabilities_other_than_provisions) as liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.shortterm_liabilities_other_than_provisions) as shortterm_liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.longterm_liabilities_other_than_provisions) as longterm_liabilities_other_than_provisions,
-                        TRY(financial_parsed.financial_metrics.provisions) as provisions,
-                        TRY(financial_parsed.financial_metrics.property_plant_equipment) as property_plant_equipment,
-                        TRY(financial_parsed.financial_metrics.contributed_capital) as contributed_capital,
+                        {financial_fields},
                         CASE 
                             WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
+                                 AND TRY(financial_parsed.financial_metrics.total_equity) IS NOT NULL
                             THEN TRY(financial_parsed.financial_metrics.total_equity) / TRY(financial_parsed.financial_metrics.total_assets) 
                             ELSE NULL 
                         END as equity_ratio,
                         CASE 
                             WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0 
+                                 AND TRY(financial_parsed.financial_metrics.net_profit_loss) IS NOT NULL
                             THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.average_number_of_employees) 
                             ELSE NULL 
                         END as profit_per_employee,
                         CASE 
                             WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
+                                 AND TRY(financial_parsed.financial_metrics.net_profit_loss) IS NOT NULL
                             THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.total_assets) 
                             ELSE NULL 
                         END as return_on_assets
