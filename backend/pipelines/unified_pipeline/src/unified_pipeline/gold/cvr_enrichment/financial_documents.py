@@ -157,18 +157,29 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         Returns:
             List of company data to process in this batch
         """
-        self.log.info("Loading company data from company fetching step")
+        if self.config.shared_config.enable_independent_execution:
+            self.log.info("Loading company data from latest available file (independent execution mode)")
+        else:
+            self.log.info("Loading company data from company fetching step (pipeline dependency mode)")
         
-        # Get input paths from company fetching step
+        # Get input paths from company fetching step (with independent execution support)
         input_paths = get_step_input_paths(
             CVREnrichmentStep.FINANCIAL_DOCUMENTS,
             self.date_pattern,
-            total_batches=5,  # Company fetching creates 5 batch files
-            bucket=self.config.bucket
+            total_batches=5,  # Company fetching creates 5 batch files (ignored in independent mode)
+            bucket=self.config.bucket,
+            enable_independent_execution=self.config.shared_config.enable_independent_execution,
+            max_days_back=self.config.shared_config.max_days_back_for_inputs
         )
         
         if not input_paths:
-            raise ValueError("No input paths found for financial documents step")
+            if self.config.shared_config.enable_independent_execution:
+                raise ValueError(
+                    f"No company data found within {self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"Please run the company fetching step first or disable independent execution."
+                )
+            else:
+                raise ValueError("No input paths found for financial documents step")
         
         all_companies = []
         

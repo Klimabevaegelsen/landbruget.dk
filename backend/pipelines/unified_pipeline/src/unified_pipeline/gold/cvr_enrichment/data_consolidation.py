@@ -186,16 +186,30 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         Returns:
             Dictionary containing merged data from all steps
         """
-        self.log.info("Loading and merging data from all pipeline steps")
+        if self.config.shared_config.enable_independent_execution:
+            self.log.info("Loading and merging data from latest available files (independent execution mode)")
+        else:
+            self.log.info("Loading and merging data from all pipeline steps (pipeline dependency mode)")
         
-        # Get input paths for all previous steps
+        # Get input paths for all previous steps (with independent execution support)
         input_paths = get_step_input_paths(
             CVREnrichmentStep.DATA_CONSOLIDATION,
             self.date_pattern,
-            bucket=self.config.bucket
+            bucket=self.config.bucket,
+            enable_independent_execution=self.config.shared_config.enable_independent_execution,
+            max_days_back=self.config.shared_config.max_days_back_for_inputs
         )
         
-        self.log.info(f"Found {len(input_paths)} input files to process")
+        if self.config.shared_config.enable_independent_execution:
+            available_count = len([p for p in input_paths if p is not None])
+            self.log.info(f"Found {available_count}/{len(input_paths)} input files available for processing")
+            if available_count == 0:
+                self.log.warning(
+                    f"No data files found within {self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"Cannot perform consolidation."
+                )
+        else:
+            self.log.info(f"Found {len(input_paths)} input files to process")
         
         # Initialize data containers
         companies_data = {}
@@ -203,8 +217,12 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         financial_data = {}
         addresses_data = {}
         
-        # Process each input file
+        # Process each input file (skip None values from independent execution)
         for input_path in input_paths:
+            if input_path is None:
+                self.log.info("Skipping missing input file (None)")
+                continue
+                
             self.log.info(f"Processing: {input_path}")
             
             try:
