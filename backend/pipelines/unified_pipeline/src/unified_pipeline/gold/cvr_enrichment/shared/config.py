@@ -248,51 +248,67 @@ def _get_latest_input_paths_from_gcs(
         
         elif step == CVREnrichmentStep.COMPANY_FETCHING:
             # Company fetching depends on collection step
-            pattern = f"{base_pattern}/*/collection.parquet"
-            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
-            return [latest_file] if latest_file else []
+            pattern = f"{base_pattern}/*/collection_summary.json"
+            latest_dir = _find_latest_directory_with_pattern(gcs_access, pattern, max_days_back)
+            if latest_dir:
+                data_file = f"{latest_dir}/data.parquet"
+                return [data_file]
+            return []
         
         elif step == CVREnrichmentStep.PNUMBER_FETCHING:
             # P-number fetching depends on company fetching
-            pattern = f"{base_pattern}/*/company_fetching.parquet"
-            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
-            return [latest_file] if latest_file else []
+            pattern = f"{base_pattern}/*/company_summary.json"
+            latest_dir = _find_latest_directory_with_pattern(gcs_access, pattern, max_days_back)
+            if latest_dir:
+                data_file = f"{latest_dir}/data.parquet"
+                return [data_file]
+            return []
         
         elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
             # Financial documents depend on company fetching
-            pattern = f"{base_pattern}/*/company_fetching.parquet"
-            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
-            return [latest_file] if latest_file else []
+            pattern = f"{base_pattern}/*/company_summary.json"
+            latest_dir = _find_latest_directory_with_pattern(gcs_access, pattern, max_days_back)
+            if latest_dir:
+                data_file = f"{latest_dir}/data.parquet"
+                return [data_file]
+            return []
         
         elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
             # Address geocoding depends on both company and P-number data
-            company_pattern = f"{base_pattern}/*/company_fetching.parquet"
-            pnumber_pattern = f"{base_pattern}/*/pnumber_fetching.parquet"
+            company_pattern = f"{base_pattern}/*/company_summary.json"
+            pnumber_pattern = f"{base_pattern}/*/pnumber_summary.json"
             
-            latest_company = _find_latest_file_with_pattern(gcs_access, company_pattern, max_days_back)
-            latest_pnumber = _find_latest_file_with_pattern(gcs_access, pnumber_pattern, max_days_back)
+            latest_company_dir = _find_latest_directory_with_pattern(gcs_access, company_pattern, max_days_back)
+            latest_pnumber_dir = _find_latest_directory_with_pattern(gcs_access, pnumber_pattern, max_days_back)
             
             inputs = []
-            if latest_company:
-                inputs.append(latest_company)
-            if latest_pnumber:
-                inputs.append(latest_pnumber)
+            if latest_company_dir:
+                inputs.append(f"{latest_company_dir}/data.parquet")
+            if latest_pnumber_dir:
+                inputs.append(f"{latest_pnumber_dir}/data.parquet")
             return inputs
         
         elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
             # Data consolidation depends on all previous steps
             patterns = [
-                f"{base_pattern}/*/company_fetching.parquet",
-                f"{base_pattern}/*/pnumber_fetching.parquet",
-                f"{base_pattern}/*/financial_documents.parquet",
-                f"{base_pattern}/*/address_geocoding.parquet"
+                (f"{base_pattern}/*/company_summary.json", "data.parquet"),
+                (f"{base_pattern}/*/pnumber_summary.json", "data.parquet"),
+                (f"{base_pattern}/*/financial_documents.parquet", None),  # Financial still uses original naming
+                (f"{base_pattern}/*/address_geocoding.parquet", None)  # This one uses the original naming
             ]
             
             inputs = []
-            for pattern in patterns:
-                latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
-                if latest_file:
-                    inputs.append(latest_file)
+            for pattern, filename in patterns:
+                if filename:
+                    # Use directory pattern with summary.json and construct data.parquet path
+                    latest_dir = _find_latest_directory_with_pattern(gcs_access, pattern, max_days_back)
+                    if latest_dir:
+                        inputs.append(f"{latest_dir}/{filename}")
+                else:
+                    # Use direct file pattern for address_geocoding (maintains original naming)
+                    latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+                    if latest_file:
+                        inputs.append(latest_file)
             return inputs
         
         else:
@@ -327,7 +343,8 @@ def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int)
             return None
         
         # Filter files within the time window
-        cutoff_date = datetime.now() - timedelta(days=max_days_back)
+        from datetime import timezone
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=max_days_back)
         recent_files = [
             (filepath, timestamp) 
             for filepath, timestamp in files_with_timestamps 
@@ -345,6 +362,60 @@ def _find_latest_file_with_pattern(gcs_access, pattern: str, max_days_back: int)
         from unified_pipeline.util.log_util import Logger
         logger = Logger.get_logger()
         logger.warning(f"Error searching for pattern {pattern}: {e}")
+        return None
+
+
+def _find_latest_directory_with_pattern(gcs_access, pattern: str, max_days_back: int) -> Optional[str]:
+    """
+    Find the latest directory containing a summary.json file using the existing GCS utility.
+    
+    This function finds the latest *_summary.json file and returns its directory path
+    so we can construct paths to the corresponding data.parquet files.
+    
+    Args:
+        gcs_access: GCSDataAccess instance
+        pattern: GCS file pattern to search for summary.json files
+        max_days_back: Maximum days to look back
+        
+    Returns:
+        Directory path containing the latest summary.json file or None
+    """
+    from datetime import datetime, timedelta
+    
+    try:
+        # Get files with timestamps using existing utility
+        files_with_timestamps = gcs_access.list_files_with_timestamps(pattern)
+        
+        if not files_with_timestamps:
+            return None
+        
+        # Filter files within the time window
+        from datetime import timezone
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=max_days_back)
+        recent_files = [
+            (filepath, timestamp) 
+            for filepath, timestamp in files_with_timestamps 
+            if timestamp >= cutoff_date
+        ]
+        
+        if not recent_files:
+            return None
+        
+        # Sort by timestamp (most recent first) and return the directory of the latest
+        recent_files.sort(key=lambda x: x[1], reverse=True)
+        latest_summary_file = recent_files[0][0]  # Get the latest summary.json file path
+        
+        # Extract directory path (remove the summary.json filename)
+        # Example: gs://bucket/path/2025-01-15/company_summary.json -> gs://bucket/path/2025-01-15
+        if latest_summary_file.endswith('.json'):
+            return '/'.join(latest_summary_file.split('/')[:-1])
+        
+        return None
+        
+    except Exception as e:
+        from unified_pipeline.util.log_util import Logger
+        logger = Logger.get_logger()
+        logger.warning(f"Error searching for directory pattern {pattern}: {e}")
         return None
 
 
