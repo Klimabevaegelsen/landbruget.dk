@@ -162,3 +162,6 @@ devenv.local.nix
 
 # pre-commit
 .pre-commit-config.yaml
+
+# Data samples directory (contains large analysis files)
+data_samples/
