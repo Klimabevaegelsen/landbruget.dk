@@ -25,6 +25,7 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInt
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.timing import AsyncTimer
 
+
 class DAGIBronzeConfig(BaseJobConfig):
     """
     Configuration for DAGI bronze layer data extraction.

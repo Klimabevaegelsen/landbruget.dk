@@ -12,7 +12,7 @@ logger = get_logger()
 class SchemaManager:
     """Manager for data schemas in the Silver layer."""
 
-    def __init__(self, schema_dir: Path | None = None):
+    def __init__(self, schema_dir: Path | None = None) -> None:
         """Initialize the schema manager.
 
         Args:
@@ -27,7 +27,7 @@ class SchemaManager:
             
         logger.info(f"Initialized schema manager with {len(self.schemas)} schemas")
 
-    def _load_schemas(self):
+    def _load_schemas(self) -> None:
         """Load schemas from the schema directory."""
         try:
             # Look for JSON schema files

@@ -7,15 +7,16 @@ deduplicates them, validates formats, and prepares them for the enrichment proce
 
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Optional
 
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.cvr_collection import CVRCollectionManager
 from unified_pipeline.util.timing import timed
-from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep
+
 from .shared.batch_manager import CVRBatchManager
+from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep
 
 
 class CVRCollectionConfig(BaseJobConfig):
@@ -86,7 +87,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
         )
         
         self.log.info("CVR collection step initialized")
-        self.log.info(f"📋 Configuration:")
+        self.log.info("📋 Configuration:")
         self.log.info(f"   • Validate CVR format: {self.config.validate_cvr_format}")
         self.log.info(f"   • Save invalid CVRs: {self.config.save_invalid_cvrs}")
         self.log.info(f"   • Test limit: {self.config.shared_config.test_limit or 'none'}")
@@ -128,11 +129,11 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
             self.log.info("=" * 60)
             self.log.info("✅ CVR COLLECTION COMPLETED SUCCESSFULLY")
             self.log.info("=" * 60)
-            self.log.info(f"📊 SUMMARY:")
+            self.log.info("📊 SUMMARY:")
             self.log.info(f"   • Total CVR numbers collected: {total_cvrs:,}")
             self.log.info(f"   • Processing batches created: {batches_created}")
             self.log.info(f"   • Output table: {table_name}")
-            self.log.info(f"   • Ready for next step: Company Fetching")
+            self.log.info("   • Ready for next step: Company Fetching")
             self.log.info("=" * 60)
             
             return table_name

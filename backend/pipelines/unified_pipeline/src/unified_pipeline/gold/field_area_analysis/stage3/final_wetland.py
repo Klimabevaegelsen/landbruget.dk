@@ -67,7 +67,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         wetland_count = self.conn.execute("SELECT COUNT(*) FROM field_wetland_intersections").fetchone()[0]
         water_wetland_count = self.conn.execute("SELECT COUNT(*) FROM stage3b_field_wetland_water_intersections").fetchone()[0]
 
-        self.log.info(f"📊 Input data loaded:")
+        self.log.info("📊 Input data loaded:")
         self.log.info(f"  Field-property intersections: {property_count:,}")
         self.log.info(f"  Field-wetland intersections: {wetland_count:,}")
         self.log.info(f"  Field-wetland-water intersections: {water_wetland_count:,}")
@@ -151,7 +151,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         # Validation: Geometry validity checks
         self._validate_geometric_output()
 
-        self.log.info(f"✅ SIMPLIFIED STAGE 3B COMPLETE:")
+        self.log.info("✅ SIMPLIFIED STAGE 3B COMPLETE:")
         self.log.info(f"📊 Property-wetland intersections: {property_wetland_count:,}")
         self.log.info(f"📊 Property-wetland-water intersections: {property_wetland_water_count:,}")
         self.log.info(f"📊 Unique properties with wetlands: {unique_properties:,}")

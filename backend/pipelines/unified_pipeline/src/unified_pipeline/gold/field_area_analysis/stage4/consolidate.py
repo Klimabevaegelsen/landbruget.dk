@@ -300,99 +300,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
         self.log.info("Step 3C: Creating field-level environmental analysis (one record per field)...")
         
         # TABLE 1: Field-Level Environmental Analysis (one record per field)
-        field_level_query = """
-        CREATE OR REPLACE TABLE field_environmental_analysis AS
-        SELECT 
-            -- Field identification (from property intersections - guaranteed to exist)
-            f.field_id,
-            f.block_id,
-            f.cvr_number,
-            f.year,
-            f.field_uuid,
-            f.geometry,
-            f.field_area_m2,
-            
-            -- Property ownership data (from Stage 1C - guaranteed to exist)
-            f.property_count,
-            f.total_property_intersection_area_m2,
-            f.primary_bfe_number,
-            
-            -- Soil type data (from Stage 1B - already field-level aggregated)
-            COALESCE(s.soil_type_count, 0) as soil_type_count,
-            COALESCE(s.unique_soil_codes, 0) as unique_soil_codes,
-            COALESCE(s.dominant_soil_type, NULL) as dominant_soil_type,
-            COALESCE(s.dominant_soil_coverage_pct, 0) as dominant_soil_coverage_pct,
-            COALESCE(s.total_soil_coverage_pct, 0) as total_soil_coverage_pct,
-            COALESCE(s.soil_type_breakdown, '{}') as soil_type_breakdown,
-            
-            -- BNBO analysis data (from pre-aggregated field summary - NO CARTESIAN PRODUCT!)
-            COALESCE(b.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
-            COALESCE(b.field_bnbo_water_covered_m2, 0) as field_bnbo_water_covered_m2,
-            COALESCE(b.field_bnbo_water_covered_pct, 0) as field_bnbo_water_covered_pct,
-            COALESCE(b.field_bnbo_water_uncovered_pct, 0) as field_bnbo_water_uncovered_pct,
-            COALESCE(b.field_bnbo_coverage_pct, 0) as field_bnbo_coverage_pct,
-            
-            -- BNBO status metrics - flattened by category (from pre-aggregated summary)
-            COALESCE(b.bnbo_action_required_hectares, 0.0) as bnbo_action_required_hectares,
-            COALESCE(b.bnbo_completed_hectares, 0.0) as bnbo_completed_hectares,
-            COALESCE(b.bnbo_action_required_overlap_hectares, 0.0) as bnbo_action_required_overlap_hectares,
-            COALESCE(b.bnbo_completed_overlap_hectares, 0.0) as bnbo_completed_overlap_hectares,
-            COALESCE(b.bnbo_action_required_not_covered_by_water_hectares, 0.0) as bnbo_action_required_not_covered_by_water_hectares,
-            COALESCE(b.bnbo_completed_not_covered_by_water_hectares, 0.0) as bnbo_completed_not_covered_by_water_hectares,
-            COALESCE(b.bnbo_status_categories, NULL) as bnbo_status_categories,
-            COALESCE(b.bnbo_status_count, 0) as bnbo_status_count,
-            
-            -- Wetland analysis data (from pre-aggregated field summary - NO CARTESIAN PRODUCT!)
-            COALESCE(w.field_wetland_total_m2, 0) as field_wetland_total_m2,
-            COALESCE(w.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
-            COALESCE(w.field_wetland_water_covered_pct, 0) as field_wetland_water_covered_pct,
-            COALESCE(w.field_wetland_water_uncovered_pct, 0) as field_wetland_water_uncovered_pct,
-            COALESCE(w.field_wetland_coverage_pct, 0) as field_wetland_coverage_pct,
-            
-            -- Property-environmental spatial relationships (from pre-aggregated field summaries)
-            COALESCE(b.property_bnbo_total_m2, 0) as property_bnbo_total_m2,
-            COALESCE(b.property_bnbo_count, 0) as property_bnbo_count,
-            COALESCE(b.property_bnbo_owners, NULL) as property_bnbo_owners,
-            COALESCE(b.property_bnbo_breakdown, '{}') as property_bnbo_breakdown,
-            COALESCE(b.property_bnbo_water_covered_m2, 0) as property_bnbo_water_covered_m2,
-            COALESCE(b.property_bnbo_water_uncovered_m2, 0) as property_bnbo_water_uncovered_m2,
-            
-            COALESCE(w.property_wetland_total_m2, 0) as property_wetland_total_m2,
-            COALESCE(w.property_wetland_count, 0) as property_wetland_count,
-            COALESCE(w.property_wetland_owners, NULL) as property_wetland_owners,
-            COALESCE(w.property_wetland_breakdown, '{}') as property_wetland_breakdown,
-            COALESCE(w.property_wetland_water_covered_m2, 0) as property_wetland_water_covered_m2,
-            COALESCE(w.property_wetland_water_uncovered_m2, 0) as property_wetland_water_uncovered_m2,
-            
-            -- Combined environmental-property metrics
-            COALESCE(b.property_bnbo_count, 0) + COALESCE(w.property_wetland_count, 0) as total_properties_with_environmental_features,
-            CASE 
-                WHEN f.property_count > 0 
-                THEN ((COALESCE(b.property_bnbo_total_m2, 0) + COALESCE(w.property_wetland_total_m2, 0)) / 
-                      f.total_property_intersection_area_m2) * 100
-                ELSE 0 
-            END as combined_property_environmental_coverage_pct,
-            
-            -- Environmental summary flags
-            CASE 
-                WHEN COALESCE(b.field_bnbo_total_m2, 0) > 0 OR COALESCE(w.field_wetland_total_m2, 0) > 0 
-                THEN TRUE ELSE FALSE 
-            END as has_environmental_features,
-            
-            CASE 
-                WHEN COALESCE(b.property_bnbo_count, 0) > 0 OR COALESCE(w.property_wetland_count, 0) > 0 
-                THEN TRUE ELSE FALSE 
-            END as has_property_environmental_relationships
-            
-        FROM all_fields_with_properties f
-        LEFT JOIN field_soil_summary s ON f.field_uuid = s.field_uuid 
-            AND f.year = s.year
-        LEFT JOIN bnbo_field_summary b ON f.field_uuid = b.field_uuid
-            AND f.year = b.year
-        LEFT JOIN wetland_field_summary w ON f.field_uuid = w.field_uuid
-            AND f.year = w.year
+        consolidation_query = """
+            CREATE OR REPLACE TABLE field_area_analysis_final AS
+            SELECT * FROM wetland_field_summary
         """
-
         self.conn.execute(consolidation_query)
 
         # Log results

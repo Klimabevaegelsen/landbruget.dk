@@ -143,7 +143,7 @@ async def run_cumulative_analysis(
             cumulative_table = f"cumulative_h3_results_res{resolution}"
             processor.conn.execute(f"""
                 CREATE OR REPLACE TABLE {cumulative_table} AS
-                SELECT 
+                SELECT
                     h3_cell,
                     center_lat,
                     center_lon,
@@ -195,7 +195,7 @@ async def run_cumulative_analysis(
                 # Add this year's data to cumulative results
                 processor.conn.execute(f"""
                     INSERT INTO {cumulative_table}
-                    SELECT 
+                    SELECT
                         h3_cell,
                         center_lat,
                         center_lon,
@@ -253,25 +253,25 @@ async def run_cumulative_analysis(
                     STRING_AGG(DISTINCT crop_types, '; ') as crop_types,
                     MAX(crop_diversity) as crop_diversity,
                     -- Recalculate intensity based on cumulative totals
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_pfas_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_diquat_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_glyphosate_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_pesticide_belastning) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pesticide_belastning_per_ha,
                     CURRENT_TIMESTAMP as created_at
                 FROM {cumulative_table}
@@ -306,7 +306,7 @@ async def run_cumulative_analysis(
             cumulative_kommune_table = "cumulative_kommune_results"
             processor.conn.execute(f"""
                 CREATE OR REPLACE TABLE {cumulative_kommune_table} AS
-                SELECT 
+                SELECT
                     kommune_code,
                     kommune_name,
                     region_code,
@@ -412,45 +412,45 @@ async def run_cumulative_analysis(
                     MAX(unique_glyphosate_products) as unique_glyphosate_products,
                     MAX(unique_pesticide_products) as unique_pesticide_products,
                     -- Recalculate intensity based on cumulative totals
-                    CASE 
-                        WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_agricultural_area_ha) > 0 THEN
                             SUM(total_pfas_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_agricultural_area_ha) > 0 THEN
                             SUM(total_diquat_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_agricultural_area_ha) > 0 THEN
                             SUM(total_glyphosate_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_agricultural_area_ha) > 0 THEN
                             SUM(total_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pesticide_belastning_per_ha,
-                    CASE 
-                        WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_agricultural_area_ha) > 0 THEN
                             SUM(total_pfas_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pfas_pesticide_belastning_per_ha,
-                    CASE 
-                        WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_agricultural_area_ha) > 0 THEN
                             SUM(total_diquat_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as diquat_pesticide_belastning_per_ha,
-                    CASE 
-                        WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_agricultural_area_ha) > 0 THEN
                             SUM(total_glyphosate_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as glyphosate_pesticide_belastning_per_ha,
-                    CASE 
-                        WHEN ANY_VALUE(kommune_area_ha) > 0 THEN 
+                    CASE
+                        WHEN ANY_VALUE(kommune_area_ha) > 0 THEN
                             (MAX(total_agricultural_area_ha) / ANY_VALUE(kommune_area_ha)) * 100.0
-                        ELSE 0 
+                        ELSE 0
                     END as agricultural_coverage_pct,
                     CURRENT_TIMESTAMP as created_at
                 FROM {cumulative_kommune_table}
@@ -661,7 +661,7 @@ async def run_cumulative_analysis_optimized(
                     # Insert into cumulative table with column mapping
                     processor.conn.execute(f"""
                         INSERT INTO {cumulative_table}
-                        SELECT 
+                        SELECT
                             {h3_col} as h3_cell,
                             center_lat,
                             center_lon,
@@ -729,25 +729,25 @@ async def run_cumulative_analysis_optimized(
                     STRING_AGG(DISTINCT crop_types, '; ') as crop_types,
                     MAX(crop_diversity) as crop_diversity,
                     -- Recalculate intensity based on cumulative totals
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_pfas_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_diquat_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_glyphosate_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_pesticide_belastning) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pesticide_belastning_per_ha,
                     CURRENT_TIMESTAMP as created_at
                 FROM {cumulative_table}
@@ -832,7 +832,7 @@ async def run_cumulative_analysis_optimized(
                 # Initialize cumulative kommune results table
                 cumulative_kommune_table = "cumulative_kommune_results"
                 final_cumulative_kommune_table = "final_cumulative_kommune"
-                
+
                 # Create empty cumulative table with correct schema
                 processor.conn.execute(f"""
                     CREATE OR REPLACE TABLE {cumulative_kommune_table} (
@@ -880,21 +880,21 @@ async def run_cumulative_analysis_optimized(
                 # Load and aggregate each year's results
                 for year, file_path in available_kommune_results:
                     logger.info(f"   📅 Loading kommune results for year {year} from GCS")
-                    
+
                     # Load year results from GCS
                     year_table = f"year_kommune_results_{year}"
                     try:
                         processor.gcs_access.create_table_from_gcs(year_table, file_path)
-                        
+
                         # Insert into cumulative table
                         processor.conn.execute(f"""
                             INSERT INTO {cumulative_kommune_table}
                             SELECT * FROM {year_table}
                         """)
-                        
+
                         # Clean up year table
                         processor.conn.execute(f"DROP TABLE IF EXISTS {year_table}")
-                        
+
                     except Exception as e:
                         logger.error(f"❌ Failed to load year {year} kommune results: {e}")
                         continue
@@ -933,45 +933,45 @@ async def run_cumulative_analysis_optimized(
                         MAX(unique_glyphosate_products) as unique_glyphosate_products,
                         MAX(unique_pesticide_products) as unique_pesticide_products,
                         -- Recalculate intensity based on cumulative totals
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pfas_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_diquat_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_glyphosate_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pfas_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pfas_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_diquat_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as diquat_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_glyphosate_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as glyphosate_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN ANY_VALUE(kommune_area_ha) > 0 THEN 
+                        CASE
+                            WHEN ANY_VALUE(kommune_area_ha) > 0 THEN
                                 (MAX(total_agricultural_area_ha) / ANY_VALUE(kommune_area_ha)) * 100.0
-                            ELSE 0 
+                            ELSE 0
                         END as agricultural_coverage_pct,
                         CURRENT_TIMESTAMP as created_at
                     FROM {cumulative_kommune_table}
@@ -1214,7 +1214,7 @@ async def run_cumulative_analysis_github_actions_optimized(
                     # Insert into cumulative table with column mapping
                     processor.conn.execute(f"""
                         INSERT INTO {cumulative_table}
-                        SELECT 
+                        SELECT
                             {h3_col} as h3_cell,
                             center_lat,
                             center_lon,
@@ -1282,25 +1282,25 @@ async def run_cumulative_analysis_github_actions_optimized(
                     STRING_AGG(DISTINCT crop_types, '; ') as crop_types,
                     MAX(crop_diversity) as crop_diversity,
                     -- Recalculate intensity based on cumulative totals
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_pfas_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_diquat_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_glyphosate_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_pesticide_belastning) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pesticide_belastning_per_ha,
                     CURRENT_TIMESTAMP as created_at
                 FROM {cumulative_table}
@@ -1483,45 +1483,45 @@ async def run_cumulative_analysis_github_actions_optimized(
                         MAX(unique_glyphosate_products) as unique_glyphosate_products,
                         MAX(unique_pesticide_products) as unique_pesticide_products,
                         -- Recalculate intensity based on cumulative totals
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pfas_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_diquat_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_glyphosate_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pfas_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pfas_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_diquat_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as diquat_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_glyphosate_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as glyphosate_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN ANY_VALUE(kommune_area_ha) > 0 THEN 
+                        CASE
+                            WHEN ANY_VALUE(kommune_area_ha) > 0 THEN
                                 (MAX(total_agricultural_area_ha) / ANY_VALUE(kommune_area_ha)) * 100.0
-                            ELSE 0 
+                            ELSE 0
                         END as agricultural_coverage_pct,
                         CURRENT_TIMESTAMP as created_at
                     FROM {cumulative_kommune_table}
@@ -1851,7 +1851,7 @@ async def run_cumulative_analysis_from_artifacts(
         from .result_saver import H3ResultSaver
 
         # Initialize components
-        data_loader = H3DataLoader(processor.conn, processor.config, processor.gcs_access)
+        H3DataLoader(processor.conn, processor.config, processor.gcs_access)
         result_saver = H3ResultSaver(processor.conn, processor.config, processor.gcs_access)
 
         # Read artifacts to get GCS paths
@@ -2001,7 +2001,7 @@ async def run_cumulative_analysis_from_artifacts(
                     # Insert into cumulative table with column mapping
                     processor.conn.execute(f"""
                         INSERT INTO {cumulative_table}
-                        SELECT 
+                        SELECT
                             {h3_col} as h3_cell,
                             center_lat,
                             center_lon,
@@ -2069,25 +2069,25 @@ async def run_cumulative_analysis_from_artifacts(
                     STRING_AGG(DISTINCT crop_types, '; ') as crop_types,
                     MAX(crop_diversity) as crop_diversity,
                     -- Recalculate intensity based on cumulative totals
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_pfas_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_diquat_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_glyphosate_containing_active_ingredient_grams) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                    CASE 
-                        WHEN MAX(total_intersection_area_ha) > 0 THEN 
+                    CASE
+                        WHEN MAX(total_intersection_area_ha) > 0 THEN
                             SUM(total_pesticide_belastning) / MAX(total_intersection_area_ha)
-                        ELSE 0 
+                        ELSE 0
                     END as pesticide_belastning_per_ha,
                     CURRENT_TIMESTAMP as created_at
                 FROM {cumulative_table}
@@ -2254,45 +2254,45 @@ async def run_cumulative_analysis_from_artifacts(
                         MAX(unique_glyphosate_products) as unique_glyphosate_products,
                         MAX(unique_pesticide_products) as unique_pesticide_products,
                         -- Recalculate intensity based on cumulative totals
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pfas_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_diquat_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_glyphosate_containing_active_ingredient_grams) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_pfas_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as pfas_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_diquat_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as diquat_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN MAX(total_agricultural_area_ha) > 0 THEN 
+                        CASE
+                            WHEN MAX(total_agricultural_area_ha) > 0 THEN
                                 SUM(total_glyphosate_pesticide_belastning) / MAX(total_agricultural_area_ha)
-                            ELSE 0 
+                            ELSE 0
                         END as glyphosate_pesticide_belastning_per_ha,
-                        CASE 
-                            WHEN ANY_VALUE(kommune_area_ha) > 0 THEN 
+                        CASE
+                            WHEN ANY_VALUE(kommune_area_ha) > 0 THEN
                                 (MAX(total_agricultural_area_ha) / ANY_VALUE(kommune_area_ha)) * 100.0
-                            ELSE 0 
+                            ELSE 0
                         END as agricultural_coverage_pct,
                         CURRENT_TIMESTAMP as created_at
                     FROM {cumulative_kommune_table}

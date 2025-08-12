@@ -14,7 +14,8 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
     FileMetadata = None
 
 # Get logger
@@ -36,7 +37,7 @@ class TransformResult:
 class BaseTransformer(abc.ABC):
     """Base class for all transformers."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the transformer."""
         logger.debug(f"Initialized {self.__class__.__name__}")
 

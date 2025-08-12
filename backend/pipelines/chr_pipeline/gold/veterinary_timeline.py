@@ -1,14 +1,12 @@
 """CHR Veterinary Timeline processing for Gold layer."""
 
 import logging
-import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import duckdb
-import pandas as pd
 
-from .config import GOLD_BASE_DIR, SILVER_BASE_DIR
+from .config import GOLD_BASE_DIR
 
 # Try to import GCS utilities
 try:
@@ -518,8 +516,8 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
         health_col = next((col for col in column_names if 'health_status' in col.lower()), None)
         cert_date_col = next((col for col in column_names if 'cert' in col.lower() and 'date' in col.lower()), None)
         cert_approved_col = next((col for col in column_names if 'approved' in col.lower()), None)
-        salmonella_date_col = next((col for col in column_names if 'salmonella_date' in col.lower()), None)
-        salmonella_status_col = next((col for col in column_names if 'salmonella_status' in col.lower()), None)
+        next((col for col in column_names if 'salmonella_date' in col.lower()), None)
+        next((col for col in column_names if 'salmonella_status' in col.lower()), None)
         
         # Certificate events (if we have certificate data)
         if cert_date_col and health_col:
@@ -859,7 +857,7 @@ def create_veterinary_timeline(con: duckdb.DuckDBPyConnection, pipeline_run_date
             FROM veterinary_timeline
         """).fetchone()
         
-        logger.info(f"✅ Created veterinary timeline:")
+        logger.info("✅ Created veterinary timeline:")
         logger.info(f"   Total events: {summary[0]:,}")
         logger.info(f"   Unique CHRs: {summary[1]:,}")
         logger.info(f"   Date range: {summary[2]} to {summary[3]}")

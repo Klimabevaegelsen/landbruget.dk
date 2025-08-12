@@ -91,7 +91,7 @@ async def run_pipeline(
     Returns:
         True if successful, False otherwise
     """
-    pipeline_start_time = datetime.now()
+    datetime.now()
     logger.info(f"🚀 Starting H3 PFAS exposure analysis pipeline in {mode} mode")
 
     try:

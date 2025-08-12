@@ -1,9 +1,8 @@
 """CHR Gold Layer Export functionality using DuckDB."""
 
 import logging
-import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 # Try to import GCS utilities
 try:

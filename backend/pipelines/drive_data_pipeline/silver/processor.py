@@ -28,7 +28,7 @@ class SilverProcessor:
         metadata_manager: MetadataManager,
         schema_dir: Path | None = None,
         progress_callback: Callable[[int, bool], None] | None = None,
-    ):
+    ) -> None:
         """Initialize the Silver processor.
 
         Args:
@@ -125,7 +125,7 @@ class SilverProcessor:
 
             # Extract data from bronze_data structure
             file_data = bronze_data.get("data", {})
-            bronze_metadata = bronze_data.get("metadata", {})
+            bronze_data.get("metadata", {})
 
             logger.info(f"Found {len(file_data)} files in Bronze data")
 
@@ -135,9 +135,9 @@ class SilverProcessor:
             processed_count = 0
 
             # Process each file from memory
-            for file_key, file_info in file_data.items():
+            for _file_key, file_info in file_data.items():
                 # Apply filters
-                file_metadata_dict = file_info.get("metadata", {})
+                file_info.get("metadata", {})
 
                 # Filter by file type if specified
                 if supported_file_types:
@@ -277,7 +277,7 @@ class SilverProcessor:
                 # Local storage - use recursive glob through storage manager
                 import os
 
-                for root, dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
+                for root, _dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
                     for file in files:
                         if file.endswith(".metadata.json"):
                             file_path = Path(root) / file
@@ -353,7 +353,7 @@ class SilverProcessor:
             file_content = file_info["content"]
             metadata_dict = file_info["metadata"]
             original_filename = file_info["original_filename"]
-            mime_type = file_info.get("mime_type", "")
+            file_info.get("mime_type", "")
 
             # Convert metadata dict to FileMetadata object
             from ..bronze.metadata import FileMetadata

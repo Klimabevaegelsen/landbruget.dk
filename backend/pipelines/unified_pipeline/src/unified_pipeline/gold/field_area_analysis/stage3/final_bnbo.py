@@ -67,7 +67,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         bnbo_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
         water_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM stage3a_field_bnbo_water_intersections").fetchone()[0]
 
-        self.log.info(f"📊 Input data loaded:")
+        self.log.info("📊 Input data loaded:")
         self.log.info(f"  Field-property intersections: {property_count:,}")
         self.log.info(f"  Field-BNBO intersections: {bnbo_count:,}")
         self.log.info(f"  Field-BNBO-water intersections: {water_bnbo_count:,}")
@@ -151,7 +151,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         # Validation: Geometry validity checks
         self._validate_geometric_output()
 
-        self.log.info(f"✅ SIMPLIFIED STAGE 3A COMPLETE:")
+        self.log.info("✅ SIMPLIFIED STAGE 3A COMPLETE:")
         self.log.info(f"📊 Property-BNBO intersections: {property_bnbo_count:,}")
         self.log.info(f"📊 Property-BNBO-water intersections: {property_bnbo_water_count:,}")
         self.log.info(f"📊 Unique properties with BNBO: {unique_properties:,}")

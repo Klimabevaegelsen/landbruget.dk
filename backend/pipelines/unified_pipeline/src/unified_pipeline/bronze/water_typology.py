@@ -13,9 +13,8 @@ The data is fetched from the vp3endelig2022 WFS service with proper error handli
 and async processing for robustness.
 """
 
-import logging
-from typing import Any, Optional
 from asyncio import Semaphore
+from typing import Any, Optional
 
 import aiohttp
 from pydantic import ConfigDict

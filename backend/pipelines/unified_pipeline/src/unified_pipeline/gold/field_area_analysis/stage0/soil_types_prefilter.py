@@ -84,7 +84,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             JOIN soil_types_full s ON ST_Intersects(f.geometry, s.geometry)
         """)
 
-        intersecting_count = self.conn.execute(
+        self.conn.execute(
             "SELECT COUNT(*) FROM soil_types_intersecting"
         ).fetchone()[0]
 

@@ -9,7 +9,7 @@ DAWA API documentation: https://api.dataforsyningen.dk/
 """
 
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import requests
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential

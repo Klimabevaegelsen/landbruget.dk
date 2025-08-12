@@ -13,7 +13,8 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger():
+        return logging.getLogger(__name__)
     from silver.duckdb_base import DuckDBProcessor
 from .base import BaseTransformer, TransformResult
 
@@ -24,7 +25,7 @@ logger = get_logger()
 class PDFTransformer(BaseTransformer, DuckDBProcessor):
     """Transformer for PDF files using DuckDB."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the PDF transformer."""
         BaseTransformer.__init__(self)
         DuckDBProcessor.__init__(self)

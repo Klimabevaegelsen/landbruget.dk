@@ -133,7 +133,7 @@ class EnhancedDMACompanyDetailScraper:
             pdf_url_selector = "#hent-0"
 
             pdf_path = None
-            if soup.select_one(pdf_url_selector) != None:
+            if soup.select_one(pdf_url_selector) is not None:
                 pdf_url = "https://dma.mst.dk" + soup.select_one(pdf_url_selector).get("href")
                 pdf_path = await self.download_pdf(session, pdf_url, company_dir, section, index)
 

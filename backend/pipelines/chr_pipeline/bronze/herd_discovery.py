@@ -1,10 +1,9 @@
 """Herd volume discovery system for intelligent processing strategy."""
 
-import logging
 import json
+import logging
 from datetime import date, timedelta
-from typing import Dict, List, Tuple, Any, Optional
-from collections import defaultdict
+from typing import Any, Dict, List, Optional, Tuple
 
 # Import GCS access for persistent storage
 try:
@@ -14,8 +13,8 @@ except ImportError:
     GCS_AVAILABLE = False
     GCSDataAccess = None
 
-from .volume_management import add_high_volume_herd, is_high_volume_herd
 from .utils import create_base_request
+from .volume_management import add_high_volume_herd, is_high_volume_herd
 
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.herd_discovery")
 

@@ -40,7 +40,7 @@ class H3ResultSaver:
                 CAST(h3_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
-                
+
                 -- Map field area for database compatibility (this is the key fix!)
                 CAST(total_intersection_area_ha AS DOUBLE) as agricultural_area_ha,
 
@@ -231,7 +231,7 @@ class H3ResultSaver:
                 CAST(h3_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
-                
+
                 -- Map field area for database compatibility
                 CAST(total_intersection_area_ha AS DOUBLE) as agricultural_area_ha,
 
@@ -303,7 +303,7 @@ class H3ResultSaver:
                 CAST(h3_area_ha AS DOUBLE) as h3_cell_area_ha,
                 CAST(total_intersection_area_ha AS DOUBLE) as total_intersection_area_ha,
                 CAST(actual_coverage_ratio AS DOUBLE) as actual_coverage_ratio,
-                
+
                 -- Map field area for database compatibility
                 CAST(total_intersection_area_ha AS DOUBLE) as agricultural_area_ha,
 

@@ -6,6 +6,7 @@ from typing import Any
 
 import duckdb
 
+
 # Try to import optimized GCS access with fallback
 def _get_optimized_gcs_access():
     """Get optimized GCS access with robust import handling."""
@@ -23,7 +24,7 @@ OptimizedGCSDataAccess = _get_optimized_gcs_access()
 class BuildingProcessor:
     """Process BBR building data in the silver layer."""
 
-    def __init__(self, settings, logger: logging.Logger):
+    def __init__(self, settings, logger: logging.Logger) -> None:
         """Initialize the building processor."""
         self.settings = settings
         self.logger = logger
@@ -37,7 +38,7 @@ class BuildingProcessor:
             self.conn.execute("LOAD spatial")
         return self.conn
 
-    def process_buildings_from_data(self, bronze_data: dict[str, Any], output_dir: Path):
+    def process_buildings_from_data(self, bronze_data: dict[str, Any], output_dir: Path) -> None:
         """Process buildings from in-memory bronze data."""
         self.logger.info("Processing buildings from in-memory bronze data")
 
@@ -54,7 +55,7 @@ class BuildingProcessor:
         # Process the buildings from the bronze output directory
         self._process_buildings_directory(output_dir_path, output_dir)
 
-    def process_buildings(self, input_dir: Path, output_dir: Path):
+    def process_buildings(self, input_dir: Path, output_dir: Path) -> None:
         """Process buildings from disk-based bronze data."""
         self.logger.info(f"Processing buildings from disk: {input_dir}")
 
@@ -63,7 +64,7 @@ class BuildingProcessor:
 
         self._process_buildings_directory(input_dir, output_dir)
 
-    def _process_buildings_directory(self, input_dir: Path, output_dir: Path):
+    def _process_buildings_directory(self, input_dir: Path, output_dir: Path) -> None:
         """Process buildings from a bronze output directory."""
         conn = self._get_connection()
 
@@ -206,7 +207,7 @@ class BuildingProcessor:
         export_location = f"GCS and local: {output_file}" if gcs_export_success else f"local: {output_file}"
         self.logger.info(f"Saved processed buildings to: {export_location}")
 
-    def close(self):
+    def close(self) -> None:
         """Close database connection."""
         if self.conn:
             self.conn.close()

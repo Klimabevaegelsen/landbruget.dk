@@ -185,7 +185,7 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
 class ProgressTracker:
     """Tracks progress of pipeline operations and provides reporting capabilities."""
 
-    def __init__(self, quiet: bool = False, verbose: bool = False):
+    def __init__(self, quiet: bool = False, verbose: bool = False) -> None:
         """Initialize the progress tracker.
 
         Args:
@@ -208,7 +208,7 @@ class ProgressTracker:
         }
         self.logger = get_logger()
 
-    def start_bronze_operation(self, total_files: int):
+    def start_bronze_operation(self, total_files: int) -> None:
         """Start tracking a bronze layer operation.
 
         Args:
@@ -219,7 +219,7 @@ class ProgressTracker:
             print(f"Starting Bronze layer processing: {total_files} files identified")
         self.logger.info(f"Bronze layer processing started: {total_files} files")
 
-    def update_bronze_progress(self, file_count: int, success: bool, file_size: int = 0):
+    def update_bronze_progress(self, file_count: int, success: bool, file_size: int = 0) -> None:
         """Update bronze layer progress.
 
         Args:
@@ -247,7 +247,7 @@ class ProgressTracker:
                     f"Bronze progress: {self.bronze_stats['downloaded_files']} files processed (total unknown)"
                 )
 
-    def start_silver_operation(self, total_files: int):
+    def start_silver_operation(self, total_files: int) -> None:
         """Start tracking a silver layer operation.
 
         Args:
@@ -258,7 +258,7 @@ class ProgressTracker:
             print(f"Starting Silver layer processing: {total_files} files to transform")
         self.logger.info(f"Silver layer processing started: {total_files} files")
 
-    def update_silver_progress(self, file_count: int, success: bool):
+    def update_silver_progress(self, file_count: int, success: bool) -> None:
         """Update silver layer progress.
 
         Args:
@@ -284,7 +284,7 @@ class ProgressTracker:
                     f"Silver progress: {self.silver_stats['processed_files']} files processed (total unknown)"
                 )
 
-    def print_summary(self):
+    def print_summary(self) -> None:
         """Print a summary of the pipeline run."""
         if self.quiet:
             return
@@ -420,7 +420,7 @@ def main() -> int:
             # Extract all files recursively from the folder structure for progress tracking
             all_files = []
 
-            def collect_files(folder):
+            def collect_files(folder) -> None:
                 all_files.extend(folder.files)
                 for subfolder in folder.subfolders:
                     collect_files(subfolder)
@@ -495,7 +495,7 @@ def main() -> int:
                 # Apply filtering if specified
                 if file_types or subfolders:
                     filtered_count = 0
-                    for file_key, file_info in file_data.items():
+                    for _file_key, file_info in file_data.items():
                         # Filter by file type if specified
                         if file_types:
                             file_extension = Path(file_info["original_filename"]).suffix.lstrip(".")
@@ -633,7 +633,7 @@ def main() -> int:
                 except ImportError as e:
                     import warnings
 
-                    warnings.warn(f"Schema documentation not available: {e}")
+                    warnings.warn(f"Schema documentation not available: {e}", stacklevel=2)
                     SchemaDocumentationManager = None
 
                 conn = duckdb.connect()

@@ -1,10 +1,12 @@
 """Base class for DuckDB operations in migrated pipelines."""
 
-import duckdb
 import os
 import time
 from pathlib import Path
-from typing import Optional, Union, List, Dict, Any
+from typing import Any, Dict, List, Optional, Union
+
+import duckdb
+
 
 class DuckDBProcessor:
     """Base class for DuckDB-based data processing."""

@@ -362,7 +362,7 @@ def process_chr_data_streaming(
                 
                 # MINIMAL FIX: For CHR movement data, search across month-suffixed directories
                 if dataset_key == "cattle_movements":
-                    logging.info(f"🔍 Looking for CHR movement files across month-suffixed bronze directories...")
+                    logging.info("🔍 Looking for CHR movement files across month-suffixed bronze directories...")
                     
                     try:
                         # Find all month-suffixed directories for this bronze timestamp
@@ -767,18 +767,18 @@ def process_chr_data_streaming(
                         con.create_table("herd_users", herd_users_table, overwrite=True)
 
                 elif step == "silver_herd_sizes":
-                    herd_sizes_table = herds.create_herd_sizes_table(con, context.get("bes_details_table"), silver_dir)
+                    herds.create_herd_sizes_table(con, context.get("bes_details_table"), silver_dir)
 
                 elif step == "silver_animal_movements":
                     # Process DIKO movements (always available)
                     if context.get("diko_flyt_table") is not None:
-                        animal_movements_table = animal_movements.create_animal_movements_table(
+                        animal_movements.create_animal_movements_table(
                             con, context.get("diko_flyt_table"), silver_dir
                         )
 
                     # Process CHR_dyr cattle movements (optional - aggregated summaries format)
                     if context.get("cattle_movements_table") is not None:
-                        chr_dyr_movements_table = animal_movements.create_chr_dyr_movement_summaries_table(
+                        animal_movements.create_chr_dyr_movement_summaries_table(
                             con, context.get("cattle_movements_table"), silver_dir
                         )
                     else:
@@ -786,7 +786,7 @@ def process_chr_data_streaming(
 
                 elif step == "silver_property_vet_events":
                     if context.get("ejendom_vet_table") is not None:
-                        property_vet_events_table = property_vet_events.create_property_vet_events_table(
+                        property_vet_events.create_property_vet_events_table(
                             con,
                             context.get("ejendom_vet_table"),
                             context.get("lookup_tables", {}),
@@ -795,7 +795,7 @@ def process_chr_data_streaming(
 
                 elif step == "silver_antibiotic_usage":
                     if context.get("vetstat_table") is not None:
-                        antibiotic_usage_table = antibiotic_usage.create_antibiotic_usage_table(
+                        antibiotic_usage.create_antibiotic_usage_table(
                             con,
                             context.get("vetstat_table"),
                             context.get("lookup_tables", {}),
@@ -810,7 +810,7 @@ def process_chr_data_streaming(
                         try:
                             from . import spf_su
 
-                            spf_su_herds_table = spf_su.create_spf_su_herds_table(
+                            spf_su.create_spf_su_herds_table(
                                 con, context.get("spf_su_table"), silver_dir
                             )
                         except ImportError:
@@ -823,7 +823,7 @@ def process_chr_data_streaming(
                         try:
                             from . import spf_su
 
-                            spf_su_controls_table = spf_su.create_spf_su_health_controls_table(
+                            spf_su.create_spf_su_health_controls_table(
                                 con, context.get("spf_su_table"), silver_dir
                             )
                         except ImportError:
@@ -836,7 +836,7 @@ def process_chr_data_streaming(
                         try:
                             from . import spf_su
 
-                            spf_su_salmonella_table = spf_su.create_spf_su_salmonella_data_table(
+                            spf_su.create_spf_su_salmonella_data_table(
                                 con, context.get("spf_su_table"), silver_dir
                             )
                         except ImportError:

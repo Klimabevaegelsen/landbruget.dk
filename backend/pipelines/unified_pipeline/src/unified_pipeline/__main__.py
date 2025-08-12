@@ -1,4 +1,3 @@
-import sys
 
 from unified_pipeline import app
 

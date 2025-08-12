@@ -254,7 +254,7 @@ class GCSDataAccess:
             temp_file = None
             try:
                 # Check available space before download
-                free_space = self.monitor.check_resources("pre_download")["disk_gb"]
+                self.monitor.check_resources("pre_download")["disk_gb"]
 
                 # Check file size constraints
                 self.check_file_size_limits(gcs_path)

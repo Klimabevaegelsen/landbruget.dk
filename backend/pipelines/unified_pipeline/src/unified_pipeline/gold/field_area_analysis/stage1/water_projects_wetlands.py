@@ -150,8 +150,6 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         )
 
         total_intersections = 0
-        total_wetland_area = 0
-        total_covered_area = 0
 
         # Process each batch
         for batch_num in range(num_batches):
@@ -172,7 +170,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             """)
 
             # Calculate areas (wetland_id already exists from main wetlands table)
-            self.conn.execute(f"""
+            self.conn.execute("""
                 CREATE OR REPLACE TABLE wetlands_batch AS
                 SELECT 
                     wetland_key,

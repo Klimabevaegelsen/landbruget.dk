@@ -261,7 +261,7 @@ async def main():
     # Configure logging level (logger already configured at module level)
     if args.verbose:
         # Get a new logger instance with DEBUG level for verbose output
-        verbose_logger = Logger.get_logger("DEBUG")
+        Logger.get_logger("DEBUG")
 
     # Create configuration
     config_kwargs = {

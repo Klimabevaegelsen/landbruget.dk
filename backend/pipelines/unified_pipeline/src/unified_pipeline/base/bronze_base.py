@@ -1,8 +1,10 @@
 """Base class for bronze layer processing."""
 
-from .duckdb_processor import DuckDBProcessor
-from typing import Union, Optional
 from pathlib import Path
+from typing import Union
+
+from .duckdb_processor import DuckDBProcessor
+
 
 class BronzeBase(DuckDBProcessor):
     """Base class for bronze layer data ingestion."""

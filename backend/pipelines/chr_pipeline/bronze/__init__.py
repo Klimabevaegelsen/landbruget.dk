@@ -30,6 +30,11 @@ from .auth import (
     get_legacy_fvm_credentials,
 )
 from .data_processing import aggregate_cattle_movements
+from .herd_discovery import (
+    classify_herd_volume,
+    discover_herd_volumes_for_year,
+    load_previous_discovery_results,
+)
 from .load_chr_dyr import (
     finalize_consolidated_processing,
     initialize_consolidated_processing,
@@ -42,11 +47,6 @@ from .volume_management import (
     detect_herd_volume,
     get_optimal_date_range,
     is_high_volume_herd,
-)
-from .herd_discovery import (
-    discover_herd_volumes_for_year,
-    load_previous_discovery_results,
-    classify_herd_volume,
 )
 
 __all__ = [

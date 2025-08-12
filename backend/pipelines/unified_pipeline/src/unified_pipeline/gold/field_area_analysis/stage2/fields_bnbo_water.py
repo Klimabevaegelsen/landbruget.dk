@@ -57,7 +57,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
             "water_projects_bnbo_intersections",
         )
 
-        self.log.info(f"✅ Loaded foundation data for redesigned Stage 2A")
+        self.log.info("✅ Loaded foundation data for redesigned Stage 2A")
 
         # Input validation
         field_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
@@ -66,7 +66,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
             "SELECT COUNT(*) FROM water_projects_bnbo_intersections"
         ).fetchone()[0]
 
-        self.log.info(f"📊 Foundation data loaded:")
+        self.log.info("📊 Foundation data loaded:")
         self.log.info(f"  Fields: {field_count:,}")
         self.log.info(f"  BNBO areas (pre-filtered): {bnbo_count:,}")
         self.log.info(f"  Water-covered BNBO intersections: {water_bnbo_count:,}")
@@ -156,7 +156,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         # Validation: Geometry validity checks
         self._validate_geometric_output()
 
-        self.log.info(f"✅ REDESIGNED STAGE 2A COMPLETE:")
+        self.log.info("✅ REDESIGNED STAGE 2A COMPLETE:")
         self.log.info(f"📊 Total field-BNBO intersections: {total_bnbo_intersections:,}")
         self.log.info(f"📊 Water-covered intersections: {water_covered_intersections:,}")
         self.log.info(f"📊 Unique fields with BNBO: {unique_fields_with_bnbo:,}")

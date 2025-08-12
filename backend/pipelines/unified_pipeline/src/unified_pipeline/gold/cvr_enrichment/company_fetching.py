@@ -15,6 +15,7 @@ from pydantic import Field
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.cvr_api_client import CVRAPIClient
 from unified_pipeline.util.timing import timed
+
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
 
 
@@ -88,8 +89,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         )
         
         self.log.info("Company fetching step initialized")
-        self.log.info(f"📋 Configuration:")
-        self.log.info(f"   • Processing mode: Single job (no batching)")
+        self.log.info("📋 Configuration:")
+        self.log.info("   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}")
     
@@ -133,7 +134,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.log.info("=" * 60)
             self.log.info("✅ COMPANY FETCHING COMPLETED SUCCESSFULLY")
             self.log.info("=" * 60)
-            self.log.info(f"📊 PROCESSING SUMMARY:")
+            self.log.info("📊 PROCESSING SUMMARY:")
             self.log.info(f"   • CVR numbers requested: {total_requested:,}")
             self.log.info(f"   • Companies found: {total_successful:,}")
             self.log.info(f"   • Companies not found: {total_failed:,}")
@@ -141,7 +142,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.log.info(f"   • API calls made: {api_calls}")
             self.log.info(f"   • Efficiency gain: {efficiency_gain}")
             self.log.info(f"   • Output table: {table_name}")
-            self.log.info(f"   • Ready for next step: P-Number Fetching")
+            self.log.info("   • Ready for next step: P-Number Fetching")
             self.log.info("=" * 60)
             
             return table_name
@@ -151,8 +152,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.log.error("❌ COMPANY FETCHING FAILED")
             self.log.error("=" * 60)
             self.log.error(f"💥 Error: {e}")
-            self.log.error(f"🔍 Check the logs above for detailed error information")
-            self.log.error(f"📋 Processing mode: Single job (no batching)")
+            self.log.error("🔍 Check the logs above for detailed error information")
+            self.log.error("📋 Processing mode: Single job (no batching)")
             self.log.error("=" * 60)
             raise
     

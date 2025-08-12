@@ -6,24 +6,22 @@ This script tests the complete bronze → silver flow with the work permits PDF
 to ensure the specialized WorkPermitsTransformer is working correctly.
 """
 
-import sys
-import os
-from pathlib import Path
-import tempfile
 import shutil
+import sys
+from pathlib import Path
 
 # Add the parent directory to sys.path for imports
 parent_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from backend.pipelines.drive_data_pipeline.config.settings import get_settings
-from backend.pipelines.drive_data_pipeline.bronze.processor import BronzeProcessor  
 from backend.pipelines.drive_data_pipeline.bronze.metadata import MetadataManager
+from backend.pipelines.drive_data_pipeline.config.settings import get_settings
 from backend.pipelines.drive_data_pipeline.silver.processor import SilverProcessor
+from backend.pipelines.drive_data_pipeline.utils.logging import get_logger, setup_logging
 from backend.pipelines.drive_data_pipeline.utils.storage import get_storage_manager
-from backend.pipelines.drive_data_pipeline.utils.logging import setup_logging, get_logger
 
-def test_work_permits_pipeline(pdf_path: Path):
+
+def test_work_permits_pipeline(pdf_path: Path) -> bool | None:
     """Test the drive pipeline with work permits PDF."""
     
     # Setup logging
@@ -61,7 +59,7 @@ def test_work_permits_pipeline(pdf_path: Path):
         test_metadata = {
             # Basic metadata
             "timestamp": now_iso,
-            "source_url": f"https://drive.google.com/file/d/test_work_permits/view",
+            "source_url": "https://drive.google.com/file/d/test_work_permits/view",
             "file_id": "test_work_permits",
             "original_filename": pdf_path.name,
             "original_subfolder": "work_permits_test",
@@ -158,7 +156,7 @@ def test_work_permits_pipeline(pdf_path: Path):
         traceback.print_exc()
         return False
 
-def main():
+def main() -> None:
     """Main function."""
     if len(sys.argv) != 2:
         print("Usage: python test_work_permits_pipeline.py <path_to_work_permits_pdf>")
