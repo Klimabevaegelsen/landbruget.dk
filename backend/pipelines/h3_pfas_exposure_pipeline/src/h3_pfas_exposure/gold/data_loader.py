@@ -102,6 +102,23 @@ class H3DataLoader:
                 )
                 return sorted(files)[-1]  # Latest by timestamp
 
+        # Special handling for pesticide_disaggregation with Y+1 pattern
+        if not files and dataset == "pesticide_disaggregation":
+            # Try unified pipeline Y+1 format: pesticide_disaggregation_YYYY_YYYY+1/timestamp/pesticide_disaggregation_YYYY_YYYY+1.parquet
+            self.log.warning(
+                f"No unified format files found for {dataset} {year}, trying Y+1 pattern format"
+            )
+            y_plus_1_pattern = (
+                f"gs://{self.config.bucket}/gold/{dataset}_{year}_{year + 1}/*/{dataset}_{year}_{year + 1}.parquet"
+            )
+            files = self.gcs_access.list_files(y_plus_1_pattern)
+
+            if files:
+                self.log.info(
+                    f"Found Y+1 pattern format files for {dataset} {year}: {len(files)} files"
+                )
+                return sorted(files)[-1]  # Latest by timestamp
+
         if not files:
             # Fallback to legacy format for backward compatibility
             self.log.warning(
