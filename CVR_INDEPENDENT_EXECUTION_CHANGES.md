@@ -22,22 +22,9 @@ Added independent execution capability where each step can:
 3. **Maintain backward compatibility** with traditional pipeline dependencies
 4. **Provide clear logging** about which execution mode is being used
 
-## Files Added
-
-### 1. GCS Latest File Fetcher Utility
-**File:** `backend/pipelines/unified_pipeline/src/unified_pipeline/util/gcs_latest_fetcher.py`
-
-A new utility class that provides methods to find the latest available files in GCS:
-- `find_latest_cvr_collection_data()` - Latest collection data
-- `find_latest_company_data()` - Latest company fetching results
-- `find_latest_pnumber_data()` - Latest P-number data
-- `find_latest_financial_data()` - Latest financial documents
-- `find_latest_address_data()` - Latest geocoded addresses
-- `find_latest_consolidation_inputs()` - All files needed for consolidation
-
 ## Files Modified
 
-### 2. Shared Configuration
+### 1. Shared Configuration
 **File:** `backend/pipelines/unified_pipeline/src/unified_pipeline/gold/cvr_enrichment/shared/config.py`
 
 Added new configuration options:
@@ -47,20 +34,20 @@ max_days_back_for_inputs: int = 30         # How far back to search for files
 fallback_to_pipeline_dependencies: bool = True  # Fallback behavior
 ```
 
-Updated `get_step_input_paths()` function to support independent execution mode.
+Updated `get_step_input_paths()` function to support independent execution mode using the existing `GCSDataAccess` utility to avoid code duplication.
 
-### 3. Individual CVR Steps
+### 2. Individual CVR Steps
 **Files Modified:**
-- `company_fetching.py` - Modified to fetch latest collection data
-- `pnumber_fetching.py` - Modified to fetch latest company data  
-- `financial_documents.py` - Modified to fetch latest company data
-- `address_geocoding.py` - Modified to fetch latest company and P-number data
-- `data_consolidation.py` - Modified to fetch latest data from all previous steps
+- `company_fetching.py` - Modified to use smart independent execution
+- `pnumber_fetching.py` - Modified to use smart independent execution  
+- `financial_documents.py` - Modified to use smart independent execution
+- `address_geocoding.py` - Modified to use smart independent execution
+- `data_consolidation.py` - Modified to use smart independent execution
 
 Each step now:
 - Uses the updated `get_step_input_paths()` with independent execution parameters
-- Logs which execution mode is being used
-- Provides informative error messages when data is not found
+- Automatically detects whether to use pipeline dependencies or latest GCS files
+- Uses existing `GCSDataAccess.list_files_with_timestamps()` utility for efficient file discovery
 - Gracefully handles missing optional data files
 
 ## How It Works
