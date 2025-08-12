@@ -441,6 +441,7 @@ class BaseSource(Generic[T], ABC):
         stage: str,
         subdataset: str = None,
         conn: Any = None,
+        filename: str = None,
     ) -> None:
         """
         Save data using unified GCS access layer.
@@ -465,7 +466,8 @@ class BaseSource(Generic[T], ABC):
 
         # Create path with timestamp
         timestamp = self.date_pattern
-        filename = "data.parquet"  # Standardized filename
+        if not filename:
+            filename = "data.parquet"  # Default filename
         path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
 
         if self.config.save_local:
