@@ -28,7 +28,7 @@ def test_duckdb_helper() -> bool:
     helper = DuckDBHelper()
 
     # Create a test DataFrame
-    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
+    df = helper.conn.execute("CREATE TABLE temp_table AS SELECT 1 as id, 'test' as name").fetchdf()
 
     print("Created test DataFrame:")
     print(df.head())

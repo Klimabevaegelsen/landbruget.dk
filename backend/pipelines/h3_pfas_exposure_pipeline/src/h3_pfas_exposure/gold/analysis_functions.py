@@ -164,11 +164,11 @@ async def run_cumulative_analysis(
                     0 as glyphosate_containing_applications,
                     '' as crop_types,
                     0 as crop_diversity,
-                    CAST(0.0 AS DOUBLE) 
+                    CAST(0.0 AS DOUBLE)
                         as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                    CAST(0.0 AS DOUBLE) 
+                    CAST(0.0 AS DOUBLE)
                         as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                    CAST(0.0 AS DOUBLE) 
+                    CAST(0.0 AS DOUBLE)
                         as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
                     CAST(0.0 AS DOUBLE) as pesticide_belastning_per_ha,
                     CURRENT_TIMESTAMP as created_at
