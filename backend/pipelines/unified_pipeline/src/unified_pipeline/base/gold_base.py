@@ -1,5 +1,6 @@
 """Base class for gold layer processing."""
 
+import time
 from typing import List
 
 from .duckdb_processor import DuckDBProcessor
