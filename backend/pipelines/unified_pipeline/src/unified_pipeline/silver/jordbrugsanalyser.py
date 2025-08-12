@@ -457,7 +457,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             try:
                 bronze_conn.execute("INSTALL spatial")
                 bronze_conn.execute("LOAD spatial")
-            except:
+            except Exception:
                 pass  # May already be installed
 
             # Create processed table with spatial geometries

@@ -367,7 +367,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                                             "SELECT CAST(date_str AS DATE) as parsed_date FROM temp_date"
                                         ).fetchone()
                                         value = result[0] if result else None
-                                    except:
+                                    except Exception:
                                         value = None
                             except (ValueError, TypeError):
                                 self.log.warning(f"Failed to convert {key} value: {value}")
