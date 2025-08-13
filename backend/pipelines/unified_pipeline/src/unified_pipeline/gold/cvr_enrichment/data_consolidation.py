@@ -377,7 +377,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         if not local_path:
             # Use GCSDataAccess to handle authentication properly
-            self.log.info("Financial data artifact not available, using GCS path with authentication")
+            self.log.info(
+                "Financial data artifact not available, using GCS path with authentication"
+            )
             table_name = f"financial_data_{int(time.time() * 1000)}"
             self.gcs_access.create_table_from_gcs(table_name, input_path)
             
@@ -935,16 +937,22 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     address_latitude,
                 json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as 
                     address_longitude,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
-                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
-                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as address_coordinate_quality,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as address_coordinate_source,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as 
+                    address_coordinate_system,
+                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as 
+                    address_srid,
+                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as 
+                    address_geom_wkt,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as 
+                    address_coordinate_quality,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as 
+                    address_coordinate_source,
                 json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                 json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                 json_array_length(json_extract(json_data, '$.addresses')) as address_count,
                 json_array_length(json_extract(json_data, '$.pnumber_data')) as pnumber_count,
-                json_extract(json_data, '$.financial_document_count')::INTEGER as financial_document_count,
+                json_extract(json_data, '$.financial_document_count')::INTEGER as 
+                    financial_document_count,
                 CASE 
                     WHEN json_extract(json_data, '$.financial_metrics') IS NOT NULL 
                     THEN true 
@@ -1263,16 +1271,22 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     address_latitude,
                 json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as 
                     address_longitude,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
-                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
-                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as address_coordinate_quality,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as address_coordinate_source,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as 
+                    address_coordinate_system,
+                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as 
+                    address_srid,
+                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as 
+                    address_geom_wkt,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as 
+                    address_coordinate_quality,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as 
+                    address_coordinate_source,
                 json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                 json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                 json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
                 json_extract(json_data, '$.source_pipeline_count')::INTEGER as source_pipeline_count,
-                json_extract(json_data, '$.financial_document_count')::INTEGER as financial_document_count,
+                json_extract(json_data, '$.financial_document_count')::INTEGER as 
+                    financial_document_count,
                 json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
                 json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
             FROM unnest($1) as t(json_data)

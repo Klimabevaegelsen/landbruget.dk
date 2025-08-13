@@ -59,7 +59,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
         self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered wetlands and water projects!")
         self.log.info(
-            "🚀 PERFORMANCE: 8x faster than original (1.6M → 200K wetlands, 2.4K → 500 water projects)"
+            "🚀 PERFORMANCE: 8x faster than original "
+            "(1.6M → 200K wetlands, 2.4K → 500 water projects)"
         )
 
         # Proper SPATIAL_JOIN optimization: Water projects (build side) + ALL wetlands (probe side)

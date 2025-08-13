@@ -27,8 +27,9 @@ from urllib.parse import urljoin, urlparse
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 import requests
 from bs4 import BeautifulSoup
-from config import Settings
 from tqdm import tqdm
+
+from config import Settings
 
 
 class InspireBBRFetcher:
