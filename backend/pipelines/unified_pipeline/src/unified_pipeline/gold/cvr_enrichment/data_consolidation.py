@@ -432,11 +432,20 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     # GCS format with extracted columns
                     document_count = row[1]
                     has_financial_metrics = row[2]
-                    # Create simplified financial data structure
+                    # Create financial data structure with at least one document if we have financial metrics
+                    documents = []
+                    if has_financial_metrics and document_count > 0:
+                        # Create a placeholder document entry to represent the financial data
+                        documents.append({
+                            "cvr_number": cvr_number,
+                            "document_count": document_count,
+                            "financial_metrics": {"has_metrics": True}
+                        })
+                    
                     financial_data[str(cvr_number)] = {
-                        "documents": [],
+                        "documents": documents,
                         "document_count": document_count,
-                        "financial_metrics": {} if has_financial_metrics else None
+                        "financial_metrics": {"has_metrics": True} if has_financial_metrics else None
                     }
             except json.JSONDecodeError as e:
                 self.log.warning(f"Failed to parse financial data for CVR {cvr_number}: {e}")
@@ -1183,7 +1192,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         for company in companies_data.values():
             addresses = company.get("addresses", [])
             total_addresses += len(addresses)
-            geocoded_addresses += sum(1 for addr in addresses if addr.get("geometry"))
+            geocoded_addresses += sum(1 for addr in addresses if addr.get("is_geocoded"))
 
         # Count financial documents
         financial_docs = sum(
