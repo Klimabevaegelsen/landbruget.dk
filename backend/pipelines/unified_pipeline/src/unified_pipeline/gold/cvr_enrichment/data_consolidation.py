@@ -380,16 +380,24 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.log.info("Financial data artifact not available, using GCS path with authentication")
             table_name = f"financial_data_{int(time.time() * 1000)}"
             self.gcs_access.create_table_from_gcs(table_name, input_path)
+            
+            # Work with the actual financial data structure as saved by the financial documents step
             result = self.conn.execute(
                 f"""
-                SELECT cvr_number, financial_data_json
+                SELECT 
+                    cvr_number,
+                    COALESCE(document_count, 0) as document_count,
+                    has_financial_metrics
                 FROM {table_name}
-                WHERE financial_data_json IS NOT NULL
+                WHERE cvr_number IS NOT NULL
+                  AND (document_count > 0 OR has_financial_metrics = true)
             """
             ).fetchall()
+            
             # Clean up the temporary table
             self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
         else:
+            # For local artifacts, use the expected JSON format
             result = self.conn.execute(
                 """
                 SELECT cvr_number, financial_data_json
@@ -399,12 +407,29 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 [local_path],
             ).fetchall()
 
-        for cvr_number, financial_json in result:
+        # Process the results based on the data format
+        for row in result:
+            cvr_number = row[0]
             try:
-                financial_doc_data = json.loads(financial_json)
-                financial_data[str(cvr_number)] = financial_doc_data
+                if len(row) == 2:
+                    # Local artifact format with JSON
+                    financial_json = row[1]
+                    financial_doc_data = json.loads(financial_json)
+                    financial_data[str(cvr_number)] = financial_doc_data
+                else:
+                    # GCS format with extracted columns
+                    document_count = row[1]
+                    has_financial_metrics = row[2]
+                    # Create simplified financial data structure
+                    financial_data[str(cvr_number)] = {
+                        "documents": [],
+                        "document_count": document_count,
+                        "financial_metrics": {} if has_financial_metrics else None
+                    }
             except json.JSONDecodeError as e:
                 self.log.warning(f"Failed to parse financial data for CVR {cvr_number}: {e}")
+            except Exception as e:
+                self.log.warning(f"Failed to process financial data for CVR {cvr_number}: {e}")
 
     def _load_address_data(self, input_path: str, addresses_data: Dict[str, Any]) -> None:
         """Load address data from a batch file."""
