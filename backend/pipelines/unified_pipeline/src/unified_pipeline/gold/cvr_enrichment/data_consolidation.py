@@ -836,13 +836,17 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                 json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
+                json_extract(json_data, '$.company_type_description')::VARCHAR as 
+                    company_type_description,
                 json_extract(json_data, '$.status')::VARCHAR as status,
                 json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                 json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
-                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as address_latitude,
-                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as address_longitude,
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as 
+                    advertisement_protection,
+                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as 
+                    address_latitude,
+                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as 
+                    address_longitude,
                 json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
                 json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
                 json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
@@ -1157,13 +1161,17 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                 json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
+                json_extract(json_data, '$.company_type_description')::VARCHAR as 
+                    company_type_description,
                 json_extract(json_data, '$.status')::VARCHAR as status,
                 json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                 json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
-                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as address_latitude,
-                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as address_longitude,
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as 
+                    advertisement_protection,
+                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as 
+                    address_latitude,
+                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as 
+                    address_longitude,
                 json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
                 json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
                 json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
