@@ -48,6 +48,8 @@ on:
 env:
   BUCKET_NAME: landbrugsdata-raw-data
   PYTHON_VERSION: '3.11'
+  # Shared timestamp for all pipeline steps to ensure consistent file paths
+  PIPELINE_START_TIME: ${{ github.run_started_at }}
 
 jobs:
   # Step 1: CVR Collection (Sequential - must run first)
@@ -299,15 +301,23 @@ jobs:
       
       - name: Create Financial Data Artifact
         run: |
-          # Get the latest financial data from GCS and save as artifact
-          LATEST_DIR=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/ | tail -1)
-          if [ ! -z "$LATEST_DIR" ]; then
-            FINANCIAL_PATH="${LATEST_DIR}data.parquet"
+          # Convert GitHub's timestamp to the format used by the pipeline
+          PIPELINE_TIMESTAMP=$(date -d "$PIPELINE_START_TIME" -u +"%Y%m%d_%H%M%S")
+          echo "Using pipeline timestamp: $PIPELINE_TIMESTAMP"
+          
+          # Get the financial data from the expected path using the shared timestamp
+          FINANCIAL_PATH="gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/${PIPELINE_TIMESTAMP}/data.parquet"
+          echo "Looking for financial file at: $FINANCIAL_PATH"
+          
+          if gsutil -q stat "$FINANCIAL_PATH"; then
             gsutil cp "$FINANCIAL_PATH" /tmp/cvr_financial_data.parquet
-            echo "Created financial artifact from: $FINANCIAL_PATH"
+            echo "✅ Created financial artifact from: $FINANCIAL_PATH"
           else
-            echo "No financial data found, creating empty artifact"
+            echo "⚠️ Financial file not found at expected path: $FINANCIAL_PATH"
+            echo "This suggests the financial documents step failed or didn't complete"
+            # Create empty artifact to prevent downstream failures
             touch /tmp/cvr_financial_data.parquet
+            echo "Created empty financial artifact"
           fi
       
       - name: Upload Financial Data Artifact
@@ -379,15 +389,23 @@ jobs:
       
       - name: Create Address Data Artifact
         run: |
-          # Get the latest address data from GCS and save as artifact
-          LATEST_DIR=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment/ | tail -1)
-          if [ ! -z "$LATEST_DIR" ]; then
-            ADDRESS_PATH="${LATEST_DIR}address_geocoding.parquet"
+          # Convert GitHub's timestamp to the format used by the pipeline
+          PIPELINE_TIMESTAMP=$(date -d "$PIPELINE_START_TIME" -u +"%Y%m%d_%H%M%S")
+          echo "Using pipeline timestamp: $PIPELINE_TIMESTAMP"
+          
+          # Get the address data from the expected path using the shared timestamp
+          ADDRESS_PATH="gs://landbrugsdata-raw-data/gold/cvr_enrichment/${PIPELINE_TIMESTAMP}/address_geocoding.parquet"
+          echo "Looking for address file at: $ADDRESS_PATH"
+          
+          if gsutil -q stat "$ADDRESS_PATH"; then
             gsutil cp "$ADDRESS_PATH" /tmp/cvr_address_data.parquet
-            echo "Created address artifact from: $ADDRESS_PATH"
+            echo "✅ Created address artifact from: $ADDRESS_PATH"
           else
-            echo "No address data found, creating empty artifact"
+            echo "⚠️ Address file not found at expected path: $ADDRESS_PATH"
+            echo "This suggests the address geocoding step failed or didn't complete"
+            # Create empty artifact to prevent downstream failures
             touch /tmp/cvr_address_data.parquet
+            echo "Created empty address artifact"
           fi
       
       - name: Upload Address Data Artifact
