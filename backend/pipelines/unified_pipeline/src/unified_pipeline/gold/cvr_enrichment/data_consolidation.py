@@ -1629,33 +1629,51 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
     def _process_financial_chunk(self, json_strings: list, table_name: str) -> None:
         """Process financial documents for a chunk of companies with sophisticated metrics (ported from original)."""
+        # Check for financial data in the simplified structure from financial documents step
         financial_check = self.conn.execute(
             """
             SELECT COUNT(*)
             FROM unnest($1) as t(json_data)
-            WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
-            AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+            WHERE (json_extract(json_data, '$.financial_documents') IS NOT NULL
+                   AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0)
+                OR (json_extract(json_data, '$.document_count') IS NOT NULL
+                    AND json_extract(json_data, '$.document_count')::INTEGER > 0)
         """,
             [json_strings],
         ).fetchone()[0]
 
         if financial_check > 0:
-            # Get available financial_metrics fields from actual data
-            available_fields = self._get_available_financial_fields(json_strings)
-
-            financial_schema = self.conn.execute(
+            # Check if we have detailed financial documents structure or simplified structure  
+            has_detailed_structure = self.conn.execute(
                 """
-                WITH financial_sample AS (
-                    SELECT json_extract(json_data, '$.financial_documents') as financial_json
-                    FROM unnest($1) as t(json_data)
-                    WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
-                    AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
-                    LIMIT 1
-                )
-                SELECT json_structure(financial_json) FROM financial_sample
+                SELECT COUNT(*) > 0
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
             """,
                 [json_strings],
-            ).fetchone()
+            ).fetchone()[0]
+            
+            if has_detailed_structure:
+                # Original detailed processing
+                available_fields = self._get_available_financial_fields(json_strings)
+                financial_schema = self.conn.execute(
+                    """
+                    WITH financial_sample AS (
+                        SELECT json_extract(json_data, '$.financial_documents') as financial_json
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
+                        AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+                        LIMIT 1
+                    )
+                    SELECT json_structure(financial_json) FROM financial_sample
+                """,
+                    [json_strings],
+                ).fetchone()
+            else:
+                # Simplified structure from financial documents step - skip detailed processing
+                self.log.info("Financial data uses simplified structure - skipping detailed financial table creation")
+                return
 
             if financial_schema and financial_schema[0]:
                 # Build dynamic financial fields based on available data
