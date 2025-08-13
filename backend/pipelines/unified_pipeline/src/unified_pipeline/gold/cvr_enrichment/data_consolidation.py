@@ -7,6 +7,7 @@ that match the original CVR enrichment output format.
 """
 
 import json
+import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -285,17 +286,27 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.log.info("Using company data from artifact")
 
         if not local_path:
-            # Fallback: use GCS path directly for local development
-            local_path = input_path
-
-        result = self.conn.execute(
+            # Use GCSDataAccess to handle authentication properly
+            table_name = f"company_data_{int(time.time() * 1000)}"
+            self.gcs_access.create_table_from_gcs(table_name, input_path)
+            result = self.conn.execute(
+                f"""
+                SELECT cvr_number, company_name, company_data_json
+                FROM {table_name}
+                WHERE company_data_json IS NOT NULL
             """
-            SELECT cvr_number, company_name, company_data_json
-            FROM read_parquet(?)
-            WHERE company_data_json IS NOT NULL
-        """,
-            [local_path],
-        ).fetchall()
+            ).fetchall()
+            # Clean up the temporary table
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        else:
+            result = self.conn.execute(
+                """
+                SELECT cvr_number, company_name, company_data_json
+                FROM read_parquet(?)
+                WHERE company_data_json IS NOT NULL
+            """,
+                [local_path],
+            ).fetchall()
 
         for cvr_number, company_name, company_json in result:
             try:
@@ -318,17 +329,27 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.log.info("Using P-number data from artifact")
 
         if not local_path:
-            # Fallback: use GCS path directly for local development
-            local_path = input_path
-
-        result = self.conn.execute(
+            # Use GCSDataAccess to handle authentication properly
+            table_name = f"pnumber_data_{int(time.time() * 1000)}"
+            self.gcs_access.create_table_from_gcs(table_name, input_path)
+            result = self.conn.execute(
+                f"""
+                SELECT p_number, parent_cvr_number, pnumber_data_json
+                FROM {table_name}
+                WHERE pnumber_data_json IS NOT NULL
             """
-            SELECT p_number, parent_cvr_number, pnumber_data_json
-            FROM read_parquet(?)
-            WHERE pnumber_data_json IS NOT NULL
-        """,
-            [local_path],
-        ).fetchall()
+            ).fetchall()
+            # Clean up the temporary table
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        else:
+            result = self.conn.execute(
+                """
+                SELECT p_number, parent_cvr_number, pnumber_data_json
+                FROM read_parquet(?)
+                WHERE pnumber_data_json IS NOT NULL
+            """,
+                [local_path],
+            ).fetchall()
 
         for p_number, parent_cvr, pnumber_json in result:
             try:
@@ -355,18 +376,28 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.log.warning(f"Financial artifact not found: {artifact_path}")
 
         if not local_path:
-            # Fallback: use GCS path directly for local development or when artifact not available
-            self.log.info("Financial data artifact not available, using GCS path directly")
-            local_path = input_path
-
-        result = self.conn.execute(
+            # Use GCSDataAccess to handle authentication properly
+            self.log.info("Financial data artifact not available, using GCS path with authentication")
+            table_name = f"financial_data_{int(time.time() * 1000)}"
+            self.gcs_access.create_table_from_gcs(table_name, input_path)
+            result = self.conn.execute(
+                f"""
+                SELECT cvr_number, financial_data_json
+                FROM {table_name}
+                WHERE financial_data_json IS NOT NULL
             """
-            SELECT cvr_number, financial_data_json
-            FROM read_parquet(?)
-            WHERE financial_data_json IS NOT NULL
-        """,
-            [local_path],
-        ).fetchall()
+            ).fetchall()
+            # Clean up the temporary table
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        else:
+            result = self.conn.execute(
+                """
+                SELECT cvr_number, financial_data_json
+                FROM read_parquet(?)
+                WHERE financial_data_json IS NOT NULL
+            """,
+                [local_path],
+            ).fetchall()
 
         for cvr_number, financial_json in result:
             try:
@@ -392,18 +423,28 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.log.warning(f"Address artifact not found: {artifact_path}")
 
         if not local_path:
-            # Fallback: use GCS path directly for local development or when artifact not available
-            self.log.info("Address data artifact not available, using GCS path directly")
-            local_path = input_path
-
-        result = self.conn.execute(
+            # Use GCSDataAccess to handle authentication properly
+            self.log.info("Address data artifact not available, using GCS path with authentication")
+            table_name = f"address_data_{int(time.time() * 1000)}"
+            self.gcs_access.create_table_from_gcs(table_name, input_path)
+            result = self.conn.execute(
+                f"""
+                SELECT source_type, cvr_number, p_number, address_data_json
+                FROM {table_name}
+                WHERE address_data_json IS NOT NULL
             """
-            SELECT source_type, cvr_number, p_number, address_data_json
-            FROM read_parquet(?)
-            WHERE address_data_json IS NOT NULL
-        """,
-            [local_path],
-        ).fetchall()
+            ).fetchall()
+            # Clean up the temporary table
+            self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        else:
+            result = self.conn.execute(
+                """
+                SELECT source_type, cvr_number, p_number, address_data_json
+                FROM read_parquet(?)
+                WHERE address_data_json IS NOT NULL
+            """,
+                [local_path],
+            ).fetchall()
 
         for source_type, cvr_number, p_number, address_json in result:
             try:
