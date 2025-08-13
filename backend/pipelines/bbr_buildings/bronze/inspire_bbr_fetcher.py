@@ -20,6 +20,8 @@ import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from queue import Queue
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
@@ -54,7 +56,7 @@ class InspireBBRFetcher:
         sample_size: int | None = None,
         return_data: bool = False,
         pipeline_start_time: datetime = None,
-    ):
+    ) -> dict | None:
         """
         Fetch INSPIRE BBR data and enrich with GraphQL API.
 
@@ -145,10 +147,10 @@ class InspireBBRFetcher:
     def fetch_data_streaming(
         self,
         output_dir: Path,
-        building_queue,
+        building_queue: Queue[tuple[list[str], list[dict[str, Any]]]],
         sample_size: int | None = None,
         pipeline_start_time: datetime = None,
-    ):
+    ) -> dict | None:
         """
         Fetch INSPIRE BBR data and stream building IDs to queue as they are processed.
 
@@ -202,7 +204,9 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to fetch INSPIRE BBR data in streaming mode: {e}")
             raise
 
-    def _extract_and_process_with_graphql(self, zip_path: Path, sample_size: int | None):
+    def _extract_and_process_with_graphql(
+        self, zip_path: Path, sample_size: int | None
+    ) -> dict[str, Any]:
         """
         Extract GPKG and process it with GraphQL API enrichment.
         """
@@ -231,7 +235,9 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to extract and process with GraphQL: {e}")
             raise
 
-    def _load_and_enrich_with_graphql(self, gpkg_path: Path, sample_size: int | None):
+    def _load_and_enrich_with_graphql(
+        self, gpkg_path: Path, sample_size: int | None
+    ) -> dict[str, Any]:
         """
         Load INSPIRE BBR data and enrich with GraphQL API for detailed BBR codes.
 
@@ -272,7 +278,7 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to load and enrich with GraphQL: {e}")
             raise
 
-    def _extract_sample_buildings(self, conn, gpkg_path: Path, sample_size: int):
+    def _extract_sample_buildings(self, conn: Any, gpkg_path: Path, sample_size: int) -> dict[str, list[dict[str, Any]]]:
         """Extract sample buildings for testing"""
 
         # Define target categories
@@ -329,7 +335,7 @@ class InspireBBRFetcher:
 
         return all_buildings
 
-    def _extract_all_buildings(self, conn, gpkg_path: Path):
+    def _extract_all_buildings(self, conn: Any, gpkg_path: Path) -> dict[str, list[dict[str, Any]]]:
         """Extract all relevant buildings for production"""
 
         # Extract all residential, agriculture, and publicServices buildings
@@ -345,7 +351,8 @@ class InspireBBRFetcher:
             numberOfDwellings as dwellings,
             addressRepresentation as address,
             CASE 
-                WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings') THEN 'residential'
+                WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings') 
+                    THEN 'residential'
                 WHEN currentUse = 'agriculture' THEN 'agriculture'
                 WHEN currentUse = 'publicServices' THEN 'publicServices'
                 ELSE 'other'
@@ -386,7 +393,7 @@ class InspireBBRFetcher:
 
         return buildings
 
-    def _enrich_with_graphql_api(self, buildings_data):
+    def _enrich_with_graphql_api(self, buildings_data: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
         """
         Enrich building data with detailed BBR codes from GraphQL API.
 
@@ -452,7 +459,7 @@ class InspireBBRFetcher:
         # Return the list of buildings directly - no DataFrame conversion needed
         return {"attributes_df": final_buildings, "building_ids": building_ids}
 
-    def _enrich_buildings_with_graphql(self, buildings, category_name, filter_codes=None):
+    def _enrich_buildings_with_graphql(self, buildings: list[dict[str, Any]], category_name: str, filter_codes: list[str] | None = None) -> list[dict[str, Any]]:
         """
         Enrich buildings with GraphQL API data and optionally filter by BBR codes.
         """
@@ -522,7 +529,7 @@ class InspireBBRFetcher:
 
         return enriched_buildings
 
-    def _query_graphql_for_bbr_codes(self, uuids, category_name, batch_size=50):
+    def _query_graphql_for_bbr_codes(self, uuids: list[str], category_name: str, batch_size: int = 50) -> dict[str, dict[str, Any]]:
         """
         Query GraphQL API to get BBR usage codes for building UUIDs using proper batch queries.
         """
@@ -934,7 +941,7 @@ class InspireBBRFetcher:
             raise
 
     def _extract_and_process_streaming(
-        self, zip_path: Path, sample_size: int | None, building_queue
+        self, zip_path: Path, sample_size: int | None, building_queue: Queue[tuple[list[str], list[dict[str, Any]]]]
     ) -> None:
         """
         Extract GPKG and process it with streaming to building queue.
@@ -963,7 +970,7 @@ class InspireBBRFetcher:
             raise
 
     def _load_and_stream_with_graphql(
-        self, gpkg_path: Path, sample_size: int | None, building_queue
+        self, gpkg_path: Path, sample_size: int | None, building_queue: Queue[tuple[list[str], list[dict[str, Any]]]]
     ) -> None:
         """
         Load INSPIRE BBR data and stream building IDs to queue as they are processed.
@@ -1081,7 +1088,7 @@ class InspireBBRFetcher:
             raise
 
     def _enrich_and_stream_category(
-        self, building_uuids, category_name, building_queue, conn
+        self, building_uuids: list[str], category_name: str, building_queue: Queue[tuple[list[str], list[dict[str, Any]]]], conn: Any
     ) -> None:
         """
         Enrich buildings with GraphQL data and stream to queue in batches.

@@ -40,7 +40,7 @@ except ImportError as e:
     print(f"CVR collection not available: {e}")
 
 
-def _get_optimized_gcs_access():
+def _get_optimized_gcs_access() -> type | None:
     """
     Get optimized GCS access with robust import handling.
 
@@ -86,7 +86,7 @@ class GCSStorage:
                 self.gcs_access = None
                 self.use_optimized = False
 
-    def _check_gcs_available(self):
+    def _check_gcs_available(self) -> bool:
         """Check if GCS is available (Google Cloud Storage library is installed)."""
         try:
             _ = storage
@@ -95,7 +95,7 @@ class GCSStorage:
             logging.warning("Google Cloud Storage library not available. Using local storage only.")
             return False
 
-    def upload_file(self, local_path, gcs_path=None):
+    def upload_file(self, local_path, gcs_path=None) -> bool:
         """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
@@ -186,7 +186,7 @@ class SilverPipeline:
         self.df = None
         self.input_csv = None
 
-    def setup_output_directories(self):
+    def setup_output_directories(self) -> bool:
         """Create output directories if they don't exist."""
         try:
             os.makedirs(self.silver_dir, exist_ok=True)
@@ -199,7 +199,7 @@ class SilverPipeline:
             self.logger.error(f"Error creating output directories: {str(e)}")
             return False
 
-    def find_latest_bronze_data(self):
+    def find_latest_bronze_data(self) -> bool:
         """Find the latest bronze directory and CSV file."""
         try:
             self.logger.info(f"Looking for bronze data in: {self.data_root}")
@@ -222,7 +222,7 @@ class SilverPipeline:
             self.logger.error(f"Error finding latest bronze data: {str(e)}")
             return False
 
-    def connect_database(self):
+    def connect_database(self) -> bool:
         """Connect to DuckDB via Ibis."""
         try:
             self.con = ibis.duckdb.connect("data.ddb")
@@ -232,7 +232,7 @@ class SilverPipeline:
             self.logger.error(f"Error connecting to DuckDB: {str(e)}")
             return False
 
-    def load_data(self):
+    def load_data(self) -> bool:
         """Load CSV data using Ibis."""
         try:
             self.raw = self.con.read_csv(self.input_csv)
@@ -242,7 +242,7 @@ class SilverPipeline:
             self.logger.error(f"Error loading data from CSV: {str(e)}")
             return False
 
-    def rename_columns(self):
+    def rename_columns(self) -> bool:
         """Rename columns according to conventions."""
         try:
             # Stepwise renaming to avoid IbisTypeError
@@ -257,7 +257,7 @@ class SilverPipeline:
             self.logger.error(f"Error renaming columns: {str(e)}")
             return False
 
-    def validate_column_names(self):
+    def validate_column_names(self) -> bool:
         """Validate column names against conventions."""
         try:
             for name in self.raw.columns:

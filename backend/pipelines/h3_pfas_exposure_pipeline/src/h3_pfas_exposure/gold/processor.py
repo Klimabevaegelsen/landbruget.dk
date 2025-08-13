@@ -960,7 +960,7 @@ class H3PFASProcessorRefactored:
         except Exception as e:
             self.log.error(f"❌ Could not load kommune boundaries from GCS: {e}")
             self.log.error("Kommune boundaries are required for proper PMTiles generation")
-            raise ValueError(f"Failed to load kommune boundaries: {e}")
+            raise ValueError(f"Failed to load kommune boundaries: {e}") from e
 
         return kommune_table
 

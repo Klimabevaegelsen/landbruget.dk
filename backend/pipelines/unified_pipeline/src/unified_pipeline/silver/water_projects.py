@@ -21,8 +21,10 @@ from typing import Any, Optional
 
 #   # MIGRATED: Replaced with DuckDB-spatial operations
 #   # MIGRATED: Replaced with DuckDB operations
-# from shapely import MultiPolygon, Polygon, unary_union, wkt  # MIGRATED: Replaced with DuckDB ST_* functions
-# from shapely.validation import explain_validity  # MIGRATED: Using DuckDB ST_IsValid instead
+# from shapely import MultiPolygon, Polygon, unary_union, wkt
+# MIGRATED: Replaced with DuckDB ST_* functions
+# from shapely.validation import explain_validity
+# MIGRATED: Using DuckDB ST_IsValid instead
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.timing import AsyncTimer, timed

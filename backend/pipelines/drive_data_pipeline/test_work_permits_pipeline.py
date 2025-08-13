@@ -14,11 +14,14 @@ from pathlib import Path
 parent_dir = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(parent_dir))
 
-from backend.pipelines.drive_data_pipeline.bronze.metadata import MetadataManager
-from backend.pipelines.drive_data_pipeline.config.settings import get_settings
-from backend.pipelines.drive_data_pipeline.silver.processor import SilverProcessor
-from backend.pipelines.drive_data_pipeline.utils.logging import get_logger, setup_logging
-from backend.pipelines.drive_data_pipeline.utils.storage import get_storage_manager
+from backend.pipelines.drive_data_pipeline.bronze.metadata import MetadataManager  # noqa: E402
+from backend.pipelines.drive_data_pipeline.config.settings import get_settings  # noqa: E402
+from backend.pipelines.drive_data_pipeline.silver.processor import SilverProcessor  # noqa: E402
+from backend.pipelines.drive_data_pipeline.utils.logging import (  # noqa: E402
+    get_logger,
+    setup_logging,
+)
+from backend.pipelines.drive_data_pipeline.utils.storage import get_storage_manager  # noqa: E402
 
 
 def test_work_permits_pipeline(pdf_path: Path) -> bool | None:

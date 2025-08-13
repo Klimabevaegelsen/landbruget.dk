@@ -58,7 +58,8 @@ def create_antibiotic_usage_table(
     # --- START Check if vetstat_raw has columns ---
     if not vetstat_raw.columns:
         logging.warning(
-            "Cannot create antibiotic_usage: vetstat_raw table exists but has no columns (likely empty source). Creating empty table with schema."
+            "Cannot create antibiotic_usage: vetstat_raw table exists but has no columns "
+            "(likely empty source). Creating empty table with schema."
         )
         # ✅ MIGRATION: Create empty table using DuckDB directly instead of pandas
         empty_table_sql = """

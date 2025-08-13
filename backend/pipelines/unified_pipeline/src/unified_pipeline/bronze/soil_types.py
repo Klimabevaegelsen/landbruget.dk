@@ -125,7 +125,7 @@ class SoilTypesBronze(BaseSource[SoilTypesBronzeConfig], BronzeJobInterface):
 
         except Exception as e:
             self.log.error(f"Error preparing soil types data fetch: {str(e)}")
-            raise Exception(f"Failed to prepare soil types data fetch: {str(e)}")
+            raise Exception(f"Failed to prepare soil types data fetch: {str(e)}") from e
 
     async def run(self) -> Optional[Any]:
         """

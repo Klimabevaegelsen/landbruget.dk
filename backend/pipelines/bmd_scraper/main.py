@@ -202,7 +202,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     """Main entry point for the BMD Scraper pipeline."""
     args = parse_args()
     logger.info(f"Starting BMD Scraper pipeline (stage: {args.stage})")

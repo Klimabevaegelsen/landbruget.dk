@@ -1,7 +1,9 @@
 """Integration test for end-to-end pipeline execution."""
 
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,7 +12,7 @@ from drive_data_pipeline.main import main
 
 
 @pytest.fixture
-def mock_drive_service():
+def mock_drive_service() -> Generator[MagicMock, None, None]:
     """Mock the Google Drive service."""
     with patch("drive_data_pipeline.bronze.drive.auth.get_drive_service") as mock_service:
         # Configure mock to return a fake service
@@ -19,7 +21,7 @@ def mock_drive_service():
 
 
 @pytest.fixture
-def mock_drive_files():
+def mock_drive_files() -> list[dict[str, Any]]:
     """Mock files returned from Google Drive API."""
     # Sample file structure for testing
     return [
@@ -43,17 +45,17 @@ def mock_drive_files():
 
 
 @pytest.fixture
-def mock_fetcher(mock_drive_service, mock_drive_files):
+def mock_fetcher(mock_drive_service: MagicMock, mock_drive_files: list[dict[str, Any]]) -> Generator[MagicMock, None, None]:
     """Mock the GoogleDriveFetcher class."""
-    with patch("drive_data_pipeline.bronze.drive.GoogleDriveFetcher") as MockFetcher:
+    with patch("drive_data_pipeline.bronze.drive.GoogleDriveFetcher") as mock_fetcher_patch:
         fetcher_instance = MagicMock()
-        MockFetcher.return_value = fetcher_instance
+        mock_fetcher_patch.return_value = fetcher_instance
 
         # Mock list_folder_contents to return sample files
         fetcher_instance.list_folder_contents.return_value = mock_drive_files
 
         # Mock download_file to create a simple file
-        def mock_download(file_id, destination_path) -> bool:
+        def mock_download(file_id: str, destination_path: Path) -> bool:
             # Create a simple test file at the destination
             with open(destination_path, "w") as f:
                 if destination_path.endswith(".xlsx"):
@@ -68,7 +70,7 @@ def mock_fetcher(mock_drive_service, mock_drive_files):
 
 
 @pytest.fixture
-def test_settings():
+def test_settings() -> Generator[Settings, None, None]:
     """Create test settings with temporary directories."""
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -93,7 +95,7 @@ def test_settings():
 
 
 @pytest.mark.integration
-def test_end_to_end_pipeline(test_settings, mock_fetcher, monkeypatch) -> None:
+def test_end_to_end_pipeline(test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test the full pipeline execution from Bronze to Silver."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -114,7 +116,7 @@ def test_end_to_end_pipeline(test_settings, mock_fetcher, monkeypatch) -> None:
         mock_excel_transformer.return_value = excel_transformer
         mock_pdf_transformer.return_value = pdf_transformer
 
-        def mock_transform(file_path, output_dir):
+        def mock_transform(file_path: Path, output_dir: Path) -> Path:
             # Create a mock transformed file
             output_file = Path(output_dir) / f"{Path(file_path).stem}.parquet"
             with open(output_file, "w") as f:
@@ -162,7 +164,7 @@ def test_end_to_end_pipeline(test_settings, mock_fetcher, monkeypatch) -> None:
 
 
 @pytest.mark.integration
-def test_bronze_only_mode(test_settings, mock_fetcher, monkeypatch) -> None:
+def test_bronze_only_mode(test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test the pipeline in bronze-only mode."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -198,7 +200,7 @@ def test_bronze_only_mode(test_settings, mock_fetcher, monkeypatch) -> None:
 
 
 @pytest.mark.integration
-def test_silver_only_mode(test_settings, mock_fetcher, monkeypatch) -> None:
+def test_silver_only_mode(test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test the pipeline in silver-only mode."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -226,7 +228,7 @@ def test_silver_only_mode(test_settings, mock_fetcher, monkeypatch) -> None:
         excel_transformer = MagicMock()
         mock_excel_transformer.return_value = excel_transformer
 
-        def mock_transform(file_path, output_dir):
+        def mock_transform(file_path: Path, output_dir: Path) -> Path:
             # Create a mock transformed file
             output_file = Path(output_dir) / f"{Path(file_path).stem}.parquet"
             with open(output_file, "w") as f:
@@ -266,7 +268,7 @@ def test_silver_only_mode(test_settings, mock_fetcher, monkeypatch) -> None:
 
 
 @pytest.mark.integration
-def test_error_recovery(test_settings, mock_fetcher, monkeypatch) -> None:
+def test_error_recovery(test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     """Test the pipeline's error recovery capabilities."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -276,7 +278,7 @@ def test_error_recovery(test_settings, mock_fetcher, monkeypatch) -> None:
     original_download = mock_fetcher.download_file.side_effect
     mock_file_ids = ["file1", "file2"]
 
-    def download_with_error(file_id, destination_path):
+    def download_with_error(file_id: str, destination_path: Path) -> bool:
         if file_id == mock_file_ids[1]:
             raise Exception("Simulated download error")
         return original_download(file_id, destination_path)

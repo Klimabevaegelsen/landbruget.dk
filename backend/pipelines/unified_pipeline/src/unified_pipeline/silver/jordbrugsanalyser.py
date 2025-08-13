@@ -1,7 +1,8 @@
 """
 Silver layer data processing for Jordbrugsanalyser Marker data.
 
-This module handles the processing of raw WFS responses from the bronze layer and convert them into structured tables with proper field mappings and data types.
+This module handles the processing of raw WFS responses from the bronze layer and
+convert them into structured tables with proper field mappings and data types.
 
 The module contains:
 - JordbrugsanalyserSilverConfig: Configuration class for the silver processing
@@ -293,7 +294,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                     try:
                         raw_value = elem.text.strip()
                         if raw_value:
-                            if converter == str:
+                            if converter is str:
                                 feature_data[target_field] = self._clean_text_value(raw_value)
                             else:
                                 feature_data[target_field] = converter(raw_value)

@@ -5,6 +5,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from google.cloud import storage
@@ -15,7 +16,7 @@ load_dotenv()
 
 
 # Try to import optimized GCS access with fallback
-def _get_optimized_gcs_access():
+def _get_optimized_gcs_access() -> Optional[Any]:
     """
     Get optimized GCS access with robust import handling.
 
@@ -42,7 +43,7 @@ OptimizedGCSDataAccess = _get_optimized_gcs_access()
 class GCSStorage:
     """Google Cloud Storage backend for arbejdstilsynet_inspections files - OPTIMIZED VERSION."""
 
-    def __init__(self, bucket_name, prefix="bronze/arbejdstilsynet_inspections"):
+    def __init__(self, bucket_name, prefix="bronze/arbejdstilsynet_inspections") -> None:
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.is_available = self._check_gcs_available()
@@ -61,7 +62,7 @@ class GCSStorage:
                 self.gcs_access = None
                 self.use_optimized = False
 
-    def _check_gcs_available(self):
+    def _check_gcs_available(self) -> bool:
         """Check if GCS is available (Google Cloud Storage library is installed)."""
         try:
             _ = storage
@@ -70,7 +71,7 @@ class GCSStorage:
             logging.warning("Google Cloud Storage library not available. Using local storage only.")
             return False
 
-    def upload_file(self, local_path, gcs_path=None):
+    def upload_file(self, local_path, gcs_path=None) -> bool:
         """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
@@ -117,7 +118,7 @@ class BronzePipeline:
         source_url: str | None,
         gcs_bucket: str | None = None,
         log_level: str = "INFO",
-    ):
+    ) -> None:
         self.pipeline_name = pipeline_name
         self.source_url = source_url
         self.pipeline_root_dir = Path(__file__).resolve().parent.parent

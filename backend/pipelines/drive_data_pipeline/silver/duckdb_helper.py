@@ -1,11 +1,17 @@
 """DuckDB and Ibis integration for Silver layer."""
 
 from pathlib import Path
+from typing import Any
 
 import duckdb
 import ibis
 
-# ✅ MIGRATION: Removed pandas import - using pure DuckDB/Ibis operations
+# pandas import needed for DataFrame type annotation
+try:
+    import pandas as pd
+    DataFrame = pd.DataFrame
+except ImportError:
+    DataFrame = Any
 from ..utils.logging import get_logger
 
 # Get logger
@@ -37,7 +43,7 @@ class DuckDBHelper:
         # Initialize Ibis connection - use the path string, not the connection object
         self.ibis_conn = ibis.duckdb.connect(self.db_path)
 
-    def dataframe_to_ibis(self, df, table_name: str) -> ibis.expr.types.Table:
+    def dataframe_to_ibis(self, df: DataFrame, table_name: str) -> ibis.expr.types.Table:
         """Convert a pandas DataFrame to an Ibis table.
 
         Args:
@@ -61,7 +67,7 @@ class DuckDBHelper:
             logger.error(f"Failed to convert DataFrame to Ibis table: {str(e)}")
             raise
 
-    def ibis_to_dataframe(self, table: ibis.expr.types.Table):
+    def ibis_to_dataframe(self, table: ibis.expr.types.Table) -> Any:
         """Convert an Ibis table to pandas DataFrame.
 
         Args:

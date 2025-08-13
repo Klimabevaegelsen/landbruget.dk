@@ -11,7 +11,7 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    def get_logger():
+    def get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
 
@@ -27,7 +27,7 @@ class ValidationResult:
     errors: list[str] = None
     warnings: list[str] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize lists if None."""
         if self.errors is None:
             self.errors = []

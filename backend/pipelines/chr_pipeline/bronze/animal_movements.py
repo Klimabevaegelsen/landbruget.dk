@@ -129,7 +129,8 @@ def load_animal_movements(
             # Mark extremely slow herds as problematic
             if request_duration > 1800:  # 30 minutes
                 logger.error(
-                    f"🐌 Extremely slow request for herd {herd_number}: {request_duration:.1f}s - marking as problematic"
+                    f"🐌 Extremely slow request for herd {herd_number}: {request_duration:.1f}s - "
+                    f"marking as problematic"
                 )
                 add_problematic_herd(herd_number)
                 return {

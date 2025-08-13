@@ -99,7 +99,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info("✅ Spatial extension is working (loaded by BaseSource)")
         except Exception as e:
             self.log.error(f"❌ Spatial extension not available from BaseSource: {e}")
-            raise RuntimeError("Spatial extension is required but not available from BaseSource")
+            raise RuntimeError("Spatial extension is required but not available from BaseSource") from e
 
         # Apply memory optimizations
         self._configure_memory_optimizations()
@@ -517,7 +517,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return latest_file
 
         except Exception as e:
-            raise FileNotFoundError(f"No silver data found for {dataset}: {e}")
+            raise FileNotFoundError(f"No silver data found for {dataset}: {e}") from e
 
     def _load_silver_data_to_table(
         self, dataset: str, table_name: str, silver_data: Optional[Dict[str, Any]]
@@ -1128,7 +1128,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.error(f"❌ Spatial extension not available: {spatial_e}")
                 raise RuntimeError(
                     "Spatial extension is required but not available from BaseSource"
-                )
+                ) from spatial_e
 
             # Debug: Check the structure and sample data of dst_zones_raw table
             try:

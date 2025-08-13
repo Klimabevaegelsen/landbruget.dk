@@ -371,7 +371,11 @@ For applications where API limits are available:
         major_excesses = results[results["compliance_status"] == "MAJOR_EXCESS"].nlargest(10, "dosage_ratio")
         if len(major_excesses) > 0:
             for _, row in major_excesses.iterrows():
-                report += f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: {row['dosage_ratio']:.1f}x limit ({row['our_dosage_per_ha']:.2f} {row['our_unit']}/ha vs {row['api_max_dosage_app']:.2f} {row['api_dosage_unit']}/ha)\n"
+                report += (
+                    f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: "
+                    f"{row['dosage_ratio']:.1f}x limit ({row['our_dosage_per_ha']:.2f} {row['our_unit']}/ha vs "
+                    f"{row['api_max_dosage_app']:.2f} {row['api_dosage_unit']}/ha)\n"
+                )
         else:
             report += "None found.\n"
 
@@ -382,14 +386,18 @@ For applications where API limits are available:
         unit_mismatches = results[results["compliance_status"] == "UNIT_MISMATCH"]
         if len(unit_mismatches) > 0:
             for _, row in unit_mismatches.head(10).iterrows():
-                report += f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: Our unit: {row['our_unit']}, API unit: {row['api_dosage_unit']}\n"
+                report += (
+                    f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: "
+                    f"Our unit: {row['our_unit']}, API unit: {row['api_dosage_unit']}\n"
+                )
         else:
             report += "None found.\n"
 
         report += f"""
 ## Methodology Notes
 
-1. **Dosage Calculation**: Our data contains total dosage per application, converted to per-hectare by dividing by area_ha
+1. **Dosage Calculation**: Our data contains total dosage per application, converted to per-hectare by
+   dividing by area_ha
 2. **Unit Mapping**: 2=kg, 4=l, 5=tablets (based on codebase analysis)
 3. **Crop Matching**: Used comprehensive crop code mapping with {len(self.crop_mapping)} validated matches
 4. **API Source**: Plante IT Pesticide Service (pesticideservice.dlbr.dk)
@@ -401,7 +409,9 @@ For applications where API limits are available:
 
 ## Data Quality Assessment
 
-This analysis validates **{summary["api_match_rate_pct"]}%** of our pesticide applications against official API dosage recommendations, providing strong regulatory compliance insights for Danish agricultural pesticide usage.
+This analysis validates **{summary["api_match_rate_pct"]}%** of our pesticide applications against official
+API dosage recommendations, providing strong regulatory compliance insights for Danish agricultural
+pesticide usage.
 """
 
         with open(output_path, "w") as f:

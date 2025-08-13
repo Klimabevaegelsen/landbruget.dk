@@ -14,10 +14,10 @@ except ImportError:
     import logging
     import time
 
-    def get_logger():
+    def get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
-    def generate_timestamp():
+    def generate_timestamp() -> int:
         return int(time.time())
 
     class StorageError(Exception):

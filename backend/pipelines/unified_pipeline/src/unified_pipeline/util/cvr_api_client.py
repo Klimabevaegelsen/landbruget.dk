@@ -788,7 +788,9 @@ class CVRAPIClient:
                         # Show the complete address that was attempted for geocoding
                         failed_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                            failed_address = (
+                                f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                            )
                         self.log.warning(f"Failed to geocode address: {failed_address}")
 
                 enriched_addresses.append(enriched_address)
@@ -1920,7 +1922,9 @@ class CVRAPIClient:
                     if should_geocode:
                         failed_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                            failed_address = (
+                                f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                            )
                         self.log.warning(f"Failed to geocode P-number address: {failed_address}")
 
                 enriched_addresses.append(enriched_address)

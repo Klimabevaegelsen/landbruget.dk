@@ -50,7 +50,8 @@ class CVREnrichmentSharedConfig(BaseModel):
 
     api_batch_size: int = Field(
         default=100,
-        description="Number of CVR numbers or P-numbers to fetch per API call using 'terms' query (optimized for maximum efficiency)",
+        description="Number of CVR numbers or P-numbers to fetch per API call using "
+                    "'terms' query (optimized for maximum efficiency)",
     )
 
     # Address geocoding configuration
@@ -112,7 +113,8 @@ class CVREnrichmentSharedConfig(BaseModel):
     # Independent execution configuration
     enable_independent_execution: bool = Field(
         default=True,
-        description="Whether to enable independent step execution by fetching latest files from GCS",
+        description="Whether to enable independent step execution by fetching "
+                    "latest files from GCS",
     )
 
     max_days_back_for_inputs: int = Field(
@@ -298,7 +300,8 @@ def _get_latest_input_paths_from_gcs(
 
 def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int) -> Optional[str]:
     """
-    Find the latest file matching a pattern that contains company data (has company_data_json column).
+    Find the latest file matching a pattern that contains company data
+    (has company_data_json column).
 
     Args:
         gcs_access: GCSDataAccess instance

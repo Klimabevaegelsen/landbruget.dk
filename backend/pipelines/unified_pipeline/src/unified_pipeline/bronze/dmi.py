@@ -108,7 +108,7 @@ class DMIApiClient:
                 return await response.json()
 
         except Exception as e:
-            raise aiohttp.ClientError(f"Error making request to DMI API: {str(e)}")
+            raise aiohttp.ClientError(f"Error making request to DMI API: {str(e)}") from e
 
     async def fetch_grid_data(
         self,
