@@ -388,9 +388,16 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             result = self.conn.execute(
                 f"""
                 SELECT 
-                    cvr_number,
-                    COALESCE(document_count, 0) as document_count,
-                    COALESCE(has_financial_metrics, false) as has_financial_metrics
+                    cvr_number, 
+                    company_name, 
+                    COALESCE(document_count, 0) as document_count, 
+                    xml_document_count, 
+                    total_xml_size_bytes, 
+                    latest_reporting_date, 
+                    COALESCE(has_financial_metrics, false) as has_financial_metrics, 
+                    financial_data_json, 
+                    processing_timestamp, 
+                    batch_number
                 FROM {table_name}
                 WHERE cvr_number IS NOT NULL
                   AND (document_count > 0 OR has_financial_metrics = true)
@@ -403,7 +410,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             # For local artifacts, use the expected JSON format
             result = self.conn.execute(
                 """
-                SELECT cvr_number, financial_data_json
+                SELECT cvr_number, company_name, document_count, xml_document_count, 
+                       total_xml_size_bytes, latest_reporting_date, has_financial_metrics, 
+                       financial_data_json, processing_timestamp, batch_number
                 FROM read_parquet(?)
                 WHERE financial_data_json IS NOT NULL
             """,
@@ -414,34 +423,28 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         for row in result:
             cvr_number = row[0]
             try:
-                if len(row) == 2:
-                    # Local artifact format with JSON
-                    financial_json = row[1]
-                    financial_doc_data = json.loads(financial_json)
-                    financial_data[str(cvr_number)] = financial_doc_data
-                else:
-                    # GCS format with processed financial data columns
-                    # Based on actual data: cvr_number, company_name, document_count, xml_document_count, 
-                    # total_xml_size_bytes, latest_reporting_date, has_financial_metrics, financial_data_json, processing_timestamp, batch_number
-                    document_count = row[2]  # document_count is the 3rd column (index 2)
-                    has_financial_metrics = row[6]  # has_financial_metrics is the 7th column (index 6)
-                    
-                    # Create proper financial data structure
-                    documents = []
-                    if has_financial_metrics and document_count > 0:
-                        # Create documents array with the actual document count
-                        for i in range(document_count):
-                            documents.append({
-                                "cvr_number": cvr_number,
-                                "document_index": i,
-                                "has_financial_data": True
-                            })
-                    
-                    financial_data[str(cvr_number)] = {
-                        "documents": documents,
-                        "document_count": document_count,
-                        "financial_metrics": {"has_metrics": has_financial_metrics} if has_financial_metrics else None
-                    }
+                # Now we always select all columns from parquet format
+                # Based on actual data: cvr_number, company_name, document_count, xml_document_count, 
+                # total_xml_size_bytes, latest_reporting_date, has_financial_metrics, financial_data_json, processing_timestamp, batch_number
+                document_count = row[2]  # document_count is the 3rd column (index 2)
+                has_financial_metrics = row[6]  # has_financial_metrics is the 7th column (index 6)
+                
+                # Create proper financial data structure
+                documents = []
+                if has_financial_metrics and document_count > 0:
+                    # Create documents array with the actual document count
+                    for i in range(document_count):
+                        documents.append({
+                            "cvr_number": cvr_number,
+                            "document_index": i,
+                            "has_financial_data": True
+                        })
+                
+                financial_data[str(cvr_number)] = {
+                    "documents": documents,
+                    "document_count": document_count,
+                    "financial_metrics": {"has_metrics": has_financial_metrics} if has_financial_metrics else None
+                }
             except json.JSONDecodeError as e:
                 self.log.warning(f"Failed to parse financial data for CVR {cvr_number}: {e}")
             except Exception as e:
