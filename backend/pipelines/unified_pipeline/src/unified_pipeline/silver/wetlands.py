@@ -167,7 +167,8 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
                 CASE 
                     WHEN ABS(ROUND((ST_XMax({geometry_col}) - ST_XMin({geometry_col})) / 10) * 10 - 
                              (ST_XMax({geometry_col}) - ST_XMin({geometry_col}))) < 0.01
-                         AND ABS(ROUND((ST_YMax({geometry_col}) - ST_YMin({geometry_col})) / 10) * 10 - 
+                         AND ABS(ROUND((ST_YMax({geometry_col}) - 
+                                       ST_YMin({geometry_col})) / 10) * 10 - 
                                  (ST_YMax({geometry_col}) - ST_YMin({geometry_col}))) < 0.01
                     THEN true 
                     ELSE false 

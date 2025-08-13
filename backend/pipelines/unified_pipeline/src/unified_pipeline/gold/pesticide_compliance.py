@@ -12,7 +12,8 @@ detect violations across the entire agricultural sector.
 
 THE BUSINESS PROBLEM:
 ====================
-- BMD database contains restriction dates for pesticide products (frist_for_anvendelse_og_besiddelse)
+- BMD database contains restriction dates for pesticide products 
+  (frist_for_anvendelse_og_besiddelse)
 - Agricultural companies report pesticide applications with dates
 - We need to identify: "Which companies used restricted pesticides after the restriction date?"
 

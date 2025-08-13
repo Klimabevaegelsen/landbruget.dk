@@ -9,9 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from tqdm import tqdm
+
 from bronze.inspire_bbr_fetcher import InspireBBRFetcher
 from config.settings import get_settings
-from tqdm import tqdm
 from utils.logger import setup_logger
 
 # GCS upload functionality

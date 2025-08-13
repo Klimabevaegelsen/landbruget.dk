@@ -685,15 +685,15 @@ async def run_cumulative_analysis_optimized(
                             center_lat,
                             center_lon,
                             {
-                                "h3_area_ha" if "h3_area_ha" in column_names 
+                                "h3_area_ha" if "h3_area_ha" in column_names
                                 else "h3_cell_area_ha"
                             } as h3_area_ha,
                             {
-                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names 
+                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names
                                 else "agricultural_area_ha"
                             } as total_intersection_area_ha,
                             {
-                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names 
+                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names
                                 else "0.0"
                             } as actual_coverage_ratio,
                             unique_field_count,
@@ -1267,15 +1267,15 @@ async def run_cumulative_analysis_github_actions_optimized(
                             center_lat,
                             center_lon,
                             {
-                                "h3_area_ha" if "h3_area_ha" in column_names 
+                                "h3_area_ha" if "h3_area_ha" in column_names
                                 else "h3_cell_area_ha"
                             } as h3_area_ha,
                             {
-                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names 
+                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names
                                 else "agricultural_area_ha"
                             } as total_intersection_area_ha,
                             {
-                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names 
+                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names
                                 else "0.0"
                             } as actual_coverage_ratio,
                             unique_field_count,
@@ -2083,15 +2083,15 @@ async def run_cumulative_analysis_from_artifacts(
                             center_lat,
                             center_lon,
                             {
-                                "h3_area_ha" if "h3_area_ha" in column_names 
+                                "h3_area_ha" if "h3_area_ha" in column_names
                                 else "h3_cell_area_ha"
                             } as h3_area_ha,
                             {
-                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names 
+                                "total_intersection_area_ha" if "total_intersection_area_ha" in column_names
                                 else "agricultural_area_ha"
                             } as total_intersection_area_ha,
                             {
-                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names 
+                                "actual_coverage_ratio" if "actual_coverage_ratio" in column_names
                                 else "0.0"
                             } as actual_coverage_ratio,
                             unique_field_count,
@@ -2244,7 +2244,7 @@ async def run_cumulative_analysis_from_artifacts(
             else:
                 logger.info(
                     f"📊 Loading and aggregating {len(available_kommune_results)} year(s) of kommune " +
-                    f"results from artifacts"
+                    "results from artifacts"
                 )
 
                 # Initialize cumulative kommune results table
