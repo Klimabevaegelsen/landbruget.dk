@@ -169,10 +169,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         self.log.info("📋 Configuration:")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(
-            f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled'}"
+            f"   • Address geocoding: "
+            f"{'enabled' if self.config.enable_address_geocoding else 'disabled'}"
         )
         self.log.info(
-            f"   • Financial documents: {'enabled' if self.config.fetch_financial_documents else 'disabled'}"
+            f"   • Financial documents: "
+            f"{'enabled' if self.config.fetch_financial_documents else 'disabled'}"
         )
         self.log.info(f"   • Test limit: {self.config.test_limit or 'none'}")
 
@@ -190,11 +192,31 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                          OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
                     THEN NULL
                     ELSE CONCAT(
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                        SUBSTR(
+                            crypto_hash('sha1',
+                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                            1, 8
+                        ), '-',
+                        SUBSTR(
+                            crypto_hash('sha1',
+                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                            9, 4
+                        ), '-',
+                        '5', SUBSTR(
+                            crypto_hash('sha1',
+                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                            13, 3
+                        ), '-',
+                        CONCAT('8', SUBSTR(
+                            crypto_hash('sha1',
+                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                            17, 3
+                        )), '-',
+                        SUBSTR(
+                            crypto_hash('sha1',
+                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                            21, 12
+                        )
                     )
                 END
             )
@@ -354,7 +376,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         if invalid_cvrs:
             self.log.warning(
-                f"⚠️ Found {len(invalid_cvrs)} invalid CVR numbers (will skip): {invalid_cvrs[:5]}{'...' if len(invalid_cvrs) > 5 else ''}"
+                f"⚠️ Found {len(invalid_cvrs)} invalid CVR numbers (will skip): " +
+                f"{invalid_cvrs[:5]}{'...' if len(invalid_cvrs) > 5 else ''}"
             )
 
         self.log.info(
@@ -815,7 +838,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 "gross_result": "GrossResult",
                 "employee_benefits_expense": "EmployeeBenefitsExpense",
                 "average_number_of_employees": "AverageNumberOfEmployees",  # IMPORTANT!
-                "depreciation_expense": "DepreciationAmortisationExpenseAndImpairmentLossesOfPropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss",
+                "depreciation_expense": ("DepreciationAmortisationExpenseAndImpairmentLossesOf" +
+                                        "PropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss"),
                 "other_finance_income": "OtherFinanceIncome",
                 "other_finance_expenses": "OtherFinanceExpenses",
                 "tax_expense": "TaxExpense",
@@ -837,7 +861,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 "longterm_liabilities_other_than_provisions": "LongtermLiabilitiesOtherThanProvisions",
                 "shortterm_debt_to_banks": "ShorttermDebtToBanks",
                 "shortterm_part_of_longterm_liabilities": "ShorttermPartOfLongtermLiabilitiesOtherThanProvisions",
-                "other_payables_including_tax": "OtherPayablesIncludingTaxPayablesLiabilitiesOtherThanProvisionsShortterm",
+                "other_payables_including_tax": ("OtherPayablesIncludingTaxPayables" +
+                                                "LiabilitiesOtherThanProvisionsShortterm"),
                 "provisions": "Provisions",
                 "provisions_for_deferred_tax": "ProvisionsForDeferredTax",
                 "property_plant_equipment": "PropertyPlantAndEquipment",
@@ -1065,11 +1090,14 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
                 json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as address_latitude,
                 json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as address_longitude,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR
+                    as address_coordinate_system,
                 json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
                 json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as address_coordinate_quality,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as address_coordinate_source,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR
+                    as address_coordinate_quality,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR
+                    as address_coordinate_source,
                 json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                 json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                 json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
@@ -1312,7 +1340,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     calculated_fields.append("""
                         CASE 
                             WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.total_equity) / TRY(financial_parsed.financial_metrics.total_assets) 
+                            THEN TRY(financial_parsed.financial_metrics.total_equity) /
+                        TRY(financial_parsed.financial_metrics.total_assets) 
                             ELSE NULL 
                         END as equity_ratio""")
                 else:
@@ -1326,7 +1355,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     calculated_fields.append("""
                         CASE 
                             WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.average_number_of_employees) 
+                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) /
+                        TRY(financial_parsed.financial_metrics.average_number_of_employees) 
                             ELSE NULL 
                         END as profit_per_employee""")
                 else:
@@ -1337,7 +1367,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     calculated_fields.append("""
                         CASE 
                             WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
-                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.total_assets) 
+                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) /
+                        TRY(financial_parsed.financial_metrics.total_assets) 
                             ELSE NULL 
                         END as return_on_assets""")
                 else:

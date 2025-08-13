@@ -131,7 +131,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             -- Detailed injury type data (34 companies)
             injury_type_data AS (
                 SELECT 
-                    CAST(anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart AS BIGINT) as cvr_number,
+                    CAST(\n                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart \n                        AS BIGINT\n                    ) as cvr_number,
                     column_1 as injury_type,
                     column_2 as year_2019,
                     column_3 as year_2020,
@@ -140,7 +140,8 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
                     column_6 as year_2023,
                     column_7 as year_2024
                 FROM worker_safety_injury_types_raw
-                WHERE anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart ~ '^[0-9]+$'
+                WHERE anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart 
+                      ~ '^[0-9]+$'
                 AND column_1 IS NOT NULL 
                 AND column_1 != ''
                 AND column_1 != 'Skadeart'
@@ -148,7 +149,10 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             -- Main total data (190 companies)
             main_data AS (
                 SELECT 
-                    CAST(anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer AS BIGINT) as cvr_number,
+                    CAST(
+                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer 
+                        AS BIGINT
+                    ) as cvr_number,
                     column_1 as year_2019,
                     column_2 as year_2020, 
                     column_3 as year_2021,
@@ -156,8 +160,10 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
                     column_5 as year_2023,
                     column_6 as year_2024
                 FROM worker_safety_raw
-                WHERE anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer ~ '^[0-9]+$'
-                AND anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer != 'CVR-nr.'
+                WHERE anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer 
+                      ~ '^[0-9]+$'
+                AND anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer 
+                    != 'CVR-nr.'
             ),
             -- Get CVRs that have detailed injury type data
             detailed_cvrs AS (

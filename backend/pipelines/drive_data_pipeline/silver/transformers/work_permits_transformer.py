@@ -175,7 +175,9 @@ class WorkPermitsTransformer(BaseTransformer):
             logger.error(f"Error processing work permits PDF {file_path}: {e}")
             return TransformResult(success=False, error=str(e))
 
-    def _extract_text_from_pdf(self, pdf_path: Path, storage_manager: DriveStorageManager | None = None) -> str:
+    def _extract_text_from_pdf(
+        self, pdf_path: Path, storage_manager: DriveStorageManager | None = None
+    ) -> str:
         """Extract raw text from PDF using pdfplumber."""
         logger.debug("Extracting text from PDF...")
 

@@ -99,7 +99,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info("✅ Spatial extension is working (loaded by BaseSource)")
         except Exception as e:
             self.log.error(f"❌ Spatial extension not available from BaseSource: {e}")
-            raise RuntimeError("Spatial extension is required but not available from BaseSource") from e
+            raise RuntimeError(
+                "Spatial extension is required but not available from BaseSource"
+            ) from e
 
         # Apply memory optimizations
         self._configure_memory_optimizations()
@@ -159,7 +161,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info(f"   Checkpoint threshold: {checkpoint_threshold} (aggressive cleanup)")
             self.log.info(f"   Emergency threshold: {self.config.emergency_memory_threshold:.0%}")
             self.log.info(
-                f"   Spatial join batching: {self.config.enable_batched_spatial_joins} (batch size: {self.config.spatial_join_batch_size:,})"
+                f"   Spatial join batching: {self.config.enable_batched_spatial_joins} "
+                f"(batch size: {self.config.spatial_join_batch_size:,})"
             )
 
         except Exception as e:
@@ -848,18 +851,22 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         hst77_national.harvest_value
                     ) as yield_estimate_hkg_ha,
                     CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, 
+                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
                         THEN 'dst_region_match'
                         ELSE 'no_yield_data'
                     END as yield_estimation_method,
                     -- PRODUCTION ESTIMATE
                     CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
-                        THEN f.area_ha * COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value)
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, 
+                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        THEN f.area_ha * COALESCE(hst77.harvest_value, gartn1.horticulture_value, 
+                                                 fro.seed_value, halm1.straw_value, hst77_national.harvest_value)
                         ELSE NULL
                     END as production_estimate_hkg,
                     CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, 
+                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
                         THEN 'hkg'
                         ELSE NULL
                     END as production_unit,
@@ -1247,7 +1254,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             for year, year_count, year_with_production, year_coverage in year_summary:
                 self.log.info(
-                    f"    Year {year}: {year_count:,} fields, {year_with_production:,} with production ({year_coverage:.1f}%)"
+                    f"    Year {year}: {year_count:,} fields, {year_with_production:,} with production "
+                    f"({year_coverage:.1f}%)"
                 )
 
             # Check quality thresholds

@@ -84,6 +84,7 @@ class BaseTransformer(abc.ABC):
         # Handle imports for both standalone and package usage (duplicate import)
         try:
             from ...bronze.metadata import FileMetadata
+
             file_metadata_class = FileMetadata
         except ImportError:
             file_metadata_class = None

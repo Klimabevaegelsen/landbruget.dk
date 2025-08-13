@@ -12,6 +12,7 @@ import pyarrow.parquet as pq
 try:
     import geopandas as gpd
     import pandas as pd
+
     DataFrame = pd.DataFrame
     GeoDataFrame = gpd.GeoDataFrame
 except ImportError:

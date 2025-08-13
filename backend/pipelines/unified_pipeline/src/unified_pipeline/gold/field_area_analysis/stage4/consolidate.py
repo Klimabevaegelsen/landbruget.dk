@@ -21,7 +21,8 @@ class ConsolidateResults(FieldAnalysisStageBase):
         super().__init__(config, "Stage 4: Consolidation")
 
     def _load_input_data(self):
-        """Load all field-property intersections, soil data, and environmental analyses from previous stages."""
+        """Load all field-property intersections, soil data, and environmental analyses 
+        from previous stages."""
         # Debug: Log the current configuration
         self.log.info(
             f"🔍 DEBUG: Using agricultural_fields_year = {CONFIG.agricultural_fields_year}"
@@ -31,7 +32,8 @@ class ConsolidateResults(FieldAnalysisStageBase):
         updated_outputs = CONFIG.update_outputs_for_year()
         self.log.info(f"🔍 DEBUG: Updated dataset outputs: {updated_outputs}")
 
-        # Load ALL field-property intersections from Stage 1C (foundation for all fields with properties)
+        # Load ALL field-property intersections from Stage 1C 
+        # (foundation for all fields with properties)
         stage1c_dataset = updated_outputs["field_property_intersections"]
         self.log.info(f"🔍 DEBUG: Looking for dataset: {stage1c_dataset}")
         try:

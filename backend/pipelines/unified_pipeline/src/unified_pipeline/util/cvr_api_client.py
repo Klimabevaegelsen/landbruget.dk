@@ -788,9 +788,7 @@ class CVRAPIClient:
                         # Show the complete address that was attempted for geocoding
                         failed_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            failed_address = (
-                                f"{address['full_address']}, {address['postal_code']} {address['city']}"
-                            )
+                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
                         self.log.warning(f"Failed to geocode address: {failed_address}")
 
                 enriched_addresses.append(enriched_address)
@@ -1487,7 +1485,8 @@ class CVRAPIClient:
                 if "hits" in raw_data:
                     hits_info = raw_data["hits"]
                     self.log.debug(
-                        f"Hits info: total={hits_info.get('total', 'unknown')}, max_score={hits_info.get('max_score', 'unknown')}"
+                        f"Hits info: total={hits_info.get('total', 'unknown')}, "
+                        f"max_score={hits_info.get('max_score', 'unknown')}"
                     )
                     self.log.debug(f"Number of hits returned: {len(hits_info.get('hits', []))}")
 
@@ -1922,9 +1921,7 @@ class CVRAPIClient:
                     if should_geocode:
                         failed_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            failed_address = (
-                                f"{address['full_address']}, {address['postal_code']} {address['city']}"
-                            )
+                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
                         self.log.warning(f"Failed to geocode P-number address: {failed_address}")
 
                 enriched_addresses.append(enriched_address)

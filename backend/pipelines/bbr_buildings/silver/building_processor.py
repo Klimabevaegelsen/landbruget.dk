@@ -132,7 +132,8 @@ class BuildingProcessor:
                 building_area_m2 as building_floor_area_sqm,
                 join_status,
                 CASE 
-                    WHEN current_use IN ('individualResidence', 'collectiveResidence', 'twoDwellings') THEN 'residential'
+                    WHEN current_use IN ('individualResidence', 'collectiveResidence', 'twoDwellings') 
+                        THEN 'residential'
                     WHEN current_use = 'agriculture' THEN 'agricultural'
                     WHEN current_use = 'publicServices' THEN 'educational'
                     ELSE 'other'

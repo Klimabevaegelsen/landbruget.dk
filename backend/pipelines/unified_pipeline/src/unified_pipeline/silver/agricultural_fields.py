@@ -65,7 +65,7 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         "Afgkode": "crop_code",
         "Afgroede": "crop_name",
         "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling"
-                                         # (basic payment) eligibility, NOT organic farming
+        # (basic payment) eligibility, NOT organic farming
         "GBanmeldt": "grundbetaling_area_ha",  # Actual grundbetaling area reported
         "Markblok": "block_id",
         "MB_NR": "block_id",
@@ -185,7 +185,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     if "*" in table_pattern:
                         # Get all tables matching pattern
                         tables = self.conn.execute(
-                            f"SELECT table_name FROM information_schema.tables WHERE table_name LIKE '{table_pattern.replace('*', '%')}'"
+                            f"SELECT table_name FROM information_schema.tables WHERE "
+                            f"table_name LIKE '{table_pattern.replace('*', '%')}'"
                         ).fetchall()
                         for table_row in tables:
                             self.conn.execute(f"DROP TABLE IF EXISTS {table_row[0]}")
@@ -575,7 +576,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         # Read data with support for in-memory passing
                         if bronze_data is not None:
                             self.log.info("Using bronze data from memory (in-memory data passing)")
-                            # ✅ MIGRATION: Bronze data structure: {"fields": {year: raw_data_list}, "blocks": {year: raw_data_list}}
+                            # ✅ MIGRATION: Bronze data structure: 
+                            # {"fields": {year: raw_data_list}, "blocks": {year: raw_data_list}}
                             if isinstance(bronze_data, dict):
                                 # Map dataset names to bronze data keys
                                 bronze_key = "fields" if "fields" in dataset else "blocks"

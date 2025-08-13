@@ -116,7 +116,9 @@ class DriveStorageManager:
                 f"✅ DriveStorageManager: Initialized with fallback GCS for bucket: {bucket_name}"
             )
         except ImportError as e:
-            raise ImportError("google-cloud-storage is required for GCS storage but not available") from e
+            raise ImportError(
+                "google-cloud-storage is required for GCS storage but not available"
+            ) from e
         except Exception as e:
             raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
@@ -171,7 +173,8 @@ class DriveStorageManager:
                     blob = self.gcs_bucket.blob(gcs_relative_path)
                     blob.upload_from_string(file_bytes)
                     logger.info(
-                        f"✅ Saved file to GCS (fallback): gs://{self.bucket_name}/{gcs_relative_path} ({len(file_bytes)} bytes)"
+                        f"✅ Saved file to GCS (fallback): gs://{self.bucket_name}/{gcs_relative_path} "
+                        f"({len(file_bytes)} bytes)"
                     )
             else:
                 # Local storage

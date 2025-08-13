@@ -52,7 +52,7 @@ class DAGISilverConfig(BaseJobConfig):
     target_crs: str = Field(
         default="EPSG:4326",
         description="Target coordinate reference system - WGS84 for consistency "
-                    "with other datasets",
+        "with other datasets",
     )
 
     endpoints: Dict[str, str] = Field(

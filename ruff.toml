@@ -3,4 +3,7 @@ line-length = 120
 
 [lint]
 select = ["E", "F", "I"]
-ignore = [] 
+ignore = []
+
+[lint.per-file-ignores]
+"backend/pipelines/chr_pipeline/bronze/load_vetstat.py" = ["E501"] 
