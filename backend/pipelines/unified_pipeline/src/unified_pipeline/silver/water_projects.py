@@ -251,7 +251,9 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 close_count = polygon_wkt.count(")")
                 if open_count != close_count:
                     self.log.error(
-                        f"Invalid WKT detected - unbalanced parentheses ({open_count} open, {close_count} close): {polygon_wkt[:100]}..."
+                        f"Invalid WKT detected - unbalanced parentheses "
+                        f"({open_count} open, {close_count} close): "
+                        f"{polygon_wkt[:100]}..."
                     )
                     continue
 

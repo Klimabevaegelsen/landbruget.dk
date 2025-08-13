@@ -253,7 +253,8 @@ class ProgressTracker:
                     self.bronze_stats["downloaded_files"] / self.bronze_stats["total_files"]
                 ) * 100
                 print(
-                    f"Bronze progress: {self.bronze_stats['downloaded_files']}/{self.bronze_stats['total_files']} files ({pct:.1f}%)"
+                    f"Bronze progress: {self.bronze_stats['downloaded_files']}/"
+                    f"{self.bronze_stats['total_files']} files ({pct:.1f}%)"
                 )
             else:
                 print(
@@ -290,7 +291,8 @@ class ProgressTracker:
                     self.silver_stats["processed_files"] / self.silver_stats["total_files"]
                 ) * 100
                 print(
-                    f"Silver progress: {self.silver_stats['processed_files']}/{self.silver_stats['total_files']} files ({pct:.1f}%)"
+                    f"Silver progress: {self.silver_stats['processed_files']}/"
+                    f"{self.silver_stats['total_files']} files ({pct:.1f}%)"
                 )
             else:
                 print(
@@ -643,6 +645,7 @@ def main() -> int:
 
                 try:
                     from backend.common.schema_documentation import SchemaDocumentationManager
+
                     schema_doc_manager_class = SchemaDocumentationManager
                 except ImportError as e:
                     import warnings

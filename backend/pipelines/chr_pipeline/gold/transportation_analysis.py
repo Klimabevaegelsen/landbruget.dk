@@ -589,7 +589,8 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.is_invalid,
             sv.missing_animal_count
         FROM svineflytning sv
-        JOIN intl_pig_nt nt ON CONCAT(EXTRACT(YEAR FROM sv.movement_date), '.', LPAD(sv.traces_document, 7, '0')) = SUBSTRING(nt.i_2_imsoc_reference, 13)
+        JOIN intl_pig_nt nt ON CONCAT(EXTRACT(YEAR FROM sv.movement_date), '.', LPAD(sv.traces_document, 7, '0')) 
+            = SUBSTRING(nt.i_2_imsoc_reference, 13)
         WHERE sv.receiver_country_code != 'DK' 
         AND sv.traces_document ~ '^[0-9]+$'
         AND nt.i_2_imsoc_reference IS NOT NULL
@@ -649,7 +650,10 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.is_invalid,
             sv.missing_animal_count
         FROM svineflytning sv
-        JOIN intl_pig_2024_2025 new ON CONCAT(EXTRACT(YEAR FROM sv.movement_date), '.', LPAD(sv.traces_document, 7, '0')) = SUBSTRING(new.i_2_imsoc_reference, 13)
+        JOIN intl_pig_2024_2025 new ON CONCAT(
+            EXTRACT(YEAR FROM sv.movement_date), '.', LPAD(sv.traces_document, 7, '0')
+        ) 
+            = SUBSTRING(new.i_2_imsoc_reference, 13)
         WHERE sv.receiver_country_code != 'DK' 
         AND sv.traces_document ~ '^[0-9]+$'
         AND new.i_2_imsoc_reference IS NOT NULL
@@ -896,7 +900,10 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                 'intl_cattle_traces_nt' as source_file
             FROM (
                 SELECT *,
-                    ROW_NUMBER() OVER (PARTITION BY i_2_imsoc_reference ORDER BY i_14_dato_og_klokkeslaet_for_afgang DESC) as rn
+                    ROW_NUMBER() OVER (
+                        PARTITION BY i_2_imsoc_reference 
+                        ORDER BY i_14_dato_og_klokkeslaet_for_afgang DESC
+                    ) as rn
                 FROM intl_cattle_traces_nt
                 WHERE i_14_dato_og_klokkeslaet_for_afgang != '-'
             ) ranked
@@ -918,7 +925,11 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                 'intl_combined_traces_2024_2025' as source_file
             FROM intl_combined_traces_2024_2025
             WHERE i_14_dato_og_klokkeslaet_for_afgang != '-'
-            AND (i_30_commodities LIKE '%cattle%' OR i_30_commodities LIKE '%bovine%' OR i_30_commodities LIKE '%Cattle%')
+            AND (
+                i_30_commodities LIKE '%cattle%' 
+                OR i_30_commodities LIKE '%bovine%' 
+                OR i_30_commodities LIKE '%Cattle%'
+            )
         ) all_traces
         -- Final deduplication across all files - use most recent record for each certificate
         QUALIFY ROW_NUMBER() OVER (PARTITION BY certificate ORDER BY raw_datetime DESC) = 1
@@ -1011,7 +1022,8 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                     -- Match by address string similarity
                     (sender_prop.address IS NOT NULL AND ct.sender_address IS NOT NULL 
                      AND (LOWER(sender_prop.address) LIKE '%' || LOWER(SPLIT_PART(ct.sender_address, ' ', 1)) || '%'
-                          OR LOWER(ct.sender_address) LIKE '%' || LOWER(SPLIT_PART(sender_prop.address, ' ', 1)) || '%'))
+                          OR LOWER(ct.sender_address) LIKE '%' || 
+                          LOWER(SPLIT_PART(sender_prop.address, ' ', 1)) || '%'))
                 )
                 OR
                 -- CHR RECEIVER matches traces loading (import scenario)
@@ -1025,7 +1037,8 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                     -- Match by address string similarity
                     (receiver_prop.address IS NOT NULL AND ct.sender_address IS NOT NULL 
                      AND (LOWER(receiver_prop.address) LIKE '%' || LOWER(SPLIT_PART(ct.sender_address, ' ', 1)) || '%'
-                          OR LOWER(ct.sender_address) LIKE '%' || LOWER(SPLIT_PART(receiver_prop.address, ' ', 1)) || '%'))
+                          OR LOWER(ct.sender_address) LIKE '%' || 
+                          LOWER(SPLIT_PART(receiver_prop.address, ' ', 1)) || '%'))
                 )
             )
         -- Limit to one match per CHR movement to avoid duplicates
@@ -1117,13 +1130,19 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
                 WHEN receiver_h.business_type_name LIKE '%sædopsamling%' THEN 'AI Station'
                 
                 -- Trading and markets
-                WHEN receiver_h.business_type_name LIKE '%handel%' OR receiver_h.business_type_name LIKE '%marked%' THEN 'Market/Trading'
+                WHEN receiver_h.business_type_name LIKE '%handel%' 
+                    OR receiver_h.business_type_name LIKE '%marked%' 
+                    THEN 'Market/Trading'
                 
                 -- Hobby and recreational
                 WHEN receiver_h.business_type_name LIKE '%Hobby%' THEN 'Hobby Farm'
-                WHEN receiver_h.business_type_name LIKE '%pension%' OR receiver_h.business_type_name LIKE '%rideskole%' THEN 'Boarding/Riding School'
+                WHEN receiver_h.business_type_name LIKE '%pension%' 
+                    OR receiver_h.business_type_name LIKE '%rideskole%' 
+                    THEN 'Boarding/Riding School'
                 WHEN receiver_h.business_type_name LIKE '%Stutteri%' THEN 'Stud Farm'
-                WHEN receiver_h.business_type_name LIKE '%væddeløb%' OR receiver_h.business_type_name LIKE '%træning%' THEN 'Racing/Training'
+                WHEN receiver_h.business_type_name LIKE '%væddeløb%' 
+                    OR receiver_h.business_type_name LIKE '%træning%' 
+                    THEN 'Racing/Training'
                 
                 -- Other livestock operations
                 WHEN receiver_h.business_type_name LIKE '%Øvrige%' THEN 'Other Livestock'
@@ -1164,11 +1183,17 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
                 WHEN sender_h.business_type_name LIKE '%karantæne%' THEN 'Quarantine Facility'
                 WHEN sender_h.business_type_name LIKE '%forsøg%' THEN 'Research Facility'
                 WHEN sender_h.business_type_name LIKE '%sædopsamling%' THEN 'AI Station'
-                WHEN sender_h.business_type_name LIKE '%handel%' OR sender_h.business_type_name LIKE '%marked%' THEN 'Market/Trading'
+                WHEN sender_h.business_type_name LIKE '%handel%' 
+                    OR sender_h.business_type_name LIKE '%marked%' 
+                    THEN 'Market/Trading'
                 WHEN sender_h.business_type_name LIKE '%Hobby%' THEN 'Hobby Farm'
-                WHEN sender_h.business_type_name LIKE '%pension%' OR sender_h.business_type_name LIKE '%rideskole%' THEN 'Boarding/Riding School'
+                WHEN sender_h.business_type_name LIKE '%pension%' 
+                    OR sender_h.business_type_name LIKE '%rideskole%' 
+                    THEN 'Boarding/Riding School'
                 WHEN sender_h.business_type_name LIKE '%Stutteri%' THEN 'Stud Farm'
-                WHEN sender_h.business_type_name LIKE '%væddeløb%' OR sender_h.business_type_name LIKE '%træning%' THEN 'Racing/Training'
+                WHEN sender_h.business_type_name LIKE '%væddeløb%' 
+                    OR sender_h.business_type_name LIKE '%træning%' 
+                    THEN 'Racing/Training'
                 WHEN sender_h.business_type_name LIKE '%Øvrige%' THEN 'Other Livestock'
                 WHEN sender_h.business_type_name LIKE '%besætning%' THEN 'Livestock Farm'
                 WHEN sender_h.business_type_name LIKE '%Sæsonafgræsning%' THEN 'Seasonal Grazing'

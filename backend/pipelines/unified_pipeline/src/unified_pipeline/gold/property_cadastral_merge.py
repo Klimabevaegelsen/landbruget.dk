@@ -151,7 +151,9 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             except Exception as e:
                 self.log.error(f"Failed to access BFE from nested structure: {e}")
-                raise ValueError(f"Cannot access BFE number from property data structure: {e}") from e
+                raise ValueError(
+                    f"Cannot access BFE number from property data structure: {e}"
+                ) from e
 
             # Perform the merge and save directly to parquet using DuckDB COPY
             self.log.info("Performing BFE-based merge and creating result table...")
@@ -215,7 +217,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                       AND JSON_EXTRACT_STRING(company_data, '$.cvrNummer') IS NOT NULL
                       AND TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) != ''
                       AND LENGTH(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR))) = 8
-                      AND REGEXP_MATCHES(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)), '^[1-9][0-9]{7}$')
+                      AND REGEXP_MATCHES(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)), 
+                                        '^[1-9][0-9]{7}$')
                     ORDER BY cvr_number
                     """
 

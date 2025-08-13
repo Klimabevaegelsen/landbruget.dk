@@ -463,7 +463,7 @@ def process_chr_data_streaming(
                         con.raw_sql("DROP TABLE temp_batch")
 
                     logging.info(
-                        f"✅ Loaded {table_name}: {total_records:,} records from {len(matching_files)} files (processed in batches)"
+                        f"✅ Loaded {table_name}: {total_records:,} records from {len(matching_files)} files "\n                        f"(processed in batches)"
                     )
                     loaded_tables[dataset_key] = table_name
 
@@ -730,7 +730,7 @@ def process_chr_data_streaming(
                             parquet_path = silver_dir / "property_owners.parquet"
                             if parquet_path.exists():
                                 con.raw_sql(
-                                    f"CREATE OR REPLACE TABLE property_owners AS SELECT * FROM read_parquet('{parquet_path}')"
+                                    f"CREATE OR REPLACE TABLE property_owners AS "\n                                    f"SELECT * FROM read_parquet('{parquet_path}')"
                                 )
                         except Exception as e:
                             logging.warning(f"Failed to register property_owners table for CVR collection: {e}")
@@ -1057,7 +1057,9 @@ def process_chr_data(
                         pass
         else:
             logging.warning(
-                f"VetStat XML file not found or not provided ({'in-memory path was' if load_from_memory else 'bronze path was'} {vetstat_antibiotics_xml_path}). Skipping antibiotic data processing."
+                f"VetStat XML file not found or not provided "
+                f"({'in-memory path was' if load_from_memory else 'bronze path was'} "
+                f"{vetstat_antibiotics_xml_path}). Skipping antibiotic data processing."
             )
             vetstat_antibiotics_jsonl_path = None
     finally:
@@ -1163,7 +1165,8 @@ def process_chr_data(
                             temp_file.write(json_string + "\n")  # Write string + newline
                         except TypeError as e_json:
                             logging.warning(
-                                f"Skipping record due to JSON serialization error for table '{table_name}': {e_json}. Record sample: {str(record)[:200]}..."
+                                f"Skipping record due to JSON serialization error for table '{table_name}': {e_json}. "
+                                f"Record sample: {str(record)[:200]}..."
                             )
                             continue  # Skip bad records
 

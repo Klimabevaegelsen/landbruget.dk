@@ -336,10 +336,19 @@ def create_soap_envelope_template(
     # Using f-strings carefully, ensuring proper escaping if needed (though not complex here)
     # Pay close attention to namespaces and prefixes matching the NAMESPACES dict
     xml_template = f"""
-<soapenv:Envelope xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:ec="http://www.w3.org/2001/10/xml-exc-c14n#" xmlns:eks="http://vetstat.fvst.dk/ekstern" xmlns:glr="http://www.logica.com/glrchr" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+<soapenv:Envelope xmlns:ds="http://www.w3.org/2000/09/xmldsig#" 
+    xmlns:ec="http://www.w3.org/2001/10/xml-exc-c14n#" 
+    xmlns:eks="http://vetstat.fvst.dk/ekstern" 
+    xmlns:glr="http://www.logica.com/glrchr" 
+    xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
+    xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" 
+    xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
   <soapenv:Header>
     <wsse:Security>
-      <wsse:BinarySecurityToken EncodingType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary" ValueType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-x509-token-profile-1.0#X509v3" wsu:Id="{binary_token_id}">PLACEHOLDER_CERT</wsse:BinarySecurityToken>
+      <wsse:BinarySecurityToken 
+          EncodingType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-soap-message-security-1.0#Base64Binary" 
+          ValueType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-x509-token-profile-1.0#X509v3" 
+          wsu:Id="{binary_token_id}">PLACEHOLDER_CERT</wsse:BinarySecurityToken>
       <wsse:UsernameToken wsu:Id="{username_token_id}">
         <wsse:Username>PLACEHOLDER_USER</wsse:Username>
         <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">PLACEHOLDER_PASS</wsse:Password>
@@ -439,7 +448,8 @@ def create_soap_envelope_template(
 def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: date, period_to: date) -> Optional[str]:
     """Fetch raw antibiotics data XML from VetStat for a given CHR, species, and period."""
     logger.info(
-        f"Preparing VetStat request for CHR: {chr_number}, Species: {species_code}, Period: {period_from} to {period_to}"
+        f"Preparing VetStat request for CHR: {chr_number}, Species: {species_code}, "
+        f"Period: {period_from} to {period_to}"
     )
 
     try:

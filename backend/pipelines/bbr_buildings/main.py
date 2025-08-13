@@ -20,6 +20,7 @@ from typing import Any
 
 try:
     import pandas as pd
+
     DataFrame = pd.DataFrame
 except ImportError:
     DataFrame = Any
@@ -57,7 +58,8 @@ def check_memory_usage() -> None:
         f"Memory: {memory.percent:.1f}% used ({memory.used / 1024**3:.1f}GB/{memory.total / 1024**3:.1f}GB)"
     )
     print(
-        f"Disk: {100 - disk.free / disk.total * 100:.1f}% used ({disk.used / 1024**3:.1f}GB/{disk.total / 1024**3:.1f}GB)"
+        f"Disk: {100 - disk.free / disk.total * 100:.1f}% used "
+        f"({disk.used / 1024**3:.1f}GB/{disk.total / 1024**3:.1f}GB)"
     )
 
     if memory.percent > 90:
@@ -557,7 +559,8 @@ def perform_chunked_spatial_join(
             progress_pct = ((chunk_idx + 1) / total_chunks) * 100
             elapsed_time = datetime.now() - start_time
             print(
-                f"🔄 Chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_ids):,} IDs) - {progress_pct:.1f}% complete - {elapsed_time}"
+                f"🔄 Chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_ids):,} IDs) - "
+                f"{progress_pct:.1f}% complete - {elapsed_time}"
             )
             check_memory_usage()
 
@@ -1194,7 +1197,9 @@ def run_silver_layer(
     }
 
 
-def _load_bronze_data(bronze_data: dict[str, Any] | None, bronze_timestamp: str, logger: logging.Logger) -> tuple[list, DataFrame | None]:
+def _load_bronze_data(
+    bronze_data: dict[str, Any] | None, bronze_timestamp: str, logger: logging.Logger
+) -> tuple[list, DataFrame | None]:
     """Load bronze data from various sources (in-memory, GCS, artifacts)."""
     building_ids = []
     attributes_df = None
@@ -1257,7 +1262,9 @@ def _load_bronze_data(bronze_data: dict[str, Any] | None, bronze_timestamp: str,
     return [], None
 
 
-def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger) -> tuple[list, DataFrame | None]:
+def _load_bronze_data_from_gcs(
+    timestamp: str, logger: logging.Logger
+) -> tuple[list, DataFrame | None]:
     """Load bronze data from GCS."""
     if not GCS_AVAILABLE:
         logger.warning("⚠️ GCS not available - cannot load from GCS")

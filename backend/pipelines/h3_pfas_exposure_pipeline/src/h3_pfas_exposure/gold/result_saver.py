@@ -26,7 +26,7 @@ class H3ResultSaver:
     def save_year_results_kepler_compatible(self, results_table: str, year: int) -> int:
         """Save results to GCS with Kepler.gl compatibility fixes."""
         self.log.info(
-            f"💾 Saving Kepler.gl-compatible H3 pesticide exposure results for year {year} (resolution {self.config.h3_resolution}) to GCS"
+            f"💾 Saving Kepler.gl-compatible H3 pesticide exposure results for year {year} "\n            f"(resolution {self.config.h3_resolution}) to GCS"
         )
 
         # Create Kepler.gl compatible version by converting BigInt columns to regular numbers
@@ -53,18 +53,24 @@ class H3ResultSaver:
                 CAST(crop_diversity AS INTEGER) as crop_diversity,
 
                 -- Active ingredient exposure metrics as doubles
-                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
-                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as total_diquat_containing_active_ingredient_grams,
-                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as total_glyphosate_containing_active_ingredient_grams,
+                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_pfas_containing_active_ingredient_grams,
+                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_diquat_containing_active_ingredient_grams,
+                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_glyphosate_containing_active_ingredient_grams,
                 -- Pesticide load metrics as doubles
                 CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
                 CAST(total_pfas_pesticide_belastning AS DOUBLE) as total_pfas_pesticide_belastning,
                 CAST(total_diquat_pesticide_belastning AS DOUBLE) as total_diquat_pesticide_belastning,
                 CAST(total_glyphosate_pesticide_belastning AS DOUBLE) as total_glyphosate_pesticide_belastning,
                 -- Intensity metrics (grams per hectare)
-                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    diquat_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    glyphosate_containing_active_ingredient_intensity_grams_per_ha,
 
                 -- String fields (no conversion needed)
                 crop_types,
@@ -141,9 +147,12 @@ class H3ResultSaver:
                 CAST(crop_diversity AS INTEGER) as crop_diversity,
                 crop_types,
                 -- Active ingredient totals
-                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
-                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as total_diquat_containing_active_ingredient_grams,
-                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as total_glyphosate_containing_active_ingredient_grams,
+                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_pfas_containing_active_ingredient_grams,
+                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_diquat_containing_active_ingredient_grams,
+                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_glyphosate_containing_active_ingredient_grams,
                 -- Pesticide load totals
                 CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
                 CAST(total_pfas_pesticide_belastning AS DOUBLE) as total_pfas_pesticide_belastning,
@@ -160,9 +169,12 @@ class H3ResultSaver:
                 CAST(unique_glyphosate_products AS INTEGER) as unique_glyphosate_products,
                 CAST(unique_pesticide_products AS INTEGER) as unique_pesticide_products,
                 -- Intensity metrics (grams per hectare)
-                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    diquat_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    glyphosate_containing_active_ingredient_intensity_grams_per_ha,
                 -- Pesticide load intensity metrics
                 CAST(pesticide_belastning_per_ha AS DOUBLE) as pesticide_belastning_per_ha,
                 CAST(pfas_pesticide_belastning_per_ha AS DOUBLE) as pfas_pesticide_belastning_per_ha,
@@ -246,18 +258,24 @@ class H3ResultSaver:
                 CAST(crop_diversity AS INTEGER) as crop_diversity,
 
                 -- Active ingredient exposure metrics as doubles
-                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
-                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as total_diquat_containing_active_ingredient_grams,
-                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as total_glyphosate_containing_active_ingredient_grams,
+                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_pfas_containing_active_ingredient_grams,
+                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_diquat_containing_active_ingredient_grams,
+                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_glyphosate_containing_active_ingredient_grams,
                 -- Pesticide load metrics as doubles
                 CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
                 CAST(total_pfas_pesticide_belastning AS DOUBLE) as total_pfas_pesticide_belastning,
                 CAST(total_diquat_pesticide_belastning AS DOUBLE) as total_diquat_pesticide_belastning,
                 CAST(total_glyphosate_pesticide_belastning AS DOUBLE) as total_glyphosate_pesticide_belastning,
                 -- Intensity metrics (grams per hectare)
-                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    diquat_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    glyphosate_containing_active_ingredient_intensity_grams_per_ha,
 
                 -- String fields
                 crop_types,
@@ -318,18 +336,24 @@ class H3ResultSaver:
                 CAST(crop_diversity AS INTEGER) as crop_diversity,
 
                 -- Active ingredient exposure metrics as doubles
-                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
-                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as total_diquat_containing_active_ingredient_grams,
-                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as total_glyphosate_containing_active_ingredient_grams,
+                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_pfas_containing_active_ingredient_grams,
+                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_diquat_containing_active_ingredient_grams,
+                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_glyphosate_containing_active_ingredient_grams,
                 -- Pesticide load metrics as doubles
                 CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
                 CAST(total_pfas_pesticide_belastning AS DOUBLE) as total_pfas_pesticide_belastning,
                 CAST(total_diquat_pesticide_belastning AS DOUBLE) as total_diquat_pesticide_belastning,
                 CAST(total_glyphosate_pesticide_belastning AS DOUBLE) as total_glyphosate_pesticide_belastning,
                 -- Intensity metrics (grams per hectare)
-                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    diquat_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    glyphosate_containing_active_ingredient_intensity_grams_per_ha,
 
                 -- String fields
                 crop_types,
@@ -415,9 +439,12 @@ class H3ResultSaver:
                 CAST(crop_diversity AS INTEGER) as crop_diversity,
                 crop_types,
                 -- Active ingredient totals
-                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as total_pfas_containing_active_ingredient_grams,
-                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as total_diquat_containing_active_ingredient_grams,
-                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as total_glyphosate_containing_active_ingredient_grams,
+                CAST(total_pfas_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_pfas_containing_active_ingredient_grams,
+                CAST(total_diquat_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_diquat_containing_active_ingredient_grams,
+                CAST(total_glyphosate_containing_active_ingredient_grams AS DOUBLE) as 
+                    total_glyphosate_containing_active_ingredient_grams,
                 -- Pesticide load totals
                 CAST(total_pesticide_belastning AS DOUBLE) as total_pesticide_belastning,
                 CAST(total_pfas_pesticide_belastning AS DOUBLE) as total_pfas_pesticide_belastning,
@@ -434,9 +461,12 @@ class H3ResultSaver:
                 CAST(unique_glyphosate_products AS INTEGER) as unique_glyphosate_products,
                 CAST(unique_pesticide_products AS INTEGER) as unique_pesticide_products,
                 -- Intensity metrics (grams per hectare)
-                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(pfas_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    pfas_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(diquat_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    diquat_containing_active_ingredient_intensity_grams_per_ha,
+                CAST(glyphosate_containing_active_ingredient_intensity_grams_per_ha AS DOUBLE) as 
+                    glyphosate_containing_active_ingredient_intensity_grams_per_ha,
                 -- Pesticide load intensity metrics
                 CAST(pesticide_belastning_per_ha AS DOUBLE) as pesticide_belastning_per_ha,
                 CAST(pfas_pesticide_belastning_per_ha AS DOUBLE) as pfas_pesticide_belastning_per_ha,

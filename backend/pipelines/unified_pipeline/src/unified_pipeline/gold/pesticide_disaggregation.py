@@ -1779,18 +1779,24 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         main_totals.TotalMarkerAreaForCVRCrop,
                         non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop,
                         -- Calculate errors for both strategies
-                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 as main_error_pct,
-                        ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 as nonorg_error_pct,
+                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                            as main_error_pct,
+                        ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                            as nonorg_error_pct,
                         -- Check tolerance for both
-                        CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                        CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                                 <= {self.config.area_tolerance_pct} 
                              THEN TRUE ELSE FALSE END as main_passes,
-                        CASE WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                        CASE WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                                 <= {self.config.area_tolerance_pct} 
                              THEN TRUE ELSE FALSE END as nonorg_passes,
                         -- Determine best strategy
                         CASE 
                             WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
-                                 AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} THEN
-                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) <= ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
+                                 AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                                     <= {self.config.area_tolerance_pct} THEN
+                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) 
+                                          <= ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
                                      THEN 'main' ELSE 'nonorg' END
                             WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
                                  THEN 'main'
@@ -1899,13 +1905,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         main_totals.TotalMarkerAreaForCVRCrop,
                         non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop,
                         -- Calculate errors for both strategies
-                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 as main_error_pct,
-                        ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 as nonorg_error_pct,
+                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                            as main_error_pct,
+                        ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                            as nonorg_error_pct,
                         -- Determine best strategy
                         CASE 
                             WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
-                                 AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} THEN
-                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) <= ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
+                                 AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                                     <= {self.config.area_tolerance_pct} THEN
+                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) 
+                                          <= ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
                                      THEN 'main' ELSE 'nonorg' END
                             WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
                                  THEN 'main'

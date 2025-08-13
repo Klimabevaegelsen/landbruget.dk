@@ -280,7 +280,9 @@ if __name__ == "__main__":
         # TEST_USAGE_CODE = 11  # Example: Kød, generelt
         # logger.info(f"\n--- Testing load_herd_list (Species: {TEST_SPECIES_CODE}, "
         #             f"Usage: {TEST_USAGE_CODE}) ---")
-        # herd_list, last_herd_in_batch, has_more = load_herd_list(besaetning_client, username, TEST_SPECIES_CODE, TEST_USAGE_CODE)
+        # herd_list, last_herd_in_batch, has_more = load_herd_list(
+        #     besaetning_client, username, TEST_SPECIES_CODE, TEST_USAGE_CODE
+        # )
         # if herd_list:
         #     logger.info(f"Successfully called load_herd_list. Raw data saved via export module.")
         # else:

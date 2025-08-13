@@ -9,10 +9,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from tqdm import tqdm
-
 from bronze.inspire_bbr_fetcher import InspireBBRFetcher
 from config.settings import get_settings
+from tqdm import tqdm
 from utils.logger import setup_logger
 
 # GCS upload functionality
@@ -230,7 +229,12 @@ def _save_attributes_standard(attributes_data: list[dict[str, Any]], output_dir:
         conn.close()
 
 
-def _process_with_streaming(inspire_fetcher: InspireBBRFetcher, output_dir: Path, sample_size: int | None, pipeline_start_time: datetime) -> dict[str, Any] | None:
+def _process_with_streaming(
+    inspire_fetcher: InspireBBRFetcher,
+    output_dir: Path,
+    sample_size: int | None,
+    pipeline_start_time: datetime,
+) -> dict[str, Any] | None:
     """Process INSPIRE BBR data using streaming approach to manage memory."""
     print("🌊 Using streaming processing for large dataset...")
 

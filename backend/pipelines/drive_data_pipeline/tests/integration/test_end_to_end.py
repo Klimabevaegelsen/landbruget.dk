@@ -45,7 +45,9 @@ def mock_drive_files() -> list[dict[str, Any]]:
 
 
 @pytest.fixture
-def mock_fetcher(mock_drive_service: MagicMock, mock_drive_files: list[dict[str, Any]]) -> Generator[MagicMock, None, None]:
+def mock_fetcher(
+    mock_drive_service: MagicMock, mock_drive_files: list[dict[str, Any]]
+) -> Generator[MagicMock, None, None]:
     """Mock the GoogleDriveFetcher class."""
     with patch("drive_data_pipeline.bronze.drive.GoogleDriveFetcher") as mock_fetcher_patch:
         fetcher_instance = MagicMock()
@@ -95,7 +97,9 @@ def test_settings() -> Generator[Settings, None, None]:
 
 
 @pytest.mark.integration
-def test_end_to_end_pipeline(test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_end_to_end_pipeline(
+    test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test the full pipeline execution from Bronze to Silver."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -164,7 +168,9 @@ def test_end_to_end_pipeline(test_settings: Settings, mock_fetcher: MagicMock, m
 
 
 @pytest.mark.integration
-def test_bronze_only_mode(test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_bronze_only_mode(
+    test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test the pipeline in bronze-only mode."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -200,7 +206,9 @@ def test_bronze_only_mode(test_settings: Settings, mock_fetcher: MagicMock, monk
 
 
 @pytest.mark.integration
-def test_silver_only_mode(test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_silver_only_mode(
+    test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test the pipeline in silver-only mode."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")
@@ -217,7 +225,8 @@ def test_silver_only_mode(test_settings: Settings, mock_fetcher: MagicMock, monk
     metadata_file = bronze_run_dir / "metadata.json"
     with open(metadata_file, "w") as f:
         f.write(
-            '{"files": [{"file_id": "file1", "name": "test_file.xlsx", "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}]}'
+            '{"files": [{"file_id": "file1", "name": "test_file.xlsx", '
+            '"mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}]}'
         )
 
     # Mock Excel transformer
@@ -268,7 +277,9 @@ def test_silver_only_mode(test_settings: Settings, mock_fetcher: MagicMock, monk
 
 
 @pytest.mark.integration
-def test_error_recovery(test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_error_recovery(
+    test_settings: Settings, mock_fetcher: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test the pipeline's error recovery capabilities."""
     # Set necessary environment variables
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "mock_folder_id")

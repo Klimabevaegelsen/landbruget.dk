@@ -51,7 +51,7 @@ class CVREnrichmentSharedConfig(BaseModel):
     api_batch_size: int = Field(
         default=100,
         description="Number of CVR numbers or P-numbers to fetch per API call using "
-                    "'terms' query (optimized for maximum efficiency)",
+        "'terms' query (optimized for maximum efficiency)",
     )
 
     # Address geocoding configuration
@@ -114,7 +114,7 @@ class CVREnrichmentSharedConfig(BaseModel):
     enable_independent_execution: bool = Field(
         default=True,
         description="Whether to enable independent step execution by fetching "
-                    "latest files from GCS",
+        "latest files from GCS",
     )
 
     max_days_back_for_inputs: int = Field(

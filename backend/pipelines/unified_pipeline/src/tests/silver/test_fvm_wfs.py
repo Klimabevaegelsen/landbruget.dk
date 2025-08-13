@@ -3,7 +3,6 @@ Tests for FVM WFS Silver layer.
 """
 
 import pytest
-
 from unified_pipeline.silver.fvm_wfs import FVMWFSSilver, FVMWFSSilverConfig
 
 

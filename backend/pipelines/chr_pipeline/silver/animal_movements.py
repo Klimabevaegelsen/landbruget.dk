@@ -22,7 +22,8 @@ def create_chr_dyr_movement_summaries_table(
 
     try:
         # Expected columns in aggregated format:
-        # reporting_herd_number, movement_date, counterparty_herd, movement_type, animal_count, movement_reasons, cattle_type_breakdown, nation_codes_from, nation_codes_to, is_international
+        # reporting_herd_number, movement_date, counterparty_herd, movement_type, animal_count,
+        # movement_reasons, cattle_type_breakdown, nation_codes_from, nation_codes_to, is_international
         required_columns = [
             "reporting_herd_number",
             "movement_date",
@@ -150,7 +151,8 @@ def create_chr_dyr_animal_movements_table(
         # Access the nested structure Response[0]
         if not isinstance(chr_dyr_raw["Response"].type(), dt.Array):
             logging.warning(
-                f"Cannot create chr_dyr_animal_movements: 'Response' column is not an Array (Type: {chr_dyr_raw['Response'].type()}). Skipping."
+                f"Cannot create chr_dyr_animal_movements: 'Response' column is not an Array "
+                f"(Type: {chr_dyr_raw['Response'].type()}). Skipping."
             )
             return None
 
@@ -163,14 +165,16 @@ def create_chr_dyr_animal_movements_table(
             or "Enkeltdyrsoplysninger" not in response_struct_path.type().names
         ):
             logging.warning(
-                "Cannot create chr_dyr_animal_movements: Missing 'BesaetningsNummer' or 'Enkeltdyrsoplysninger' in Response[0] path. Skipping."
+                "Cannot create chr_dyr_animal_movements: Missing 'BesaetningsNummer' or "
+                "'Enkeltdyrsoplysninger' in Response[0] path. Skipping."
             )
             return None
 
         # Check Enkeltdyrsoplysninger is array using path
         if not isinstance(response_struct_path.Enkeltdyrsoplysninger.type(), dt.Array):
             logging.warning(
-                f"Cannot create chr_dyr_animal_movements: Response[0].Enkeltdyrsoplysninger path is not an Array (Type: {response_struct_path.Enkeltdyrsoplysninger.type()}). Skipping."
+                f"Cannot create chr_dyr_animal_movements: Response[0].Enkeltdyrsoplysninger path "
+                f"is not an Array (Type: {response_struct_path.Enkeltdyrsoplysninger.type()}). Skipping."
             )
             return None
 
@@ -328,7 +332,8 @@ def create_animal_movements_table(
         # Access the nested structure Response[0]
         if not isinstance(diko_flyt_raw["Response"].type(), dt.Array):
             logging.warning(
-                f"Cannot create animal_movements: 'Response' column is not an Array (Type: {diko_flyt_raw['Response'].type()}). Skipping."
+                f"Cannot create animal_movements: 'Response' column is not an Array "
+                f"(Type: {diko_flyt_raw['Response'].type()}). Skipping."
             )
             return None
         # Define path
@@ -341,14 +346,16 @@ def create_animal_movements_table(
             or "Flytninger" not in response_struct_path.type().names
         ):
             logging.warning(
-                "Cannot create animal_movements: Missing 'BesaetningsNummer' or 'Flytninger' in Response[0] path. Skipping."
+                "Cannot create animal_movements: Missing 'BesaetningsNummer' or "
+                "'Flytninger' in Response[0] path. Skipping."
             )
             return None
 
         # Check Flytninger is array using path
         if not isinstance(response_struct_path.Flytninger.type(), dt.Array):
             logging.warning(
-                f"Cannot create animal_movements: Response[0].Flytninger path is not an Array (Type: {response_struct_path.Flytninger.type()}). Skipping."
+                f"Cannot create animal_movements: Response[0].Flytninger path is not an Array "
+                f"(Type: {response_struct_path.Flytninger.type()}). Skipping."
             )
             return None
 

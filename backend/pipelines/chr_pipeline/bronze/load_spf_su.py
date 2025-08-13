@@ -144,7 +144,8 @@ async def _fetch_spf_su_for_herd(
 
                     # Always log the basic error
                     logger.warning(
-                        f"HTTP {response.status} for herd {herd_number}: {response_text[:200]}{'...' if len(response_text) > 200 else ''}"
+                        f"HTTP {response.status} for herd {herd_number}: "
+                        f"{response_text[:200]}{'...' if len(response_text) > 200 else ''}"
                     )
 
                     # Only log full details for first 3 errors of each status code to avoid spam
@@ -160,7 +161,8 @@ async def _fetch_spf_su_for_herd(
                     # Log detailed info only for first 3 occurrences of each error type
                     if _fetch_spf_su_for_herd.error_counts[status_code] <= 3:
                         logger.warning(
-                            f"  Detailed error info for HTTP {status_code} (occurrence #{_fetch_spf_su_for_herd.error_counts[status_code]}):"
+                            f"  Detailed error info for HTTP {status_code} "
+                            f"(occurrence #{_fetch_spf_su_for_herd.error_counts[status_code]}):"
                         )
                         logger.warning(f"  URL: {url}")
                         logger.warning(f"  Response headers: {dict(response.headers)}")

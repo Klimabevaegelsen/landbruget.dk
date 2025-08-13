@@ -29,7 +29,10 @@ def _get_optimized_gcs_access():
         return GCSDataAccess
     except ImportError as e:
         logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
-        logger.warning("⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance")
+        logger.warning(
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed "
+            "for optimal performance"
+        )
         return None
 
 
@@ -91,7 +94,9 @@ class OptimizedGCSStorage:
                 # Use fallback upload
                 blob = self.gcs_bucket.blob(gcs_path)
                 blob.upload_from_filename(str(local_path))
-                logger.info(f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+                logger.info(
+                    f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)"
+                )
 
             return True
 
@@ -550,7 +555,8 @@ class BMDTransformer:
                     END AS contains_diquat,
                     CASE 
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
-                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%' OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
+                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%' 
+                            OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
                         ELSE false
                     END AS contains_glyphosate
                 FROM {table_name};
@@ -578,13 +584,16 @@ class BMDTransformer:
             total_count = self.conn.execute("SELECT COUNT(*) FROM pfas_enhanced").fetchone()[0]
 
             logger.info(
-                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS ({pfas_count / total_count:.1%})"
+                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS "
+                f"({pfas_count / total_count:.1%})"
             )
             logger.info(
-                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat ({diquat_count / total_count:.1%})"
+                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat "
+                f"({diquat_count / total_count:.1%})"
             )
             logger.info(
-                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate ({glyphosate_count / total_count:.1%})"
+                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate "
+                f"({glyphosate_count / total_count:.1%})"
             )
 
             # Store detection metadata
