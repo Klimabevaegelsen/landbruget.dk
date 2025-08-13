@@ -194,27 +194,32 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     ELSE CONCAT(
                         SUBSTR(
                             crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                                CONCAT('landbrugsdata-company-cvr', 
+                                    TRIM(CAST(cvr_number AS VARCHAR)))), 
                             1, 8
                         ), '-',
                         SUBSTR(
                             crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                                CONCAT('landbrugsdata-company-cvr', 
+                                    TRIM(CAST(cvr_number AS VARCHAR)))), 
                             9, 4
                         ), '-',
                         '5', SUBSTR(
                             crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                                CONCAT('landbrugsdata-company-cvr', 
+                                    TRIM(CAST(cvr_number AS VARCHAR)))), 
                             13, 3
                         ), '-',
                         CONCAT('8', SUBSTR(
                             crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                                CONCAT('landbrugsdata-company-cvr', 
+                                    TRIM(CAST(cvr_number AS VARCHAR)))), 
                             17, 3
                         )), '-',
                         SUBSTR(
                             crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 
+                                CONCAT('landbrugsdata-company-cvr', 
+                                    TRIM(CAST(cvr_number AS VARCHAR)))), 
                             21, 12
                         )
                     )
@@ -241,7 +246,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.conn.execute("SET max_memory = '8GB'")
 
             # CRITICAL: Enable more aggressive memory management
-            # DuckDB recommendation: Disable insertion order preservation for better memory efficiency
+            # DuckDB recommendation: Disable insertion order preservation for better memory
+            # efficiency
             self.conn.execute(
                 "SET preserve_insertion_order = false"
             )  # Already set in base, but ensure it's applied
@@ -350,7 +356,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             original_list_length = len(cvr_list)
             cvr_list = cvr_list[: self.config.test_limit]
             self.log.info(
-                f"🧪 Test mode: Limited CVR list from {original_list_length} to {len(cvr_list)} entries"
+                f"🧪 Test mode: Limited CVR list from {original_list_length} to "
+                f"{len(cvr_list)} entries"
             )
 
         # Additional validation and logging for deduplication

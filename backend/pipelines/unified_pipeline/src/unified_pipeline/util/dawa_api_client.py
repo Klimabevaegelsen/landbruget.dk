@@ -140,7 +140,8 @@ class DAWAAPIClient:
 
         Args:
             address_ids: List of DAWA address IDs
-            max_concurrent: Maximum number of concurrent requests (not implemented yet - sequential for now)
+            max_concurrent: Maximum number of concurrent requests 
+                (not implemented yet - sequential for now)
 
         Returns:
             Dictionary mapping address_id to geocoded data (or None if failed)

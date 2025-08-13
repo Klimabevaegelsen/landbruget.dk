@@ -107,7 +107,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self._configure_memory_optimizations()
 
     def _configure_memory_optimizations(self):
-        """Configure DuckDB memory optimizations for GitHub Actions environment with aggressive resource management."""
+        """Configure DuckDB memory optimizations for GitHub Actions environment with 
+        aggressive resource management."""
         if not self.config.enable_memory_optimizations:
             return
 

@@ -1,6 +1,7 @@
 """Tests for BBR Buildings Pipeline configuration."""
 
 import pytest
+
 from config import Settings, get_settings
 
 

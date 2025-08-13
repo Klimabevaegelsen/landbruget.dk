@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import aiohttp
 import pytest
+
 from unified_pipeline.bronze.dmi import DMIApiClient, DMIBronze, DMIBronzeConfig
 
 
