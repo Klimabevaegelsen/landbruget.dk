@@ -1529,7 +1529,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         self.log.info("✅ DuckDB setup completed successfully!")
         self.log.info(
-            f"📈 Loaded {marker_count:,} agricultural fields and {pesticide_count:,} pesticide records"
+            f"📈 Loaded {marker_count:,} agricultural fields and "
+            f"{pesticide_count:,} pesticide records"
         )
 
         # SUCCESS! We now have both datasets loaded and ready for disaggregation
@@ -1647,8 +1648,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """
         Identifies marker field UUIDs that are considered organic.
 
-        Now that FVM marker data contains organic farming information via the is_organic column,
-        this method queries the marker table to find all organic fields using field_uuid for uniqueness.
+        Now that FVM marker data contains organic farming information via the is_organic
+        column,
+        this method queries the marker table to find all organic fields using field_uuid
+        for uniqueness.
 
         Results are cached.
         Returns a set of marker.field_uuid strings for unique identification.
@@ -1668,7 +1671,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             organic_field_uuids = {str(row[0]) for row in result}
             self.log.info(
-                f"Found {len(organic_field_uuids)} unique organic field UUIDs out of total marker fields"
+                f"Found {len(organic_field_uuids)} unique organic field UUIDs "
+                "out of total marker fields"
             )
 
             # Cache the result
@@ -1706,9 +1710,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                   AND area_ha > 0.0
             """).fetchall()
 
-            mixed_combinations = {(str(row[0]), int(row[1])) for row in result if row[0] and row[1]}
+            mixed_combinations = {
+                (str(row[0]), int(row[1])) for row in result if row[0] and row[1]
+            }
             self.log.info(
-                f"🌱 Found {len(mixed_combinations)} CVR+crop combinations with organic fields (mixed farming)"
+                f"🌱 Found {len(mixed_combinations)} CVR+crop combinations with "
+                "organic fields (mixed farming)"
             )
             return mixed_combinations
 
@@ -1782,31 +1789,36 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         main_totals.TotalMarkerAreaForCVRCrop,
                         non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop,
                         -- Calculate errors for both strategies
-                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 
-                            as main_error_pct,
-                        ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 
-                            as nonorg_error_pct,
+                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                            p.AcreageSize * 100 as main_error_pct,
+                        ABS(p.AcreageSize - 
+                            non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100 as nonorg_error_pct,
                         -- Check tolerance for both
-                        CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 
+                        CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                            p.AcreageSize * 100 
                                  <= {self.config.area_tolerance_pct} 
                              THEN TRUE ELSE FALSE END as main_passes,
-                        CASE WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                        CASE WHEN ABS(p.AcreageSize - 
+                            non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
                             p.AcreageSize * 100 
                                  <= {self.config.area_tolerance_pct} 
                              THEN TRUE ELSE FALSE END as nonorg_passes,
                         -- Determine best strategy
                         CASE 
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                                p.AcreageSize * 100
                                  <= {self.config.area_tolerance_pct} 
-                                 AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 
+                                 AND ABS(p.AcreageSize - 
+                                     non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100 
                                      <= {self.config.area_tolerance_pct} THEN
                                 CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) 
                                           <= ABS(p.AcreageSize -
                                               non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
                                      THEN 'main' ELSE 'nonorg' END
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                                p.AcreageSize * 100
                                  <= {self.config.area_tolerance_pct} 
                                  THEN 'main'
                             WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
@@ -1916,23 +1928,26 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         main_totals.TotalMarkerAreaForCVRCrop,
                         non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop,
                         -- Calculate errors for both strategies
-                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 
-                            as main_error_pct,
-                        ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 
-                            as nonorg_error_pct,
+                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                            p.AcreageSize * 100 as main_error_pct,
+                        ABS(p.AcreageSize - 
+                            non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100 as nonorg_error_pct,
                         -- Determine best strategy
                         CASE 
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                                p.AcreageSize * 100
                                  <= {self.config.area_tolerance_pct} 
-                                 AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 
+                                 AND ABS(p.AcreageSize - 
+                                     non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100 
                                      <= {self.config.area_tolerance_pct} THEN
                                 CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) 
                                           <= ABS(p.AcreageSize -
                                               non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
                                      THEN 'main' ELSE 'nonorg' END
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                                p.AcreageSize * 100
                                  <= {self.config.area_tolerance_pct} 
                                  THEN 'main'
                             WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
@@ -2627,7 +2642,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             if pending_for_chunk == 0:
                 self.log.info(
                     f"⚠️ Chunk {chunk_num}: No pending records found - skipping " +
-                    f"(this shouldn't happen with optimized filtering)"
+                    "(this shouldn't happen with optimized filtering)"
                 )
                 return 0
             else:

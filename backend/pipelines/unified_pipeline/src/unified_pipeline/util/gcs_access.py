@@ -591,7 +591,8 @@ class GCSDataAccess:
 
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             self.log.info(
-                f"✅ Created combined table {table_name} with {count:,} rows from {len(gcs_paths)} files"
+                f"✅ Created combined table {table_name} with {count:,} rows "
+                f"from {len(gcs_paths)} files"
             )
 
         finally:

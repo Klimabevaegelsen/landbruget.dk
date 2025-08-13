@@ -131,7 +131,10 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             -- Detailed injury type data (34 companies)
             injury_type_data AS (
                 SELECT 
-                    CAST(\n                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart \n                        AS BIGINT\n                    ) as cvr_number,
+                    CAST(
+                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart 
+                        AS BIGINT
+                    ) as cvr_number,
                     column_1 as injury_type,
                     column_2 as year_2019,
                     column_3 as year_2020,

@@ -55,7 +55,8 @@ def check_memory_usage() -> None:
     disk = psutil.disk_usage(".")
 
     print(
-        f"Memory: {memory.percent:.1f}% used ({memory.used / 1024**3:.1f}GB/{memory.total / 1024**3:.1f}GB)"
+        f"Memory: {memory.percent:.1f}% used "
+        f"({memory.used / 1024**3:.1f}GB/{memory.total / 1024**3:.1f}GB)"
     )
     print(
         f"Disk: {100 - disk.free / disk.total * 100:.1f}% used "
@@ -400,7 +401,8 @@ def perform_true_spatial_join_example(
         INNER JOIN {spatial_features_table} f ON ST_Intersects(b.geometry, f.geometry)
         WHERE ST_IsValid(b.geometry) 
         AND ST_IsValid(f.geometry)
-        AND ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) > 10  -- Minimum 10m² intersection
+        AND ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) > 10  
+        -- Minimum 10m² intersection
         """
 
         # Check if SPATIAL_JOIN operator would be used

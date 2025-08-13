@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.log_util import Logger
 
-from .area_validation import FieldAreaValidator, ValidationError
+from .area_validation import FieldAreaValidator
 from .config import CONFIG
 
 

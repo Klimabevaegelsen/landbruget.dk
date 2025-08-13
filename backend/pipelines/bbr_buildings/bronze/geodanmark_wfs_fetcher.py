@@ -15,9 +15,10 @@ from pathlib import Path
 from threading import Lock
 
 import requests
-from config import Settings
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+
+from config import Settings
 
 
 class GeoDanmarkWFSFetcher:

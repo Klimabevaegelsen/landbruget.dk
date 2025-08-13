@@ -188,7 +188,8 @@ class FVMWFSSilverConfig(BaseJobConfig):
         "Marknr": "field_id",
         "Geometrisk": "area_ha",  # Geometric area in hectares
         "Foranstalt": "subsidy_measure",  # Subsidy measure description
-        "Tilsagnsty": "subsidy_type_code",  # Subsidy type code (e.g., "67 Afgræsning med grundbetaling")
+        "Tilsagnsty": "subsidy_type_code",  # Subsidy type code 
+        # (e.g., "67 Afgræsning med grundbetaling")
         "Graesnings": "grazing_info",  # Grazing-specific information
         "Startdato": "start_date",  # Start date of subsidy
         "Slutdato": "end_date",  # End date of subsidy
@@ -398,7 +399,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.log.warning("No features with valid geometry found in payload")
                 # Create empty table for consistency
                 self.conn.execute(
-                    f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry LIMIT 0"
+                    f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS "
+                    "SELECT NULL as geometry LIMIT 0"
                 )
                 return f"extracted_features_{table_suffix}"
 
@@ -455,7 +457,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Create spatial table with transformed geometry as WKT string
             # Return DuckDB relation instead of pandas  to avoid Shapely conversion
-            # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
+            # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate
+            # transformation
             result_query = f"""
                 SELECT 
                     {", ".join(column_mappings) if column_mappings else "*"},
@@ -489,14 +492,16 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.log.error(f"Error parsing JSON payload: {e}")
             # Create empty table for consistency
             self.conn.execute(
-                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry LIMIT 0"
+                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS "
+                "SELECT NULL as geometry LIMIT 0"
             )
             return f"extracted_features_{table_suffix}"
         except Exception as e:
             self.log.error(f"Error processing payload: {e}")
             # Create empty table for consistency
             self.conn.execute(
-                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS SELECT NULL as geometry LIMIT 0"
+                f"CREATE OR REPLACE TABLE extracted_features_{table_suffix} AS "
+                "SELECT NULL as geometry LIMIT 0"
             )
             return f"extracted_features_{table_suffix}"
 

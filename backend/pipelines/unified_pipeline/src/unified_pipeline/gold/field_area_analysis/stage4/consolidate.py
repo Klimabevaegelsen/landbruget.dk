@@ -268,8 +268,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 MAX(bnbo_completed_hectares) as bnbo_completed_hectares,
                 MAX(bnbo_action_required_overlap_hectares) as bnbo_action_required_overlap_hectares,
                 MAX(bnbo_completed_overlap_hectares) as bnbo_completed_overlap_hectares,
-                MAX(bnbo_action_required_not_covered_by_water_hectares) as bnbo_action_required_not_covered_by_water_hectares,
-                MAX(bnbo_completed_not_covered_by_water_hectares) as bnbo_completed_not_covered_by_water_hectares,
+                MAX(bnbo_action_required_not_covered_by_water_hectares) as 
+                    bnbo_action_required_not_covered_by_water_hectares,
+                MAX(bnbo_completed_not_covered_by_water_hectares) as 
+                    bnbo_completed_not_covered_by_water_hectares,
                 MAX(bnbo_status_categories) as bnbo_status_categories,
                 MAX(bnbo_status_count) as bnbo_status_count,
                 
@@ -277,7 +279,8 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 SUM(property_bnbo_total_m2) as property_bnbo_total_m2,
                 SUM(property_bnbo_water_covered_m2) as property_bnbo_water_covered_m2,
                 SUM(property_bnbo_water_uncovered_m2) as property_bnbo_water_uncovered_m2,
-                SUM(property_bnbo_count) as property_bnbo_count,  -- Total count across all properties
+                SUM(property_bnbo_count) as property_bnbo_count,  
+                -- Total count across all properties
                 MAX(property_bnbo_owners) as property_bnbo_owners,
                 MAX(property_bnbo_breakdown) as property_bnbo_breakdown
                 
