@@ -1131,7 +1131,10 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Calculate summary statistics
         companies_data = consolidated_data.get("companies", {})
-        pnumbers_data = consolidated_data.get("pnumbers", {})
+        # Count P-numbers from merged company data (not from separate pnumbers dict)
+        total_pnumbers = sum(
+            len(company.get("pnumber_data", [])) for company in companies_data.values()
+        )
 
         # Count addresses and geocoded addresses
         total_addresses = 0
@@ -1149,7 +1152,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         # Create comprehensive summary statistics
         summary_stats = {
             "total_companies": len(companies_data),
-            "total_pnumbers": len(pnumbers_data),
+            "total_pnumbers": total_pnumbers,
             "total_addresses": total_addresses,
             "geocoded_addresses": geocoded_addresses,
             "financial_documents": financial_docs,
