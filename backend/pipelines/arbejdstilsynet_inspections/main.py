@@ -12,7 +12,7 @@ print("[DEBUG] DISPLAY =", os.environ.get("DISPLAY"))
 print("[DEBUG] DOCKER_ENV =", os.environ.get("DOCKER_ENV"))
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     """Parse command line arguments for the pipeline.
 
     Returns:

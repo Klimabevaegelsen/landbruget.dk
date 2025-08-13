@@ -5,8 +5,18 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 import pyarrow.parquet as pq
+
+try:
+    import geopandas as gpd
+    import pandas as pd
+    DataFrame = pd.DataFrame
+    GeoDataFrame = gpd.GeoDataFrame
+except ImportError:
+    DataFrame = Any
+    GeoDataFrame = Any
 
 # ✅ MIGRATION: Removed shapely import - using DuckDB ST_Point for all spatial operations
 
@@ -18,7 +28,7 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    def get_logger():
+    def get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
     DriveStorageManager = None
@@ -162,7 +172,7 @@ class ParquetManager(DuckDBProcessor):
     # Legacy method for backward compatibility during migration
     def save_dataframe_to_parquet(
         self,
-        df,  # Could be pandas DataFrame or table name
+        df: DataFrame | str,  # Could be pandas DataFrame or table name
         output_path: Path,
         schema_metadata: dict | None = None,
         row_group_size: int = 100000,
@@ -337,7 +347,7 @@ class ParquetManager(DuckDBProcessor):
     # Legacy methods for backward compatibility
     def save_geodataframe_to_geoparquet(
         self,
-        gdf,  # Could be GeoDataFrame or table name
+        gdf: GeoDataFrame | str,  # Could be GeoDataFrame or table name
         output_path: Path,
         geometry_column: str = "geometry",
         schema_metadata: dict | None = None,

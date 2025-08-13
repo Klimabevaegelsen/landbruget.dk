@@ -51,7 +51,8 @@ class DAGISilverConfig(BaseJobConfig):
 
     target_crs: str = Field(
         default="EPSG:4326",
-        description="Target coordinate reference system - WGS84 for consistency with other datasets",
+        description="Target coordinate reference system - WGS84 for consistency "
+                    "with other datasets",
     )
 
     endpoints: Dict[str, str] = Field(
@@ -245,7 +246,8 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             ).fetchone()[0]
 
             self.log.info(
-                f"Processed {total_count} features for {layer_type}, {valid_count} with valid geometries"
+                f"Processed {total_count} features for {layer_type}, "
+                f"{valid_count} with valid geometries"
             )
 
             # Clean up temporary table
@@ -270,7 +272,8 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
 
         Returns:
             Optional[Dict[str, str]]: Dictionary mapping layer names to processed table names
-                                     for potential gold stage consumption, or None if processing fails.
+                                     for potential gold stage consumption, or None
+                                     if processing fails.
         """
         self.log.info("Running DAGI silver job with DuckDB-spatial")
 

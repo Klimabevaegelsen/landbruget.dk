@@ -157,7 +157,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
                         f"Error getting count for {url}: {response.status} - {response_text}"
                     )
         except Exception as e:
-            raise Exception(f"Error getting total count for {url}: {str(e)}")
+            raise Exception(f"Error getting total count for {url}: {str(e)}") from e
 
     @retry(
         retry=retry_if_exception_type(Exception),

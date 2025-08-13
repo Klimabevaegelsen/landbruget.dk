@@ -136,21 +136,21 @@ def parse_args() -> Dict[str, Any]:
     if args.test_species_codes:
         try:
             test_species_codes = [int(code.strip()) for code in args.test_species_codes.split(",")]
-        except ValueError:
-            raise ValueError("test_species_codes must be comma-separated integers")
+        except ValueError as e:
+            raise ValueError("test_species_codes must be comma-separated integers") from e
 
     # Parse dates if provided
     start_date, end_date = get_default_dates()
     if args.start_date:
         try:
             start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
-        except ValueError:
-            raise ValueError("start_date must be in YYYY-MM-DD format")
+        except ValueError as e:
+            raise ValueError("start_date must be in YYYY-MM-DD format") from e
     if args.end_date:
         try:
             end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date()
-        except ValueError:
-            raise ValueError("end_date must be in YYYY-MM-DD format")
+        except ValueError as e:
+            raise ValueError("end_date must be in YYYY-MM-DD format") from e
 
     return {
         "steps": args.steps,
@@ -1184,7 +1184,7 @@ def main():
 
     except Exception as e:
         logging.error(f"Pipeline failed: {e}", exc_info=True)
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
 
 if __name__ == "__main__":

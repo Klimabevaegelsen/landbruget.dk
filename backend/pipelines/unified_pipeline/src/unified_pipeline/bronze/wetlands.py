@@ -181,11 +181,11 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
                     except ET.ParseError as e:
                         err_msg = f"Failed to parse XML response: {e}"
                         self.log.error(err_msg)
-                        raise Exception(err_msg)
+                        raise Exception(err_msg) from e
             except Exception as e:
                 err_msg = f"Error fetching data: {e}"
                 self.log.error(err_msg)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
 
     async def _fetch_raw_data(self) -> Optional[list[str]]:
         """

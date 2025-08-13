@@ -11,7 +11,7 @@ logger = get_logger()
 
 
 # Try to import optimized GCS access with fallback
-def _get_gcs_access():
+def _get_gcs_access() -> type | None:
     """
     Get GCSDataAccess with robust import handling for different environments.
 
@@ -115,10 +115,10 @@ class DriveStorageManager:
             logger.info(
                 f"✅ DriveStorageManager: Initialized with fallback GCS for bucket: {bucket_name}"
             )
-        except ImportError:
-            raise ImportError("google-cloud-storage is required for GCS storage but not available")
+        except ImportError as e:
+            raise ImportError("google-cloud-storage is required for GCS storage but not available") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
     def save_file(self, data: bytes | BinaryIO, path: str | Path) -> None:
         """Save file data to the given path.

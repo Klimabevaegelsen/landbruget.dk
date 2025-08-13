@@ -10,7 +10,7 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # Run the pipeline
-from drive_data_pipeline.main import main
+from drive_data_pipeline.main import main  # noqa: E402
 
 if __name__ == "__main__":
     sys.exit(main())

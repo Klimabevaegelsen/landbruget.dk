@@ -82,7 +82,10 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     # DON'T CHANGE THIS - it's the magic number that makes the whole system work
     area_tolerance_pct: float = Field(
         default=2.0,
-        description="Area tolerance percentage - PRESERVE ORIGINAL VALUE (2% = the sweet spot for 92% coverage)",
+        description=(
+            "Area tolerance percentage - PRESERVE ORIGINAL VALUE "
+            "(2% = the sweet spot for 92% coverage)"
+        ),
     )
 
     # Memory management settings for processing large datasets
@@ -271,14 +274,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
                 self.log.info(f"📊 VALIDATION: {strategy_name} completed")
                 self.log.info(
-                    f"   ✅ Strategy processed: {strategy_stats[0]:,} records from {strategy_stats[3]:,} original applications"
+                    f"   ✅ Strategy processed: {strategy_stats[0]:,} records from "
+                    f"{strategy_stats[3]:,} original applications"
                 )
                 self.log.info(f"   📈 Cumulative progress: {current_stats[0]:,} records")
 
                 # Simple check for major discrepancies
                 if strategy_stats[0] != processed_count:
                     self.log.warning(
-                        f"⚠️ VALIDATION WARNING: Expected {processed_count:,} records but found {strategy_stats[0]:,} in database"
+                        f"⚠️ VALIDATION WARNING: Expected {processed_count:,} records but "
+                        f"found {strategy_stats[0]:,} in database"
                     )
 
         except Exception as e:
@@ -288,7 +293,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Map strategy names to their AllocationMethod patterns for querying."""
         strategy_patterns = {
             "Main Area Match": "Marker_ApplicationAreaToTotalFieldArea_FieldProportional",
-            "Non-Organic Match": "Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional",
+            "Non-Organic Match": (
+                "Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional"
+            ),
             "Partial Field Coverage": "Partial_Field_Coverage_SingleField",
             "Spatial Clustering": "Adjacent_Fields_Spatial_Cluster_AreaMatched",
             "Ethical Best-Match": "Ethical_Best_Match_",
@@ -375,13 +382,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info("📋 STRATEGY BREAKDOWN:")
                 for strategy, stats in self._validation_data.get("strategy_totals", {}).items():
                     self.log.info(
-                        f"   {strategy}: {stats['original_records']:,} applications → {stats['record_count']:,} records"
+                        f"   {strategy}: {stats['original_records']:,} applications → "
+                        f"{stats['record_count']:,} records"
                     )
 
-                # Simple validation: if we have pending records but no results, that's likely a processing failure
+                # Simple validation: if we have pending records but no results,
+                # that's likely a processing failure
                 if pending_count > 0 and final_count == 0:
                     self.log.warning(
-                        f"⚠️ VALIDATION WARNING: {pending_count:,} pending records but 0 disaggregated results - this may indicate processing issues"
+                        f"⚠️ VALIDATION WARNING: {pending_count:,} pending records but "
+                        f"0 disaggregated results - this may indicate processing issues"
                     )
 
                 self.log.info("✅ Validation completed")
@@ -416,7 +426,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("🚀 Starting pesticide disaggregation processing with original strategy")
         print("DEBUG: Logger info message sent")
         self.log.info(
-            f"🔧 Configuration: area_tolerance={self.config.area_tolerance_pct}%, field_year_offset={self.config.field_year_offset}"
+            f"🔧 Configuration: area_tolerance={self.config.area_tolerance_pct}%, "
+            f"field_year_offset={self.config.field_year_offset}"
         )
         self.log.info(f"☁️ GCS Bucket: {self.config.bucket}")
 
@@ -461,7 +472,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         for i, (pesticide_year, field_year) in enumerate(pesticide_field_pairs, 1):
             self.log.info("=" * 80)
             self.log.info(
-                f"🔄 Processing year pair {i}/{len(pesticide_field_pairs)}: pesticide {pesticide_year} with field {field_year}"
+                f"🔄 Processing year pair {i}/{len(pesticide_field_pairs)}: "
+                f"pesticide {pesticide_year} with field {field_year}"
             )
             self.log.info("=" * 80)
 
@@ -469,7 +481,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # =====================================
             # Load both pesticide applications and field boundaries for this year combination
             self.log.info(
-                f"📥 Loading silver data for pesticide year {pesticide_year} and field year {field_year}"
+                f"📥 Loading silver data for pesticide year {pesticide_year} "
+                f"and field year {field_year}"
             )
             try:
                 datasets = self._load_silver_data_for_years(pesticide_year, field_year, silver_data)
@@ -531,7 +544,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Update our running totals based on how this year went
             if year_results is not None and year_results > 0:
                 self.log.info(
-                    f"✅ Year {pesticide_year}: Successfully processed and saved {year_results:,} disaggregated records"
+                    f"✅ Year {pesticide_year}: Successfully processed and saved "
+                    f"{year_results:,} disaggregated records"
                 )
 
                 # Count total pesticide records for this year to calculate coverage percentage
@@ -545,7 +559,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     temp_conn.close()
                     total_pesticide_records += pesticide_count
                     self.log.info(
-                        f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, {year_results} disaggregated"
+                        f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, "
+                        f"{year_results} disaggregated"
                     )
                     total_disaggregated_records += year_results
                     successful_years += 1
@@ -572,7 +587,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         if successful_years == 0:
             self.log.error("❌ No years were successfully processed - terminating")
-            error_msg = f"Pesticide disaggregation failed completely: 0/{len(pesticide_field_pairs)} years processed successfully, {failed_years} years failed"
+            error_msg = (
+                f"Pesticide disaggregation failed completely: 0/{len(pesticide_field_pairs)} "
+                f"years processed successfully, {failed_years} years failed"
+            )
             self.log.error(f"💥 CRITICAL FAILURE: {error_msg}")
             raise RuntimeError(error_msg)
 
@@ -588,9 +606,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # This indicates a systematic processing failure, not just missing data
             if total_disaggregated_records == 0:
                 self.log.warning(
-                    f"⚠️ WARNING: All {failed_years} years failed to process - this may indicate systematic issues with column mapping, data schema, or processing logic"
+                    f"⚠️ WARNING: All {failed_years} years failed to process - this may "
+                    f"indicate systematic issues with column mapping, data schema, or "
+                    f"processing logic"
                 )
-                # Note: We don't fail here because this might be due to data quality issues rather than code bugs
+                # Note: We don't fail here because this might be due to data quality issues
+                # rather than code bugs
 
         self.log.info("🎉 Pesticide disaggregation completed successfully!")
         self.log.info("📊 Final Statistics:")
@@ -598,7 +619,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             f"   📈 Total pesticide records across all years: {total_pesticide_records:,}"
         )
         self.log.info(
-            f"   ✅ Successfully disaggregated: {total_disaggregated_records:,} ({coverage_pct:.1f}%)"
+            f"   ✅ Successfully disaggregated: {total_disaggregated_records:,} "
+            f"({coverage_pct:.1f}%)"
         )
         self.log.info(f"   📅 Processed years: {successful_years}")
         self.log.info("   💾 Results saved as separate files for each year (much more efficient!)")
@@ -715,7 +737,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         Use _save_year_results_direct() instead for better performance.
         """
         self.log.warning(
-            "⚠️ Using deprecated _save_year_results method - consider using _save_year_results_direct"
+            "⚠️ Using deprecated _save_year_results method - "
+            "consider using _save_year_results_direct"
         )
         return self._save_year_results_direct(year)
 
@@ -725,7 +748,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         THE Y+1 TEMPORAL PATTERN:
         =========================
-        We use a Y+1 pattern where pesticide data from year X is matched with field data from year X+1.
+        We use a Y+1 pattern where pesticide data from year X is matched with field data
+        from year X+1.
 
         Why? Because field boundaries are often updated/finalized after the growing season ends.
         So 2021 pesticide applications use 2022 field boundaries, which reflect the actual field
@@ -789,7 +813,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info(f"   ✅ Pair created: pesticide {pest_year} → field {field_year}")
             else:
                 self.log.warning(
-                    f"   ❌ No field data found for pesticide year {pest_year} (expected field year {field_year})"
+                    f"   ❌ No field data found for pesticide year {pest_year} "
+                    f"(expected field year {field_year})"
                 )
 
         self.log.info(f"🎯 Created {len(pairs)} valid pesticide-field year pairs")
@@ -888,10 +913,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         fields_status = "✅" if datasets["agricultural_fields"] else "❌"
         self.log.info(f"📋 Data loading summary for {pesticide_year}-{field_year}:")
         self.log.info(
-            f"   {pesticide_status} Pesticide data: {'Found' if datasets['pesticides'] else 'Missing'}"
+            f"   {pesticide_status} Pesticide data: "
+            f"{'Found' if datasets['pesticides'] else 'Missing'}"
         )
         self.log.info(
-            f"   {fields_status} Agricultural fields data: {'Found' if datasets['agricultural_fields'] else 'Missing'}"
+            f"   {fields_status} Agricultural fields data: "
+            f"{'Found' if datasets['agricultural_fields'] else 'Missing'}"
         )
 
         return datasets
@@ -900,7 +927,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Read pesticide data for a specific year."""
         try:
             # Look for the specific pesticide file for this year
-            # Based on actual codebase: filename pattern is pesticiddata_YYYY_YYYY.parquet in timestamped subdirs
+            # Based on actual codebase: filename pattern is pesticiddata_YYYY_YYYY.parquet
+            # in timestamped subdirs
             filename = f"pesticiddata_{year}_{year + 1}.parquet"
 
             # Use list_files with recursive pattern to find all parquet files
@@ -1095,7 +1123,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             processed_ethical = self._process_mixed_farming_best_match(mixed_combinations)
             total_processed += processed_ethical
             self.log.info(
-                f"✅ Year {pesticide_year}: Ethical Best-Match: {processed_ethical} mixed farming records processed"
+                f"✅ Year {pesticide_year}: Ethical Best-Match: {processed_ethical} "
+                f"mixed farming records processed"
             )
             # VALIDATION: Check ethical best-match strategy results
             self._validate_strategy_results("Ethical Best-Match", processed_ethical)
@@ -1108,7 +1137,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             processed_main_remaining = self._disaggregate_by_marker_match()
             total_processed += processed_main_remaining
             self.log.info(
-                f"✅ Year {pesticide_year}: Main Area Match (remaining): {processed_main_remaining} records processed"
+                f"✅ Year {pesticide_year}: Main Area Match (remaining): "
+                f"{processed_main_remaining} records processed"
             )
             # VALIDATION: Check main area matching strategy results
             self._validate_strategy_results("Main Area Match", processed_main_remaining)
@@ -1121,7 +1151,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             processed_nonorg_cleanup = self._disaggregate_by_marker_non_organic_match()
             total_processed += processed_nonorg_cleanup
             self.log.info(
-                f"✅ Year {pesticide_year}: Non-Organic Cleanup: {processed_nonorg_cleanup} records processed"
+                f"✅ Year {pesticide_year}: Non-Organic Cleanup: {processed_nonorg_cleanup} "
+                f"records processed"
             )
             # VALIDATION: Check non-organic matching strategy results
             self._validate_strategy_results("Non-Organic Match", processed_nonorg_cleanup)

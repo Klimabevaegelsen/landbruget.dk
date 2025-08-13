@@ -11,9 +11,9 @@ import nest_asyncio
 ROOT = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
 sys.path.insert(0, ROOT)
 
-from bronze.fetch_company_data import DMAScraper
-from bronze.fetch_company_detail import DMACompanyDetailScraper
-from silver.transformation import transform_dma_json
+from bronze.fetch_company_data import DMAScraper  # noqa: E402
+from bronze.fetch_company_detail import DMACompanyDetailScraper  # noqa: E402
+from silver.transformation import transform_dma_json  # noqa: E402
 
 
 def _get_optimized_storage():
@@ -85,10 +85,10 @@ class OptimizedStorageBackend:
             self.gcs_client = storage.Client()
             self.gcs_bucket = self.gcs_client.bucket(bucket_name)
             print(f"✅ DMA Storage: Using fallback GCS for bucket: {bucket_name}")
-        except ImportError:
-            raise ImportError("google-cloud-storage is required but not available")
+        except ImportError as e:
+            raise ImportError("google-cloud-storage is required but not available") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
     def save_json(self, data, blob_name: str):
         """Save JSON data to GCS."""

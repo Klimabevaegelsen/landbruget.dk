@@ -1,5 +1,6 @@
 """Main entry point for Google Drive Data Pipeline."""
 
+import logging
 import os
 import sys
 import time
@@ -14,13 +15,14 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # Use absolute imports
-from drive_data_pipeline.bronze import BronzeProcessor
-from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service
-from drive_data_pipeline.bronze.metadata import MetadataManager
-from drive_data_pipeline.config import get_settings, parse_args
-from drive_data_pipeline.silver import SilverProcessor
-from drive_data_pipeline.utils.logging import get_logger, setup_logging
-from drive_data_pipeline.utils.storage import get_storage_manager
+from drive_data_pipeline.bronze import BronzeProcessor  # noqa: E402
+from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service  # noqa: E402
+from drive_data_pipeline.bronze.drive.models import DriveFolder  # noqa: E402
+from drive_data_pipeline.bronze.metadata import MetadataManager  # noqa: E402
+from drive_data_pipeline.config import get_settings, parse_args  # noqa: E402
+from drive_data_pipeline.silver import SilverProcessor  # noqa: E402
+from drive_data_pipeline.utils.logging import get_logger, setup_logging  # noqa: E402
+from drive_data_pipeline.utils.storage import get_storage_manager  # noqa: E402
 
 # Try to import CVR collection utilities
 try:
@@ -47,7 +49,9 @@ if not os.path.exists(env_path):
 load_dotenv(env_path)
 
 
-def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetime, logger) -> None:
+def _save_discovered_cvr_numbers(
+    silver_path: Path, pipeline_start_time: datetime, logger: logging.Logger
+) -> None:
     """
     Extract and save CVR numbers discovered in the drive data pipeline silver data.
 
@@ -429,7 +433,7 @@ def main() -> int:
             # Extract all files recursively from the folder structure for progress tracking
             all_files = []
 
-            def collect_files(folder) -> None:
+            def collect_files(folder: DriveFolder) -> None:
                 all_files.extend(folder.files)
                 for subfolder in folder.subfolders:
                     collect_files(subfolder)
@@ -639,11 +643,12 @@ def main() -> int:
 
                 try:
                     from backend.common.schema_documentation import SchemaDocumentationManager
+                    schema_doc_manager_class = SchemaDocumentationManager
                 except ImportError as e:
                     import warnings
 
                     warnings.warn(f"Schema documentation not available: {e}", stacklevel=2)
-                    SchemaDocumentationManager = None
+                    schema_doc_manager_class = None
 
                 conn = duckdb.connect()
 
@@ -667,9 +672,9 @@ def main() -> int:
                                 f"Could not load {file_path} for schema documentation: {e}"
                             )
 
-                    if table_names and SchemaDocumentationManager is not None:
+                    if table_names and schema_doc_manager_class is not None:
                         # Initialize schema documentation manager
-                        schema_manager = SchemaDocumentationManager(
+                        schema_manager = schema_doc_manager_class(
                             connection=conn,
                             pipeline_name="drive_data_pipeline",
                             pipeline_start_time=pipeline_start_time,
@@ -685,7 +690,7 @@ def main() -> int:
                         # Commit to GitHub
                         schema_manager.commit_to_github()
                         logger.info("Drive data schema documentation committed to GitHub")
-                    elif SchemaDocumentationManager is None:
+                    elif schema_doc_manager_class is None:
                         logger.warning("Schema documentation disabled due to import error")
                     else:
                         logger.info("No processable parquet files found for schema documentation")

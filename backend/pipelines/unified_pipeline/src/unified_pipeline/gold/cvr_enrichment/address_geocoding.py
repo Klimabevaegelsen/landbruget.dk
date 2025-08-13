@@ -164,7 +164,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         if not input_paths:
             if self.config.shared_config.enable_independent_execution:
                 self.log.warning(
-                    f"No company/P-number data found within {self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"No company/P-number data found within "
+                    f"{self.config.shared_config.max_days_back_for_inputs} days. "
                     f"Returning empty address data."
                 )
             else:

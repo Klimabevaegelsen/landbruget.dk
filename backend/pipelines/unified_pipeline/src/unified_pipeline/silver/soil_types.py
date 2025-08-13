@@ -104,7 +104,8 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                     if response.status != 200:
                         response_text = await response.text()
                         raise Exception(
-                            f"WFS request failed with status {response.status}: {response_text[:500]}"
+                            f"WFS request failed with status {response.status}: "
+                            f"{response_text[:500]}"
                         )
 
                     # Get the response as JSON
@@ -265,7 +266,8 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             """)
 
             # ✅ MIGRATION: Use DuckDB-spatial geometry validation
-            # ✅ COORDINATE FIX: ST_FlipCoordinates is applied in the validator to fix swapped lat/lon coordinates
+            # ✅ COORDINATE FIX: ST_FlipCoordinates is applied in the validator
+            # to fix swapped lat/lon coordinates
             validate_and_transform_geometries_duckdb(
                 self.conn, processed_table, self.config.dataset
             )
@@ -389,7 +391,8 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 # Check if coordinates are reasonable for Denmark in WGS84
                 if not (7.0 <= min_x <= 16.0 and 54.0 <= min_y <= 58.0):
                     self.log.warning(
-                        "Coordinates appear to be outside Denmark bounds (coordinates should be fixed with ST_FlipCoordinates)"
+                        "Coordinates appear to be outside Denmark bounds "
+                        "(coordinates should be fixed with ST_FlipCoordinates)"
                     )
 
             # Check attribute distributions

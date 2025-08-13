@@ -7,6 +7,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from tqdm import tqdm
 
@@ -76,7 +77,7 @@ def upload_inspire_data_to_gcs(output_dir: Path, gcs_bucket: str, timestamp: str
                 upload_to_gcs(str(bronze_file), gcs_bucket, gcs_path)
 
 
-def _save_attributes_to_parquet(attributes_data, output_dir) -> None:
+def _save_attributes_to_parquet(attributes_data: list[dict[str, Any]], output_dir: Path) -> None:
     """Save attributes data to parquet using DuckDB streaming approach."""
     if not attributes_data:
         print("⚠️ No attributes data to save")
@@ -103,7 +104,7 @@ def _save_attributes_to_parquet(attributes_data, output_dir) -> None:
         print("💾 Copied attributes to data root for GitHub Actions compatibility")
 
 
-def _save_attributes_streaming(attributes_data, output_dir) -> None:
+def _save_attributes_streaming(attributes_data: list[dict[str, Any]], output_dir: Path) -> None:
     """Save large attributes dataset using streaming approach with better memory management."""
     import duckdb
 
@@ -208,7 +209,7 @@ def _save_attributes_streaming(attributes_data, output_dir) -> None:
         conn.close()
 
 
-def _save_attributes_standard(attributes_data, output_dir) -> None:
+def _save_attributes_standard(attributes_data: list[dict[str, Any]], output_dir: Path) -> None:
     """Save small attributes dataset using standard approach."""
     import duckdb
 
@@ -229,7 +230,7 @@ def _save_attributes_standard(attributes_data, output_dir) -> None:
         conn.close()
 
 
-def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_start_time):
+def _process_with_streaming(inspire_fetcher: InspireBBRFetcher, output_dir: Path, sample_size: int | None, pipeline_start_time: datetime) -> dict[str, Any] | None:
     """Process INSPIRE BBR data using streaming approach to manage memory."""
     print("🌊 Using streaming processing for large dataset...")
 
@@ -295,7 +296,8 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
         else:
             # Medium-sized dataset - use standard processing with memory optimizations
             print(
-                f"📊 Medium dataset ({sample_size:,}) - using standard processing with optimizations"
+                f"📊 Medium dataset ({sample_size:,}) - using standard processing "
+                "with optimizations"
             )
             result = inspire_fetcher.fetch_data(
                 output_dir,
@@ -357,7 +359,7 @@ def _process_with_streaming(inspire_fetcher, output_dir, sample_size, pipeline_s
             raise
 
 
-def _get_building_count_from_files(output_dir=None):
+def _get_building_count_from_files(output_dir: Path | None = None) -> int:
     """Get building count from saved files after streaming processing."""
     building_count = 0
 

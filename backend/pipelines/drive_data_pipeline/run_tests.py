@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 
-def run_test(test_script) -> bool | None:
+def run_test(test_script: str | Path) -> bool | None:
     """Run a test script and return True if it succeeds."""
     print(f"\n{'-' * 80}")
     print(f"Running test: {test_script}")

@@ -108,7 +108,7 @@ class DuckDBProcessor:
         """)
         logger.info(f"Exported spatial table {table_name} to GeoParquet: {output_path}")
 
-    def save_table_to_parquet(self, table_name: str, output_path: str | Path):
+    def save_table_to_parquet(self, table_name: str, output_path: str | Path) -> None:
         """Save table to parquet file (legacy method)."""
         # Ensure the output directory exists before saving
         output_path = Path(output_path)
@@ -127,7 +127,7 @@ class DuckDBProcessor:
         """)
         logger.info(f"Saved table {table_name} to CSV: {output_path}")
 
-    def export_table_to_dataframe(self, table_name: str):
+    def export_table_to_dataframe(self, table_name: str) -> Any:
         """Export DuckDB table to pandas DataFrame (when needed for compatibility)."""
         return self.conn.execute(f"SELECT * FROM {table_name}").df()
 
@@ -194,8 +194,8 @@ class DuckDBProcessor:
             self.conn.close()
             logger.debug("Closed DuckDB connection")
 
-    def __enter__(self):
+    def __enter__(self) -> "DuckDBProcessor":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.close()

@@ -147,7 +147,8 @@ class BronzeStorageManager:
                 file_exists = self.storage_manager.file_exists(file_path)
                 if not file_exists:
                     logger.error(
-                        f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage backend at {file_path}"
+                        f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage "
+                        f"backend at {file_path}"
                     )
                     # For GCS, try a brief retry since there might be eventual consistency issues
                     if self.storage_manager.storage_type.lower() == "gcs":
@@ -163,7 +164,7 @@ class BronzeStorageManager:
                             )
             except Exception as verify_error:
                 logger.error(f"File verification failed: {verify_error}")
-                raise StorageError(f"Could not verify file save: {verify_error}")
+                raise StorageError(f"Could not verify file save: {verify_error}") from verify_error
 
             logger.info(f"Saved file to {file_path}")
             return file_path

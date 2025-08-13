@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def _get_optimized_gcs_access():
+def _get_optimized_gcs_access() -> type | None:
     """
     Get optimized GCS access with robust import handling.
 
@@ -44,7 +44,7 @@ class BMDScraper:
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
 
-    def get_verification_token(self):
+    def get_verification_token(self) -> str | None:
         """Get the __RequestVerificationToken from the export dialog."""
         url = f"{self.base_url}/External/Entry/ExportDialog"
         params = {
@@ -86,7 +86,7 @@ class BMDScraper:
         logging.info(f"Verification token obtained: {token[:10]}...")
         return token
 
-    def generate_document(self, token):
+    def generate_document(self, token) -> str | None:
         """Request document generation using the verification token."""
         url = f"{self.base_url}/External/Entry/GenerateDocument"
 
@@ -287,7 +287,7 @@ class GCSStorage:
             return False
 
 
-def main():
+def main() -> None:
     # Example usage for local development
     scraper = BMDScraper(output_dir="bronze/bmd")
     file_path = scraper.scrape()
