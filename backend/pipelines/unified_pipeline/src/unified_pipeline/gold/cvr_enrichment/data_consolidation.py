@@ -420,23 +420,27 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     financial_doc_data = json.loads(financial_json)
                     financial_data[str(cvr_number)] = financial_doc_data
                 else:
-                    # GCS format with extracted columns
-                    document_count = row[1]
-                    has_financial_metrics = row[2]
-                    # Create financial data structure with at least one document if we have financial metrics
+                    # GCS format with processed financial data columns
+                    # Based on actual data: cvr_number, company_name, document_count, xml_document_count, 
+                    # total_xml_size_bytes, latest_reporting_date, has_financial_metrics, financial_data_json, processing_timestamp, batch_number
+                    document_count = row[2]  # document_count is the 3rd column (index 2)
+                    has_financial_metrics = row[6]  # has_financial_metrics is the 7th column (index 6)
+                    
+                    # Create proper financial data structure
                     documents = []
                     if has_financial_metrics and document_count > 0:
-                        # Create a placeholder document entry to represent the financial data
-                        documents.append({
-                            "cvr_number": cvr_number,
-                            "document_count": document_count,
-                            "financial_metrics": {"has_metrics": True}
-                        })
+                        # Create documents array with the actual document count
+                        for i in range(document_count):
+                            documents.append({
+                                "cvr_number": cvr_number,
+                                "document_index": i,
+                                "has_financial_data": True
+                            })
                     
                     financial_data[str(cvr_number)] = {
                         "documents": documents,
                         "document_count": document_count,
-                        "financial_metrics": {"has_metrics": True} if has_financial_metrics else None
+                        "financial_metrics": {"has_metrics": has_financial_metrics} if has_financial_metrics else None
                     }
             except json.JSONDecodeError as e:
                 self.log.warning(f"Failed to parse financial data for CVR {cvr_number}: {e}")
@@ -1193,9 +1197,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             company_geocoded = sum(1 for addr in addresses if addr.get("dawa_enriched"))
             geocoded_addresses += company_geocoded
 
-        # Count financial documents
+        # Count financial documents using the correct field from merged data
         financial_docs = sum(
-            len(company.get("financial_documents", [])) for company in companies_data.values()
+            company.get("financial_document_count", 0) for company in companies_data.values()
         )
 
         # Create comprehensive summary statistics
@@ -1629,25 +1633,65 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
     def _process_financial_chunk(self, json_strings: list, table_name: str) -> None:
         """Process financial documents for a chunk of companies with sophisticated metrics (ported from original)."""
-        # The financial documents step now saves simplified structure, skip detailed table creation
+        # Check for financial data in the merged company structure 
         financial_check = self.conn.execute(
             """
             SELECT COUNT(*)
             FROM unnest($1) as t(json_data)
-            WHERE json_extract(json_data, '$.document_count') IS NOT NULL
-            AND json_extract(json_data, '$.document_count')::INTEGER > 0
+            WHERE json_extract(json_data, '$.financial_document_count') IS NOT NULL
+            AND json_extract(json_data, '$.financial_document_count')::INTEGER > 0
         """,
             [json_strings],
         ).fetchone()[0]
 
         if financial_check > 0:
-            self.log.info(f"Found {financial_check} companies with financial data in simplified format")
-            self.log.info("Current financial data structure contains summary metrics only - skipping detailed financial table creation")
-            self.log.info("Financial data is available in the main consolidated data for basic reporting")
-            return
+            self.log.info(f"Found {financial_check} companies with financial data - creating financial records")
+            
+            # Insert financial data into the financial table
+            self.conn.execute(
+                f"""
+                INSERT INTO {table_name}_financial
+                SELECT 
+                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    NULL as publication_type,
+                    NULL as publication_time,
+                    NULL as case_number,
+                    NULL as reporting_period_start,
+                    NULL as reporting_period_end,
+                    json_extract(json_data, '$.financial_document_count')::INTEGER as document_count,
+                    NULL as xml_size_bytes,
+                    true as download_success,
+                    -- Financial metrics fields (all NULL for now since we have summary data only)
+                    NULL as duration_context,
+                    NULL as instant_context,
+                    NULL as cash_and_cash_equivalents,
+                    NULL as other_finance_income,
+                    NULL as total_assets,
+                    NULL as assets_total,
+                    NULL as total_equity,
+                    NULL as equity_total,
+                    NULL as retained_earnings,
+                    NULL as liabilities_other_than_provisions,
+                    NULL as shortterm_liabilities_other_than_provisions,
+                    NULL as longterm_liabilities_other_than_provisions,
+                    NULL as provisions,
+                    NULL as property_plant_equipment,
+                    NULL as contributed_capital,
+                    NULL as net_profit_loss,
+                    -- Calculated ratios
+                    NULL as equity_ratio,
+                    NULL as profit_per_employee,
+                    NULL as return_on_assets
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.financial_document_count') IS NOT NULL
+                AND json_extract(json_data, '$.financial_document_count')::INTEGER > 0
+            """,
+                [json_strings],
+            )
+            self.log.info(f"Created {financial_check} financial records in {table_name}_financial")
         else:
             self.log.info("No financial data found in this chunk")
-            return
     def _process_industries_chunk(self, json_strings: list, table_name: str) -> None:
         """Process industries for a chunk of companies (ported from original)."""
         industry_check = self.conn.execute(
