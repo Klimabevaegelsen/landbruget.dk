@@ -457,7 +457,6 @@ def execute(cli_config: cli.CliConfig) -> int:
                 # Note: This requires silver datasets to be available:
                 # bmd, pesticides
                 (PesticideComplianceGold, PesticideComplianceGoldConfig),
->>>>>>> origin/main
             ],
         },
         cli.Source.cvr_enrichment: {
