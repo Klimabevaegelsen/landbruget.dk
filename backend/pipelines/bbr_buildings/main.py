@@ -18,6 +18,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    import pandas as pd
+    DataFrame = pd.DataFrame
+except ImportError:
+    DataFrame = Any
+
 # Updated imports for bulk approach
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 from config import Settings, get_settings
@@ -64,7 +70,7 @@ def perform_uuid_join_optimized(
     building_ids: list[str],
     geodanmark_path: str,
     output_dir: Path,
-    attributes_df=None,  # Optional INSPIRE attributes to include
+    attributes_df: DataFrame | None = None,  # Optional INSPIRE attributes to include
 ) -> dict[str, Any]:
     """
     Perform efficient UUID-based join between INSPIRE BBR and GeoDanmark data.
@@ -782,7 +788,7 @@ def run_bronze_layer_bulk(
     logger: logging.Logger,
     pipeline_start_time: datetime,
     return_data: bool = False,
-):
+) -> dict | None:
     """
     Execute bronze layer processing - raw data collection and upload to GCS.
 
@@ -867,7 +873,7 @@ def run_bronze_layer_bulk(
 
 
 def _upload_bronze_data_to_gcs(
-    building_ids: list, attributes_df, timestamp: str, logger: logging.Logger
+    building_ids: list, attributes_df: DataFrame | None, timestamp: str, logger: logging.Logger
 ) -> None:
     """Upload bronze data to GCS for silver layer consumption."""
     if not GCS_AVAILABLE:
@@ -1065,9 +1071,9 @@ def run_silver_layer(
     args: argparse.Namespace,
     settings: Settings,
     logger: logging.Logger,
-    bronze_data=None,
-    bronze_timestamp: str = None,
-):
+    bronze_data: dict[str, Any] | None = None,
+    bronze_timestamp: str | None = None,
+) -> dict:
     """
     Execute silver layer processing - joins, transformations, and final output.
 
@@ -1188,7 +1194,7 @@ def run_silver_layer(
     }
 
 
-def _load_bronze_data(bronze_data, bronze_timestamp: str, logger: logging.Logger):
+def _load_bronze_data(bronze_data: dict[str, Any] | None, bronze_timestamp: str, logger: logging.Logger) -> tuple[list, DataFrame | None]:
     """Load bronze data from various sources (in-memory, GCS, artifacts)."""
     building_ids = []
     attributes_df = None
@@ -1251,7 +1257,7 @@ def _load_bronze_data(bronze_data, bronze_timestamp: str, logger: logging.Logger
     return [], None
 
 
-def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
+def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger) -> tuple[list, DataFrame | None]:
     """Load bronze data from GCS."""
     if not GCS_AVAILABLE:
         logger.warning("⚠️ GCS not available - cannot load from GCS")

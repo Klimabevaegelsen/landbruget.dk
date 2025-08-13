@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, validator
 from ..utils.error_handling import StorageError
 from ..utils.helpers import calculate_content_checksum, calculate_file_checksum
 from ..utils.logging import get_logger
+from ..utils.storage import DriveStorageManager
 
 # Get logger
 logger = get_logger()
@@ -61,7 +62,7 @@ class FileMetadata(BaseModel):
 class MetadataManager:
     """Manager for file metadata."""
 
-    def __init__(self, base_path: Path, storage_manager=None) -> None:
+    def __init__(self, base_path: Path, storage_manager: DriveStorageManager | None = None) -> None:
         """Initialize the metadata manager.
 
         Args:

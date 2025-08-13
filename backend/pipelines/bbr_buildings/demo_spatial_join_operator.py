@@ -22,7 +22,7 @@ Limitations:
 import duckdb
 
 
-def create_sample_data():
+def create_sample_data() -> duckdb.DuckDBPyConnection:
     """Create sample spatial data for demonstration."""
     print("🏗️  Creating sample spatial data...")
 
@@ -74,7 +74,7 @@ def create_sample_data():
     return conn
 
 
-def demonstrate_spatial_join_operator():
+def demonstrate_spatial_join_operator() -> bool:
     """Demonstrate the SPATIAL_JOIN operator with proper query structure."""
     print("\n🚀 Demonstrating SPATIAL_JOIN operator...")
 
@@ -226,7 +226,8 @@ def demonstrate_performance_comparison() -> None:
     spatial_join_time = time.time() - start_time
 
     print(
-        f"✅ SPATIAL_JOIN result: {result_with_spatial_join:,} intersections in {spatial_join_time:.2f}s"
+        f"✅ SPATIAL_JOIN result: {result_with_spatial_join:,} intersections "
+        f"in {spatial_join_time:.2f}s"
     )
 
     # Note: We can't easily disable the SPATIAL_JOIN operator once it's available

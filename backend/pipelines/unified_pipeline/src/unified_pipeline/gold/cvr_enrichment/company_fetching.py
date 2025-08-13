@@ -95,7 +95,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self.log.info("   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(
-            f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}"
+            f"   • Address geocoding: "
+            f"{'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}"
         )
 
     @timed(name="Company fetching processing")
@@ -364,11 +365,13 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 SELECT 
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                    json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
+                    json_extract(json_data, '$.company_type_description')::VARCHAR 
+                        as company_type_description,
                     json_extract(json_data, '$.status')::VARCHAR as status,
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
                     json_data as company_data_json,
-                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                    json_extract(json_data, '$.processing_timestamp')::VARCHAR 
+                        as processing_timestamp,
                     NULL::INTEGER as batch_number  -- No batching
                 FROM unnest($1) as t(json_data)
             """,

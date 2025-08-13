@@ -430,7 +430,9 @@ def process_chr_data_streaming(
                         batch_file_list = "', '".join(batch_files)
 
                         logging.info(
-                            f"📦 Processing batch {i // batch_size + 1}/{(len(matching_files) + batch_size - 1) // batch_size} ({len(batch_files)} files)"
+                            f"📦 Processing batch {i // batch_size + 1}/"
+                            f"{(len(matching_files) + batch_size - 1) // batch_size} "
+                            f"({len(batch_files)} files)"
                         )
 
                         # Load batch into temporary table - use appropriate reader based on file type

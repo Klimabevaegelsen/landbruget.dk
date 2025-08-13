@@ -8,7 +8,7 @@ from pathlib import Path
 import duckdb
 
 
-def test_simple_proximity():
+def test_simple_proximity() -> None:
     print("🧪 Testing simplified proximity analysis")
 
     # Setup paths

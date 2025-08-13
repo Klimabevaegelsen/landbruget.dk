@@ -33,7 +33,7 @@ else:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 # Import the new refactored modules
-from h3_pfas_exposure.gold import (
+from h3_pfas_exposure.gold import (  # noqa: E402
     run_combined_analysis,
     run_cumulative_analysis,
     run_cumulative_analysis_from_artifacts,

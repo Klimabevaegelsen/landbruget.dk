@@ -491,7 +491,8 @@ class BulkGeoDanmarkFetcher:
             total_buildings = result[0] if result else 0
 
             logger.info(
-                f"🏢 Combined {total_buildings:,} buildings into final file: geodanmark_buildings_complete.geoparquet"
+                f"🏢 Combined {total_buildings:,} buildings into final file: "
+                f"geodanmark_buildings_complete.geoparquet"
             )
 
             # Clean up intermediate files
@@ -517,7 +518,8 @@ class BulkGeoDanmarkFetcher:
                 except Exception as debug_e:
                     logger.error(f"Failed to debug schema: {debug_e}")
 
-                # Try a more aggressive fallback: read each file individually and cast all columns to string
+                # Try a more aggressive fallback: read each file individually and
+                # cast all columns to string
                 logger.info("Attempting fallback combination with string casting...")
                 try:
                     # Create a temporary table to collect all data

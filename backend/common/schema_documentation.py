@@ -24,7 +24,7 @@ class SchemaDocumentationManager:
         pipeline_name: str,
         pipeline_start_time: Optional[datetime] = None,
         logger: Optional[Any] = None,
-    ):
+    ) -> None:
         """
         Initialize schema documentation manager.
 
@@ -447,7 +447,7 @@ class SchemaDocumentationMixin:
 
     def init_schema_documentation(
         self, pipeline_name: str, pipeline_start_time: Optional[datetime] = None, enable_auto_commit: bool = False
-    ):
+    ) -> None:
         """
         Initialize schema documentation for this pipeline.
 

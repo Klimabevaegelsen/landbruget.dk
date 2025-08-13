@@ -9,7 +9,7 @@ from pathlib import Path
 import duckdb
 
 
-def test_proximity_analysis():
+def test_proximity_analysis() -> None:
     print("🧪 Testing pesticide proximity analysis with local data")
 
     # Setup paths

@@ -311,7 +311,8 @@ class DuckLakePilot:
             for row in results:
                 year, count, avg_quality, avg_sustainability, with_permits = row
                 logger.info(
-                    f"   {year}: {count} companies, quality: {avg_quality:.3f}, sustainability: {avg_sustainability:.3f}, permits: {with_permits}"
+                    f"   {year}: {count} companies, quality: {avg_quality:.3f}, "
+                    f"sustainability: {avg_sustainability:.3f}, permits: {with_permits}"
                 )
 
             return True
@@ -355,7 +356,7 @@ class DuckLakePilot:
             logger.error(f"❌ Report generation failed: {e}")
             return {"error": str(e)}
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         """Clean up resources."""
         if self.conn:
             try:
@@ -368,7 +369,7 @@ class DuckLakePilot:
                 self.conn.close()
 
 
-def main():
+def main() -> None:
     """Main function to run DuckLake pilot test."""
     parser = argparse.ArgumentParser(description="DuckLake Pilot Test")
     parser.add_argument("--generate-sample-data", action="store_true", help="Generate sample BMD data for testing")

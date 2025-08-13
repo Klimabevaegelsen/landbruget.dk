@@ -3,7 +3,9 @@
 import json
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,7 +15,7 @@ from drive_data_pipeline.utils.storage import LocalStorageManager
 
 
 @pytest.fixture
-def mock_drive_files():
+def mock_drive_files() -> list[dict[str, Any]]:
     """Mock files returned from Google Drive API."""
     # Sample file structure for testing
     return [
@@ -51,17 +53,17 @@ def mock_drive_files():
 
 
 @pytest.fixture
-def mock_drive_fetcher(mock_drive_files):
+def mock_drive_fetcher(mock_drive_files: list[dict[str, Any]]) -> Generator[MagicMock, None, None]:
     """Mock the GoogleDriveFetcher class."""
-    with patch("drive_data_pipeline.bronze.drive.GoogleDriveFetcher") as MockFetcher:
+    with patch("drive_data_pipeline.bronze.drive.GoogleDriveFetcher") as mock_fetcher:
         fetcher_instance = MagicMock()
-        MockFetcher.return_value = fetcher_instance
+        mock_fetcher.return_value = fetcher_instance
 
         # Mock list_folder_contents to return sample files
         fetcher_instance.list_folder_contents.return_value = mock_drive_files
 
         # Mock get_file_metadata to return sample metadata
-        def mock_get_metadata(file_id):
+        def mock_get_metadata(file_id: str) -> dict[str, Any]:
             for file in mock_drive_files:
                 if file["id"] == file_id:
                     return file
@@ -70,7 +72,7 @@ def mock_drive_fetcher(mock_drive_files):
         fetcher_instance.get_file_metadata.side_effect = mock_get_metadata
 
         # Mock download_file to create a simple file
-        def mock_download(file_id, destination_path) -> bool:
+        def mock_download(file_id: str, destination_path: Path) -> bool:
             # Create a simple test file at the destination
             with open(destination_path, "w") as f:
                 if destination_path.endswith(".xlsx"):
@@ -85,7 +87,7 @@ def mock_drive_fetcher(mock_drive_files):
 
 
 @pytest.fixture
-def test_settings():
+def test_settings() -> Generator[Settings, None, None]:
     """Create test settings with temporary directories."""
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -109,7 +111,7 @@ def test_settings():
 
 
 @pytest.mark.integration
-def test_bronze_processor(test_settings, mock_drive_fetcher) -> None:
+def test_bronze_processor(test_settings: Settings, mock_drive_fetcher: MagicMock) -> None:
     """Test bronze processor end-to-end functionality."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -150,13 +152,13 @@ def test_bronze_processor(test_settings, mock_drive_fetcher) -> None:
 
 
 @pytest.mark.integration
-def test_bronze_specific_subfolders(test_settings, mock_drive_fetcher) -> None:
+def test_bronze_specific_subfolders(test_settings: Settings, mock_drive_fetcher: MagicMock) -> None:
     """Test bronze processor with specific subfolders filter."""
     # Create storage manager
     storage_manager = LocalStorageManager()
 
     # Configure mock_drive_fetcher to simulate folder structure
-    def mock_list_contents(folder_id, recursive=False):
+    def mock_list_contents(folder_id: str, recursive: bool = False) -> list[dict[str, Any]]:
         if folder_id == "mock_folder_id":
             # Return only top-level folders if not recursive
             if not recursive:
@@ -233,7 +235,7 @@ def test_bronze_specific_subfolders(test_settings, mock_drive_fetcher) -> None:
 
 
 @pytest.mark.integration
-def test_bronze_specific_file_types(test_settings, mock_drive_fetcher) -> None:
+def test_bronze_specific_file_types(test_settings: Settings, mock_drive_fetcher: MagicMock) -> None:
     """Test bronze processor with specific file types filter."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -265,7 +267,7 @@ def test_bronze_specific_file_types(test_settings, mock_drive_fetcher) -> None:
 
 
 @pytest.mark.integration
-def test_bronze_error_handling(test_settings, mock_drive_fetcher) -> None:
+def test_bronze_error_handling(test_settings: Settings, mock_drive_fetcher: MagicMock) -> None:
     """Test bronze processor error handling capabilities."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -273,7 +275,7 @@ def test_bronze_error_handling(test_settings, mock_drive_fetcher) -> None:
     # Make one file download fail
     original_download = mock_drive_fetcher.download_file.side_effect
 
-    def download_with_error(file_id, destination_path):
+    def download_with_error(file_id: str, destination_path: Path) -> bool:
         if file_id == "file1":
             raise Exception("Simulated download error")
         return original_download(file_id, destination_path)

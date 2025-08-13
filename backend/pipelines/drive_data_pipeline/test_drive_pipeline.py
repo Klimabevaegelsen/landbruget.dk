@@ -12,11 +12,11 @@ from pathlib import Path
 parent_dir = Path(__file__).parent
 sys.path.insert(0, str(parent_dir))
 
-from bronze.metadata import MetadataManager
-from config.settings import get_settings
-from silver.processor import SilverProcessor
-from utils.logging import get_logger, setup_logging
-from utils.storage import get_storage_manager
+from bronze.metadata import MetadataManager  # noqa: E402
+from config.settings import get_settings  # noqa: E402
+from silver.processor import SilverProcessor  # noqa: E402
+from utils.logging import get_logger, setup_logging  # noqa: E402
+from utils.storage import get_storage_manager  # noqa: E402
 
 
 def test_drive_pipeline_with_pdf(pdf_path: Path) -> None:

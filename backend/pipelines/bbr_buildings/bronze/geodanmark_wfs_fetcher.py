@@ -87,9 +87,10 @@ class GeoDanmarkWFSFetcher:
         building_ids: list,
         return_data: bool = False,
         pipeline_start_time: datetime = None,
-    ):
+    ) -> None:
         """
-        Fetch building geometries from GeoDanmark WFS for specific building IDs using adaptive batching and parallel processing.
+        Fetch building geometries from GeoDanmark WFS for specific building IDs using
+        adaptive batching and parallel processing.
 
         Args:
             output_dir: Directory to save the geometry data
@@ -103,7 +104,8 @@ class GeoDanmarkWFSFetcher:
         run_dir.mkdir(parents=True, exist_ok=True)
 
         self.logger.info(
-            f"Starting GeoDanmark WFS geometry fetch for {len(building_ids):,} building IDs to {run_dir}"
+            f"Starting GeoDanmark WFS geometry fetch for {len(building_ids):,} "
+            f"building IDs to {run_dir}"
         )
 
         try:
@@ -190,7 +192,8 @@ class GeoDanmarkWFSFetcher:
                                 all_geometries.extend(batch_geometries)
                             successful_batches += 1
                             self.logger.info(
-                                f"Batch {batch_num}/{total_batches}: Retrieved {len(batch_geometries)} geometries"
+                                f"Batch {batch_num}/{total_batches}: "
+                                f"Retrieved {len(batch_geometries)} geometries"
                             )
                         else:
                             failed_batches += 1
@@ -224,7 +227,8 @@ class GeoDanmarkWFSFetcher:
                 f"Successfully retrieved {len(all_geometries):,} building geometries out of {len(building_ids):,} requested"
             )
             self.logger.info(
-                f"Success rate: {success_rate:.1f}% ({successful_batches + 1}/{total_batches} batches successful)"
+                f"Success rate: {success_rate:.1f}% "
+                f"({successful_batches + 1}/{total_batches} batches successful)"
             )
 
             # Save metadata
@@ -382,7 +386,8 @@ class GeoDanmarkWFSFetcher:
             # Handle redirects manually to maintain POST method
             if response.status_code in (301, 302, 303, 307, 308):
                 self.logger.warning(
-                    f"Received redirect {response.status_code} - this might cause POST to GET conversion"
+                    f"Received redirect {response.status_code} - "
+                    "this might cause POST to GET conversion"
                 )
                 return None
 
@@ -515,7 +520,8 @@ class GeoDanmarkWFSFetcher:
 
         self.logger.info(f"Saved geometry fetch metadata to {metadata_path}")
         self.logger.info(
-            f"Success rate: {metadata['success_rate']:.1%} ({len(retrieved_geometries)}/{len(requested_ids)})"
+            f"Success rate: {metadata['success_rate']:.1%} "
+            f"({len(retrieved_geometries)}/{len(requested_ids)})"
         )
 
     def _get_capabilities(self) -> dict:

@@ -251,7 +251,8 @@ class BronzeProcessor:
                         saved_size = full_path.stat().st_size
                         if saved_size != len(file_content):
                             logger.warning(
-                                f"File size mismatch for {file.name}: expected {len(file_content)}, got {saved_size}"
+                                f"File size mismatch for {file.name}: "
+                                f"expected {len(file_content)}, got {saved_size}"
                             )
                 except Exception as e:
                     logger.warning(f"Could not verify file size locally: {e}")

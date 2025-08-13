@@ -486,8 +486,10 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     SELECT 
                         'Completed' as status_category,
                         ST_Difference(
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Completed'),
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Action Required')
+                            (SELECT dissolved_geometry FROM {dissolved_table_name} 
+                             WHERE status_category = 'Completed'),
+                            (SELECT dissolved_geometry FROM {dissolved_table_name} 
+                             WHERE status_category = 'Action Required')
                         ) as geometry,
                         CURRENT_TIMESTAMP as dissolved_at
                 """)
@@ -516,7 +518,8 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             """).fetchone()[0]
 
             self.log.info(
-                f"Created dissolved table '{dissolved_table_name}' with {final_count} dissolved geometries"
+                f"Created dissolved table '{dissolved_table_name}' with "
+                f"{final_count} dissolved geometries"
             )
             return dissolved_table_name
 
