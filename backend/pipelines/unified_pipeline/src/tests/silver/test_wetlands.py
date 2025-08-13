@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, call, patch
 import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon
-
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
 
 # Alias for geopandas.GeoDataFrame to match usage in tests

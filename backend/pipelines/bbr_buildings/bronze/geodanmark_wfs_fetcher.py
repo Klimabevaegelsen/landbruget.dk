@@ -15,10 +15,9 @@ from pathlib import Path
 from threading import Lock
 
 import requests
+from config import Settings
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
-from config import Settings
 
 
 class GeoDanmarkWFSFetcher:
@@ -120,7 +119,8 @@ class GeoDanmarkWFSFetcher:
             if self.settings.max_geometries_to_fetch is not None:
                 building_ids = building_ids[: self.settings.max_geometries_to_fetch]
                 self.logger.info(
-                    f"Limiting geometry fetch to {len(building_ids):,} buildings (max_geometries_to_fetch={self.settings.max_geometries_to_fetch})"
+                    f"Limiting geometry fetch to {len(building_ids):,} buildings "
+                    f"(max_geometries_to_fetch={self.settings.max_geometries_to_fetch})"
                 )
 
             # Test with a small batch first to determine optimal batch size
@@ -155,7 +155,8 @@ class GeoDanmarkWFSFetcher:
 
             total_batches = len(batches) + 1  # +1 for test batch
             self.logger.info(
-                f"Processing {len(building_ids):,} building IDs in {total_batches} batches of ~{optimal_batch_size} using {max_workers} workers"
+                f"Processing {len(building_ids):,} building IDs in {total_batches} batches "
+                f"of ~{optimal_batch_size} using {max_workers} workers"
             )
 
             # Add test results to all_geometries
@@ -224,7 +225,8 @@ class GeoDanmarkWFSFetcher:
 
             success_rate = (len(all_geometries) / len(building_ids)) * 100
             self.logger.info(
-                f"Successfully retrieved {len(all_geometries):,} building geometries out of {len(building_ids):,} requested"
+                f"Successfully retrieved {len(all_geometries):,} building geometries "
+                f"out of {len(building_ids):,} requested"
             )
             self.logger.info(
                 f"Success rate: {success_rate:.1f}% "
@@ -368,7 +370,10 @@ class GeoDanmarkWFSFetcher:
 
                 url = self.settings.geodanmark_wfs_url
                 if self.settings.has_datafordeler_credentials:
-                    url += f"?username={self.settings.datafordeler_username}&password={self.settings.datafordeler_password}"
+                    url += (
+                        f"?username={self.settings.datafordeler_username}"
+                        f"&password={self.settings.datafordeler_password}"
+                    )
 
                 response = self.session.post(
                     url,

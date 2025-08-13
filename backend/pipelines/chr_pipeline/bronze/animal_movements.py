@@ -190,7 +190,8 @@ def load_animal_movements(
                 if individual_record_count > 0:
                     reduction_ratio = (individual_record_count - summary_record_count) / individual_record_count * 100
                     logger.info(
-                        f"📉 Herd {herd_number}: Reduced {individual_record_count} individual animal records to {summary_record_count} movement summaries ({reduction_ratio:.1f}% reduction)"
+                        f"📉 Herd {herd_number}: Reduced {individual_record_count} individual animal records to "
+                        f"{summary_record_count} movement summaries ({reduction_ratio:.1f}% reduction)"
                     )
 
             # Return the aggregated data
@@ -282,7 +283,8 @@ def load_cattle_movement_summaries(
     try:
         for chunk_idx, (chunk_start, chunk_end) in enumerate(date_ranges):
             logger.info(
-                f"🔄 Processing herd {herd_number} chunk {chunk_idx + 1}/{len(date_ranges)}: {chunk_start} to {chunk_end}"
+                f"🔄 Processing herd {herd_number} chunk {chunk_idx + 1}/{len(date_ranges)}: "
+                f"{chunk_start} to {chunk_end}"
             )
 
             try:
@@ -297,7 +299,8 @@ def load_cattle_movement_summaries(
 
                     # Add movements to consolidated table
                     logger.debug(
-                        f"💾 Adding {len(chunk_movements)} movements from chunk {chunk_idx + 1} to consolidated table..."
+                        f"💾 Adding {len(chunk_movements)} movements from chunk {chunk_idx + 1} to "
+                        f"consolidated table..."
                     )
                     try:
                         from bronze.load_chr_dyr import add_to_consolidated_table
@@ -326,7 +329,8 @@ def load_cattle_movement_summaries(
 
         # Log final summary
         logger.info(
-            f"📊 Herd {herd_number} SUMMARY: {successful_chunks} successful chunks, {failed_chunks} failed chunks, {total_movements} total movements"
+            f"📊 Herd {herd_number} SUMMARY: {successful_chunks} successful chunks, "
+            f"{failed_chunks} failed chunks, {total_movements} total movements"
         )
 
         # Return summary result

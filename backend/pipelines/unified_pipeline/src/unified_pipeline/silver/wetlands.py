@@ -159,13 +159,16 @@ class WetlandsSilver(BaseSource[WetlandsSilverConfig], SilverJobInterface):
         # Get geometry statistics using DuckDB-spatial
         stats_data = conn.execute(f"""
             SELECT 
-                (ST_XMax({geometry_col}) - ST_XMin({geometry_col})) * (ST_YMax({geometry_col}) - ST_YMin({geometry_col})) as area,
+                (ST_XMax({geometry_col}) - ST_XMin({geometry_col})) * 
+                (ST_YMax({geometry_col}) - ST_YMin({geometry_col})) as area,
                 ST_NPoints({geometry_col}) as vertices,
                 ST_XMax({geometry_col}) - ST_XMin({geometry_col}) as width,
                 ST_YMax({geometry_col}) - ST_YMin({geometry_col}) as height,
                 CASE 
-                    WHEN ABS(ROUND((ST_XMax({geometry_col}) - ST_XMin({geometry_col})) / 10) * 10 - (ST_XMax({geometry_col}) - ST_XMin({geometry_col}))) < 0.01
-                         AND ABS(ROUND((ST_YMax({geometry_col}) - ST_YMin({geometry_col})) / 10) * 10 - (ST_YMax({geometry_col}) - ST_YMin({geometry_col}))) < 0.01
+                    WHEN ABS(ROUND((ST_XMax({geometry_col}) - ST_XMin({geometry_col})) / 10) * 10 - 
+                             (ST_XMax({geometry_col}) - ST_XMin({geometry_col}))) < 0.01
+                         AND ABS(ROUND((ST_YMax({geometry_col}) - ST_YMin({geometry_col})) / 10) * 10 - 
+                                 (ST_YMax({geometry_col}) - ST_YMin({geometry_col}))) < 0.01
                     THEN true 
                     ELSE false 
                 END as grid_aligned
