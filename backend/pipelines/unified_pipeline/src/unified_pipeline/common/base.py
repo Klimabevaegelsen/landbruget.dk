@@ -161,7 +161,19 @@ class BaseSource(Generic[T], ABC):
         self.gcs_access = GCSDataAccess(connection=self.conn)
 
         # Use pipeline start time consistently (not save time)
-        self.pipeline_start_time = datetime.now()
+        # Check if shared timestamp is provided via environment variable (for GitHub Actions)
+        pipeline_start_env = os.getenv('PIPELINE_START_TIME')
+        if pipeline_start_env:
+            try:
+                # Parse GitHub's ISO timestamp format
+                self.pipeline_start_time = datetime.fromisoformat(pipeline_start_env.replace('Z', '+00:00'))
+                logger.info(f"Using shared pipeline start time from environment: {self.pipeline_start_time}")
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse PIPELINE_START_TIME environment variable: {e}")
+                self.pipeline_start_time = datetime.now()
+        else:
+            self.pipeline_start_time = datetime.now()
+        
         self.date_pattern = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
         # Initialize schema managers with shared connection
