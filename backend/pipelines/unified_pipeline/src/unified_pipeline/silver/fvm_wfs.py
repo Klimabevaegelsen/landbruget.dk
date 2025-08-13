@@ -131,7 +131,8 @@ class FVMWFSSilverConfig(BaseJobConfig):
         # Area fields
         "Ansoegt": "applied_area_ha",  # 2010-2014
         "GBanmeldt": "grundbetaling_area_ha",  # 2017-2025, actual grundbetaling area reported
-        "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling" (basic payment) eligibility
+        "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling"
+                                         # (basic payment) eligibility
         # Administrative fields
         "Journalnr": "journal_number",  # 2014+
         "Markblok": "block_id",  # 2016+
@@ -146,7 +147,8 @@ class FVMWFSSilverConfig(BaseJobConfig):
         "Afgkode": "biotope_code",
         "Afgroede": "biotope_type",
         "GBanmeldt": "grundbetaling_area_ha",  # Actual grundbetaling area reported
-        "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling" (basic payment) eligibility
+        "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling"
+                                         # (basic payment) eligibility
         "Markblok": "block_id",
         "MarkblokNr": "block_number",
         "BRUGER_ID": "user_id",
@@ -165,7 +167,8 @@ class FVMWFSSilverConfig(BaseJobConfig):
         # Note: the_geom is handled as geometry automatically
     }
 
-    # Organic Subsidies fields (from Miljoe_og_oekologitilsagn:Tilsagn_til_oekologiske_arealtilskud_2015-2020)
+    # Organic Subsidies fields (from Miljoe_og_oekologitilsagn:
+    # Tilsagn_til_oekologiske_arealtilskud_2015-2020)
     organic_subsidies_column_mapping: Dict[str, str] = {
         "CVR": "cvr_number",
         "Marknr": "field_id",
@@ -178,7 +181,8 @@ class FVMWFSSilverConfig(BaseJobConfig):
         # Note: the_geom is handled as geometry automatically
     }
 
-    # Grassland Subsidies fields (from Miljoe_og_oekologitilsagn:Tilsagn_til_pleje_af_graes_2015-2020)
+    # Grassland Subsidies fields (from Miljoe_og_oekologitilsagn:
+    # Tilsagn_til_pleje_af_graes_2015-2020)
     grassland_subsidies_column_mapping: Dict[str, str] = {
         "CVR": "cvr_number",
         "Marknr": "field_id",
@@ -229,7 +233,8 @@ class FVMWFSSilverConfig(BaseJobConfig):
                 # For enrichment, preserve all layer types but filter to specific year
                 year = cli_config.fvm_year
 
-                # Filter all year lists to only the specified year (if it exists in the original range)
+                # Filter all year lists to only the specified year
+                # (if it exists in the original range)
                 if year in self.markblokke_years:
                     object.__setattr__(self, "markblokke_years", [year])
                 else:

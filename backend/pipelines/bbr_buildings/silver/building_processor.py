@@ -6,9 +6,11 @@ from typing import Any
 
 import duckdb
 
+from ..config.settings import Settings
+
 
 # Try to import optimized GCS access with fallback
-def _get_optimized_gcs_access():
+def _get_optimized_gcs_access() -> type | None:
     """Get optimized GCS access with robust import handling."""
     try:
         from unified_pipeline.util.gcs_access import GCSDataAccess
@@ -26,13 +28,13 @@ OptimizedGCSDataAccess = _get_optimized_gcs_access()
 class BuildingProcessor:
     """Process BBR building data in the silver layer."""
 
-    def __init__(self, settings, logger: logging.Logger) -> None:
+    def __init__(self, settings: Settings, logger: logging.Logger) -> None:
         """Initialize the building processor."""
         self.settings = settings
         self.logger = logger
         self.conn = None
 
-    def _get_connection(self):
+    def _get_connection(self) -> duckdb.DuckDBPyConnection:
         """Get or create a DuckDB connection with spatial extension."""
         if self.conn is None:
             self.conn = duckdb.connect(":memory:")

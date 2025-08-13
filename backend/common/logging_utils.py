@@ -109,7 +109,7 @@ def get_pipeline_logger(pipeline_name: str) -> logging.Logger:
     return logger
 
 
-def log_pipeline_start(logger: logging.Logger, pipeline_name: str, version: str = "1.0.0"):
+def log_pipeline_start(logger: logging.Logger, pipeline_name: str, version: str = "1.0.0") -> None:
     """Log standardized pipeline start message."""
     logger.info("=" * 60)
     logger.info(f"🚀 Starting {pipeline_name} Pipeline (v{version})")
@@ -117,7 +117,7 @@ def log_pipeline_start(logger: logging.Logger, pipeline_name: str, version: str 
     logger.info("=" * 60)
 
 
-def log_pipeline_end(logger: logging.Logger, pipeline_name: str, start_time: datetime, success: bool = True):
+def log_pipeline_end(logger: logging.Logger, pipeline_name: str, start_time: datetime, success: bool = True) -> None:
     """Log standardized pipeline completion message."""
     end_time = datetime.now()
     duration = end_time - start_time
@@ -131,7 +131,7 @@ def log_pipeline_end(logger: logging.Logger, pipeline_name: str, start_time: dat
     logger.info("=" * 60)
 
 
-def log_stage_start(logger: logging.Logger, stage_name: str):
+def log_stage_start(logger: logging.Logger, stage_name: str) -> None:
     """Log standardized stage start message."""
     logger.info("-" * 40)
     logger.info(f"🔄 Starting {stage_name} stage")
@@ -144,7 +144,7 @@ def log_stage_end(
     start_time: datetime,
     records_processed: Optional[int] = None,
     success: bool = True,
-):
+) -> None:
     """Log standardized stage completion message."""
     duration = datetime.now() - start_time
     status = "✅" if success else "❌"
@@ -162,18 +162,18 @@ class PipelineLogger:
     with automatic start/end messages and duration tracking.
     """
 
-    def __init__(self, pipeline_name: str, version: str = "1.0.0", logger: Optional[logging.Logger] = None):
+    def __init__(self, pipeline_name: str, version: str = "1.0.0", logger: Optional[logging.Logger] = None) -> None:
         self.pipeline_name = pipeline_name
         self.version = version
         self.logger = logger or get_pipeline_logger(pipeline_name)
         self.start_time = None
 
-    def __enter__(self):
+    def __enter__(self) -> logging.Logger:
         self.start_time = datetime.now()
         log_pipeline_start(self.logger, self.pipeline_name, self.version)
         return self.logger
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         success = exc_type is None
         log_pipeline_end(self.logger, self.pipeline_name, self.start_time, success)
 
@@ -181,21 +181,21 @@ class PipelineLogger:
 class StageLogger:
     """Context manager for stage logging within pipelines."""
 
-    def __init__(self, stage_name: str, logger: logging.Logger):
+    def __init__(self, stage_name: str, logger: logging.Logger) -> None:
         self.stage_name = stage_name
         self.logger = logger
         self.start_time = None
 
-    def __enter__(self):
+    def __enter__(self) -> "StageLogger":
         self.start_time = datetime.now()
         log_stage_start(self.logger, self.stage_name)
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         success = exc_type is None
         log_stage_end(self.logger, self.stage_name, self.start_time, success=success)
 
-    def log_progress(self, message: str, records_processed: Optional[int] = None):
+    def log_progress(self, message: str, records_processed: Optional[int] = None) -> None:
         """Log progress message with optional record count."""
         if records_processed is not None:
             message += f" ({records_processed:,} records)"
@@ -205,7 +205,7 @@ class StageLogger:
 # Example usage patterns to replace inconsistent logging across pipelines:
 
 
-def example_usage():
+def example_usage() -> None:
     """
     Example usage patterns that replace the inconsistent logging
     found across different pipelines.

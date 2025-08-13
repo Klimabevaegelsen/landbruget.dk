@@ -65,10 +65,10 @@ class OptimizedGCSStorage:
             self.gcs_client = storage.Client()
             self.gcs_bucket = self.gcs_client.bucket(bucket_name)
             logger.info(f"✅ BMD Silver: Using fallback GCS for bucket: {bucket_name}")
-        except ImportError:
-            raise ImportError("google-cloud-storage is required but not available")
+        except ImportError as e:
+            raise ImportError("google-cloud-storage is required but not available") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
     def upload_file(self, local_path: Path, gcs_path: str = None) -> bool:
         """Upload file to GCS with optimized or fallback method."""

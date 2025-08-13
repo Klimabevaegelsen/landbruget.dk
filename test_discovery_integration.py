@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def test_discovery_step_integration():
+def test_discovery_step_integration() -> bool:
     """Test that the discovery step is properly integrated in main.py"""
 
     logger.info("🧪 Testing discovery step integration...")
@@ -64,7 +64,7 @@ def test_discovery_step_integration():
         return False
 
 
-def test_discovery_imports():
+def test_discovery_imports() -> bool:
     """Test that all discovery modules can be imported."""
 
     logger.info("🧪 Testing discovery module imports...")
@@ -87,7 +87,7 @@ def test_discovery_imports():
         return False
 
 
-def test_workflow_integration():
+def test_workflow_integration() -> bool:
     """Test that workflow files contain the discovery step."""
 
     logger.info("🧪 Testing GitHub Actions workflow integration...")
@@ -116,7 +116,7 @@ def test_workflow_integration():
         return False
 
 
-def main():
+def main() -> bool:
     """Run all integration tests."""
 
     logger.info("🚀 Starting discovery system integration tests...")

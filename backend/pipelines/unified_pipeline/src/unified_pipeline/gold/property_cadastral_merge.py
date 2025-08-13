@@ -151,7 +151,7 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             except Exception as e:
                 self.log.error(f"Failed to access BFE from nested structure: {e}")
-                raise ValueError(f"Cannot access BFE number from property data structure: {e}")
+                raise ValueError(f"Cannot access BFE number from property data structure: {e}") from e
 
             # Perform the merge and save directly to parquet using DuckDB COPY
             self.log.info("Performing BFE-based merge and creating result table...")

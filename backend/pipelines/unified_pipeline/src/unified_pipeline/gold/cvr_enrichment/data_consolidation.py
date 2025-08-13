@@ -98,11 +98,16 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                          OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
                     THEN NULL
                     ELSE CONCAT(
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                                      TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                                               TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
                     )
                 END
             )
@@ -213,7 +218,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             )
             if available_count == 0:
                 self.log.warning(
-                    f"No data files found within {self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"No data files found within "
+                    f"{self.config.shared_config.max_days_back_for_inputs} days. "
                     f"Cannot perform consolidation."
                 )
         else:
@@ -605,7 +611,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         table_name = "cvr_enriched_companies"
 
         self.log.info(
-            f"🔍 Creating normalized tables for {len(companies_list)} companies using chunked processing"
+            f"🔍 Creating normalized tables for {len(companies_list)} companies "
+            f"using chunked processing"
         )
 
         # Process companies in chunks to avoid memory issues (copied from original)
@@ -627,7 +634,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             chunk_companies = companies_list[start_idx:end_idx]
 
             self.log.info(
-                f"📦 Processing chunk {chunk_idx + 1}/{num_chunks}: companies {start_idx}-{end_idx - 1}"
+                f"📦 Processing chunk {chunk_idx + 1}/{num_chunks}: "
+                f"companies {start_idx}-{end_idx - 1}"
             )
 
             try:

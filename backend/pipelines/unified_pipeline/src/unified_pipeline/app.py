@@ -167,7 +167,8 @@ async def execute_pipeline_jobs(
             print(f"🚨 APP: Applying CLI filters to {config_cls.__name__}")
             config_instance.apply_cli_filters(cli_config)
             print(
-                f"🚨 APP: After CLI filters - pesticide_year = {getattr(config_instance, 'pesticide_year', 'NOT_SET')}"
+                f"🚨 APP: After CLI filters - pesticide_year = "
+                f"{getattr(config_instance, 'pesticide_year', 'NOT_SET')}"
             )
         else:
             print(f"🚨 APP: No apply_cli_filters method found on {config_cls.__name__}")
@@ -184,12 +185,14 @@ async def execute_pipeline_jobs(
                 if bronze_data is not None:
                     job_successful = True
                     log.info(
-                        f"Bronze job {job_cls.__name__} completed successfully with data for in-memory passing"
+                        f"Bronze job {job_cls.__name__} completed successfully with data "
+                        f"for in-memory passing"
                     )
                 else:
                     log.error(f"Bronze job {job_cls.__name__} failed - no data returned")
 
-                # 🧹 CLEANUP: Bronze data will be cleared AFTER silver processing to allow in-memory passing
+                # 🧹 CLEANUP: Bronze data will be cleared AFTER silver processing
+                # to allow in-memory passing
                 # Log the size for monitoring purposes
                 if bronze_data and isinstance(bronze_data, dict):
                     total_size = (
@@ -507,9 +510,9 @@ def execute(cli_config: cli.CliConfig) -> int:
     try:
         jobs = pipeline_map[cli_config.source][cli_config.stage]
         print(f"🚨 APP: Found {len(jobs)} jobs: {[job[0].__name__ for job in jobs]}")
-    except KeyError:
+    except KeyError as e:
         print("🚨 APP: KeyError - source/stage combination not found in pipeline_map")
-        raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
+        raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.") from e
 
     # Execute jobs with support for in-memory data passing
     print(f"🚨 APP: About to execute {len(jobs)} jobs with asyncio.run")

@@ -50,7 +50,8 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         raw_count = self.conn.execute("SELECT COUNT(*) FROM soil_types_raw").fetchone()[0]
         decomposed_count = self.conn.execute("SELECT COUNT(*) FROM soil_types_full").fetchone()[0]
         self.log.info(
-            f"📊 Input: {raw_count:,} soil types MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+            f"📊 Input: {raw_count:,} soil types MultiPolygons → "
+            f"{decomposed_count:,} individual polygons after ST_Dump"
         )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:

@@ -270,7 +270,8 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
             }
 
             logger.info(
-                f"Herd {herd_number} volume detection: {volume_category} ({estimated_5_year:,.0f} estimated 5-year animals)"
+                f"Herd {herd_number} volume detection: {volume_category} "
+                f"({estimated_5_year:,.0f} estimated 5-year animals)"
             )
 
             # Auto-configure high-risk herds

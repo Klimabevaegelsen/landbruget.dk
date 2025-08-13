@@ -14,8 +14,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Direct imports from the codebase
-from silver.duckdb_helper import DuckDBHelper
-from utils.logging import get_logger
+from silver.duckdb_helper import DuckDBHelper  # noqa: E402
+from utils.logging import get_logger  # noqa: E402
 
 logger = get_logger()
 

@@ -473,7 +473,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         except Exception as e:
             error_msg = f"❌ Stage 1 validation error: {str(e)}"
             if self.validation_config.fail_on_validation_error:
-                raise Exception(error_msg)
+                raise Exception(error_msg) from e
             else:
                 self.log.warning(f"⚠️ {error_msg} but continuing")
 

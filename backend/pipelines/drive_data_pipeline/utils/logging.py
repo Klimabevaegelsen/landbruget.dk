@@ -25,7 +25,7 @@ COLORS = {
 class ColoredFormatter(logging.Formatter):
     """Custom formatter adding colors to log components."""
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         """Format the log record with colors."""
         # Add color to levelname
         levelname = record.levelname

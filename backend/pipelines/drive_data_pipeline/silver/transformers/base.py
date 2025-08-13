@@ -14,7 +14,7 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    def get_logger():
+    def get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
     FileMetadata = None
@@ -66,7 +66,7 @@ class BaseTransformer(abc.ABC):
         file_content: bytes,
         filename: str,
         metadata_dict: dict,
-    ):
+    ) -> Any:
         """Transform file content directly from memory.
 
         Args:
@@ -84,8 +84,9 @@ class BaseTransformer(abc.ABC):
         # Handle imports for both standalone and package usage (duplicate import)
         try:
             from ...bronze.metadata import FileMetadata
+            file_metadata_class = FileMetadata
         except ImportError:
-            FileMetadata = None
+            file_metadata_class = None
 
         try:
             # Create a temporary file
@@ -97,7 +98,7 @@ class BaseTransformer(abc.ABC):
                 temp_path = Path(temp_file.name)
 
             # Create metadata object
-            metadata = FileMetadata(**metadata_dict)
+            metadata = file_metadata_class(**metadata_dict)
 
             # Create temporary output directory
             with tempfile.TemporaryDirectory() as temp_output_dir:

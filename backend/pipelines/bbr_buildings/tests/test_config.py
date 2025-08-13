@@ -1,5 +1,7 @@
 """Tests for BBR Buildings Pipeline configuration."""
 
+import pytest
+
 from config import Settings, get_settings
 
 
@@ -22,7 +24,7 @@ def test_get_settings() -> None:
     assert settings.geodanmark_wfs_url is not None
 
 
-def test_settings_with_env_vars(monkeypatch) -> None:
+def test_settings_with_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that settings respect environment variables."""
     monkeypatch.setenv("MAX_WORKERS", "8")
     monkeypatch.setenv("CHUNK_SIZE", "100000")
