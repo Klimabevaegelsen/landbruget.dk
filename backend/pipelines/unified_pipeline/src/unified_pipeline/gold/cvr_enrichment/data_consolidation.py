@@ -1181,7 +1181,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         for company in companies_data.values():
             addresses = company.get("addresses", [])
             total_addresses += len(addresses)
-            geocoded_addresses += sum(1 for addr in addresses if addr.get("is_geocoded"))
+            # Use the same field that the table creation uses for consistency
+            company_geocoded = sum(1 for addr in addresses if addr.get("dawa_enriched"))
+            geocoded_addresses += company_geocoded
 
         # Count financial documents
         financial_docs = sum(
