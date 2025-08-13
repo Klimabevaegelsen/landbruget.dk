@@ -382,27 +382,16 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.gcs_access.create_table_from_gcs(table_name, input_path)
             
             # Work with the actual financial data structure as saved by the financial documents step
-            # The parquet file contains raw financial metrics, so we compute has_financial_metrics
+            # The parquet file contains processed financial summary data, not raw metrics
             result = self.conn.execute(
                 f"""
                 SELECT 
                     cvr_number,
                     COALESCE(document_count, 0) as document_count,
-                    CASE 
-                        WHEN total_assets IS NOT NULL 
-                          OR cash_and_cash_equivalents IS NOT NULL 
-                          OR other_finance_income IS NOT NULL 
-                          OR liabilities_other_than_provisions IS NOT NULL
-                        THEN true 
-                        ELSE false 
-                    END as has_financial_metrics
+                    COALESCE(has_financial_metrics, false) as has_financial_metrics
                 FROM {table_name}
                 WHERE cvr_number IS NOT NULL
-                  AND (document_count > 0 OR 
-                       total_assets IS NOT NULL OR 
-                       cash_and_cash_equivalents IS NOT NULL OR 
-                       other_finance_income IS NOT NULL OR 
-                       liabilities_other_than_provisions IS NOT NULL)
+                  AND (document_count > 0 OR has_financial_metrics = true)
             """
             ).fetchall()
             
