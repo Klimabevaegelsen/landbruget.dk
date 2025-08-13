@@ -120,7 +120,8 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         num_chunks = (total_properties + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"🚀 OPTIMIZED PROCESSING: {total_properties:,} pre-filtered properties in {num_chunks} chunks of {chunk_size:,}"
+            f"🚀 OPTIMIZED PROCESSING: {total_properties:,} pre-filtered properties " +
+            f"in {num_chunks} chunks of {chunk_size:,}"
         )
         self.log.info("⚡ 13x faster than original due to Stage 0 pre-filtering")
 
@@ -223,8 +224,10 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         
                         -- Calculate intersection area and percentages
                         ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) as intersection_area_m2,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) / field_area_m2) * 100 as field_area_share_pct,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) / property_area_m2) * 100 as property_area_share_pct,
+                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                         field_area_m2) * 100 as field_area_share_pct,
+                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                         property_area_m2) * 100 as property_area_share_pct,
                         
                         -- STREAM intersection geometries for downstream spatial analysis
                         field_geometry,

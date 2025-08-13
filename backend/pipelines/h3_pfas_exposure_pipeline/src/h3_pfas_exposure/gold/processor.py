@@ -74,7 +74,8 @@ class H3PFASProcessorRefactored:
             if process_memory_gb > max_process_memory_gb:
                 self._memory_alerts += 1
                 self.log.warning(
-                    f"⚠️ {operation}: High process memory usage {process_memory_gb:.1f}GB (limit: {max_process_memory_gb}GB)"
+                    f"⚠️ {operation}: High process memory usage {process_memory_gb:.1f}GB "
+                    f"(limit: {max_process_memory_gb}GB)"
                 )
 
                 # Only trigger cleanup after more alerts and avoid during critical operations
@@ -88,7 +89,8 @@ class H3PFASProcessorRefactored:
             if available_disk_gb < min_free_disk_gb:
                 self._disk_alerts += 1
                 self.log.warning(
-                    f"⚠️ {operation}: Low available disk space {available_disk_gb:.1f}GB (minimum: {min_free_disk_gb}GB)"
+                    f"⚠️ {operation}: Low available disk space {available_disk_gb:.1f}GB "
+                    f"(minimum: {min_free_disk_gb}GB)"
                 )
 
                 # Only trigger cleanup after more alerts and avoid during critical operations
