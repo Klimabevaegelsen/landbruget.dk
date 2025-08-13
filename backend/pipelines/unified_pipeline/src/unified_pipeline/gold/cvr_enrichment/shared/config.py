@@ -276,7 +276,7 @@ def _get_latest_input_paths_from_gcs(
             patterns = [
                 f"{base_pattern}/*/company_fetching.parquet",
                 f"{base_pattern}/*/pnumber_fetching.parquet",
-                f"{base_pattern}/*/financial_documents.parquet",
+                f"gs://{bucket}/gold/cvr_enrichment_financial/*/data.parquet",  # Financial docs use different dataset
                 f"{base_pattern}/*/address_geocoding.parquet",
             ]
 
