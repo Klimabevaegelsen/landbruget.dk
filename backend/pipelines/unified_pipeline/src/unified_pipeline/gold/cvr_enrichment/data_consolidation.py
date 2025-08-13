@@ -786,6 +786,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 provisions DOUBLE,
                 property_plant_equipment DOUBLE,
                 contributed_capital DOUBLE,
+                net_profit_loss DOUBLE,
                 equity_ratio DOUBLE,
                 profit_per_employee DOUBLE,
                 return_on_assets DOUBLE
@@ -1463,11 +1464,15 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             ).fetchone()
 
             if result and result[0]:
-                return set(result[0])
+                available_fields = set(result[0])
+                self.log.info(f"Found {len(available_fields)} available financial fields in data")
+                return available_fields
             else:
+                self.log.warning("No financial metrics found in data, will use NULL values for all fields")
                 return set()
         except Exception as e:
             self.log.warning(f"Could not determine available financial fields: {e}")
+            self.log.info("Will use NULL values for all financial fields to ensure query stability")
             return set()
 
     def _build_financial_select_fields(self, available_fields: set) -> str:
@@ -1547,6 +1552,22 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
                 # Log available fields for debugging
                 self.log.info(f"Available financial fields: {sorted(available_fields)}")
+                
+                # Validate column count before INSERT to prevent mismatch errors
+                expected_columns = self.conn.execute(
+                    f"SELECT COUNT(*) FROM pragma_table_info('{table_name}_financial')"
+                ).fetchone()[0]
+                
+                # Count SELECT fields: 10 fixed fields + len(financial_fields) + 3 calculated fields
+                select_field_count = 10 + len(financial_fields.split(',')) + 3
+                
+                if select_field_count != expected_columns:
+                    self.log.warning(
+                        f"Column count mismatch detected: table has {expected_columns} columns, "
+                        f"but SELECT would produce {select_field_count} values. Using safe fallback."
+                    )
+                    # Use NULL for all financial metrics to ensure column count matches
+                    financial_fields = self._build_financial_select_fields(set())
 
                 self.conn.execute(
                     f"""
