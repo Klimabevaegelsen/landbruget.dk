@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 import geopandas as gpd
 import pytest
-
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 
 # Create alias for test compatibility

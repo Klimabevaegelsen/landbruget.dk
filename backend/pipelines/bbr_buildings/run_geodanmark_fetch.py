@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 
 import duckdb
-
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 
 # GCS upload functionality

@@ -9,7 +9,6 @@ from unittest.mock import Mock
 import pytest
 from geopandas import GeoDataFrame as gGeo
 from shapely.geometry import Polygon
-
 from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
     PesticideDisaggregationGoldConfig,

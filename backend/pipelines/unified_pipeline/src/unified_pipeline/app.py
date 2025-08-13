@@ -236,7 +236,8 @@ async def execute_pipeline_jobs(
                         )
                         if total_size > 10_000_000:  # More than 10MB of string data
                             log.info(
-                                f"🧹 Clearing large bronze data ({total_size:,} chars) to prevent GitHub runner memory issues"
+                                f"🧹 Clearing large bronze data ({total_size:,} chars) to prevent "
+                                f"GitHub runner memory issues"
                             )
 
                     bronze_data = None
@@ -512,7 +513,9 @@ def execute(cli_config: cli.CliConfig) -> int:
         print(f"🚨 APP: Found {len(jobs)} jobs: {[job[0].__name__ for job in jobs]}")
     except KeyError as e:
         print("🚨 APP: KeyError - source/stage combination not found in pipeline_map")
-        raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.") from e
+        raise ValueError(
+            f"Source {cli_config.source} and stage {cli_config.stage} not supported."
+        ) from e
 
     # Execute jobs with support for in-memory data passing
     print(f"🚨 APP: About to execute {len(jobs)} jobs with asyncio.run")

@@ -110,7 +110,8 @@ def parse_args() -> Dict[str, Any]:
         "--steps",
         type=str,
         default="all",
-        help="Pipeline steps to run (all, stamdata, herds, herd_details, diko, animal_movements, ejendom, vetstat, silver_*)",
+        help="Pipeline steps to run (all, stamdata, herds, herd_details, "
+             "diko, animal_movements, ejendom, vetstat, silver_*)",
     )
     parser.add_argument("--test-species-codes", type=str, help="Comma-separated list of species codes for testing")
     parser.add_argument("--limit-total-herds", type=int, help="Limit total number of herds to process")
@@ -264,14 +265,16 @@ def fetch_herds(
                             ):
                                 logger.info(f"Total herd limit ({limit_total}) reached.")
                                 logger.info(
-                                    f"Found {len(herd_to_species)} unique herds across {len(herds_count_per_species)} species."
+                                    f"Found {len(herd_to_species)} unique herds across "
+                                    f"{len(herds_count_per_species)} species."
                                 )
                                 for species, count in herds_count_per_species.items():
                                     logger.info(f"  Species {species}: {count} herds")
                                 return herd_to_species
 
                 logger.debug(
-                    f"Processed batch for species {species_code}, usage {usage_code}. Added {herds_added_this_batch} new herds."
+                    f"Processed batch for species {species_code}, usage {usage_code}. "
+                    f"Added {herds_added_this_batch} new herds."
                 )
 
                 # Check if we need to continue pagination
@@ -285,11 +288,14 @@ def fetch_herds(
                     break
 
             except Exception as e:
-                logger.error(f"Error fetching herds for species {species_code}, usage {usage_code}: {e}")
+                logger.error(
+                    f"Error fetching herds for species {species_code}, usage {usage_code}: {e}"
+                )
                 break  # Stop processing this combo on error
 
         logger.info(
-            f"Finished fetching herds. Found {len(herd_to_species)} unique herds across {len(herds_count_per_species)} species."
+            f"Finished fetching herds. Found {len(herd_to_species)} unique herds "
+            f"across {len(herds_count_per_species)} species."
         )
     for species, count in herds_count_per_species.items():
         logger.info(f"  Species {species}: {count} herds")
@@ -593,7 +599,8 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
         if context["args"]["progress"]:
             logging.info(
-                f"Processed {len(context['herd_details'])} herd details, found {len(context['chr_to_species'])} unique CHR numbers"
+                f"Processed {len(context['herd_details'])} herd details, "
+                f"found {len(context['chr_to_species'])} unique CHR numbers"
             )
 
     elif step == "diko":
@@ -642,7 +649,8 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             successful_opl = sum(1 for r in oplysninger_results if r)
             successful_vet = sum(1 for r in vet_events_results if r)
             logging.info(
-                f"Completed Ejendom tasks. Oplysninger success: {successful_opl}/{len(ejendom_tasks)}, Vet events success: {successful_vet}/{len(ejendom_tasks)}"
+                f"Completed Ejendom tasks. Oplysninger success: {successful_opl}/{len(ejendom_tasks)}, "
+                f"Vet events success: {successful_vet}/{len(ejendom_tasks)}"
             )
 
     elif step == "animal_movements":
@@ -886,12 +894,18 @@ def main():
 
             if has_buffer_data or has_context_import or has_bronze_files or (can_use_streaming and bronze_timestamp):
                 logging.warning(
-                    f"Silver-only operation detected with existing data. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, Override: {bronze_dir_override}"
+                    f"Silver-only operation detected with existing data. "
+                    f"Buffer: {has_buffer_data}, Context: {has_context_import}, "
+                    f"Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, "
+                    f"Override: {bronze_dir_override}"
                 )
                 needs_fvm_credentials = False
             else:
                 logging.warning(
-                    f"Silver-only operation but no existing data found. Will need to run bronze steps. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, Override: {bronze_dir_override}"
+                    f"Silver-only operation but no existing data found. Will need to run bronze steps. "
+                    f"Buffer: {has_buffer_data}, Context: {has_context_import}, "
+                    f"Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, "
+                    f"Override: {bronze_dir_override}"
                 )
 
         # Initialize context based on whether we need FVM credentials
@@ -1056,7 +1070,8 @@ def main():
                 if use_streaming_mode and bronze_timestamp:
                     # Use streaming mode for memory efficiency
                     logging.warning(
-                        f"🚀 Using STREAMING mode for memory-efficient processing (bronze_timestamp: {bronze_timestamp})"
+                        f"🚀 Using STREAMING mode for memory-efficient processing "
+                        f"(bronze_timestamp: {bronze_timestamp})"
                     )
                     success = run_silver_processing(
                         silver_dir=silver_dir,

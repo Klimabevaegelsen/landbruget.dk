@@ -50,7 +50,8 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
 
         if has_malformed_columns:
             logger.info("🔧 Detected malformed column structure - using positional reconstruction")
-            # Column structure based on analysis: date, x_coord, y_coord, street, house_num, municipality, table_number, source_file
+            # Column structure: date, x_coord, y_coord, street, house_num, 
+            # municipality, table_number, source_file
             con.execute(f"""
                 CREATE OR REPLACE TABLE cleaned_fires AS
                 SELECT 
@@ -80,7 +81,8 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
                                     WHEN 'dec' THEN '12'
                                     ELSE '01'
                                 END || '-' ||
-                                LPAD(CAST(LEFT("{column_names[0]}", POSITION('-' IN "{column_names[0]}") - 1) AS VARCHAR), 2, '0')
+                                LPAD(CAST(LEFT("{column_names[0]}", 
+                                    POSITION('-' IN "{column_names[0]}") - 1) AS VARCHAR), 2, '0')
                             ELSE NULL
                         END AS DATE
                     ) as fire_date
@@ -251,10 +253,15 @@ def match_fires_to_properties(con: duckdb.DuckDBPyConnection, max_distance_m: in
                     ) as distance_meters,
                     -- Score the address match quality (handle .0 suffix)
                     CASE 
-                        WHEN LOWER(p.address) = LOWER(f.fire_street || ' ' || f.fire_house_number) THEN 100
-                        WHEN LOWER(p.address) = LOWER(f.fire_street || ' ' || REGEXP_REPLACE(f.fire_house_number, '\\.0$', '')) THEN 100
+                        WHEN LOWER(p.address) = LOWER(
+                            f.fire_street || ' ' || f.fire_house_number
+                        ) THEN 100
+                        WHEN LOWER(p.address) = LOWER(
+                            f.fire_street || ' ' || REGEXP_REPLACE(f.fire_house_number, '\\.0$', '')
+                        ) THEN 100
                         WHEN LOWER(p.address) LIKE '%' || LOWER(f.fire_street) || '%' 
-                             AND LOWER(p.address) LIKE '%' || LOWER(REGEXP_REPLACE(f.fire_house_number, '\\.0$', '')) || '%' THEN 90
+                             AND LOWER(p.address) LIKE '%' || 
+                             LOWER(REGEXP_REPLACE(f.fire_house_number, '\\.0$', '')) || '%' THEN 90
                         WHEN LOWER(p.address) LIKE '%' || LOWER(f.fire_street) || '%' THEN 70
                         ELSE 0
                     END as address_match_score

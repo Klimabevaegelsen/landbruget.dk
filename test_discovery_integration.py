@@ -27,7 +27,10 @@ def test_discovery_step_integration() -> bool:
         expected_deps = ["stamdata", "herds"]
 
         if discovery_deps != expected_deps:
-            logger.error(f"❌ Discovery dependencies wrong: got {discovery_deps}, expected {expected_deps}")
+            logger.error(
+                f"❌ Discovery dependencies wrong: got {discovery_deps}, "
+                f"expected {expected_deps}"
+            )
             return False
 
         # Test that animal_movements depends on discovery
@@ -48,7 +51,9 @@ def test_discovery_step_integration() -> bool:
         try:
             args = parse_arguments()
             if args.get("discovery_year") != 2023:
-                logger.error(f"❌ Discovery year not parsed correctly: {args.get('discovery_year')}")
+                logger.error(
+                    f"❌ Discovery year not parsed correctly: {args.get('discovery_year')}"
+                )
                 return False
 
             logger.info("✅ Argument parsing works")
@@ -97,7 +102,10 @@ def test_workflow_integration() -> bool:
         with open(".github/workflows/chr_pipeline.yml", "r") as f:
             workflow_content = f.read()
 
-        required_elements = ["herd_discovery", "discovery_year:", "--discovery-year", "Year for herd volume discovery"]
+        required_elements = [
+            "herd_discovery", "discovery_year:", "--discovery-year", 
+            "Year for herd volume discovery"
+        ]
 
         missing_elements = []
         for element in required_elements:

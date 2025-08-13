@@ -24,7 +24,8 @@ def _get_optimized_gcs_access() -> type | None:
     except ImportError as e:
         logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
         logging.warning(
-            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed "
+            "for optimal performance"
         )
         return None
 
@@ -254,7 +255,9 @@ class GCSStorage:
 
         if gcs_path is None:
             # Use the file structure from local path but with GCS prefix
-            relative_path = os.path.relpath(local_path, start=os.path.dirname(os.path.dirname(local_path)))
+            relative_path = os.path.relpath(
+                local_path, start=os.path.dirname(os.path.dirname(local_path))
+            )
             gcs_path = f"{self.prefix}/{relative_path}"
 
         try:
@@ -279,7 +282,9 @@ class GCSStorage:
                 bucket = client.bucket(self.bucket_name)
                 blob = bucket.blob(gcs_path)
                 blob.upload_from_filename(local_path)
-                logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+                logging.info(
+                    f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)"
+                )
                 return True
 
         except Exception as e:

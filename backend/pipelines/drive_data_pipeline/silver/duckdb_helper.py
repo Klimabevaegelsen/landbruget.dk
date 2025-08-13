@@ -9,6 +9,7 @@ import ibis
 # pandas import needed for DataFrame type annotation
 try:
     import pandas as pd
+
     DataFrame = pd.DataFrame
 except ImportError:
     DataFrame = Any
