@@ -1629,103 +1629,25 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
     def _process_financial_chunk(self, json_strings: list, table_name: str) -> None:
         """Process financial documents for a chunk of companies with sophisticated metrics (ported from original)."""
+        # The financial documents step now saves simplified structure, skip detailed table creation
         financial_check = self.conn.execute(
             """
             SELECT COUNT(*)
             FROM unnest($1) as t(json_data)
-            WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
-            AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
+            WHERE json_extract(json_data, '$.document_count') IS NOT NULL
+            AND json_extract(json_data, '$.document_count')::INTEGER > 0
         """,
             [json_strings],
         ).fetchone()[0]
 
         if financial_check > 0:
-            # Get available financial_metrics fields from actual data
-            available_fields = self._get_available_financial_fields(json_strings)
-
-            financial_schema = self.conn.execute(
-                """
-                WITH financial_sample AS (
-                    SELECT json_extract(json_data, '$.financial_documents') as financial_json
-                    FROM unnest($1) as t(json_data)
-                    WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
-                    AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
-                    LIMIT 1
-                )
-                SELECT json_structure(financial_json) FROM financial_sample
-            """,
-                [json_strings],
-            ).fetchone()
-
-            if financial_schema and financial_schema[0]:
-                # Build dynamic financial fields based on available data
-                financial_fields = self._build_financial_select_fields(available_fields)
-
-                # Log available fields for debugging
-                self.log.info(f"Available financial fields: {sorted(available_fields)}")
-                
-                # Validate column count before INSERT to prevent mismatch errors
-                expected_columns = self.conn.execute(
-                    f"SELECT COUNT(*) FROM pragma_table_info('{table_name}_financial')"
-                ).fetchone()[0]
-                
-                # Count SELECT fields: 10 fixed fields + len(financial_fields) + 3 calculated fields
-                select_field_count = 10 + len(financial_fields.split(',')) + 3
-                
-                if select_field_count != expected_columns:
-                    self.log.warning(
-                        f"Column count mismatch detected: table has {expected_columns} columns, "
-                        f"but SELECT would produce {select_field_count} values. Using safe fallback."
-                    )
-                    # Use NULL for all financial metrics to ensure column count matches
-                    financial_fields = self._build_financial_select_fields(set())
-
-                self.conn.execute(
-                    f"""
-                    INSERT INTO {table_name}_financial
-                    WITH financial_flattened AS (
-                        SELECT
-                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            unnest(json_transform(json_extract(json_data, '$.financial_documents'), $2)) as financial_parsed
-                        FROM unnest($1) as t(json_data)
-                        WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
-                        AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
-                    )
-                    SELECT 
-                        company_uuid(cvr_number) as company_uuid,
-                        cvr_number,
-                        financial_parsed.publication_type,
-                        financial_parsed.publication_time,
-                        financial_parsed.case_number,
-                        TRY(financial_parsed.reporting_period.start_date) as reporting_period_start,
-                        TRY(financial_parsed.reporting_period.end_date) as reporting_period_end,
-                        financial_parsed.document_count,
-                        financial_parsed.xml_size_bytes,
-                        financial_parsed.download_success,
-                        {financial_fields},
-                        CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
-                                 AND TRY(financial_parsed.financial_metrics.total_equity) IS NOT NULL
-                            THEN TRY(financial_parsed.financial_metrics.total_equity) / TRY(financial_parsed.financial_metrics.total_assets) 
-                            ELSE NULL 
-                        END as equity_ratio,
-                        CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0 
-                                 AND TRY(financial_parsed.financial_metrics.net_profit_loss) IS NOT NULL
-                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.average_number_of_employees) 
-                            ELSE NULL 
-                        END as profit_per_employee,
-                        CASE 
-                            WHEN TRY(financial_parsed.financial_metrics.total_assets) > 0 
-                                 AND TRY(financial_parsed.financial_metrics.net_profit_loss) IS NOT NULL
-                            THEN TRY(financial_parsed.financial_metrics.net_profit_loss) / TRY(financial_parsed.financial_metrics.total_assets) 
-                            ELSE NULL 
-                        END as return_on_assets
-                    FROM financial_flattened
-                """,
-                    [json_strings, financial_schema[0]],
-                )
-
+            self.log.info(f"Found {financial_check} companies with financial data in simplified format")
+            self.log.info("Current financial data structure contains summary metrics only - skipping detailed financial table creation")
+            self.log.info("Financial data is available in the main consolidated data for basic reporting")
+            return
+        else:
+            self.log.info("No financial data found in this chunk")
+            return
     def _process_industries_chunk(self, json_strings: list, table_name: str) -> None:
         """Process industries for a chunk of companies (ported from original)."""
         industry_check = self.conn.execute(
