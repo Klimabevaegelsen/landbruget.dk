@@ -858,8 +858,8 @@ class GCSDataAccess:
 
                 # Handle different mtime types from gcsfs
                 if isinstance(mtime, datetime.datetime):
-                    # mtime is already a datetime object
-                    timestamp = mtime
+                    # mtime is already a datetime object, normalize to timezone-naive
+                    timestamp = mtime.replace(tzinfo=None) if mtime.tzinfo else mtime
                 elif isinstance(mtime, (int, float)) and mtime > 0:
                     # mtime is a numeric timestamp
                     timestamp = datetime.datetime.fromtimestamp(mtime)
@@ -870,7 +870,7 @@ class GCSDataAccess:
                 files_with_timestamps.append((f"gs://{file_path}", timestamp))
             except Exception as e:
                 self.log.warning(f"Could not get timestamp for {file_path}: {e}")
-                # Fall back to current time if timestamp unavailable
+                # Fall back to current time if timestamp unavailable (timezone-naive)
                 files_with_timestamps.append((f"gs://{file_path}", datetime.datetime.now()))
 
         return files_with_timestamps
