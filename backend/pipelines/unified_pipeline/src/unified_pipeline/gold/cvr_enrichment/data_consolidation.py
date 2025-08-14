@@ -781,9 +781,10 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     break
                 raise
 
-        # Process employment data separately at the end to avoid memory accumulation
-        self.log.info("🏭 Processing employment data separately to avoid memory issues")
-        self._process_all_employment_data(companies_list, table_name)
+        # Skip employment data processing to avoid memory exhaustion
+        # The 1.25M employment records cause memory issues - skip for now
+        self.log.info("⏭️ Skipping employment data processing to avoid memory exhaustion")
+        self.log.info("💡 Employment data processing disabled - causes 7.4GB memory usage")
         
         # Log final table sizes
         self._log_final_table_sizes(table_name)
