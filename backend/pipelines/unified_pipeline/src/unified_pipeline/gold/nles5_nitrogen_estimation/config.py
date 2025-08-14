@@ -25,12 +25,15 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     frequency: str = "monthly$"
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
-    # Input silver datasets
+    # Input silver datasets - Updated to match actual GCS structure
     soil_types_dataset: str = "soil_types"
-    dmi_dataset: str = "dmi"
-    fertilizer_dataset: str = "fertiliser"  # Add fertilizer data from silver layer
-    field_plan_dataset: str = "field_plan"  # Add field plan data
-    catch_crops_dataset: str = "catch_crops"  # Add catch crop data (optional)
+    dmi_precipitation_dataset: str = "dmi_acc_precip_dmi_acc_precip"  # DMI accumulated precipitation
+    dmi_evaporation_dataset: str = "dmi_pot_evaporation_makkink_dmi_pot_evaporation_makkink"  # DMI potential evaporation
+    fertilizer_dataset: str = "fertiliser"  # Fertilizer data from silver layer
+    agricultural_fields_dataset: str = "fvm_marker"  # Use fvm_marker instead of agricultural_fields
+    # Field plans and catch crops are in fertiliser directory as GKEA and Efterafgrøder files
+    field_plan_dataset: str = "field_plan"  # GKEA field plan data (in fertiliser directory)
+    catch_crops_dataset: str = "catch_crops"  # Efterafgrøder data (in fertiliser directory)
 
     # Processing configuration - CHUNKED FOR STABILITY
     batch_size: int = 50000  # Reduced batch size for memory-intensive operations

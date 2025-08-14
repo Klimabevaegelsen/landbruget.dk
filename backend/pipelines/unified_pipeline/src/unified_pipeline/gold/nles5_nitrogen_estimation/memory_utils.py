@@ -129,7 +129,15 @@ class NLES5MemoryUtils:
                 'percolation_target',
                 'estimates_target_*',  # Pattern for target year estimate tables
                 'fertilizer_target_year',
-                'field_plan_target_year'
+                'field_plan_target_year',
+                # Agricultural pattern matching tables
+                'gkea_fvm_enhanced_mappings_*',  # Year-specific enhanced mappings
+                'unmatched_gkea_fields_*',  # Pattern matcher temporary tables
+                'gkea_agricultural_signatures_*',
+                'fvm_agricultural_signatures_*',
+                'agricultural_pattern_matches_*',
+                'agricultural_field_mappings_*',
+                'enhanced_gkea_fvm_matches_*'
             ]
             
             # Get list of all tables to find target year tables
@@ -163,10 +171,67 @@ class NLES5MemoryUtils:
             # Clean up temp files
             self.processor._cleanup_temp_files()
             
+            # Clean up agricultural pattern matching tables specifically
+            self._cleanup_agricultural_pattern_tables()
+            
             self.log.debug("✅ Target year cleanup completed")
             
         except Exception as e:
             self.log.debug(f"Error during target year cleanup: {e}")
+    
+    def _cleanup_agricultural_pattern_tables(self) -> None:
+        """Clean up agricultural pattern matching tables after processing."""
+        try:
+            self.log.debug("🧹 Cleaning up agricultural pattern matching tables")
+            
+            # Get all tables to find pattern matching tables
+            all_tables = self.conn.execute("SHOW TABLES").fetchall()
+            table_names = [table[0] for table in all_tables]
+            
+            # Pattern matching table patterns
+            pattern_table_patterns = [
+                'unmatched_gkea_fields',
+                'gkea_agricultural_signatures',
+                'gkea_crop_profiles', 
+                'fvm_agricultural_signatures',
+                'fvm_crop_profiles',
+                'agricultural_pattern_matches',
+                'agricultural_field_mappings',
+                'enhanced_gkea_fvm_matches',
+                'agricultural_matching_summary',
+                'fertilizer_enhanced_field_mappings',
+                'company_field_bridge'
+            ]
+            
+            cleaned_count = 0
+            for table_name in table_names:
+                # Check if table matches any pattern
+                should_clean = False
+                for pattern in pattern_table_patterns:
+                    if pattern in table_name:
+                        # Keep persistent tables with year suffixes, clean temporary ones
+                        if ('enhanced_gkea_fvm_matches' in table_name and '_' in table_name.split('enhanced_gkea_fvm_matches')[-1]) or \
+                           ('gkea_fvm_enhanced_mappings' in table_name and '_' in table_name.split('gkea_fvm_enhanced_mappings')[-1]):
+                            # Keep year-specific enhanced mappings
+                            continue
+                        elif any(temp_marker in table_name for temp_marker in ['_temp', '_tmp', 'unmatched_', 'signatures_', 'mappings_']):
+                            # Clean temporary tables
+                            should_clean = True
+                            break
+                
+                if should_clean:
+                    try:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                        cleaned_count += 1
+                        self.log.debug(f"Dropped agricultural pattern table: {table_name}")
+                    except Exception:
+                        pass
+            
+            if cleaned_count > 0:
+                self.log.debug(f"Cleaned up {cleaned_count} agricultural pattern matching tables")
+                
+        except Exception as e:
+            self.log.debug(f"Error cleaning up agricultural pattern tables: {e}")
 
     def _aggressive_pipeline_cleanup(self) -> None:
         """Perform comprehensive pipeline cleanup to free all possible memory."""

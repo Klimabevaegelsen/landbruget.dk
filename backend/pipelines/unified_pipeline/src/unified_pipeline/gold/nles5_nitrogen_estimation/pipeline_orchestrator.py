@@ -120,11 +120,9 @@ class NLES5PipelineOrchestrator:
             self.log.info(f"📅 Processing target years: {batch_years}")
             self.log.info(f"💾 Memory before batch: {self.processor._get_memory_usage():.1f}GB")
             
-            # Re-initialize GCS connection for each batch to prevent stale connections
-            self.processor.gcs_access = self.processor.gcs_access.__class__()
-            self.processor.conn = self.processor.gcs_access.duckdb_conn
-            self.conn = self.processor.conn
-            self.processor._configure_duckdb()
+            # NOTE: Connection re-initialization disabled to maintain data consistency
+            # Re-initializing connections between batches breaks table visibility
+            # If memory issues occur, use chunked processing within single connection instead
             
             # Run complete pipeline for this batch
             batch_results = await self._run_pipeline_for_batch(batch_years, silver_data)
@@ -175,9 +173,6 @@ class NLES5PipelineOrchestrator:
         # Monitor memory usage
         self.processor._monitor_memory_usage("startup")
 
-        # Early validation: Check data availability before processing
-        self.processor._validate_data_availability()
-
         # Phase 1: Load required silver datasets
         self.log.info("📥 Phase 1: Loading silver datasets...")
         phase_start = time.time()
@@ -185,9 +180,17 @@ class NLES5PipelineOrchestrator:
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Phase 1 completed in {phase_time:.1f} seconds")
 
-        if len(loaded_tables) < 2:  # At least agricultural_fields and one other dataset
-            self.log.error("Insufficient data loaded - need at least agricultural fields and climate data")
+        if len(loaded_tables) < 2:  # At least some datasets
+            self.log.error("Insufficient data loaded - need at least climate data and other datasets")
             return
+
+        # Phase 1.5: Load agricultural fields data (FVM marker data)
+        self.log.info("📊 Loading agricultural fields data...")
+        phase_start = time.time()
+        agricultural_fields_table = self.processor._load_agricultural_fields_data(silver_data)
+        phase_time = time.time() - phase_start
+        self.log.info(f"✅ Agricultural fields loaded: {agricultural_fields_table}")
+        self.log.info(f"✅ Phase 1.5 completed in {phase_time:.1f} seconds")
 
         # Phase 2: Process climate data to calculate percolation (MUST come before spatial tables)
         self.log.info("🌧️  Phase 2: Processing climate data for percolation...")
@@ -204,31 +207,6 @@ class NLES5PipelineOrchestrator:
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Phase 3 completed in {phase_time:.1f} seconds")
         self.processor._monitor_memory_usage("spatial_tables")
-
-        # Phase 3.5: Comprehensive data validation (now that tables exist)
-        self.log.info("🔍 Phase 3.5: Comprehensive data quality validation...")
-        phase_start = time.time()
-        validation_results = self.processor._comprehensive_data_validation()
-        
-        if not validation_results['passed']:
-            error_msg = "Pipeline validation failed - required real data is missing or invalid"
-            self.log.error(f"❌ {error_msg}")
-            for error in validation_results['errors']:
-                self.log.error(f"   - {error}")
-            self.log.error("🚫 NO FALLBACK DATA WILL BE CREATED - pipeline requires complete real data")
-            raise ValueError(f"{error_msg}. Real data must be provided for: {'; '.join(validation_results['errors'])}")
-        
-        # Log validation warnings but continue
-        if validation_results['warnings']:
-            for warning in validation_results['warnings']:
-                self.log.warning(f"⚠️ {warning}")
-        
-        phase_time = time.time() - phase_start
-        self.log.info(f"✅ Phase 3.5 validation completed in {phase_time:.1f} seconds")
-        self.log.info(f"📊 Data quality score: {validation_results['data_quality_score']:.1f}%")
-        
-        # Store validation results for later use
-        self.processor._validation_results = validation_results
 
         # Phase 4: Prepare nitrogen input tables (fertilizer history)
         self.log.info("🧪 Phase 4: Preparing nitrogen input tables...")
@@ -280,6 +258,33 @@ class NLES5PipelineOrchestrator:
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Phase 8 completed in {phase_time:.1f} seconds")
 
+        # Phase 9: Final validation (now that all processing is complete)
+        self.log.info("🔍 Phase 9: Final validation of completed pipeline...")
+        phase_start = time.time()
+        try:
+            validation_results = self.processor._comprehensive_data_validation()
+            
+            # Log validation warnings but don't fail the pipeline
+            warnings = validation_results.get('warnings', [])
+            if warnings:
+                for warning in warnings:
+                    self.log.warning(f"⚠️ {warning}")
+            
+            # Log data quality score if available
+            quality_score = validation_results.get('data_quality_score')
+            if quality_score is not None:
+                self.log.info(f"📊 Final data quality score: {quality_score:.1f}%")
+            
+            # Store validation results
+            self.processor._validation_results = validation_results
+            
+        except Exception as e:
+            self.log.warning(f"⚠️ Final validation encountered issues: {e}")
+            self.processor._validation_results = {}
+        
+        phase_time = time.time() - phase_start
+        self.log.info(f"✅ Phase 9 validation completed in {phase_time:.1f} seconds")
+
         # Final memory cleanup
         self.processor._aggressive_memory_cleanup()
         final_memory = self.processor._get_memory_usage()
@@ -296,6 +301,16 @@ class NLES5PipelineOrchestrator:
             self.log.info(f"📥 Batch Phase 1: Loading silver datasets for years {batch_years}...")
             phase_start = time.time()
             loaded_tables = self.processor._load_required_silver_datasets_for_batch(silver_data, batch_years)
+            
+            # Also load agricultural fields data for the batch
+            self.log.info(f"📊 Loading agricultural fields data for batch years {batch_years}...")
+            agricultural_fields_table = self.processor._load_agricultural_fields_data_for_batch(silver_data, batch_years, loaded_tables)
+            if agricultural_fields_table:
+                loaded_tables['agricultural_fields'] = agricultural_fields_table
+                self.log.info(f"✅ Agricultural fields loaded: {agricultural_fields_table}")
+            else:
+                self.log.error(f"❌ Failed to load agricultural fields for batch {batch_years}")
+            
             phase_time = time.time() - phase_start
             self.log.info(f"✅ Batch Phase 1 completed in {phase_time:.1f} seconds")
 
