@@ -292,7 +292,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     # Use domain-specific mapping
                     standardized_name = mapped_name
                 else:
-                    # Standardize column name: lowercase, replace spaces/special chars with underscores
+                    # Standardize column name: lowercase, replace spaces/special chars
                     # Handle Danish characters properly
                     standardized_name = str(col_name).lower()
                     # Replace Danish characters
@@ -414,7 +414,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
         return None
 
     def _add_backward_compatibility_columns(self, table_name: str) -> None:
-        """Add backward compatibility columns for pesticide data to maintain downstream compatibility.
+        """Add backward compatibility columns for pesticide data to maintain compatibility.
 
         Args:
             table_name: Name of the table to add compatibility columns to

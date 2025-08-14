@@ -555,7 +555,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 chunk_companies = companies_data[start_idx:end_idx]
 
                 self.log.info(
-                    f"📦 Processing chunk {chunk_idx + 1}/{num_chunks}: companies {start_idx}-{end_idx - 1}"
+                    f"📦 Processing chunk {chunk_idx + 1}/{num_chunks}: "
+                    f"companies {start_idx}-{end_idx - 1}"
                 )
 
                 try:
@@ -846,8 +847,10 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 "gross_result": "GrossResult",
                 "employee_benefits_expense": "EmployeeBenefitsExpense",
                 "average_number_of_employees": "AverageNumberOfEmployees",  # IMPORTANT!
-                "depreciation_expense": ("DepreciationAmortisationExpenseAndImpairmentLossesOf" +
-                                        "PropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss"),
+                "depreciation_expense": (
+                    "DepreciationAmortisationExpenseAndImpairmentLossesOf"
+                    "PropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss"
+                ),
                 "other_finance_income": "OtherFinanceIncome",
                 "other_finance_expenses": "OtherFinanceExpenses",
                 "tax_expense": "TaxExpense",
@@ -865,16 +868,26 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 "deferred_income_assets": "DeferredIncomeAssets",
                 "recognised_not_owned_assets": "RecognisedButNotOwnedAssets",
                 "liabilities_other_than_provisions": "LiabilitiesOtherThanProvisions",
-                "shortterm_liabilities_other_than_provisions": "ShorttermLiabilitiesOtherThanProvisions",
-                "longterm_liabilities_other_than_provisions": "LongtermLiabilitiesOtherThanProvisions",
+                "shortterm_liabilities_other_than_provisions": (
+                    "ShorttermLiabilitiesOtherThanProvisions"
+                ),
+                "longterm_liabilities_other_than_provisions": (
+                    "LongtermLiabilitiesOtherThanProvisions"
+                ),
                 "shortterm_debt_to_banks": "ShorttermDebtToBanks",
-                "shortterm_part_of_longterm_liabilities": "ShorttermPartOfLongtermLiabilitiesOtherThanProvisions",
-                "other_payables_including_tax": ("OtherPayablesIncludingTaxPayables" +
-                                                "LiabilitiesOtherThanProvisionsShortterm"),
+                "shortterm_part_of_longterm_liabilities": (
+                    "ShorttermPartOfLongtermLiabilitiesOtherThanProvisions"
+                ),
+                "other_payables_including_tax": (
+                    "OtherPayablesIncludingTaxPayables"
+                    "LiabilitiesOtherThanProvisionsShortterm"
+                ),
                 "provisions": "Provisions",
                 "provisions_for_deferred_tax": "ProvisionsForDeferredTax",
                 "property_plant_equipment": "PropertyPlantAndEquipment",
-                "longterm_debt_to_credit_institutions": "LongtermDebtToOtherCreditInstitutions",
+                "longterm_debt_to_credit_institutions": (
+                    "LongtermDebtToOtherCreditInstitutions"
+                ),
             }
 
             # Extract period information for the data
@@ -1091,17 +1104,22 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                 json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
+                json_extract(json_data, '$.company_type_description')::VARCHAR
+                    as company_type_description,
                 json_extract(json_data, '$.status')::VARCHAR as status,
                 json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                 json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
-                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as address_latitude,
-                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as address_longitude,
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN
+                    as advertisement_protection,
+                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE
+                    as address_latitude,
+                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE
+                    as address_longitude,
                 json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR
                     as address_coordinate_system,
                 json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
-                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
+                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR
+                    as address_geom_wkt,
                 json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR
                     as address_coordinate_quality,
                 json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR
@@ -1109,8 +1127,10 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                 json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                 json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
-                json_extract(json_data, '$.source_pipeline_count')::INTEGER as source_pipeline_count,
-                json_extract(json_data, '$.financial_document_count')::INTEGER as financial_document_count,
+                json_extract(json_data, '$.source_pipeline_count')::INTEGER
+                    as source_pipeline_count,
+                json_extract(json_data, '$.financial_document_count')::INTEGER
+                    as financial_document_count,
                 json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
                 json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
             FROM unnest($1) as t(json_data)
@@ -1252,9 +1272,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     f"""
                     INSERT INTO {table_name}_leadership
                     SELECT
-                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER)
+                            as company_uuid,
                         json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                        unnest(json_transform(json_extract(json_data, '$.leadership'), $2)) as leadership_data
+                        unnest(json_transform(
+                            json_extract(json_data, '$.leadership'), $2
+                        )) as leadership_data
                     FROM unnest($1) as t(json_data)
                     WHERE json_extract(json_data, '$.leadership') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.leadership')) > 0
@@ -1329,7 +1352,10 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 # Check which fields exist in the schema
                 available_fields = set()
                 for field, fallback in possible_fields.items():
-                    if f"financial_metrics.{field}" in schema_str or f'"{field}"' in schema_str:
+                    if (
+                        f"financial_metrics.{field}" in schema_str
+                        or f'"{field}"' in schema_str
+                    ):
                         financial_metrics_fields.append(
                             f"TRY(financial_parsed.financial_metrics.{field}) as {field}"
                         )
@@ -1337,7 +1363,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     else:
                         financial_metrics_fields.append(f"{fallback} as {field}")
                         self.log.debug(
-                            f"Field 'financial_metrics.{field}' not found in schema, using {fallback}"
+                            f"Field 'financial_metrics.{field}' not found in schema, "
+                            f"using {fallback}"
                         )
 
                 # Build calculated fields based on available fields
@@ -1362,7 +1389,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 ):
                     calculated_fields.append("""
                         CASE
-                            WHEN TRY(financial_parsed.financial_metrics.average_number_of_employees) > 0
+                            WHEN TRY(
+                                financial_parsed.financial_metrics.average_number_of_employees
+                            ) > 0
                             THEN TRY(financial_parsed.financial_metrics.net_profit_loss) /
                         TRY(financial_parsed.financial_metrics.average_number_of_employees)
                             ELSE NULL
@@ -1392,7 +1421,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     WITH financial_flattened AS (
                         SELECT
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            unnest(json_transform(json_extract(json_data, '$.financial_documents'), $2)) as financial_parsed
+                            unnest(json_transform(
+                                json_extract(json_data, '$.financial_documents'), $2
+                            )) as financial_parsed
                         FROM unnest($1) as t(json_data)
                         WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
                         AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
@@ -1403,8 +1434,10 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         financial_parsed.publication_type,
                         financial_parsed.publication_time,
                         financial_parsed.case_number,
-                        TRY(financial_parsed.reporting_period.start_date) as reporting_period_start,
-                        TRY(financial_parsed.reporting_period.end_date) as reporting_period_end,
+                        TRY(financial_parsed.reporting_period.start_date)
+                            as reporting_period_start,
+                        TRY(financial_parsed.reporting_period.end_date)
+                            as reporting_period_end,
                         financial_parsed.document_count,
                         financial_parsed.xml_size_bytes,
                         financial_parsed.download_success,
@@ -1431,7 +1464,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             industry_schema = self.conn.execute(
                 """
                 WITH industry_sample AS (
-                    SELECT json_extract(json_data, '$.industries') as industry_json
+                    SELECT json_extract(json_data, '$.industries')
+                        as industry_json
                     FROM unnest($1) as t(json_data)
                     WHERE json_extract(json_data, '$.industries') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.industries')) > 0
@@ -1447,9 +1481,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     f"""
                     INSERT INTO {table_name}_industries
                     SELECT
-                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER)
+                            as company_uuid,
                         json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                        unnest(json_transform(json_extract(json_data, '$.industries'), $2)) as industry_data
+                        unnest(json_transform(
+                            json_extract(json_data, '$.industries'), $2
+                        )) as industry_data
                     FROM unnest($1) as t(json_data)
                     WHERE json_extract(json_data, '$.industries') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.industries')) > 0
@@ -1472,7 +1509,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 SELECT COUNT(*)
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
-                AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                AND json_array_length(
+                    json_extract(json_data, '$.employment_data.' || $2)
+                ) > 0
             """,
                 [json_strings, employment_field],
             ).fetchone()[0]
@@ -1481,10 +1520,13 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 employment_schema = self.conn.execute(
                     """
                     WITH employment_sample AS (
-                        SELECT json_extract(json_data, '$.employment_data.' || $2) as employment_json
+                        SELECT json_extract(json_data, '$.employment_data.' || $2)
+                            as employment_json
                         FROM unnest($1) as t(json_data)
                         WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
-                        AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                        AND json_array_length(
+                    json_extract(json_data, '$.employment_data.' || $2)
+                ) > 0
                         LIMIT 1
                     )
                     SELECT json_structure(employment_json) FROM employment_sample
@@ -1497,12 +1539,18 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         f"""
                         INSERT INTO {table_name}_employment_{table_suffix}
                         SELECT
-                            company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                            company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER)
+                                as company_uuid,
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            unnest(json_transform(json_extract(json_data, '$.employment_data.{employment_field}'), $2)) as employment_data
+                            unnest(json_transform(
+                                json_extract(json_data, '$.employment_data.{employment_field}'), $2
+                            )) as employment_data
                         FROM unnest($1) as t(json_data)
-                        WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
-                        AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                        WHERE json_extract(json_data, '$.employment_data.{employment_field}')
+                            IS NOT NULL
+                        AND json_array_length(
+                            json_extract(json_data, '$.employment_data.{employment_field}')
+                        ) > 0
                     """,
                         [json_strings, employment_schema[0]],
                     )
@@ -1568,7 +1616,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
             # Geocoded addresses count
             geocoded_count = self.conn.execute(
-                f"SELECT COUNT(*) FROM {table_name}_addresses WHERE dawa_enriched = true"
+                f"SELECT COUNT(*) FROM {table_name}_addresses "
+                f"WHERE dawa_enriched = true"
             ).fetchone()[0]
 
             # Sample results
@@ -1583,15 +1632,20 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.info(f"   📋 Companies: {main_count}")
             self.log.info(f"   👥 Leadership entries: {leadership_count}")
             self.log.info(f"   💰 Financial documents: {financial_count}")
-            self.log.info(f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)")
+            self.log.info(
+                f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)"
+            )
             self.log.info(f"   🏭 Industry entries: {industries_count}")
             self.log.info("   👷 Employment data:")
             for table_suffix, count in employment_counts.items():
-                self.log.info(f"      📈 {table_suffix.replace('_', ' ').title()}: {count} records")
+                self.log.info(
+                    f"      📈 {table_suffix.replace('_', ' ').title()}: {count} records"
+                )
 
             for row in sample_results:
                 self.log.info(
-                    f"   📋 CVR: {row[0]} | Name: {row[1]} | Type: {row[2]} | Founded: {row[3]} | Sources: {row[4]} | Fin.Docs: {row[5]}"
+                    f"   📋 CVR: {row[0]} | Name: {row[1]} | Type: {row[2]} | "
+                    f"Founded: {row[3]} | Sources: {row[4]} | Fin.Docs: {row[5]}"
                 )
 
         except Exception as e:

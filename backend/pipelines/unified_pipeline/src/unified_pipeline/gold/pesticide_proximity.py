@@ -301,7 +301,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             self.log.warning("No fields with valid field_uuid found")
             return 0
 
-        # Create proximity analysis results table by breaking into steps to avoid DuckDB CTE alias issues
+        # Create proximity analysis results table by breaking into steps to avoid
+        # DuckDB CTE alias issues
 
         # Step 1: Create fields with geometry
         self.conn.execute(f"""
@@ -338,13 +339,16 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             total=total_fields,
             desc="🏠 Residential proximity",
             unit="fields",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]",
+            bar_format=(
+                "{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+            ),
         )
 
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
             self.log.info(
-                f"🔄 Processing residential batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
+                f"🔄 Processing residential batch {chunk_num}/{total_chunks} "
+                f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
             # Step 1: Create current batch of fields with consistent ordering
@@ -404,7 +408,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             )
 
             self.log.info(
-                f"✅ Residential batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed / chunk_time:.0f} fields/s"
+                f"✅ Residential batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - "
+                f"Rate: {batch_processed / chunk_time:.0f} fields/s"
             )
 
         residential_pbar.close()
@@ -428,13 +433,16 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             total=total_fields,
             desc="🏫 Educational proximity",
             unit="fields",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]",
+            bar_format=(
+                "{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+            ),
         )
 
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
             self.log.info(
-                f"🔄 Processing educational batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
+                f"🔄 Processing educational batch {chunk_num}/{total_chunks} "
+                f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
             # Step 1: Create current batch of fields with consistent ordering
@@ -494,7 +502,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             )
 
             self.log.info(
-                f"✅ Educational batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed / chunk_time:.0f} fields/s"
+                f"✅ Educational batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - "
+                f"Rate: {batch_processed / chunk_time:.0f} fields/s"
             )
 
         educational_pbar.close()
@@ -518,13 +527,16 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             total=total_fields,
             desc="💧 Water proximity",
             unit="fields",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]",
+            bar_format=(
+                "{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+            ),
         )
 
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
             self.log.info(
-                f"🔄 Processing water batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
+                f"🔄 Processing water batch {chunk_num}/{total_chunks} "
+                f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
             # Step 1: Create current batch of fields with consistent ordering
@@ -576,7 +588,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             )
 
             self.log.info(
-                f"✅ Water batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed / chunk_time:.0f} fields/s"
+                f"✅ Water batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - "
+                f"Rate: {batch_processed / chunk_time:.0f} fields/s"
             )
 
         water_pbar.close()
@@ -589,7 +602,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             SELECT DISTINCT
                 cd.*,
                 COALESCE(rp.residential_buildings_formatted, '') as residential_buildings_formatted,
-                COALESCE(ep.educational_facilities_formatted, '') as educational_facilities_formatted,
+                COALESCE(ep.educational_facilities_formatted, '') 
+                    as educational_facilities_formatted,
                 COALESCE(wp.water_distance_formatted, '') as water_distance_formatted
             FROM current_disaggregation cd
             LEFT JOIN residential_proximity rp ON cd.field_uuid = rp.field_uuid
@@ -606,18 +620,22 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         # CRITICAL VALIDATION: Ensure no duplication occurred
         if result_count != unique_disaggregated_ids:
             self.log.error(
-                f"❌ DUPLICATION DETECTED: {result_count:,} records but only {unique_disaggregated_ids:,} unique DisaggregatedIDs"
+                f"❌ DUPLICATION DETECTED: {result_count:,} records but only "
+                f"{unique_disaggregated_ids:,} unique DisaggregatedIDs"
             )
             self.log.error(f"❌ Duplication ratio: {result_count / unique_disaggregated_ids:.1f}x")
             raise ValueError(
-                f"Data duplication detected in proximity results: {result_count:,} records vs {unique_disaggregated_ids:,} unique IDs"
+                f"Data duplication detected in proximity results: {result_count:,} records vs "
+                f"{unique_disaggregated_ids:,} unique IDs"
             )
 
         self.log.info(
-            f"✅ Proximity analysis complete: {result_count:,} records with proximity data (no duplication)"
+            f"✅ Proximity analysis complete: {result_count:,} records with proximity data "
+            f"(no duplication)"
         )
         self.log.info(
-            f"✅ Data quality check passed: {result_count:,} records = {unique_disaggregated_ids:,} unique DisaggregatedIDs"
+            f"✅ Data quality check passed: {result_count:,} records = "
+            f"{unique_disaggregated_ids:,} unique DisaggregatedIDs"
         )
         return result_count
 
@@ -628,7 +646,10 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         dataset_name = f"{self.config.dataset}_{year}_{year + 1}"
-        output_path = f"gs://{self.config.bucket}/gold/{dataset_name}/{timestamp}/pesticide_proximity_{year}_{year + 1}.parquet"
+        output_path = (
+            f"gs://{self.config.bucket}/gold/{dataset_name}/{timestamp}/"
+            f"pesticide_proximity_{year}_{year + 1}.parquet"
+        )
 
         self.log.info(f"💾 Saving {record_count:,} proximity records to: {output_path}")
 
@@ -645,8 +666,10 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         return {
             "output_columns": [
                 "All columns from disaggregated pesticide data",
-                "residential_buildings_formatted: VARCHAR (newline-separated addresses with distances)",
-                "educational_facilities_formatted: VARCHAR (newline-separated addresses with distances)",
+                "residential_buildings_formatted: VARCHAR "
+                "(newline-separated addresses with distances)",
+                "educational_facilities_formatted: VARCHAR "
+                "(newline-separated addresses with distances)",
                 "water_distance_formatted: VARCHAR (closest water distance in meters)",
             ],
             "spatial_analysis": {

@@ -3,8 +3,10 @@
 Detailed analysis of fertilizer data to identify harmonization issues.
 """
 
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+
 
 def analyze_column_inconsistencies():
     """Analyze column naming and structure inconsistencies."""
@@ -20,15 +22,15 @@ def analyze_column_inconsistencies():
     gkea_files = [f for f in parquet_files if f.name.startswith("GKEA")]
     goedning_files = [f for f in parquet_files if "Gødningsregnskaber" in f.name]
     
-    print(f"\n📊 FILE CATEGORIES:")
+    print("\n📊 FILE CATEGORIES:")
     print(f"  • Efterafgrøder files: {len(efterafgroeder_files)}")
     print(f"  • GKEA files: {len(gkea_files)}")
     print(f"  • Gødningsregnskaber files: {len(goedning_files)}")
     
-    print(f"\n🚨 MAJOR HARMONIZATION ISSUES IDENTIFIED:")
+    print("\n🚨 MAJOR HARMONIZATION ISSUES IDENTIFIED:")
     
     # Issue 1: Efterafgrøder column naming inconsistency
-    print(f"\n1. EFTERAFGRØDER COLUMN NAMING INCONSISTENCY:")
+    print("\n1. EFTERAFGRØDER COLUMN NAMING INCONSISTENCY:")
     print("-" * 50)
     for file_path in sorted(efterafgroeder_files):
         df = pd.read_parquet(file_path)
@@ -39,7 +41,7 @@ def analyze_column_inconsistencies():
         print(f"  {year}: {numbered_cols}")
     
     # Issue 2: GKEA files have generic column names
-    print(f"\n2. GKEA FILES HAVE GENERIC COLUMN NAMES:")
+    print("\n2. GKEA FILES HAVE GENERIC COLUMN NAMES:")
     print("-" * 50)
     for file_path in sorted(gkea_files):
         df = pd.read_parquet(file_path)
@@ -55,7 +57,7 @@ def analyze_column_inconsistencies():
             print(f"    → Actual headers: {meaningful_cols}")
     
     # Issue 3: Different schemas across years
-    print(f"\n3. SCHEMA INCONSISTENCIES:")
+    print("\n3. SCHEMA INCONSISTENCIES:")
     print("-" * 50)
     
     schemas = {}
@@ -82,7 +84,7 @@ def analyze_column_inconsistencies():
         print(f"  {year}: {df.shape[1]} columns, {df.shape[0]:,} rows")
     
     # Issue 4: Data type inconsistencies
-    print(f"\n4. DATA TYPE ANALYSIS:")
+    print("\n4. DATA TYPE ANALYSIS:")
     print("-" * 50)
     
     # Check if numeric fields are stored as strings
@@ -91,7 +93,10 @@ def analyze_column_inconsistencies():
         year = file_path.name.split()[-1].split('.')[0]
         
         # Check columns that should be numeric
-        potential_numeric = [col for col in df.columns if any(word in col.lower() for word in ['areal', 'ha', 'omregnet'])]
+        potential_numeric = [
+            col for col in df.columns
+            if any(word in col.lower() for word in ['areal', 'ha', 'omregnet'])
+        ]
         
         if potential_numeric:
             print(f"\n  {year} - Potential numeric columns stored as text:")

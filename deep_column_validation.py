@@ -4,9 +4,11 @@ Deep validation to check if data values actually match the column headers.
 This validates that our mappings are correct by examining actual data content.
 """
 
-import pandas as pd
-from pathlib import Path
 import re
+from pathlib import Path
+
+import pandas as pd
+
 
 def deep_validate_column_mappings():
     """Deep validate that data values match what headers claim."""
@@ -88,13 +90,17 @@ def deep_validate_column_mappings():
                 elif expected_content == 'areal_ha':
                     # Should be numeric area values
                     try:
-                        numeric_values = [float(str(val).replace(',', '.')) for val in sample_values if val and str(val) != '']
+                        numeric_values = [
+                            float(str(val).replace(',', '.'))
+                            for val in sample_values
+                            if val and str(val) != ''
+                        ]
                         avg_area = sum(numeric_values) / len(numeric_values) if numeric_values else 0
                         reasonable_area = 0.1 <= avg_area <= 500  # Reasonable hectare range
                         print(f"    ✅ Numeric area check: {len(numeric_values) > 0}, avg: {avg_area:.2f} ha")
                         print(f"    ✅ Reasonable area range: {reasonable_area}")
-                    except:
-                        print(f"    ❌ Failed to parse as numeric")
+                    except Exception:
+                        print("    ❌ Failed to parse as numeric")
                         
                 elif expected_content == 'hovedafgroede':
                     # Should be crop codes (typically numeric)
@@ -105,12 +111,16 @@ def deep_validate_column_mappings():
                 elif expected_content == 'fosfortal':
                     # Should be numeric phosphorus values
                     try:
-                        numeric_values = [float(str(val).replace(',', '.')) for val in sample_values if val and str(val) != '']
+                        numeric_values = [
+                            float(str(val).replace(',', '.'))
+                            for val in sample_values
+                            if val and str(val) != ''
+                        ]
                         has_numeric = len(numeric_values) > 0
                         avg_value = sum(numeric_values) / len(numeric_values) if numeric_values else 0
                         print(f"    ✅ Numeric phosphorus check: {has_numeric}, avg: {avg_value:.2f}")
-                    except:
-                        print(f"    ❌ Failed to parse as numeric")
+                    except Exception:
+                        print("    ❌ Failed to parse as numeric")
             else:
                 print(f"    ❌ Column {column_name} not found!")
     
@@ -144,7 +154,7 @@ def deep_validate_column_mappings():
                 old_numeric = [float(str(val).replace(',', '.')) for val in old_values if val and str(val) != '']
                 old_avg = sum(old_numeric) / len(old_numeric) if old_numeric else 0
                 print(f"    {old_mapping} numeric avg: {old_avg:.2f}")
-            except:
+            except Exception:
                 print(f"    {old_mapping}: Not numeric")
         
         if new_mapping in df.columns:
@@ -156,7 +166,7 @@ def deep_validate_column_mappings():
                 new_numeric = [float(str(val).replace(',', '.')) for val in new_values if val and str(val) != '']
                 new_avg = sum(new_numeric) / len(new_numeric) if new_numeric else 0
                 print(f"    {new_mapping} numeric avg: {new_avg:.2f}")
-            except:
+            except Exception:
                 print(f"    {new_mapping}: Not numeric")
     
     print("\n🧪 EFTERAFGRØDER VALIDATION")
@@ -188,7 +198,7 @@ def deep_validate_column_mappings():
                 numeric_vals = [float(str(val).replace(',', '.')) for val in values if val]
                 avg_area = sum(numeric_vals) / len(numeric_vals) if numeric_vals else 0
                 print(f"    {col} avg: {avg_area:.2f} ha")
-            except:
+            except Exception:
                 print(f"    {col}: Failed to parse as numeric")
     
     return True
