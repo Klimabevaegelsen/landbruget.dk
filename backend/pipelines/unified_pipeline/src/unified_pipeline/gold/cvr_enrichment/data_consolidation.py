@@ -734,7 +734,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Process companies in smaller chunks to prevent CTE memory accumulation
         # The real issue is that complex CTEs build up memory - solution is smaller batches
-        chunk_size = 25  # Smaller chunks to prevent CTE memory buildup
+        chunk_size = 1  # Process one company at a time to avoid any memory accumulation issues
         total_companies = len(companies_list)        
         num_chunks = (total_companies + chunk_size - 1) // chunk_size
 
@@ -764,8 +764,12 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 # Force checkpoint and cleanup after each chunk to prevent accumulation
                 self.conn.execute("CHECKPOINT")
                 
-                # Periodic deep cleanup every 20 chunks (not too frequent)
-                if (chunk_idx + 1) % 20 == 0:
+                # Light memory cleanup after every chunk
+                import gc
+                gc.collect()
+                
+                # Periodic deep cleanup every 1000 companies (reasonable frequency)
+                if (chunk_idx + 1) % 1000 == 0:
                     self.log.info(f"🧹 Performing periodic cleanup after {chunk_idx + 1} chunks")
                     self._deep_memory_cleanup()
 
