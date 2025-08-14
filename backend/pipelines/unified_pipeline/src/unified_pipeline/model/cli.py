@@ -52,7 +52,6 @@ class Source(Enum):
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
         arbejdstilsynet_inspections: Danish Work Environment Authority inspections data
-        fertiliser: Fertiliser data harmonization (Efterafgrøder, GKEA, Gødningsregnskaber)
     """
 
     bnbo = "bnbo"
@@ -78,7 +77,6 @@ class Source(Enum):
     arbejdstilsynet_inspections = "arbejdstilsynet_inspections"
     worker_safety = "worker_safety"
     work_permits = "work_permits"
-    fertiliser = "fertiliser"
 
 
 class Stage(Enum):
