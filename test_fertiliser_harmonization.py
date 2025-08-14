@@ -3,13 +3,12 @@
 Test script for fertiliser data harmonization.
 """
 
+import logging
 import sys
-from pathlib import Path
 
 # Add the pipeline to the path
 sys.path.append("backend/pipelines/unified_pipeline/src")
 
-import logging
 from unified_pipeline.common.base import ConnectionManager
 from unified_pipeline.silver.fertiliser import FertiliserSilverProcessor
 
