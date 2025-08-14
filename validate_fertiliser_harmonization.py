@@ -3,8 +3,10 @@
 Validation script for fertiliser data harmonization - simpler version without dependencies.
 """
 
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+
 
 def validate_fertiliser_data():
     """Validate the fertiliser data and create harmonization plan."""
