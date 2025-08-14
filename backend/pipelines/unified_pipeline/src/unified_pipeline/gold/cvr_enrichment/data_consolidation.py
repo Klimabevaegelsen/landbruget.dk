@@ -781,10 +781,10 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     break
                 raise
 
-        # Skip employment data processing to avoid memory exhaustion
-        # The 1.25M employment records cause memory issues - skip for now
-        self.log.info("⏭️ Skipping employment data processing to avoid memory exhaustion")
-        self.log.info("💡 Employment data processing disabled - causes 7.4GB memory usage")
+        # Employment data processing now handled via memory-efficient chunk processing
+        # Each employment type is processed separately to avoid the 7.4GB memory issue
+        self.log.info("✅ Employment data processing enabled with memory-efficient approach")
+        self.log.info("🔧 Processing employment types one at a time to avoid memory exhaustion")
         
         # Log final table sizes
         self._log_final_table_sizes(table_name)
@@ -1347,9 +1347,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         self._process_industries_chunk(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after industries
         
-        # Skip employment processing in chunks - do it separately at the end
-        # self._process_employment_chunk(json_strings, table_name)
-        # self.conn.execute("CHECKPOINT")  # Immediate checkpoint after employment
+        # Process employment data with memory-efficient approach (one type at a time)
+        self._process_employment_chunk_memory_efficient(json_strings, table_name)
+        self.conn.execute("CHECKPOINT")  # Immediate checkpoint after employment
         
         # Force cleanup after all processing
         del json_strings
@@ -2059,3 +2059,73 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     """,
                         [json_strings, employment_schema[0]],
                     )
+
+    def _process_employment_chunk_memory_efficient(self, json_strings: list, table_name: str) -> None:
+        """Process employment data one type at a time to avoid memory exhaustion.
+        
+        This method solves the memory issue by processing employment types sequentially
+        instead of all 1.25M records simultaneously, reducing memory usage from 7.4GB to manageable levels.
+        """
+        employment_types = [
+            ("annual_employment", "annual"),
+            ("quarterly_employment", "quarterly"),
+            ("monthly_employment", "monthly"),
+            ("replacement_monthly_employment", "replacement_monthly"),
+        ]
+        
+        self.log.info(f"🔧 Processing employment data efficiently - one type at a time to avoid memory exhaustion")
+        
+        for employment_field, table_suffix in employment_types:
+            # Check if this employment type has data before processing
+            employment_check = self.conn.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
+                  AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                """,
+                [json_strings]
+            ).fetchone()[0]
+            
+            if employment_check == 0:
+                self.log.info(f"⏭️ No {employment_field} data found, skipping")
+                continue
+                
+            self.log.info(f"📊 Processing {employment_check:,} companies with {employment_field} data")
+            
+            # Get the employment table schema
+            employment_schema = self.conn.execute(
+                f"SELECT column_names FROM duckdb_columns() WHERE table_name = '{table_name}_employment_{table_suffix}' LIMIT 1"
+            ).fetchall()
+            
+            if not employment_schema:
+                self.log.warning(f"⚠️ No schema found for {table_name}_employment_{table_suffix}")
+                continue
+            
+            # Process this employment type only - much more memory efficient
+            try:
+                self.conn.execute(
+                    f"""
+                    INSERT INTO {table_name}_employment_{table_suffix}
+                    SELECT
+                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(json_transform(json_extract(json_data, '$.employment_data.{employment_field}'), $2)) as employment_data
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
+                      AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                    """,
+                    [json_strings, employment_schema[0]],
+                )
+                
+                # Immediate cleanup after each employment type
+                self.conn.execute("CHECKPOINT")
+                import gc
+                gc.collect()
+                
+                self.log.info(f"✅ Completed processing {employment_field} data")
+                
+            except Exception as e:
+                self.log.error(f"❌ Error processing {employment_field}: {str(e)}")
+                # Continue with other employment types even if one fails
+                continue

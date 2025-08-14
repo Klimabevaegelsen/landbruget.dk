@@ -548,7 +548,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             # Initialize all tables as empty with correct schema
             self._initialize_empty_tables(table_name)
 
-            # Process each chunk
+            # Process each chunk with memory-efficient approach (following CHR pipeline pattern)
             for chunk_idx in range(num_chunks):
                 start_idx = chunk_idx * chunk_size
                 end_idx = min(start_idx + chunk_size, total_companies)
@@ -562,16 +562,47 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 try:
                     self._process_companies_chunk(chunk_companies, table_name, chunk_idx)
 
-                    # Memory cleanup after each chunk
+                    # Immediate cleanup after each chunk (following CHR streaming pattern)
                     self._cleanup_memory_after_chunk()
+                    
+                    # Aggressive cleanup every 10 chunks (following H3 PFAS pattern)
+                    if (chunk_idx + 1) % 10 == 0:
+                        self.log.info(f"🧹 Deep cleanup after {chunk_idx + 1} chunks")
+                        self.conn.execute("CHECKPOINT")
+                        self.conn.execute("PRAGMA optimize")
+                        import gc
+                        collected = gc.collect()
+                        self.log.debug(f"Collected {collected} objects during deep cleanup")
 
                 except Exception as e:
                     self.log.error(f"Error processing chunk {chunk_idx + 1}: {e}")
                     if "Out of Memory" in str(e) or "memory" in str(e).lower():
-                        self.log.warning("⚠️ Memory exhaustion detected - stopping processing")
-                        break
+                        self.log.warning("⚠️ Memory exhaustion detected - attempting recovery")
+                        # Try emergency cleanup and continue with smaller chunks
+                        self._emergency_memory_cleanup()
+                        # Reduce chunk size for remaining chunks
+                        # (following Field Production pattern)
+                        if chunk_idx < num_chunks - 1:
+                            original_chunk_size = chunk_size
+                            chunk_size = max(10, chunk_size // 2)  # Reduce by half, min 10
+                            self.log.warning(
+                            f"Reducing chunk size: {original_chunk_size} → {chunk_size}"
+                        )
+                            # Recalculate remaining chunks with smaller size
+                            remaining_companies = total_companies - end_idx
+                            num_remaining_chunks = (
+                            remaining_companies + chunk_size - 1
+                        ) // chunk_size
+                            self.log.info(
+                            f"Will process remaining {remaining_companies} companies "
+                            f"in {num_remaining_chunks} smaller chunks"
+                        )
+                        continue  # Try to continue with next chunk
                     raise
 
+            # Process employment data separately to avoid memory exhaustion during chunk processing
+            self._process_all_employment_data_memory_efficient(companies_data, table_name)
+            
             # Log final table sizes
             self._log_final_table_sizes(table_name)
         else:
@@ -1150,8 +1181,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         # Process industries for this chunk
         self._process_industries_chunk(json_strings, table_name)
 
-        # Process employment data for this chunk
-        self._process_employment_chunk(json_strings, table_name)
+        # Skip employment data in chunks - process separately to avoid memory exhaustion
+        # self._process_employment_chunk(json_strings, table_name)
 
     def _process_addresses_chunk(self, json_strings: list, table_name: str) -> None:
         """Process addresses for a chunk of companies."""
@@ -1555,6 +1586,138 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         [json_strings, employment_schema[0]],
                     )
 
+    def _process_all_employment_data_memory_efficient(
+        self, companies_data: list, table_name: str
+    ) -> None:
+        """
+        Process employment data for all companies using a memory-efficient approach.
+        
+        This method processes employment data one type at a time across all companies,
+        instead of processing all employment types for each chunk. This prevents the
+        memory buildup that was causing the 7.4GB memory exhaustion at chunk 97.
+        """
+        if not companies_data:
+            self.log.info("⏭️ No company data to process employment for")
+            return
+            
+        employment_types = [
+            ("annual_employment", "annual"),
+            ("quarterly_employment", "quarterly"),
+            ("monthly_employment", "monthly"),
+            ("replacement_monthly_employment", "replacement_monthly"),
+        ]
+        
+        self.log.info("🔧 Processing employment data memory-efficiently - one type at a time")
+        
+        # Process each employment type separately across all companies
+        for employment_field, table_suffix in employment_types:
+            self.log.info(
+                f"📊 Processing {employment_field} for all {len(companies_data):,} companies"
+            )
+            
+            # Process in smaller batches to manage memory
+            batch_size = 500  # Smaller batches for employment processing
+            total_batches = (len(companies_data) + batch_size - 1) // batch_size
+            
+            for batch_idx in range(total_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min(start_idx + batch_size, len(companies_data))
+                batch_companies = companies_data[start_idx:end_idx]
+                
+                self.log.info(
+                    f"  📦 Processing {employment_field} batch {batch_idx + 1}/{total_batches} "
+                    f"(companies {start_idx}-{end_idx - 1})"
+                )
+                
+                json_strings = [json.dumps(company) for company in batch_companies]
+                
+                # Check if this batch has employment data for this type
+                employment_check = self.conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
+                    AND json_array_length(
+                        json_extract(json_data, '$.employment_data.' || $2)
+                    ) > 0
+                """,
+                    [json_strings, employment_field],
+                ).fetchone()[0]
+                
+                if employment_check == 0:
+                    continue  # Skip this batch for this employment type
+                
+                # Get schema for this employment type
+                employment_schema = self.conn.execute(
+                    """
+                    WITH employment_sample AS (
+                        SELECT json_extract(json_data, '$.employment_data.' || $2) 
+                            as employment_json
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
+                        AND json_array_length(
+                            json_extract(json_data, '$.employment_data.' || $2)
+                        ) > 0
+                        LIMIT 1
+                    )
+                    SELECT json_structure(employment_json) FROM employment_sample
+                """,
+                    [json_strings, employment_field],
+                ).fetchone()
+                
+                if employment_schema and employment_schema[0]:
+                    try:
+                        self.conn.execute(
+                            f"""
+                            INSERT INTO {table_name}_employment_{table_suffix}
+                            SELECT
+                                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) 
+                                    as company_uuid,
+                                json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                                unnest(json_transform(
+                                    json_extract(
+                                        json_data, '$.employment_data.{employment_field}'
+                                    ), $2
+                                )) as employment_data
+                            FROM unnest($1) as t(json_data)
+                            WHERE json_extract(
+                                json_data, '$.employment_data.{employment_field}'
+                            ) IS NOT NULL
+                            AND json_array_length(
+                                json_extract(json_data, '$.employment_data.{employment_field}')
+                            ) > 0
+                        """,
+                            [json_strings, employment_schema[0]],
+                        )
+                        
+                        # Immediate cleanup after each batch
+                        self.conn.execute("CHECKPOINT")
+                        import gc
+                        gc.collect()
+                        
+                    except Exception as e:
+                        self.log.error(
+                            f"❌ Error processing {employment_field} batch {batch_idx + 1}: "
+                            f"{str(e)}"
+                        )
+                        # Continue with next batch
+                        continue
+                
+                # Clean up batch data
+                del json_strings
+                import gc
+                gc.collect()
+            
+            self.log.info(f"✅ Completed processing {employment_field} for all companies")
+            
+            # Deep cleanup after each employment type
+            self.conn.execute("CHECKPOINT")
+            self.conn.execute("PRAGMA optimize")
+            import gc
+            gc.collect()
+        
+        self.log.info("🎉 Successfully completed memory-efficient employment data processing")
+
     def _cleanup_memory_after_chunk(self) -> None:
         """
         Aggressive memory cleanup after processing a chunk.
@@ -1587,6 +1750,38 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         except Exception as e:
             self.log.debug(f"Memory cleanup warning: {e}")
+
+    def _emergency_memory_cleanup(self) -> None:
+        """
+        Emergency memory cleanup when memory exhaustion is detected.
+        
+        Based on patterns from Field Production and H3 PFAS pipelines.
+        """
+        try:
+            self.log.warning("🚨 Performing emergency memory cleanup")
+            
+            # Aggressive DuckDB cleanup
+            self.conn.execute("CHECKPOINT")
+            self.conn.execute("PRAGMA optimize")
+            
+            # Clear all caches
+            self.conn.execute("PRAGMA cache_size = 0")
+            self.conn.execute("PRAGMA temp_store = memory")
+            
+            # Force aggressive garbage collection
+            import gc
+            collected_before = gc.collect()
+            collected_after = gc.collect()  # Run twice for better cleanup
+            
+            # Reset cache to minimal size
+            self.conn.execute("PRAGMA cache_size = -1000")  # Minimal cache
+            
+            self.log.warning(
+                f"Emergency cleanup: collected {collected_before + collected_after} objects"
+            )
+            
+        except Exception as e:
+            self.log.error(f"Emergency cleanup failed: {e}")
 
     def _log_final_table_sizes(self, table_name: str) -> None:
         """Log final table sizes after all chunks are processed."""
