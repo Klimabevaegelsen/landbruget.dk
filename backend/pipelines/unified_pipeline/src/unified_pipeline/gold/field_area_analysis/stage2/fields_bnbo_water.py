@@ -106,7 +106,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info("📦 Step 1: Creating field_bnbo_intersections (2-way total BNBO)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_intersections AS
-            SELECT 
+            SELECT
                 f.field_uuid,
                 f.field_id,
                 f.block_id,
@@ -124,7 +124,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info("📦 Step 2: Creating field_bnbo_water_intersections (3-way water-covered)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_water_intersections AS
-            SELECT 
+            SELECT
                 fbi.field_uuid,
                 fbi.field_id,
                 fbi.block_id,
@@ -135,7 +135,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 wpbi.project_id,
                 ST_Intersection(fbi.field_bnbo_geometry, wpbi.intersection_geometry) as field_bnbo_water_geometry
             FROM field_bnbo_intersections fbi
-            JOIN water_projects_bnbo_intersections wpbi 
+            JOIN water_projects_bnbo_intersections wpbi
                 ON fbi.bnbo_id = wpbi.bnbo_id  -- FIX: Ensure same BNBO to prevent cross-contamination
                 AND ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
         """)
@@ -198,28 +198,28 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Check field_bnbo_intersections geometry validity
         invalid_bnbo = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_bnbo_intersections 
+            SELECT COUNT(*)
+            FROM field_bnbo_intersections
             WHERE field_bnbo_geometry IS NULL OR NOT ST_IsValid(field_bnbo_geometry)
         """).fetchone()[0]
 
         # Check field_bnbo_water_intersections geometry validity
         invalid_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_bnbo_water_intersections 
+            SELECT COUNT(*)
+            FROM field_bnbo_water_intersections
             WHERE field_bnbo_water_geometry IS NULL OR NOT ST_IsValid(field_bnbo_water_geometry)
         """).fetchone()[0]
 
         # Check for empty geometries
         empty_bnbo = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_bnbo_intersections 
+            SELECT COUNT(*)
+            FROM field_bnbo_intersections
             WHERE field_bnbo_geometry IS NOT NULL AND ST_IsEmpty(field_bnbo_geometry)
         """).fetchone()[0]
 
         empty_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_bnbo_water_intersections 
+            SELECT COUNT(*)
+            FROM field_bnbo_water_intersections
             WHERE field_bnbo_water_geometry IS NOT NULL AND ST_IsEmpty(field_bnbo_water_geometry)
         """).fetchone()[0]
 

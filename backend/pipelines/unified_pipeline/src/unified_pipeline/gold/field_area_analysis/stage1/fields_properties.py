@@ -50,7 +50,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         self.log.info("Preparing fields as BUILD side (spatial index will be created)...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -64,7 +64,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         self.log.info("Preparing pre-filtered properties as PROBE side...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE properties AS
-            SELECT 
+            SELECT
                 bestemtFastEjendomBFENr,
                 geometry,
                 property_area_m2
@@ -86,7 +86,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         # Store input area reference for validation
         if self._should_validate_areas():
             fields_area_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as field_count,
                     SUM(field_area_m2) as total_area
                 FROM agricultural_fields
@@ -128,7 +128,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         # Initialize result table
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_property_intersections AS
-            SELECT 
+            SELECT
                 CAST(NULL AS VARCHAR) as field_id,
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
@@ -162,7 +162,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             # Create property chunk from pre-filtered dataset
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE properties_chunk AS
-                SELECT 
+                SELECT
                     bestemtFastEjendomBFENr,
                     geometry,
                     property_area_m2
@@ -185,7 +185,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             )
             self.conn.execute("""
                 CREATE OR REPLACE TABLE chunk_raw_intersections AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -212,7 +212,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 )
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE chunk_final_intersections AS
-                    SELECT 
+                    SELECT
                         field_id,
                         block_id,
                         cvr_number,
@@ -235,7 +235,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         ST_Intersection(field_geometry, property_geometry) as intersection_geometry
                         
                     FROM chunk_raw_intersections
-                    WHERE 
+                    WHERE
                         -- Filter out tiny intersections (< 1% of field area or < 100 m²)
                         ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) > 100
                         AND (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) / field_area_m2) > 0.01
@@ -248,7 +248,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 # Append to main result table
                 if chunk_final_count > 0:
                     self.conn.execute("""
-                        INSERT INTO field_property_intersections 
+                        INSERT INTO field_property_intersections
                         SELECT * FROM chunk_final_intersections
                     """)
 
@@ -269,7 +269,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         # Find fields that didn't intersect with any properties
         self.conn.execute("""
             CREATE OR REPLACE TABLE fields_without_properties AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -371,7 +371,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         try:
             # Get validation statistics from output table
             stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     -- For fields WITH property intersections: sum of intersection areas
                     SUM(CASE WHEN intersection_area_m2 IS NOT NULL THEN intersection_area_m2 ELSE 0 END) as total_intersection_area,
                     

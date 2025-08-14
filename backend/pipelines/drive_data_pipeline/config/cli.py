@@ -55,7 +55,8 @@ def parse_args() -> argparse.Namespace:
     processing_group.add_argument(
         "--both",
         action="store_true",
-        help="Run both layers with in-memory data passing (bronze exports and passes data to silver in memory)",
+        help="Run both layers with in-memory data passing "
+             "(bronze exports and passes data to silver in memory)",
     )
 
     # Output options

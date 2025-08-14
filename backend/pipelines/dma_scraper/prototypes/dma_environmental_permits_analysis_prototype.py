@@ -229,7 +229,8 @@ class DMAPermitAnalyzer:
                 savings_pct = (1 - new_size / original_size) * 100
 
                 logger.debug(
-                    f"💰 Cost optimization: {pages_to_extract} pages ({new_size:,} bytes) vs full PDF ({original_size:,} bytes) - {savings_pct:.1f}% reduction"
+                    f"💰 Cost optimization: {pages_to_extract} pages ({new_size:,} bytes) "
+                    f"vs full PDF ({original_size:,} bytes) - {savings_pct:.1f}% reduction"
                 )
 
                 return first_pages_bytes
@@ -275,7 +276,9 @@ class DMAPermitAnalyzer:
             pdf_part = Part.from_data(data=first_pages_data, mime_type="application/pdf")
 
             permit_check_prompt = """# ROLLE OG OPGAVE
-Du er ekspert i danske miljømyndigheds dokumenter. Din opgave er at analysere de første 2 sider af dette PDF-dokument for at afgøre om det er en miljøtilladelse, miljøafgørelse eller relateret miljødokument.
+Du er ekspert i danske miljømyndigheds dokumenter. Din opgave er at analysere de 
+første 2 sider af dette PDF-dokument for at afgøre om det er en miljøtilladelse, 
+miljøafgørelse eller relateret miljødokument.
 
 # HVAD AT LEDE EFTER
 Se efter følgende nøgleord og koncepter på de første sider:
@@ -292,7 +295,8 @@ Se efter følgende nøgleord og koncepter på de første sider:
 # SVAR FORMAT
 Returner kun JSON i følgende format:
 
-VIGTIGT: Sæt "is_environmental_permit" til TRUE for BÅDE miljøtilladelser OG miljøafgørelser - begge indeholder værdifulde miljødata.
+VIGTIGT: Sæt "is_environmental_permit" til TRUE for BÅDE miljøtilladelser OG 
+miljøafgørelser - begge indeholder værdifulde miljødata.
 
 ```json
 {

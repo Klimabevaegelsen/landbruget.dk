@@ -105,7 +105,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         self.log.info("📦 Step 1: Creating field_wetland_intersections (2-way total wetlands)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_intersections AS
-            SELECT 
+            SELECT
                 f.field_uuid,
                 f.field_id,
                 f.block_id,
@@ -125,7 +125,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         self.log.info("📦 Step 2: Creating field_wetland_water_intersections (3-way water-covered)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_water_intersections AS
-            SELECT 
+            SELECT
                 f.field_uuid,
                 f.field_id,
                 f.block_id,
@@ -138,7 +138,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 ST_Intersection(ST_Intersection(f.geometry, w.geometry), wpwi.intersection_geometry) as field_wetland_water_geometry
             FROM agricultural_fields f
             JOIN wetlands_prefiltered w ON ST_Intersects(f.geometry, w.geometry)
-            JOIN water_projects_wetlands_intersections wpwi 
+            JOIN water_projects_wetlands_intersections wpwi
                 ON w.wetland_key = wpwi.wetland_key
                 AND ST_Intersects(f.geometry, wpwi.intersection_geometry)  -- Field must intersect water-covered part
             WHERE ST_Area_Spheroid(ST_Intersection(ST_Intersection(f.geometry, w.geometry), wpwi.intersection_geometry)) > 0
@@ -204,28 +204,28 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
         # Check field_wetland_intersections geometry validity
         invalid_wetland = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_wetland_intersections 
+            SELECT COUNT(*)
+            FROM field_wetland_intersections
             WHERE field_wetland_geometry IS NULL OR NOT ST_IsValid(field_wetland_geometry)
         """).fetchone()[0]
 
         # Check field_wetland_water_intersections geometry validity
         invalid_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_wetland_water_intersections 
+            SELECT COUNT(*)
+            FROM field_wetland_water_intersections
             WHERE field_wetland_water_geometry IS NULL OR NOT ST_IsValid(field_wetland_water_geometry)
         """).fetchone()[0]
 
         # Check for empty geometries
         empty_wetland = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_wetland_intersections 
+            SELECT COUNT(*)
+            FROM field_wetland_intersections
             WHERE field_wetland_geometry IS NOT NULL AND ST_IsEmpty(field_wetland_geometry)
         """).fetchone()[0]
 
         empty_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_wetland_water_intersections 
+            SELECT COUNT(*)
+            FROM field_wetland_water_intersections
             WHERE field_wetland_water_geometry IS NOT NULL AND ST_IsEmpty(field_wetland_water_geometry)
         """).fetchone()[0]
 

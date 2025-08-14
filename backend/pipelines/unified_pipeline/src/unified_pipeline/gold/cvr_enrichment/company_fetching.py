@@ -362,15 +362,15 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                    json_extract(json_data, '$.company_type_description')::VARCHAR 
+                    json_extract(json_data, '$.company_type_description')::VARCHAR
                         as company_type_description,
                     json_extract(json_data, '$.status')::VARCHAR as status,
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
                     json_data as company_data_json,
-                    json_extract(json_data, '$.processing_timestamp')::VARCHAR 
+                    json_extract(json_data, '$.processing_timestamp')::VARCHAR
                         as processing_timestamp,
                     NULL::INTEGER as batch_number  -- No batching
                 FROM unnest($1) as t(json_data)

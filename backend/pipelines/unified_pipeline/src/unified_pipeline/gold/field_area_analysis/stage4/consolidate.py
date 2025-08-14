@@ -21,7 +21,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         super().__init__(config, "Stage 4: Consolidation")
 
     def _load_input_data(self):
-        """Load all field-property intersections, soil data, and environmental analyses 
+        """Load all field-property intersections, soil data, and environmental analyses
         from previous stages."""
         # Debug: Log the current configuration
         self.log.info(
@@ -32,7 +32,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         updated_outputs = CONFIG.update_outputs_for_year()
         self.log.info(f"🔍 DEBUG: Updated dataset outputs: {updated_outputs}")
 
-        # Load ALL field-property intersections from Stage 1C 
+        # Load ALL field-property intersections from Stage 1C
         # (foundation for all fields with properties)
         stage1c_dataset = updated_outputs["field_property_intersections"]
         self.log.info(f"🔍 DEBUG: Looking for dataset: {stage1c_dataset}")
@@ -145,7 +145,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         self.log.info("Step 1: Creating field-property summary from Stage 1C...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE all_fields_with_properties AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -158,11 +158,11 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 COUNT(*) as property_count,
                 SUM(intersection_area_m2) as total_property_intersection_area_m2,
                 (
-                    SELECT bfe_number 
-                    FROM field_property_intersections fp2 
-                    WHERE fp2.field_uuid = fp.field_uuid 
+                    SELECT bfe_number
+                    FROM field_property_intersections fp2
+                    WHERE fp2.field_uuid = fp.field_uuid
                     AND fp2.year = fp.year
-                    ORDER BY fp2.intersection_area_m2 DESC 
+                    ORDER BY fp2.intersection_area_m2 DESC
                     LIMIT 1
                 ) as primary_bfe_number
                 
@@ -178,7 +178,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         # Store input area reference for validation
         if self._should_validate_areas():
             fields_area_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as field_count,
                     SUM(field_area_m2) as total_area
                 FROM all_fields_with_properties
@@ -194,7 +194,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         self.log.info("Step 2: Creating field-level soil type summary...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_summary AS
-            SELECT 
+            SELECT
                 field_uuid,
                 year,
                 
@@ -209,21 +209,21 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 
                 -- Dominant soil type (largest area)
                 (
-                    SELECT soil_type_category 
-                    FROM field_soil_areas fsa2 
-                    WHERE fsa2.field_uuid = fsa.field_uuid 
+                    SELECT soil_type_category
+                    FROM field_soil_areas fsa2
+                    WHERE fsa2.field_uuid = fsa.field_uuid
                     AND fsa2.year = fsa.year
-                    ORDER BY fsa2.soil_area_m2 DESC 
+                    ORDER BY fsa2.soil_area_m2 DESC
                     LIMIT 1
                 ) as dominant_soil_type,
                 
                 -- Dominant soil coverage percentage
                 (
-                    SELECT soil_area_share_pct 
-                    FROM field_soil_areas fsa2 
-                    WHERE fsa2.field_uuid = fsa.field_uuid 
+                    SELECT soil_area_share_pct
+                    FROM field_soil_areas fsa2
+                    WHERE fsa2.field_uuid = fsa.field_uuid
                     AND fsa2.year = fsa.year
-                    ORDER BY fsa2.soil_area_m2 DESC 
+                    ORDER BY fsa2.soil_area_m2 DESC
                     LIMIT 1
                 ) as dominant_soil_coverage_pct,
                 
@@ -254,7 +254,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_field_summary AS
-            SELECT 
+            SELECT
                 field_uuid, year,
                 -- Field-level totals (should be same across property rows - use MAX)
                 MAX(field_bnbo_total_m2) as field_bnbo_total_m2,
@@ -268,9 +268,9 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 MAX(bnbo_completed_hectares) as bnbo_completed_hectares,
                 MAX(bnbo_action_required_overlap_hectares) as bnbo_action_required_overlap_hectares,
                 MAX(bnbo_completed_overlap_hectares) as bnbo_completed_overlap_hectares,
-                MAX(bnbo_action_required_not_covered_by_water_hectares) as 
+                MAX(bnbo_action_required_not_covered_by_water_hectares) as
                     bnbo_action_required_not_covered_by_water_hectares,
-                MAX(bnbo_completed_not_covered_by_water_hectares) as 
+                MAX(bnbo_completed_not_covered_by_water_hectares) as
                     bnbo_completed_not_covered_by_water_hectares,
                 MAX(bnbo_status_categories) as bnbo_status_categories,
                 MAX(bnbo_status_count) as bnbo_status_count,
@@ -279,12 +279,12 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 SUM(property_bnbo_total_m2) as property_bnbo_total_m2,
                 SUM(property_bnbo_water_covered_m2) as property_bnbo_water_covered_m2,
                 SUM(property_bnbo_water_uncovered_m2) as property_bnbo_water_uncovered_m2,
-                SUM(property_bnbo_count) as property_bnbo_count,  
+                SUM(property_bnbo_count) as property_bnbo_count,
                 -- Total count across all properties
                 MAX(property_bnbo_owners) as property_bnbo_owners,
                 MAX(property_bnbo_breakdown) as property_bnbo_breakdown
                 
-            FROM final_bnbo_analysis 
+            FROM final_bnbo_analysis
             GROUP BY field_uuid, year
         """)
 
@@ -299,7 +299,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
         )
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetland_field_summary AS
-            SELECT 
+            SELECT
                 field_uuid, year,
                 -- Field-level totals (should be same across property rows - use MAX)
                 MAX(field_wetland_total_m2) as field_wetland_total_m2,
@@ -316,7 +316,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 MAX(property_wetland_owners) as property_wetland_owners,
                 MAX(property_wetland_breakdown) as property_wetland_breakdown
                 
-            FROM final_wetland_analysis 
+            FROM final_wetland_analysis
             GROUP BY field_uuid, year
         """)
 
@@ -345,7 +345,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
 
         # Get comprehensive statistics including property-environmental relationships
         stats = self.conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_fields,
                 COUNT(CASE WHEN field_bnbo_total_m2 > 0 THEN 1 END) as fields_with_bnbo,
                 COUNT(CASE WHEN field_wetland_total_m2 > 0 THEN 1 END) as fields_with_wetlands,
@@ -368,8 +368,8 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 -- Water project coverages
                 AVG(CASE WHEN field_bnbo_total_m2 > 0 THEN field_bnbo_water_covered_pct END) as avg_bnbo_water_coverage,
                 AVG(CASE WHEN field_wetland_total_m2 > 0 THEN field_wetland_water_covered_pct END) as avg_wetland_water_coverage,
-                AVG(CASE WHEN property_wetland_count > 0 THEN 
-                    (property_wetland_water_covered_m2 / NULLIF(property_wetland_total_m2, 0)) * 100 
+                AVG(CASE WHEN property_wetland_count > 0 THEN
+                    (property_wetland_water_covered_m2 / NULLIF(property_wetland_total_m2, 0)) * 100
                 END) as avg_property_wetland_water_coverage,
                 
                 -- Property-environmental spatial relationships
@@ -428,8 +428,8 @@ class ConsolidateResults(FieldAnalysisStageBase):
 
         # Get environmental category breakdown with property relationships
         env_breakdown = self.conn.execute("""
-            SELECT 
-                CASE 
+            SELECT
+                CASE
                     WHEN field_bnbo_total_m2 > 0 AND field_wetland_total_m2 > 0 THEN 'Both BNBO and Wetlands'
                     WHEN field_bnbo_total_m2 > 0 THEN 'BNBO Only'
                     WHEN field_wetland_total_m2 > 0 THEN 'Wetlands Only'
@@ -441,8 +441,8 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 AVG(combined_property_environmental_coverage_pct) as avg_property_env_coverage,
                 SUM(property_bnbo_count + property_wetland_count) as total_property_relationships
             FROM field_area_analysis_final
-            GROUP BY 
-                CASE 
+            GROUP BY
+                CASE
                     WHEN field_bnbo_total_m2 > 0 AND field_wetland_total_m2 > 0 THEN 'Both BNBO and Wetlands'
                     WHEN field_bnbo_total_m2 > 0 THEN 'BNBO Only'
                     WHEN field_wetland_total_m2 > 0 THEN 'Wetlands Only'

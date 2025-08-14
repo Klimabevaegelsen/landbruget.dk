@@ -188,7 +188,7 @@ class FVMWFSSilverConfig(BaseJobConfig):
         "Marknr": "field_id",
         "Geometrisk": "area_ha",  # Geometric area in hectares
         "Foranstalt": "subsidy_measure",  # Subsidy measure description
-        "Tilsagnsty": "subsidy_type_code",  # Subsidy type code 
+        "Tilsagnsty": "subsidy_type_code",  # Subsidy type code
         # (e.g., "67 Afgræsning med grundbetaling")
         "Graesnings": "grazing_info",  # Grazing-specific information
         "Startdato": "start_date",  # Start date of subsidy
@@ -460,9 +460,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate
             # transformation
             result_query = f"""
-                SELECT 
+                SELECT
                     {", ".join(column_mappings) if column_mappings else "*"},
-                    CASE 
+                    CASE
                         WHEN geometry IS NOT NULL AND geometry != '' THEN
                             ST_GeomFromText(geometry)
                         ELSE NULL
@@ -590,7 +590,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 # Add empty block_id column using DuckDB
                 result_table = f"marker_with_null_block_{year}"
                 self.conn.execute(
-                    f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                    f"CREATE OR REPLACE TABLE {result_table} AS "
+                    f"SELECT *, NULL as block_id FROM {marker_table}"
                 )
                 return result_table
 
@@ -665,8 +666,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         # Convert Shapely to WKT in the table
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE {marker_table}_wkt AS
-                            SELECT *, 
-                                CASE WHEN {geom_col} IS NOT NULL THEN ST_AsText({geom_col}) 
+                            SELECT *,
+                                CASE WHEN {geom_col} IS NOT NULL THEN ST_AsText({geom_col})
                                      ELSE NULL END as {geom_col}_wkt
                             FROM {marker_table}
                         """)
@@ -676,8 +677,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         # Also convert markblokke geometries if needed
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE {markblokke_table}_wkt AS
-                            SELECT *, 
-                                CASE WHEN {markblokke_geom_col} IS NOT NULL 
+                            SELECT *,
+                                CASE WHEN {markblokke_geom_col} IS NOT NULL
                                      THEN ST_AsText({markblokke_geom_col}) ELSE NULL END as {markblokke_geom_col}_wkt
                             FROM {markblokke_table}
                         """)
@@ -687,15 +688,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 # Check if geometries are already DuckDB spatial objects or WKT strings
                 marker_geom_type = self.conn.execute(f"""
                     SELECT DISTINCT typeof({geom_col}) as geom_type
-                    FROM {marker_table} 
-                    WHERE {geom_col} IS NOT NULL 
+                    FROM {marker_table}
+                    WHERE {geom_col} IS NOT NULL
                     LIMIT 1
                 """).fetchone()
 
                 markblokke_geom_type = self.conn.execute(f"""
                     SELECT DISTINCT typeof({markblokke_geom_col}) as geom_type
-                    FROM {markblokke_table} 
-                    WHERE {markblokke_geom_col} IS NOT NULL 
+                    FROM {markblokke_table}
+                    WHERE {markblokke_geom_col} IS NOT NULL
                     LIMIT 1
                 """).fetchone()
 
@@ -737,11 +738,11 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     SELECT * FROM {markblokke_table} WHERE {markblokke_geom_col} IS NOT NULL
                 """)
 
-                # Perform spatial join using DuckDB-spatial with ONLY spatial predicate 
+                # Perform spatial join using DuckDB-spatial with ONLY spatial predicate
                 # for optimal SPATIAL_JOIN operator
                 # Based on PR #545: SPATIAL_JOIN operator requires single spatial predicate in JOIN condition
                 spatial_join_query = f"""
-                    SELECT 
+                    SELECT
                         m.*,
                         b.{block_id_column} as block_id
                     FROM {marker_filtered} m
@@ -1065,7 +1066,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.conn.execute(f"""
                 ALTER TABLE {table_name} ADD COLUMN field_uuid VARCHAR;
                 
-                UPDATE {table_name} 
+                UPDATE {table_name}
                 SET field_uuid = uuid5(
                     '{self.config.uuid_namespace}',
                     ST_AsWKB(geometry)
@@ -1291,11 +1292,11 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                     # Pre-filter to remove NULL geometries for optimal SPATIAL_JOIN performance
                     self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE temp_marker_filtered_{year} AS 
+                        CREATE OR REPLACE TABLE temp_marker_filtered_{year} AS
                         SELECT * FROM temp_marker_{year} WHERE geometry IS NOT NULL
                     """)
                     self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE temp_organic_filtered_{year} AS 
+                        CREATE OR REPLACE TABLE temp_organic_filtered_{year} AS
                         SELECT * FROM temp_organic_{year} WHERE geometry IS NOT NULL
                     """)
 
@@ -1313,28 +1314,28 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                     # Add organic columns to marker table if they don't exist
                     self.conn.execute(f"""
-                        ALTER TABLE temp_marker_{year} 
+                        ALTER TABLE temp_marker_{year}
                         ADD COLUMN IF NOT EXISTS is_organic BOOLEAN DEFAULT FALSE
                     """)
                     self.conn.execute(f"""
-                        ALTER TABLE temp_marker_{year} 
+                        ALTER TABLE temp_marker_{year}
                         ADD COLUMN IF NOT EXISTS organic_conversion_date TIMESTAMP
                     """)
                     self.conn.execute(f"""
-                        ALTER TABLE temp_marker_{year} 
+                        ALTER TABLE temp_marker_{year}
                         ADD COLUMN IF NOT EXISTS organic_deregistration_date TIMESTAMP
                     """)
                     self.conn.execute(f"""
-                        ALTER TABLE temp_marker_{year} 
+                        ALTER TABLE temp_marker_{year}
                         ADD COLUMN IF NOT EXISTS organic_conversion_status VARCHAR
                     """)
 
                     # Verify SPATIAL_JOIN operator is available (DuckDB Spatial PR #545)
                     try:
                         explain_result = self.conn.execute(f"""
-                            EXPLAIN SELECT COUNT(*) 
+                            EXPLAIN SELECT COUNT(*)
                             FROM temp_marker_filtered_{year} m
-                            INNER JOIN temp_organic_filtered_{year} o 
+                            INNER JOIN temp_organic_filtered_{year} o
                                 ON ST_Contains(m.geometry, ST_Centroid(o.geometry))
                             LIMIT 1
                         """).fetchall()
@@ -1356,15 +1357,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     enrichment_query = f"""
                         UPDATE temp_marker_{year} SET
                             is_organic = TRUE,
-                            organic_conversion_date = CASE 
-                                WHEN organic_matches.conversion_date != '' 
+                            organic_conversion_date = CASE
+                                WHEN organic_matches.conversion_date != ''
                                 THEN TRY_CAST(organic_matches.conversion_date AS TIMESTAMP)
-                                ELSE NULL 
+                                ELSE NULL
                             END,
-                            organic_deregistration_date = CASE 
-                                WHEN organic_matches.deregistration_date != '' 
+                            organic_deregistration_date = CASE
+                                WHEN organic_matches.deregistration_date != ''
                                 THEN TRY_CAST(organic_matches.deregistration_date AS TIMESTAMP)
-                                ELSE NULL 
+                                ELSE NULL
                             END,
                             organic_conversion_status = organic_matches.conversion_status
                         FROM (
@@ -1374,7 +1375,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                                 o.deregistration_date,
                                 o.conversion_status
                             FROM temp_marker_filtered_{year} m
-                            INNER JOIN temp_organic_filtered_{year} o 
+                            INNER JOIN temp_organic_filtered_{year} o
                                 ON ST_Contains(m.geometry, ST_Centroid(o.geometry))
                             WHERE m.field_id = o.field_id
                         ) AS organic_matches
@@ -1391,7 +1392,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     # Save the enriched marker data back to GCS
                     enriched_marker_table = f"enriched_marker_{year}"
                     self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE {enriched_marker_table} AS 
+                        CREATE OR REPLACE TABLE {enriched_marker_table} AS
                         SELECT * FROM temp_marker_{year}
                     """)
 
@@ -1572,7 +1573,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                         # Pre-filter to remove NULL geometries for optimal performance
                         self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE temp_subsidy_filtered_{year} AS 
+                            CREATE OR REPLACE TABLE temp_subsidy_filtered_{year} AS
                             SELECT * FROM temp_subsidy_{year} WHERE geometry IS NOT NULL AND field_id IS NOT NULL
                         """)
 
@@ -1586,7 +1587,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                         # Add field_uuid column to subsidy table if it doesn't exist
                         self.conn.execute(f"""
-                            ALTER TABLE temp_subsidy_{year} 
+                            ALTER TABLE temp_subsidy_{year}
                             ADD COLUMN IF NOT EXISTS field_uuid VARCHAR
                         """)
 
@@ -1616,7 +1617,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         # Save the enriched subsidy data back to GCS
                         enriched_subsidy_table = f"enriched_{dataset_name}_{year}"
                         self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE {enriched_subsidy_table} AS 
+                            CREATE OR REPLACE TABLE {enriched_subsidy_table} AS
                             SELECT * FROM temp_subsidy_{year}
                         """)
 

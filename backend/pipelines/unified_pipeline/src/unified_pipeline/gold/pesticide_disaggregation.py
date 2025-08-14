@@ -244,7 +244,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Get current disaggregated totals
             current_stats = self.duckdb_conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as disaggregated_count,
                     SUM(COALESCE(DosageQuantity, 0)) as disaggregated_dosage,
                     SUM(COALESCE(AllocatedArea, 0)) as disaggregated_acreage,
@@ -254,7 +254,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Get strategy-specific totals
             strategy_stats = self.duckdb_conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as strategy_count,
                     SUM(COALESCE(DosageQuantity, 0)) as strategy_dosage,
                     SUM(COALESCE(AllocatedArea, 0)) as strategy_acreage,
@@ -320,7 +320,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Get remaining pending records (handle case where table might not exist)
             try:
                 pending_stats = self.duckdb_conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as pending_count,
                         SUM(COALESCE(DosageQuantity, 0)) as pending_dosage,
                         SUM(COALESCE(AcreageSize, 0)) as pending_acreage
@@ -333,7 +333,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Get final disaggregated totals (handle case where table might be empty)
             try:
                 final_stats = self.duckdb_conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as final_count,
                         SUM(COALESCE(DosageQuantity, 0)) as final_dosage,
                         SUM(COALESCE(AllocatedArea, 0)) as final_acreage,
@@ -655,7 +655,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 # Create a copy of the results table with the year-specific name
                 self.log.info(f"🏗️ Creating final table {table_name}")
                 self.duckdb_conn.execute(f"""
-                    CREATE TABLE {table_name} AS 
+                    CREATE TABLE {table_name} AS
                     SELECT * FROM disaggregated_pesticide_applications
                 """)
 
@@ -703,7 +703,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Export table to temporary file using DuckDB COPY
             self.duckdb_conn.execute(f"""
-                COPY {table_name} TO '{temp_path}' 
+                COPY {table_name} TO '{temp_path}'
                 (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
             """)
 
@@ -1411,8 +1411,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             )
 
         self.duckdb_conn.execute(f"""
-            CREATE TABLE marker AS 
-            SELECT 
+            CREATE TABLE marker AS
+            SELECT
                 field_id,
                 CAST(area_ha AS DOUBLE) as area_ha,
                 CAST({cvr_column} AS VARCHAR) as cvr_number,
@@ -1502,8 +1502,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         )
 
         self.duckdb_conn.execute(f"""
-            CREATE TABLE pesticide AS 
-            SELECT 
+            CREATE TABLE pesticide AS
+            SELECT
                 row_number() OVER () as OriginalPesticideRowID,
                 CAST({pest_cvr_column} AS VARCHAR) as cvr_number,
                 {pesticide_name_column} as PesticideName,
@@ -1569,8 +1569,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Create pending pesticide rows table with nopesticides=1 records filtered out."""
         self.duckdb_conn.execute("""
             CREATE TABLE pending_pesticide_rows AS
-            SELECT * FROM pesticide 
-            WHERE nopesticides IS NULL 
+            SELECT * FROM pesticide
+            WHERE nopesticides IS NULL
                OR (CAST(nopesticides AS VARCHAR) NOT IN ('1', 'True', 'true', 'TRUE'))
         """)
 
@@ -1592,19 +1592,19 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             cvr_match_count = self.duckdb_conn.execute("""
                 WITH PesticideCVRs AS (
                     SELECT DISTINCT TRIM(CAST(cvr_number AS VARCHAR)) as CVR
-                    FROM pending_pesticide_rows 
+                    FROM pending_pesticide_rows
                     WHERE cvr_number IS NOT NULL
                       AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
                 ),
                 MarkerCVRs AS (
                     SELECT DISTINCT TRIM(CAST(cvr_number AS VARCHAR)) as CVR
-                    FROM marker 
+                    FROM marker
                     WHERE cvr_number IS NOT NULL
                       AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
                 )
-                SELECT COUNT(*) 
+                SELECT COUNT(*)
                 FROM PesticideCVRs p
                 JOIN MarkerCVRs m ON p.CVR = m.CVR
             """).fetchone()[0]
@@ -1621,14 +1621,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
                 # Log some diagnostic information
                 pesticide_cvr_count = self.duckdb_conn.execute("""
-                    SELECT COUNT(DISTINCT cvr_number) 
-                    FROM pending_pesticide_rows 
+                    SELECT COUNT(DISTINCT cvr_number)
+                    FROM pending_pesticide_rows
                     WHERE cvr_number IS NOT NULL
                 """).fetchone()[0]
 
                 marker_cvr_count = self.duckdb_conn.execute("""
-                    SELECT COUNT(DISTINCT cvr_number) 
-                    FROM marker 
+                    SELECT COUNT(DISTINCT cvr_number)
+                    FROM marker
                     WHERE cvr_number IS NOT NULL
                 """).fetchone()[0]
 
@@ -1663,8 +1663,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         try:
             # Query organic fields from the marker table using field_uuid for uniqueness
             result = self.duckdb_conn.execute("""
-                SELECT DISTINCT field_uuid 
-                FROM marker 
+                SELECT DISTINCT field_uuid
+                FROM marker
                 WHERE organic_farming = TRUE
                   AND field_uuid IS NOT NULL
             """).fetchall()
@@ -1698,15 +1698,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """
         try:
             result = self.duckdb_conn.execute("""
-                SELECT DISTINCT 
+                SELECT DISTINCT
                     TRIM(CAST(cvr_number AS VARCHAR)) as CVR,
                     TRY_CAST(crop_code AS BIGINT) as CropCode
-                FROM marker 
+                FROM marker
                 WHERE organic_farming = TRUE
-                  AND cvr_number IS NOT NULL 
-                  AND TRIM(CAST(cvr_number AS VARCHAR)) != '' 
+                  AND cvr_number IS NOT NULL
+                  AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
                   AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
-                  AND crop_code IS NOT NULL 
+                  AND crop_code IS NOT NULL
                   AND area_ha > 0.0
             """).fetchall()
 
@@ -1764,8 +1764,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalNonOrganicMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                           AND m.organic_farming = FALSE
@@ -1777,64 +1777,64 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                     GROUP BY CVR, CropCode
                 ),
                 BestMatchEvaluation AS (
-                    SELECT 
+                    SELECT
                         p.*,
                         main_totals.TotalMarkerAreaForCVRCrop,
                         non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop,
                         -- Calculate errors for both strategies
-                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
                             p.AcreageSize * 100 as main_error_pct,
-                        ABS(p.AcreageSize - 
+                        ABS(p.AcreageSize -
                             non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
                             p.AcreageSize * 100 as nonorg_error_pct,
                         -- Check tolerance for both
-                        CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
-                            p.AcreageSize * 100 
-                                 <= {self.config.area_tolerance_pct} 
+                        CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
                              THEN TRUE ELSE FALSE END as main_passes,
-                        CASE WHEN ABS(p.AcreageSize - 
+                        CASE WHEN ABS(p.AcreageSize -
                             non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 
-                                 <= {self.config.area_tolerance_pct} 
+                            p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
                              THEN TRUE ELSE FALSE END as nonorg_passes,
                         -- Determine best strategy
-                        CASE 
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                        CASE
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
                                 p.AcreageSize * 100
-                                 <= {self.config.area_tolerance_pct} 
-                                 AND ABS(p.AcreageSize - 
+                                 <= {self.config.area_tolerance_pct}
+                                 AND ABS(p.AcreageSize -
                                      non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                                p.AcreageSize * 100 
-                                     <= {self.config.area_tolerance_pct} THEN
-                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) 
-                                          <= ABS(p.AcreageSize -
-                                              non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
-                                     THEN 'main' ELSE 'nonorg' END
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
                                 p.AcreageSize * 100
-                                 <= {self.config.area_tolerance_pct} 
+                                     <= {self.config.area_tolerance_pct} THEN
+                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop)
+                                          <= ABS(p.AcreageSize -
+                                              non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop)
+                                     THEN 'main' ELSE 'nonorg' END
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
                                  THEN 'main'
                             WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                            p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                                  THEN 'nonorg'
                             ELSE 'neither'
                         END as best_strategy
                     FROM pending_pesticide_rows p
-                    JOIN MixedFarmingCombinations mfc 
+                    JOIN MixedFarmingCombinations mfc
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = mfc.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = mfc.CropCode
                     LEFT JOIN MarkerFieldCVRCropTotals main_totals
-                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
+                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
                     LEFT JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
+                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
                     WHERE p.AcreageSize > 0
                       AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR
@@ -1880,14 +1880,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     m_fields.field_uuid as primary_field_id
                 FROM BestMatchEvaluation p
                 JOIN MarkerFieldCVRCropTotals main_totals
-                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR
                     AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
-                JOIN marker m_fields 
+                JOIN marker m_fields
                     ON main_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND main_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
                 WHERE p.best_strategy = 'main'
-                  AND m_fields.cvr_number IS NOT NULL 
-                  AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                  AND m_fields.cvr_number IS NOT NULL
+                  AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
                   AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                   AND m_fields.area_ha > 0.0
             """).fetchone()[0]
@@ -1903,8 +1903,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalNonOrganicMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                           AND m.organic_farming = FALSE
@@ -1916,54 +1916,54 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                     GROUP BY CVR, CropCode
                 ),
                 BestMatchEvaluation AS (
-                    SELECT 
+                    SELECT
                         p.*,
                         main_totals.TotalMarkerAreaForCVRCrop,
                         non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop,
                         -- Calculate errors for both strategies
-                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
                             p.AcreageSize * 100 as main_error_pct,
-                        ABS(p.AcreageSize - 
+                        ABS(p.AcreageSize -
                             non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
                             p.AcreageSize * 100 as nonorg_error_pct,
                         -- Determine best strategy
-                        CASE 
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
+                        CASE
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
                                 p.AcreageSize * 100
-                                 <= {self.config.area_tolerance_pct} 
-                                 AND ABS(p.AcreageSize - 
+                                 <= {self.config.area_tolerance_pct}
+                                 AND ABS(p.AcreageSize -
                                      non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                                p.AcreageSize * 100 
-                                     <= {self.config.area_tolerance_pct} THEN
-                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) 
-                                          <= ABS(p.AcreageSize -
-                                              non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
-                                     THEN 'main' ELSE 'nonorg' END
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / 
                                 p.AcreageSize * 100
-                                 <= {self.config.area_tolerance_pct} 
+                                     <= {self.config.area_tolerance_pct} THEN
+                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop)
+                                          <= ABS(p.AcreageSize -
+                                              non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop)
+                                     THEN 'main' ELSE 'nonorg' END
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
                                  THEN 'main'
                             WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                            p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                                  THEN 'nonorg'
                             ELSE 'neither'
                         END as best_strategy
                     FROM pending_pesticide_rows p
-                    JOIN MixedFarmingCombinations mfc 
+                    JOIN MixedFarmingCombinations mfc
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = mfc.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = mfc.CropCode
                     LEFT JOIN MarkerFieldCVRCropTotals main_totals
-                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
+                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
                     LEFT JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
+                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
                     WHERE p.AcreageSize > 0
                       AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR
@@ -2010,14 +2010,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     m_fields.field_uuid as primary_field_id
                 FROM BestMatchEvaluation p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
                                             AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
-                JOIN marker m_fields 
+                JOIN marker m_fields
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND non_organic_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
                 WHERE p.best_strategy = 'nonorg'
-                  AND m_fields.cvr_number IS NOT NULL 
-                  AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                  AND m_fields.cvr_number IS NOT NULL
+                  AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
                   AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                   AND m_fields.area_ha > 0.0
                   AND m_fields.organic_farming = FALSE
@@ -2027,7 +2027,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Remove processed applications from pending queue
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
                     SELECT DISTINCT da.OriginalPesticideRowID
                     FROM disaggregated_pesticide_applications da
@@ -2037,7 +2037,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Log the ethical impact
             best_match_stats = self.duckdb_conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Main_Strategy' THEN 1 END) as main_wins,
                     COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Non_Organic_Strategy'
                                THEN 1 END) as nonorg_wins
@@ -2116,8 +2116,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                     GROUP BY CVR, CropCode
@@ -2127,8 +2127,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     uuid() as DisaggregatedID,
                     CAST(p.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
                     CAST(p.cvr_number AS VARCHAR) as cvr_number,
-                    p.PesticideName, 
-                    p.PesticideRegistrationNumber, 
+                    p.PesticideName,
+                    p.PesticideRegistrationNumber,
                     p.DosageQuantity * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop) as DosageQuantity,
                     p.DosageUnit,
                     'marker_' || CAST(m_fields.field_id AS VARCHAR) as MatchedFieldID,
@@ -2148,20 +2148,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 FROM pending_pesticide_rows p
                 -- STEP 2: Match pesticide applications to company+crop totals
                 JOIN MarkerFieldCVRCropTotals marker_totals
-                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = marker_totals.CVR 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = marker_totals.CVR
                                          AND TRY_CAST(p.Code AS BIGINT) = marker_totals.CropCode
                 -- STEP 3: Join with individual fields to create one record per field
-                JOIN marker m_fields 
+                JOIN marker m_fields
                     ON marker_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND marker_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
-                WHERE 
+                WHERE
                     p.AcreageSize > 0 AND marker_totals.TotalMarkerAreaForCVRCrop > 0
                     -- THE CRITICAL FILTER: Only match if areas are within 2% tolerance
                     -- This 2% is the magic number that achieved 92% coverage!
                     AND ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100
                         <= {self.config.area_tolerance_pct}
-                    AND m_fields.cvr_number IS NOT NULL 
-                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                    AND m_fields.cvr_number IS NOT NULL
+                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
                     AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                     AND m_fields.area_ha > 0.0
             """
@@ -2171,10 +2171,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # CLEAN UP: Remove processed records from the pending queue
             # This prevents double-processing in subsequent strategies
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
+                    SELECT DISTINCT OriginalPesticideRowID
+                    FROM disaggregated_pesticide_applications
                     WHERE AllocationMethod = 'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'
                 )
             """)
@@ -2224,11 +2224,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalNonOrganicMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
-                                                     AND {organic_exclusion_condition} 
+                                                     AND {organic_exclusion_condition}
                     GROUP BY CVR, CropCode
                 )
                 INSERT INTO disaggregated_pesticide_applications
@@ -2236,8 +2236,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     uuid() as DisaggregatedID,
                     CAST(p.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
                     CAST(p.cvr_number AS VARCHAR) as cvr_number,
-                    p.PesticideName, 
-                    p.PesticideRegistrationNumber, 
+                    p.PesticideName,
+                    p.PesticideRegistrationNumber,
                     p.DosageQuantity * (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as DosageQuantity,
                     p.DosageUnit,
                     'marker_non_organic_' || CAST(m_fields.field_id AS VARCHAR) as MatchedFieldID,
@@ -2253,17 +2253,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     m_fields.field_uuid
                 FROM pending_pesticide_rows p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
                                          AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
-                JOIN marker m_fields 
+                JOIN marker m_fields
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND non_organic_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
-                WHERE 
+                WHERE
                     p.AcreageSize > 0 AND non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0
                     AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
                             p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
-                    AND m_fields.cvr_number IS NOT NULL 
-                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                    AND m_fields.cvr_number IS NOT NULL
+                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
                     AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                     AND m_fields.area_ha > 0.0
                                          AND m_fields.organic_farming = FALSE
@@ -2273,10 +2273,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Remove processed records from pending table
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
+                    SELECT DISTINCT OriginalPesticideRowID
+                    FROM disaggregated_pesticide_applications
                     WHERE AllocationMethod = 'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'
                 )
             """)
@@ -2307,7 +2307,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # This replaces the inefficient Python loop with pure DuckDB operations
             insert_query = """
                 WITH MarkerSingleFieldCVRCrop AS (
-                    SELECT 
+                    SELECT
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
                         CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
                         COUNT(*) as FieldCount,
@@ -2317,16 +2317,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                                                  ANY_VALUE(m.field_uuid) as field_uuid,
                          ANY_VALUE(m.field_uuid) as primary_field_id
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
+                      AND m.crop_code IS NOT NULL
                       AND m.area_ha > 0.0
                     GROUP BY 1, 2, 4, 5, 6
                     HAVING COUNT(*) = 1  -- Only single field per CVR/Crop
                 ),
                 PendingForSingleFields AS (
-                    SELECT 
+                    SELECT
                         p.OriginalPesticideRowID,
                         TRIM(CAST(p.cvr_number AS VARCHAR)) as CVR_Str,
                         CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
@@ -2336,12 +2336,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         p.DosageQuantity,
                         p.DosageUnit
                     FROM pending_pesticide_rows p
-                    WHERE p.cvr_number IS NOT NULL 
+                    WHERE p.cvr_number IS NOT NULL
                       AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0
                 ),
                 CandidatesWithFields AS (
-                    SELECT 
+                    SELECT
                         pf.OriginalPesticideRowID,
                         pf.CVR_Str,
                         pf.Crop_Str,
@@ -2357,8 +2357,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         sf.primary_field_id,
                         (pf.AcreageSize / sf.FieldArea) * 100 as CoveragePercent
                     FROM MarkerSingleFieldCVRCrop sf
-                    JOIN PendingForSingleFields pf 
-                        ON sf.CVR_Str = pf.CVR_Str 
+                    JOIN PendingForSingleFields pf
+                        ON sf.CVR_Str = pf.CVR_Str
                         AND sf.Crop_Str = pf.Crop_Str
                     WHERE pf.AcreageSize < sf.FieldArea  -- Pesticide area smaller than field area
                 )
@@ -2389,10 +2389,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Remove processed records from pending table in a single operation
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
+                    SELECT DISTINCT OriginalPesticideRowID
+                    FROM disaggregated_pesticide_applications
                     WHERE AllocationMethod = 'Partial_Field_Coverage_SingleField'
                 )
             """)
@@ -2427,7 +2427,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         try:
             # Check if geometry data is available for spatial clustering
             geometry_columns = self.duckdb_conn.execute("""
-                SELECT column_name FROM information_schema.columns 
+                SELECT column_name FROM information_schema.columns
                 WHERE table_name = 'marker' AND column_name = 'geometry'
             """).fetchall()
 
@@ -2463,30 +2463,30 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
                         COUNT(*) as pending_count
                     FROM pending_pesticide_rows p
-                    WHERE p.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(p.cvr_number AS VARCHAR)) != '' 
+                    WHERE p.cvr_number IS NOT NULL
+                      AND TRIM(CAST(p.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(p.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND p.Code IS NOT NULL 
+                      AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0.0
                     GROUP BY CVR_Str, Crop_Str
                     HAVING COUNT(*) > 0
                 ),
                 FieldCounts AS (
-                    SELECT 
+                    SELECT
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
                         CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
                         COUNT(*) as field_count
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
+                      AND m.crop_code IS NOT NULL
                       AND m.area_ha > 0.0
                       AND m.geometry IS NOT NULL
                     GROUP BY CVR_Str, Crop_Str
                     HAVING COUNT(*) >= 2  -- Only combinations with 2+ fields
                 )
-                SELECT 
+                SELECT
                     p.CVR_Str,
                     p.Crop_Str,
                     p.pending_count,
@@ -2635,7 +2635,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pending_for_chunk = self.duckdb_conn.execute(f"""
                 SELECT COUNT(*) as total_pending
                 FROM pending_pesticide_rows p
-                WHERE (TRIM(CAST(p.cvr_number AS VARCHAR)), CAST(CAST(p.Code AS BIGINT) AS VARCHAR)) 
+                WHERE (TRIM(CAST(p.cvr_number AS VARCHAR)), CAST(CAST(p.Code AS BIGINT) AS VARCHAR))
                       IN ({cvr_crop_in_clause})
             """).fetchone()[0]
 
@@ -2658,7 +2658,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 ),
                 FilteredFields AS (
                     -- CRITICAL FIX: Filter fields by CVR+crop BEFORE spatial operations
-                    SELECT 
+                    SELECT
                         m.field_id,
                         m.field_uuid,
                         m.geometry,
@@ -2666,13 +2666,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
                         CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
                     FROM marker m
-                    JOIN PendingCVRCrops pcc ON 
+                    JOIN PendingCVRCrops pcc ON
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) = pcc.CVR_Str
                         AND CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) = pcc.Crop_Str
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
+                      AND m.crop_code IS NOT NULL
                       AND m.area_ha > 0.0
                       AND m.geometry IS NOT NULL
                 ),
@@ -2686,8 +2686,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         f1.CVR_Str,
                         f1.Crop_Str
                     FROM FilteredFields f1
-                    JOIN FilteredFields f2 ON 
-                        f1.CVR_Str = f2.CVR_Str 
+                    JOIN FilteredFields f2 ON
+                        f1.CVR_Str = f2.CVR_Str
                         AND f1.Crop_Str = f2.Crop_Str
                         AND f1.field_uuid != f2.field_uuid
                         AND ST_DWithin(f1.geometry, f2.geometry, 10.0)  -- Spatial join on filtered data only
@@ -2713,7 +2713,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 ),
                 -- Simplified clustering: group fields that are directly connected
                 FieldClusters AS (
-                    SELECT 
+                    SELECT
                         field_id,
                         field_uuid,
                         CVR_Str,
@@ -2722,7 +2722,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         MIN(LEAST(field_id, connected_field))
                             OVER (PARTITION BY CVR_Str, Crop_Str, field_id) as cluster_id
                     FROM (
-                        SELECT 
+                        SELECT
                             sa.field1_id as field_id,
                             sa.field1_uuid as field_uuid,
                             sa.CVR_Str,
@@ -2732,7 +2732,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         
                         UNION ALL
                         
-                        SELECT 
+                        SELECT
                             sa.field2_id as field_id,
                             sa.field2_uuid as field_uuid,
                             sa.CVR_Str,
@@ -2743,7 +2743,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         UNION ALL
                         
                         -- Include isolated fields (not in any adjacency) from our filtered set
-                        SELECT 
+                        SELECT
                             f.field_id,
                             f.field_uuid,
                             f.CVR_Str,
@@ -2751,15 +2751,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                             f.field_id as connected_field
                         FROM FilteredFields f
                         WHERE f.field_id NOT IN (
-                            SELECT field1_id FROM SpatialAdjacency 
-                            UNION 
+                            SELECT field1_id FROM SpatialAdjacency
+                            UNION
                             SELECT field2_id FROM SpatialAdjacency
                         )
                     ) clustered_fields
                 ),
                 -- Calculate cluster areas and match against pesticide applications
                 ClusterAreas AS (
-                    SELECT 
+                    SELECT
                         fc.CVR_Str,
                         fc.Crop_Str,
                         fc.cluster_id,
@@ -2775,7 +2775,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 ),
                 -- Match clusters against pesticide applications with area tolerance
                 MatchedClusters AS (
-                    SELECT 
+                    SELECT
                         p.OriginalPesticideRowID,
                         p.cvr_number,
                         p.PesticideName,
@@ -2792,10 +2792,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         -- Calculate area match quality
                         ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 as area_diff_pct
                     FROM pending_pesticide_rows p
-                    JOIN ClusterAreas ca ON 
+                    JOIN ClusterAreas ca ON
                         TRIM(CAST(p.cvr_number AS VARCHAR)) = ca.CVR_Str
                         AND CAST(CAST(p.Code AS BIGINT) AS VARCHAR) = ca.Crop_Str
-                    WHERE p.cvr_number IS NOT NULL 
+                    WHERE p.cvr_number IS NOT NULL
                       AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0
                       -- CRITICAL: Area must match within tolerance (2%)
@@ -2804,7 +2804,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 ),
                 -- Expand matched clusters to individual field allocations
                 FieldAllocations AS (
-                    SELECT 
+                    SELECT
                         mc.OriginalPesticideRowID,
                         mc.cvr_number,
                         mc.PesticideName,
@@ -2878,10 +2878,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         try:
             # Remove all processed records from pending table
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
+                    SELECT DISTINCT OriginalPesticideRowID
+                    FROM disaggregated_pesticide_applications
                     WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'
                 )
             """)

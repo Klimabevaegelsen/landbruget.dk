@@ -367,7 +367,8 @@ class SilverProcessor:
 
             logger.info(f"Processing file from memory to Silver: {original_filename}")
 
-            # Select transformer based on content type and file specifics (same logic as _process_file)
+            # Select transformer based on content type and file specifics
+            # (same logic as _process_file)
             transformer = None
             file_path = Path(original_filename)  # Create Path object for specialized transformers
 
@@ -437,7 +438,8 @@ class SilverProcessor:
                             logger.info(f"Saved transformed data to: {output_path}")
                         except Exception as e:
                             logger.error(
-                                f"Failed to save transformed data for {original_filename} sheet {sheet_name}: {str(e)}"
+                                f"Failed to save transformed data for {original_filename} "
+                                f"sheet {sheet_name}: {str(e)}"
                             )
                             return False
 
@@ -472,7 +474,8 @@ class SilverProcessor:
                             logger.info(f"Saved transformed data to: {output_path}")
                         except Exception as e:
                             logger.error(
-                                f"Failed to save transformed data for {original_filename} part {i}: {str(e)}"
+                                f"Failed to save transformed data for {original_filename} "
+                                f"part {i}: {str(e)}"
                             )
                             return False
 
@@ -501,7 +504,8 @@ class SilverProcessor:
 
                     # Save the DuckDB table using ParquetManager (handles GCS uploads)
                     try:
-                        # Get the data from transformer's connection and register it in ParquetManager
+                        # Get the data from transformer's connection and register it
+                        # in ParquetManager
                         df = transformer.conn.execute(f"SELECT * FROM {table_name}").df()
                         parquet_table_name = f"temp_parquet_{int(time.time())}"
                         self.parquet_manager.register_dataframe(df, parquet_table_name)
@@ -565,7 +569,8 @@ class SilverProcessor:
 
         except Exception as e:
             logger.error(
-                f"Failed to process file from memory {file_info.get('original_filename', 'unknown')}: {str(e)}"
+                f"Failed to process file from memory "
+                f"{file_info.get('original_filename', 'unknown')}: {str(e)}"
             )
             return False
 
@@ -676,7 +681,8 @@ class SilverProcessor:
 
             if not table_schema:
                 logger.info(
-                    f"No schema found for {metadata.original_subfolder}, skipping schema application"
+                    f"No schema found for {metadata.original_subfolder}, "
+                    f"skipping schema application"
                 )
                 return None
 

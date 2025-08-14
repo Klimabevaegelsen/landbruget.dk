@@ -341,7 +341,8 @@ class FullDMAPipeline:
         logger.info(f"Full DMA pipeline initialized - output dir: {self.session_dir}")
         logger.info(f"Server-friendly delay between requests: {delay_seconds}s, max 3 concurrent")
         logger.info(
-            f"Circuit breaker: max {self.max_consecutive_failures} consecutive failures, max {self.max_failure_rate * 100}% failure rate"
+            f"Circuit breaker: max {self.max_consecutive_failures} consecutive failures, "
+            f"max {self.max_failure_rate * 100}% failure rate"
         )
 
     def check_circuit_breaker(self, total_processed, total_failures):
@@ -356,7 +357,8 @@ class FullDMAPipeline:
             failure_rate = total_failures / total_processed
             if failure_rate > self.max_failure_rate:
                 logger.error(
-                    f"❌ CIRCUIT BREAKER: Failure rate {failure_rate:.2%} exceeds {self.max_failure_rate:.2%}. Stopping pipeline."
+                    f"❌ CIRCUIT BREAKER: Failure rate {failure_rate:.2%} exceeds "
+                    f"{self.max_failure_rate:.2%}. Stopping pipeline."
                 )
                 return True
 
@@ -442,7 +444,8 @@ class FullDMAPipeline:
                     if response.status != 200:
                         api_failures += 1
                         logger.error(
-                            f"API request failed with status {response.status} (failure {api_failures}/{max_api_failures})"
+                            f"API request failed with status {response.status} "
+                            f"(failure {api_failures}/{max_api_failures})"
                         )
 
                         if api_failures >= max_api_failures:

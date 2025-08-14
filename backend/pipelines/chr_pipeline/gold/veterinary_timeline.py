@@ -50,11 +50,11 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
 
         if has_malformed_columns:
             logger.info("🔧 Detected malformed column structure - using positional reconstruction")
-            # Column structure: date, x_coord, y_coord, street, house_num, 
+            # Column structure: date, x_coord, y_coord, street, house_num,
             # municipality, table_number, source_file
             con.execute(f"""
                 CREATE OR REPLACE TABLE cleaned_fires AS
-                SELECT 
+                SELECT
                     "{column_names[0]}" as fire_date_str,
                     TRY_CAST("{column_names[1]}" AS DOUBLE) as fire_x_coord,
                     TRY_CAST("{column_names[2]}" AS DOUBLE) as fire_y_coord,
@@ -63,7 +63,7 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
                     "{column_names[5]}" as fire_municipality,
                     -- Try to parse date from various formats like "08-feb-21"
                     TRY_CAST(
-                        CASE 
+                        CASE
                             WHEN "{column_names[0]}" ~ '^[0-9]{{1,2}}-[a-z]{{3}}-[0-9]{{2}}$' THEN
                                 '20' || RIGHT("{column_names[0]}", 2) || '-' ||
                                 CASE LOWER(SUBSTRING("{column_names[0]}", POSITION('-' IN "{column_names[0]}") + 1, 3))
@@ -81,13 +81,13 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
                                     WHEN 'dec' THEN '12'
                                     ELSE '01'
                                 END || '-' ||
-                                LPAD(CAST(LEFT("{column_names[0]}", 
+                                LPAD(CAST(LEFT("{column_names[0]}",
                                     POSITION('-' IN "{column_names[0]}") - 1) AS VARCHAR), 2, '0')
                             ELSE NULL
                         END AS DATE
                     ) as fire_date
                 FROM stable_fires
-                WHERE "{column_names[1]}" IS NOT NULL 
+                WHERE "{column_names[1]}" IS NOT NULL
                   AND "{column_names[2]}" IS NOT NULL
                   AND TRY_CAST("{column_names[1]}" AS DOUBLE) IS NOT NULL
                   AND TRY_CAST("{column_names[2]}" AS DOUBLE) IS NOT NULL
@@ -105,13 +105,13 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
             # Create cleaned fires table dynamically
             con.execute(f"""
                 CREATE OR REPLACE TABLE cleaned_fires AS
-                SELECT 
+                SELECT
                     {coord_x_col} as fire_x_coord,
                     {coord_y_col} as fire_y_coord,
                     {date_col if date_col else "NULL"} as fire_date,
                     *
                 FROM stable_fires
-                WHERE {coord_x_col} IS NOT NULL 
+                WHERE {coord_x_col} IS NOT NULL
                   AND {coord_y_col} IS NOT NULL
             """)
 
@@ -163,7 +163,7 @@ def reconstruct_stable_fires(con: duckdb.DuckDBPyConnection, drive_silver_dir: P
                 CAST(COALESCE(NULLIF(TRIM(CAST(column4 AS VARCHAR)), ''), NULL) AS VARCHAR) as fire_house_number,
                 CAST(COALESCE(NULLIF(TRIM(CAST(column5 AS VARCHAR)), ''), NULL) AS VARCHAR) as fire_municipality
             FROM raw_stable_fires
-            WHERE column1 IS NOT NULL 
+            WHERE column1 IS NOT NULL
               AND column2 IS NOT NULL
               AND TRY_CAST(column1 AS DOUBLE) IS NOT NULL
               AND TRY_CAST(column2 AS DOUBLE) IS NOT NULL
@@ -172,7 +172,7 @@ def reconstruct_stable_fires(con: duckdb.DuckDBPyConnection, drive_silver_dir: P
         # Clean up fire data
         con.execute("""
             CREATE OR REPLACE TABLE cleaned_fires AS
-            SELECT 
+            SELECT
                 fire_date_str,
                 fire_x_coord,
                 fire_y_coord,
@@ -182,7 +182,7 @@ def reconstruct_stable_fires(con: duckdb.DuckDBPyConnection, drive_silver_dir: P
                 fire_municipality,
                 -- Try to parse date from various formats like "08-feb-21"
                 TRY_CAST(
-                    CASE 
+                    CASE
                         WHEN fire_date_str ~ '^[0-9]{1,2}-[a-z]{3}-[0-9]{2}$' THEN
                             '20' || RIGHT(fire_date_str, 2) || '-' ||
                             CASE LOWER(SUBSTRING(fire_date_str, 4, 3))
@@ -205,7 +205,7 @@ def reconstruct_stable_fires(con: duckdb.DuckDBPyConnection, drive_silver_dir: P
                     END AS DATE
                 ) as fire_date
             FROM reconstructed_fires
-            WHERE fire_x_coord IS NOT NULL 
+            WHERE fire_x_coord IS NOT NULL
               AND fire_y_coord IS NOT NULL
               AND fire_street IS NOT NULL
               AND TRIM(fire_street) != ''
@@ -239,7 +239,7 @@ def match_fires_to_properties(con: duckdb.DuckDBPyConnection, max_distance_m: in
         con.execute(f"""
             CREATE OR REPLACE TABLE fire_property_matches AS
             WITH address_matches AS (
-                SELECT 
+                SELECT
                     f.*,
                     p.chr_number,
                     p.address as property_address,
@@ -248,43 +248,43 @@ def match_fires_to_properties(con: duckdb.DuckDBPyConnection, max_distance_m: in
                     p.geo_coord_y_source as property_y,
                     -- Calculate Euclidean distance in meters (UTM coordinates are in meters)
                     SQRT(
-                        POWER(f.fire_x_coord - p.geo_coord_x_source, 2) + 
+                        POWER(f.fire_x_coord - p.geo_coord_x_source, 2) +
                         POWER(f.fire_y_coord - p.geo_coord_y_source, 2)
                     ) as distance_meters,
                     -- Score the address match quality (handle .0 suffix)
-                    CASE 
+                    CASE
                         WHEN LOWER(p.address) = LOWER(
                             f.fire_street || ' ' || f.fire_house_number
                         ) THEN 100
                         WHEN LOWER(p.address) = LOWER(
                             f.fire_street || ' ' || REGEXP_REPLACE(f.fire_house_number, '\\.0$', '')
                         ) THEN 100
-                        WHEN LOWER(p.address) LIKE '%' || LOWER(f.fire_street) || '%' 
-                             AND LOWER(p.address) LIKE '%' || 
+                        WHEN LOWER(p.address) LIKE '%' || LOWER(f.fire_street) || '%'
+                             AND LOWER(p.address) LIKE '%' ||
                              LOWER(REGEXP_REPLACE(f.fire_house_number, '\\.0$', '')) || '%' THEN 90
                         WHEN LOWER(p.address) LIKE '%' || LOWER(f.fire_street) || '%' THEN 70
                         ELSE 0
                     END as address_match_score
                 FROM cleaned_fires f
-                JOIN chr_properties p 
+                JOIN chr_properties p
                     ON (LOWER(p.address) LIKE '%' || LOWER(f.fire_street) || '%'
                         OR LOWER(f.fire_street) LIKE '%' || LOWER(SPLIT_PART(p.address, ' ', 1)) || '%')
-                    AND p.geo_coord_x_source IS NOT NULL 
+                    AND p.geo_coord_x_source IS NOT NULL
                     AND p.geo_coord_y_source IS NOT NULL
                     AND LOWER(p.municipality_name) = LOWER(f.fire_municipality)
             ),
             best_matches AS (
                 SELECT *,
                     ROW_NUMBER() OVER (
-                        PARTITION BY fire_date_str, fire_x_coord, fire_y_coord 
+                        PARTITION BY fire_date_str, fire_x_coord, fire_y_coord
                         ORDER BY address_match_score DESC, distance_meters ASC
                     ) as rn
-                FROM address_matches 
+                FROM address_matches
                 WHERE distance_meters <= {max_distance_m}
                   AND address_match_score >= 70  -- Require reasonable address match
             )
             SELECT *
-            FROM best_matches 
+            FROM best_matches
             WHERE rn = 1  -- Only the best match per fire
         """)
 
@@ -293,7 +293,7 @@ def match_fires_to_properties(con: duckdb.DuckDBPyConnection, max_distance_m: in
         if match_count > 0:
             # Get statistics
             stats = con.execute("""
-                SELECT 
+                SELECT
                     AVG(distance_meters)::DECIMAL(10,1) as avg_distance,
                     MEDIAN(distance_meters)::DECIMAL(10,1) as median_distance,
                     MAX(distance_meters)::DECIMAL(10,1) as max_distance
@@ -389,7 +389,7 @@ def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List
         # Start events
         if date_cols.get("start"):
             parts.append(f"""
-            SELECT 
+            SELECT
                 {chr_col} as chr_number,
                 'animal_welfare' as event_source,
                 'intervention_start' as event_type,
@@ -407,7 +407,7 @@ def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List
         # End events (if we have end dates)
         if date_cols.get("end"):
             parts.append(f"""
-            SELECT 
+            SELECT
                 {chr_col} as chr_number,
                 'animal_welfare' as event_source,
                 'intervention_end' as event_type,
@@ -462,14 +462,14 @@ def create_vet_events_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str
             return []
 
         part = f"""
-        SELECT 
+        SELECT
             CAST({chr_col} AS BIGINT) as chr_number,
             'chr_veterinary' as event_source,
             'disease_status_change' as event_type,
-            CASE 
-                WHEN {disease_col} IS NOT NULL AND {status_col} IS NOT NULL 
+            CASE
+                WHEN {disease_col} IS NOT NULL AND {status_col} IS NOT NULL
                 THEN CAST({disease_col} AS VARCHAR) || ' - ' || CAST({status_col} AS VARCHAR)
-                WHEN {disease_col} IS NOT NULL 
+                WHEN {disease_col} IS NOT NULL
                 THEN CAST({disease_col} AS VARCHAR)
                 ELSE 'Veterinary status change'
             END as event_description,
@@ -507,12 +507,12 @@ def create_tail_cutting_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[s
             return []
 
         part = f"""
-        SELECT 
+        SELECT
             {chr_col} as chr_number,
             'pig_tail_cutting' as event_source,
             'control_inspection' as event_type,
             'Tail cutting control inspection' as event_description,
-            'Tail_Cutting' as event_category,  
+            'Tail_Cutting' as event_category,
             'Pig' as species,
             TRY_CAST({date_col} AS TIMESTAMP) as event_date,
             NULL as end_date,
@@ -552,10 +552,10 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
         # Certificate events (if we have certificate data)
         if cert_date_col and health_col:
             parts.append(f"""
-            SELECT 
+            SELECT
                 {chr_col} as chr_number,
                 'spf_su_certificates' as event_source,
-                CASE 
+                CASE
                     WHEN {cert_approved_col} = false THEN 'certificate_rejected'
                     WHEN {health_col} LIKE 'Under godk.%' THEN 'under_approval'
                     ELSE 'certificate_issued'
@@ -587,7 +587,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
 
             for disease_name, disease_marker in disease_types:
                 parts.append(f"""
-                SELECT 
+                SELECT
                     {chr_col} as chr_number,
                     'spf_su_diseases' as event_source,
                     'disease_status' as event_type,
@@ -598,7 +598,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                     NULL as end_date,
                     'spf_su_herds' as source_file
                 FROM spf_su_herds
-                WHERE {chr_col} IS NOT NULL 
+                WHERE {chr_col} IS NOT NULL
                   AND {health_col} LIKE '%{disease_marker}%'
                 """)
 
@@ -610,7 +610,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
 
             for san_name, san_marker in sanitation_types:
                 parts.append(f"""
-                SELECT 
+                SELECT
                     {chr_col} as chr_number,
                     'spf_su_sanitation' as event_source,
                     'sanitation_process' as event_type,
@@ -621,7 +621,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                     NULL as end_date,
                     'spf_su_herds' as source_file
                 FROM spf_su_herds
-                WHERE {chr_col} IS NOT NULL 
+                WHERE {chr_col} IS NOT NULL
                   AND {health_col} LIKE '%{san_marker}%'
                 """)
 
@@ -661,7 +661,7 @@ def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[st
             return []
 
         part = f"""
-        SELECT 
+        SELECT
             {chr_col} as chr_number,
             'stable_fires' as event_source,
             'stable_fire' as event_type,
@@ -887,7 +887,7 @@ def create_veterinary_timeline(
 
         # Get summary statistics
         summary = con.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_events,
                 COUNT(DISTINCT chr_number) as unique_chrs,
                 MIN(event_date) as earliest_event,
@@ -905,7 +905,7 @@ def create_veterinary_timeline(
         # Create summary table by source
         con.execute("""
             CREATE OR REPLACE TABLE timeline_summary AS
-            SELECT 
+            SELECT
                 event_source,
                 COUNT(*) as event_count,
                 COUNT(DISTINCT chr_number) as unique_chrs,

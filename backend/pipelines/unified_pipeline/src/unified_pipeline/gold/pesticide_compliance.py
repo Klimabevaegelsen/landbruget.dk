@@ -12,7 +12,7 @@ detect violations across the entire agricultural sector.
 
 THE BUSINESS PROBLEM:
 ====================
-- BMD database contains restriction dates for pesticide products 
+- BMD database contains restriction dates for pesticide products
   (frist_for_anvendelse_og_besiddelse)
 - Agricultural companies report pesticide applications with dates
 - We need to identify: "Which companies used restricted pesticides after the restriction date?"
@@ -322,7 +322,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             self.gcs_access.query_parquet_native(
                 latest_path,
                 """
-                SELECT 
+                SELECT
                     registrerings_nr as registration_number,
                     produktnavn as product_name,
                     aktivstofnavn_e as active_substances,
@@ -346,7 +346,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             with self.gcs_access._temp_download(latest_path) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE bmd_data AS
-                    SELECT 
+                    SELECT
                         registrerings_nr as registration_number,
                         produktnavn as product_name,
                         aktivstofnavn_e as active_substances,
@@ -409,7 +409,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         with self.gcs_access._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pesticide_applications AS
-                SELECT 
+                SELECT
                     -- Use CVR from disaggregated data (standardized)
                     cvr_number,
                     PesticideName as pesticide_name,
@@ -479,7 +479,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         with self.gcs_access._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE agricultural_fields AS
-                SELECT 
+                SELECT
                     field_uuid,
                     field_id,
                     CAST(crop_code AS VARCHAR) as crop_code,
@@ -529,7 +529,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         # Get unique crop-pesticide combinations that need dosage limits
         combinations = self.conn.execute("""
-            SELECT DISTINCT 
+            SELECT DISTINCT
                 COALESCE(f.crop_code, 'UNKNOWN') as crop_code,
                 a.pesticide_registration_number
             FROM pesticide_applications a
@@ -659,7 +659,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # 1. POTENTIAL_VIOLATION: Restriction date is before the agricultural year (already restricted when applied)
         # 2. WITHDRAWN_PRODUCT_USE: Product status indicates withdrawal/expiry
         compliance_query = f"""
-        SELECT 
+        SELECT
             -- Essential field and pesticide information only
             a.field_uuid,
             a.agricultural_year,
@@ -678,12 +678,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             COALESCE(d.max_dosage_app, NULL) as api_max_dosage_per_ha,
             COALESCE(d.product_unit, NULL) as api_dosage_unit,
             -- Calculate dosage per hectare for comparison
-            CASE 
+            CASE
                 WHEN a.allocated_area_ha > 0 THEN a.dosage_quantity / a.allocated_area_ha
                 ELSE NULL
             END as actual_dosage_per_ha,
             -- Dosage compliance status
-            CASE 
+            CASE
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
                 WHEN a.dosage_unit != d.product_unit THEN 'UNIT_MISMATCH'
                 WHEN a.allocated_area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
@@ -692,18 +692,18 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 ELSE 'MAJOR_OVERDOSE'
             END as dosage_compliance_status,
             -- Dosage ratio (actual / allowed)
-            CASE 
-                WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0 AND a.allocated_area_ha > 0 
-                     AND a.dosage_unit = d.product_unit THEN 
+            CASE
+                WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0 AND a.allocated_area_ha > 0
+                     AND a.dosage_unit = d.product_unit THEN
                     (a.dosage_quantity / a.allocated_area_ha) / d.max_dosage_app
                 ELSE NULL
             END as dosage_ratio,
             -- Categorize compliance status
-            CASE 
+            CASE
                 WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'TIMING_VIOLATION'
                 WHEN b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet' THEN 'WITHDRAWN_PRODUCT_USE'
                 WHEN d.max_dosage_app IS NOT NULL AND a.allocated_area_ha > 0 AND a.dosage_quantity IS NOT NULL
-                     AND a.dosage_unit = d.product_unit 
+                     AND a.dosage_unit = d.product_unit
                      AND (a.dosage_quantity / a.allocated_area_ha) > d.max_dosage_app THEN 'DOSAGE_VIOLATION'
                 ELSE 'COMPLIANT'
             END as compliance_status,
@@ -714,7 +714,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registration_number
         LEFT JOIN agricultural_fields f ON a.field_uuid = f.field_uuid
         LEFT JOIN dosage_limits d ON (
-            f.crop_code = d.crop_code 
+            f.crop_code = d.crop_code
             AND a.pesticide_registration_number = d.registration_number
         )
         WHERE a.agricultural_year = '{ag_year}'

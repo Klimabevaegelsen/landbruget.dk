@@ -66,7 +66,8 @@ class SilverStorageManager(DuckDBProcessor):
         # Store timestamp for use in create_output_directory
         # The actual directory creation happens in create_output_directory based on subfolder
         if self.storage_manager.storage_type.lower() == "gcs":
-            # GCS storage - use empty path as base since base_path already includes the silver structure
+            # GCS storage - use empty path as base since base_path already includes
+            # the silver structure
             # This prevents the nested silver/silver/... issue
             run_dir = Path("")
         else:
@@ -86,7 +87,8 @@ class SilverStorageManager(DuckDBProcessor):
 
         Args:
             run_dir: Run directory path (silver/)
-            source_subfolder: Optional subfolder name (will be reorganized to silver/{subfolder_name}/{timestamp})
+            source_subfolder: Optional subfolder name (will be reorganized to
+                silver/{subfolder_name}/{timestamp})
             content_type: Optional content type descriptor
 
         Returns:
@@ -180,7 +182,7 @@ class SilverStorageManager(DuckDBProcessor):
 
                     # Convert other columns to string to avoid PyArrow issues
                     self.conn.execute(f"""
-                        UPDATE {temp_table}_clean 
+                        UPDATE {temp_table}_clean
                         SET {col_name} = CAST({col_name} AS VARCHAR)
                     """)
 
@@ -208,7 +210,7 @@ class SilverStorageManager(DuckDBProcessor):
                     table_name = temp_table
 
                 self.conn.execute(f"""
-                    COPY {table_name} TO '{csv_path}' 
+                    COPY {table_name} TO '{csv_path}'
                     (FORMAT CSV, HEADER true)
                 """)
 

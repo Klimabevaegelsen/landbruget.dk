@@ -178,9 +178,9 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             # Flatten the properties JSON into individual columns
             # First, get the column names from the properties
             sample_properties = self.conn.execute(f"""
-                SELECT properties 
-                FROM {table_name} 
-                WHERE properties IS NOT NULL 
+                SELECT properties
+                FROM {table_name}
+                WHERE properties IS NOT NULL
                 LIMIT 1
             """).fetchone()
 
@@ -197,7 +197,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 # Recreate table with flattened properties
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {table_name}_final AS
-                    SELECT 
+                    SELECT
                         {", ".join(column_extractions)},
                         geometry,
                         current_timestamp as processed_at,
@@ -212,7 +212,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 # If no properties, just add metadata columns
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {table_name}_final AS
-                    SELECT 
+                    SELECT
                         geometry,
                         current_timestamp as processed_at,
                         'validated' as data_quality
@@ -258,7 +258,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             # Create processed table with standardized columns
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {processed_table} AS
-                SELECT 
+                SELECT
                     {", ".join(select_parts)},
                     current_timestamp as processed_at,
                     'validated' as data_quality
@@ -354,7 +354,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
 
             # Check geometry validity
             invalid_geom_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {table_name} 
+                SELECT COUNT(*) FROM {table_name}
                 WHERE geometry IS NULL OR NOT ST_IsValid(geometry)
             """).fetchone()[0]
 
@@ -373,7 +373,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
 
             # Check coordinate bounds (should be in Denmark after transformation to WGS84)
             bounds = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     MIN(ST_XMin(geometry)) as min_x,
                     MAX(ST_XMax(geometry)) as max_x,
                     MIN(ST_YMin(geometry)) as min_y,

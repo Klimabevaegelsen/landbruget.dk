@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.log_util import Logger
 
-from .area_validation import FieldAreaValidator
+from .area_validation import FieldAreaValidator, ValidationError
 from .config import CONFIG
 
 
@@ -163,13 +163,13 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
             # Handle validation failure
             if not validation_result.is_valid:
                 if self.validation_config.fail_on_validation_error:
-                    raise ValidationException(validation_result)
+                    raise ValidationError(validation_result)
                 else:
                     self.log.warning(
                         f"⚠️ Area validation failed but continuing: {validation_result.validation_message}"
                     )
 
-        except ValidationException:
+        except ValidationError:
             raise  # Re-raise validation exceptions
         except Exception as e:
             error_msg = f"❌ Area validation error for {self.stage_name}: {str(e)}"

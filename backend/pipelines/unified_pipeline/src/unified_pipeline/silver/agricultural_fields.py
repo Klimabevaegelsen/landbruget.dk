@@ -495,7 +495,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 sql_query = f"""
                     CREATE OR REPLACE TABLE {final_table_name} AS
-                    SELECT 
+                    SELECT
                         {select_clause},
                         {year} as year,
                         ST_GeomFromGeoJSON(geometry_json) as geometry,
@@ -576,7 +576,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         # Read data with support for in-memory passing
                         if bronze_data is not None:
                             self.log.info("Using bronze data from memory (in-memory data passing)")
-                            # ✅ MIGRATION: Bronze data structure: 
+                            # ✅ MIGRATION: Bronze data structure:
                             # {"fields": {year: raw_data_list}, "blocks": {year: raw_data_list}}
                             if isinstance(bronze_data, dict):
                                 # Map dataset names to bronze data keys
