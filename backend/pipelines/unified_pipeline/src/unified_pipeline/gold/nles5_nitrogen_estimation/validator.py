@@ -705,7 +705,7 @@ class NLES5Validator:
                     AVG(area_ha) as avg_area_ha,
                     COUNT(CASE WHEN crop_name IS NOT NULL THEN 1 END) as fields_with_crop,
                     COUNT(DISTINCT crop_name) as unique_crops,
-                    COUNT(CASE WHEN geometry IS NOT NULL THEN 1 END) as fields_with_geometry
+                    COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as fields_with_geometry
                 FROM agricultural_fields
             """).fetchone()
             

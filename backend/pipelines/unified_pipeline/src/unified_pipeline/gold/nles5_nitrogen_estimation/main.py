@@ -1393,33 +1393,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     ) -> str:
         """Load agricultural fields data for specific batch years."""
         try:
-            # Calculate required data years for the batch (include previous years for NLES5)
-            all_available_years = self._get_available_fvm_marker_years()
-            required_years = self._calculate_required_data_years(batch_years, all_available_years)
-            
-            self.log.info(f"📅 Batch {batch_years} requires data years: {required_years}")
-            
-            # Load FVM data for required years only
-            yearly_tables = {}
-            for year in required_years:
-                year_table = self._read_fvm_marker_data_for_year(year)
-                if year_table:
-                    yearly_tables[year] = year_table
-                    year_count = self.conn.execute(f"SELECT COUNT(*) FROM {year_table}").fetchone()[0]
-                    self.log.info(f"Loaded {year_count:,} FVM fields for year {year}")
-            
-            if not yearly_tables:
-                raise ValueError(f"No FVM marker data loaded for batch years {batch_years}")
-            
-            # Combine yearly data
-            self.log.info(f"Combining {len(yearly_tables)} yearly FVM marker datasets")
-            combined_table = self._combine_yearly_fvm_data(yearly_tables)
-            
-            # Apply crop classifications
-            classified_table = self._prepare_crop_sequences(combined_table, loaded_tables)
-            
-            return classified_table
-            
+            # Delegate to the data loader which has the correct implementation
+            return self.data_loader._load_agricultural_fields_data_for_batch(silver_data, batch_years, loaded_tables)
         except Exception as e:
             self.log.error(f"❌ Failed to load agricultural fields for batch {batch_years}: {e}")
             raise

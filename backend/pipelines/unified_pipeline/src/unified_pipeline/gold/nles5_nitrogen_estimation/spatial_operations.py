@@ -286,20 +286,65 @@ class NLES5SpatialOperations:
                 if field_plan_count > 0:
                     self.log.info(f"Supplementing with {field_plan_count:,} field plan records")
                     
-                    self.conn.execute(f"""
-                        CREATE OR REPLACE TABLE fields_with_field_plan AS
-                        SELECT 
-                            f.*,
-                            COALESCE(f.tn_t_ha, fp.total_n_kg_ha) as final_total_n,
-                            COALESCE(f.mineral_n_foraar, fp.mineral_n_spring) as final_mineral_n_spring,
-                            COALESCE(f.organic_n_hus, fp.organic_n_total) as final_organic_n,
-                            CASE 
-                                WHEN f.nitrogen_data_source IS NOT NULL THEN f.nitrogen_data_source
-                                ELSE 'field_plan'
-                            END as final_nitrogen_source
-                        FROM {field_plan_table} f
-                        LEFT JOIN field_plan fp ON f.field_id = fp.field_id AND f.year = fp.year
-                    """)
+                    # Check if enhanced GKEA-FVM mappings are available (try year-specific tables first)
+                    enhanced_mappings_available = False
+                    enhanced_mappings_table = "gkea_fvm_enhanced_mappings"
+                    try:
+                        # First try to find year-specific enhanced mappings tables
+                        tables = self.conn.execute("""
+                            SELECT table_name 
+                            FROM information_schema.tables 
+                            WHERE table_name LIKE 'gkea_fvm_enhanced_mappings%'
+                            ORDER BY table_name DESC
+                            LIMIT 1
+                        """).fetchall()
+                        
+                        if tables:
+                            enhanced_mappings_table = tables[0][0]
+                            enhanced_count = self.conn.execute(f"SELECT COUNT(*) FROM {enhanced_mappings_table}").fetchone()[0]
+                            enhanced_mappings_available = enhanced_count > 0
+                            if enhanced_mappings_available:
+                                self.log.info(f"Using {enhanced_count:,} enhanced GKEA-FVM mappings from {enhanced_mappings_table}")
+                    except:
+                        enhanced_mappings_available = False
+                    
+                    if enhanced_mappings_available:
+                        # Use enhanced mappings for better field plan data integration
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE fields_with_field_plan AS
+                            SELECT 
+                                f.*,
+                                COALESCE(f.tn_t_ha, fp.total_n_kg_ha) as final_total_n,
+                                COALESCE(f.mineral_n_foraar, fp.mineral_n_spring) as final_mineral_n_spring,
+                                COALESCE(f.organic_n_hus, fp.organic_n_total) as final_organic_n,
+                                CASE 
+                                    WHEN f.nitrogen_data_source IS NOT NULL THEN f.nitrogen_data_source
+                                    WHEN em.match_method = 'agricultural_pattern' THEN 'field_plan_enhanced'
+                                    ELSE 'field_plan'
+                                END as final_nitrogen_source,
+                                COALESCE(em.confidence_score, 1.0) as field_plan_match_confidence
+                            FROM {field_plan_table} f
+                            LEFT JOIN {enhanced_mappings_table} em ON f.field_id = em.fvm_field_id
+                            LEFT JOIN field_plan fp ON em.gkea_field_id = fp.field_id AND f.year = fp.year
+                        """)
+                    else:
+                        # Fallback to direct field_id matching
+                        self.log.info("Enhanced mappings not available - using direct field_id matching")
+                        self.conn.execute(f"""
+                            CREATE OR REPLACE TABLE fields_with_field_plan AS
+                            SELECT 
+                                f.*,
+                                COALESCE(f.tn_t_ha, fp.total_n_kg_ha) as final_total_n,
+                                COALESCE(f.mineral_n_foraar, fp.mineral_n_spring) as final_mineral_n_spring,
+                                COALESCE(f.organic_n_hus, fp.organic_n_total) as final_organic_n,
+                                CASE 
+                                    WHEN f.nitrogen_data_source IS NOT NULL THEN f.nitrogen_data_source
+                                    ELSE 'field_plan'
+                                END as final_nitrogen_source,
+                                1.0 as field_plan_match_confidence
+                            FROM {field_plan_table} f
+                            LEFT JOIN field_plan fp ON f.field_id = fp.field_id AND f.year = fp.year
+                        """)
                     field_plan_table = "fields_with_field_plan"
                 else:
                     self.log.warning("No field plan data available")
@@ -716,7 +761,127 @@ class NLES5SpatialOperations:
         try:
             self.log.info("Creating optimized spatial tables for NLES5 processing")
             
-            # Verify required tables exist
+            # Step 1: Create agricultural_fields_spatial from agricultural_fields
+            # This was missing from the migration - the original code created this table
+            try:
+                batch_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
+                if batch_count == 0:
+                    raise ValueError("agricultural_fields is empty - no agricultural fields data available")
+                
+                self.log.info(f"Creating agricultural_fields_spatial from agricultural_fields ({batch_count:,} records)")
+                
+                # Create the spatial table with properly transformed geometries (adapted for actual schema)
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE agricultural_fields_spatial AS
+                    SELECT
+                        field_id,
+                        field_id as field_uuid,  -- Use field_id as uuid since field_uuid doesn't exist
+                        cvr_number,
+                        area_ha,
+                        crop_code,
+                        crop_name,
+                        year,
+                        block_id,
+                        layer_type,
+                        processed_at,
+                        reported_area_ha,
+                        GB as grundbetaling_eligible,  -- Map GB to expected name
+                        UNNEST(ST_Dump(
+                            ST_Transform(
+                                CASE 
+                                    WHEN ST_IsValid(ST_GeomFromText(geometry_wkt)) THEN ST_GeomFromText(geometry_wkt)
+                                    ELSE ST_MakeValid(ST_GeomFromText(geometry_wkt))
+                                END,
+                                'EPSG:4326',
+                                'EPSG:25832'
+                            )
+                        )).geom as geom,
+                        ST_GeomFromText(geometry_wkt) as geometry,
+                        ST_Area(ST_GeomFromText(geometry_wkt)) as field_area_m2
+                    FROM agricultural_fields
+                    WHERE geometry_wkt IS NOT NULL
+                        AND geometry_wkt != ''
+                        AND (ST_IsValid(ST_GeomFromText(geometry_wkt)) OR ST_MakeValid(ST_GeomFromText(geometry_wkt)) IS NOT NULL)
+                """)
+                
+                spatial_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields_spatial").fetchone()[0]
+                if spatial_count == 0:
+                    raise ValueError("agricultural_fields_spatial is empty after processing - all geometries invalid or missing")
+                
+                self.log.info(f"✅ Created agricultural_fields_spatial: {spatial_count:,} records with valid geometries")
+                
+            except Exception as e:
+                raise ValueError(f"Failed to create agricultural_fields_spatial: {e}")
+            
+            # Step 2: Create dmi_climate_prepared from climate_percolation
+            try:
+                climate_count = self.conn.execute("SELECT COUNT(*) FROM climate_percolation").fetchone()[0]
+                if climate_count == 0:
+                    raise ValueError("climate_percolation is empty - no climate data available")
+                
+                self.log.info(f"Creating dmi_climate_prepared from climate_percolation ({climate_count:,} records)")
+                
+                # Create dmi_climate_prepared from already processed climate data
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE dmi_climate_prepared AS
+                    SELECT
+                        ROW_NUMBER() OVER() as station_id,
+                        CAST(year AS VARCHAR) || '-01-01' as time,
+                        'percolation' as parameter_id,
+                        total_percolation as avg_value,
+                        geometry as geom
+                    FROM climate_percolation
+                    WHERE geometry IS NOT NULL
+                        AND ST_IsValid(geometry)
+                        AND total_percolation IS NOT NULL
+                """)
+                
+                climate_prepared_count = self.conn.execute("SELECT COUNT(*) FROM dmi_climate_prepared").fetchone()[0]
+                if climate_prepared_count == 0:
+                    raise ValueError("dmi_climate_prepared is empty after processing climate_percolation")
+                
+                self.log.info(f"✅ Created dmi_climate_prepared: {climate_prepared_count:,} records with valid geometries")
+                
+            except Exception as e:
+                raise ValueError(f"Failed to create dmi_climate_prepared: {e}")
+            
+            # Step 3: Create soil_types_prepared from soil_types
+            try:
+                soil_count = self.conn.execute("SELECT COUNT(*) FROM soil_types").fetchone()[0]
+                if soil_count == 0:
+                    raise ValueError("soil_types is empty - no soil data available")
+                
+                self.log.info(f"Creating soil_types_prepared from soil_types ({soil_count:,} records)")
+                
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE soil_types_prepared AS
+                    SELECT
+                        soil_code as soil_type,
+                        soil_code,
+                        COALESCE(soil_description, 'Unknown soil type') as soil_description,
+                        15.0 as clay_content,  -- Static value as required by NLES5 model
+                        150.0 as total_soil_n_mg_ha,  -- Static value as required by NLES5 model
+                        UNNEST(ST_Dump(
+                            CASE 
+                                WHEN ST_IsValid(geometry) THEN geometry
+                                ELSE ST_MakeValid(geometry)
+                            END
+                        )).geom as geom
+                    FROM soil_types
+                    WHERE geometry IS NOT NULL
+                        AND (ST_IsValid(geometry) OR ST_MakeValid(geometry) IS NOT NULL)
+                """)
+                
+                soil_prepared_count = self.conn.execute("SELECT COUNT(*) FROM soil_types_prepared").fetchone()[0]
+                if soil_prepared_count == 0:
+                    raise ValueError("soil_types_prepared is empty after processing soil_types")
+                
+                self.log.info(f"✅ Created soil_types_prepared: {soil_prepared_count:,} records with valid geometries")
+                
+            except Exception as e:
+                self.log.warning(f"Failed to create soil_types_prepared: {e} - will use defaults")
+            
+            # Step 4: Verify required tables exist
             required_tables = ["agricultural_fields_spatial", "climate_percolation"]
             for table in required_tables:
                 try:

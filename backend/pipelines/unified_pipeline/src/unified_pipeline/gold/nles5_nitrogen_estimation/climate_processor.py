@@ -38,7 +38,7 @@ class NLES5ClimateProcessor:
         try:
             self.log.info("Processing DMI climate data for percolation calculation")
 
-            # Debug: Check what's in dmi_data
+            # Debug: Check what's in climate_percolation
             dmi_count = self.conn.execute("SELECT COUNT(*) FROM dmi_data").fetchone()[0]
             self.log.info(f"Total DMI data records: {dmi_count:,}")
 
@@ -76,6 +76,7 @@ class NLES5ClimateProcessor:
                     self.log.info(f"🗺️  DMI coordinate analysis: X[{coord_analysis[0]:.6f}, {coord_analysis[1]:.6f}], Y[{coord_analysis[2]:.6f}, {coord_analysis[3]:.6f}]")
 
             # Create climate data table with corrected coordinate and temporal processing
+            # This creates the processed climate_percolation table from raw climate_percolation
             self.conn.execute("""
                 CREATE OR REPLACE TABLE climate_percolation AS
                 WITH combined_data AS (
@@ -297,7 +298,7 @@ class NLES5ClimateProcessor:
 
                 # CRS if available
                 try:
-                    crs_climate = self.conn.execute("SELECT DISTINCT source_crs FROM dmi_data LIMIT 5").fetchall()
+                    crs_climate = self.conn.execute("SELECT DISTINCT source_crs FROM climate_percolation LIMIT 5").fetchall()
                     self.log.info(f"Climate CRS samples: {crs_climate}")
                 except Exception as e:
                     self.log.info(f"Could not fetch climate CRS info: {e}")

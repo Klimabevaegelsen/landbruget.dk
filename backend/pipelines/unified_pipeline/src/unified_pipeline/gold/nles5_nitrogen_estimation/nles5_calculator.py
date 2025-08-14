@@ -528,6 +528,48 @@ class NLES5Calculator:
         try:
             self.log.info("Preparing nitrogen input tables for NLES5 calculations")
 
+            # Step 1: Create nitrogen fixation mapping table (from NLES5 documentation)
+            self.log.info("📋 Creating nitrogen fixation mapping from GLR crop codes...")
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE n_fixation_mapping AS
+                SELECT unnest(codes) as glr_code, fixation_rate
+                FROM (VALUES
+                    (200, [18, 25, 30, 31, 32, 35, 36, 54, 217, 326, 424]),
+                    (100, [7]),
+                    (70, [214, 234]),
+                    (140, [215]),
+                    (140, [171, 173, 273, 277, 288]),
+                    (200, [120, 121]),
+                    (120, [170, 172, 174, 255, 256, 260, 261, 262, 272, 274, 284, 306]),
+                    (60, [247, 258, 266, 267, 268, 276, 285, 286, 287]),
+                    (5, [248, 249, 250, 251, 252, 253, 254, 257, 259, 263, 264, 265, 269, 275, 278, 279, 305, 315, 350, 488]),
+                    (20, [943, 944, 945, 946, 960, 961, 962, 963, 964, 965, 966, 975])
+                ) AS t(fixation_rate, codes)
+            """)
+            
+            # Step 2: Create nitrogen fixation history table
+            self.log.info("📊 Creating nitrogen fixation history from agricultural fields...")
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE n_fixation_history AS
+                WITH n_fixation_by_field_year AS (
+                    SELECT
+                        a.field_id,
+                        a.year,
+                        fix.fixation_rate as nfix_ha  -- NULL if no fixation data for this crop
+                    FROM agricultural_fields a
+                    LEFT JOIN n_fixation_mapping fix ON a.crop_code = fix.glr_code
+                )
+                SELECT
+                    field_id,
+                    year,
+                    nfix_ha,
+                    (
+                        COALESCE(LAG(nfix_ha, 1) OVER (PARTITION BY field_id ORDER BY year), 0.0) +
+                        COALESCE(LAG(nfix_ha, 2) OVER (PARTITION BY field_id ORDER BY year), 0.0)
+                    ) / 2.0 as nfix_prev
+                FROM n_fixation_by_field_year
+            """)
+
             # Check if fertilizer data is available
             try:
                 fertilizer_count = self.conn.execute("SELECT COUNT(*) FROM fertilizer_accounts").fetchone()[0]
@@ -538,22 +580,30 @@ class NLES5Calculator:
 
             # Check if field plan data is available
             try:
-                field_plan_count = self.conn.execute("SELECT COUNT(*) FROM field_plan").fetchone()[0]
-                self.log.info(f"📊 Field plan records available: {field_plan_count:,}")
+                field_plan_data_count = self.conn.execute("SELECT COUNT(*) FROM field_plan_data").fetchone()[0]
+                self.log.info(f"📊 Field plan records available: {field_plan_data_count:,}")
             except Exception:
-                self.log.warning("⚠️  No field_plan table found - will use defaults")
-                field_plan_count = 0
+                self.log.warning("⚠️  No field_plan_data table found - will use defaults")
+                field_plan_data_count = 0
 
             # Check if catch crops data is available
             try:
-                catch_crops_count = self.conn.execute("SELECT COUNT(*) FROM catch_crops").fetchone()[0]
+                catch_crops_count = self.conn.execute("SELECT COUNT(*) FROM catch_crops_data").fetchone()[0]
                 self.log.info(f"📊 Catch crops records available: {catch_crops_count:,}")
             except Exception:
                 self.log.warning("⚠️  No catch_crops table found - will use defaults")
                 catch_crops_count = 0
+                
+            # Check nitrogen fixation data
+            try:
+                nfix_count = self.conn.execute("SELECT COUNT(*) FROM n_fixation_history WHERE nfix_ha IS NOT NULL").fetchone()[0]
+                self.log.info(f"📊 Nitrogen fixation records available: {nfix_count:,}")
+            except Exception:
+                self.log.warning("⚠️  No nitrogen fixation data created")
+                nfix_count = 0
 
             # Create comprehensive nitrogen inputs table
-            self.conn.execute("""
+            self.conn.execute(f"""
                 CREATE OR REPLACE TABLE nitrogen_inputs_prepared AS
                 SELECT
                     f.field_id,
@@ -568,15 +618,12 @@ class NLES5Calculator:
                     COALESCE(fa.organic_n_hus, 0.0) as organic_n_livestock,
                     COALESCE(fa.niveau, 'N/A') as harmoni_level,
                     
-                    -- Field plan data (from field_plan if available)
-                    COALESCE(fp.nfix_ha, 0.0) as nitrogen_fixation,
+                    -- Field plan data (from field_plan_data if available)
+                    COALESCE(nfix.nfix_ha, 0.0) as nitrogen_fixation,
                     
-                    -- Catch crops effect (from catch_crops if available)
-                    CASE 
-                        WHEN cc.field_id IS NOT NULL THEN 1.0
-                        ELSE 0.0
-                    END as has_catch_crops,
-                    COALESCE(cc.catch_crop_type, 'none') as catch_crop_type,
+                    -- Catch crops effect (not implemented - using defaults)
+                    0.0 as has_catch_crops,
+                    'none' as catch_crop_type,
                     
                     -- Calculate total mineral nitrogen
                     COALESCE(fa.mineral_n_foraar, 0.0) + 
@@ -585,24 +632,22 @@ class NLES5Calculator:
                     
                     -- Data quality indicators
                     CASE 
-                        WHEN fa.field_id IS NOT NULL THEN 'real_fertilizer_data'
+                        WHEN fa.cvr_number IS NOT NULL THEN 'real_fertilizer_data'
                         ELSE 'default_fertilizer_data'
                     END as fertilizer_data_quality,
                     
                     CASE 
-                        WHEN fp.field_id IS NOT NULL THEN 'real_field_plan_data'
-                        ELSE 'default_field_plan_data'
-                    END as field_plan_data_quality,
+                        WHEN fp.field_id IS NOT NULL THEN 'real_field_plan_data_data'
+                        ELSE 'default_field_plan_data_data'
+                    END as field_plan_data_data_quality,
                     
-                    CASE 
-                        WHEN cc.field_id IS NOT NULL THEN 'has_catch_crops'
-                        ELSE 'no_catch_crops'
-                    END as catch_crops_data_quality
+                    'no_catch_crops' as catch_crops_data_quality
                     
                 FROM agricultural_fields f
-                LEFT JOIN fertilizer_accounts fa ON f.field_id = fa.field_id AND f.year = fa.year
-                LEFT JOIN field_plan fp ON f.field_id = fp.field_id AND f.year = fp.year  
-                LEFT JOIN catch_crops cc ON f.field_id = cc.field_id AND f.year = cc.year
+                LEFT JOIN fertilizer_accounts fa ON f.cvr_number = fa.cvr_number AND f.year = fa.year
+                LEFT JOIN field_plan_data fp ON f.field_id = fp.field_id AND f.year = fp.year  
+                LEFT JOIN n_fixation_history nfix ON f.field_id = nfix.field_id AND f.year = nfix.year
+                -- Catch crops not implemented (no field_id column in catch crops data)
             """)
 
             # Get preparation statistics
@@ -610,7 +655,7 @@ class NLES5Calculator:
                 SELECT
                     COUNT(*) as total_fields,
                     COUNT(CASE WHEN fertilizer_data_quality = 'real_fertilizer_data' THEN 1 END) as real_fertilizer_count,
-                    COUNT(CASE WHEN field_plan_data_quality = 'real_field_plan_data' THEN 1 END) as real_field_plan_count,
+                    COUNT(CASE WHEN field_plan_data_data_quality = 'real_field_plan_data_data' THEN 1 END) as real_field_plan_data_count,
                     COUNT(CASE WHEN catch_crops_data_quality = 'has_catch_crops' THEN 1 END) as catch_crops_count,
                     AVG(total_nitrogen_quota) as avg_n_quota,
                     AVG(total_mineral_nitrogen) as avg_mineral_n
@@ -768,7 +813,7 @@ class NLES5Calculator:
             self.log.info(f"🧮 Integrating fertilizer data for complete NLES5 calculation (target year: {target_year})")
             
             # Initialize fertilizer table variable
-            fertilizer_table = "fertilizer_history"  # Default table name
+            fertilizer_table = "fertilizer_accounts"  # Use the loaded fertilizer accounts table
             
             # Debug: Check table names and data availability
             self.log.info(f"🔍 Debug fertilizer joining for target year {target_year}:")
@@ -790,9 +835,9 @@ class NLES5Calculator:
             fertilizer_count = self.conn.execute(f"SELECT COUNT(*) FROM {fertilizer_table} WHERE year = {target_year}").fetchone()[0]
             self.log.info(f"   - {fertilizer_table} (year {target_year}): {fertilizer_count:,} records")
             
-            # Check field_plan table
-            field_plan_count = self.conn.execute("SELECT COUNT(*) FROM field_plan").fetchone()[0]
-            self.log.info(f"   - field_plan: {field_plan_count:,} records")
+            # Check field_plan_data table
+            field_plan_data_count = self.conn.execute("SELECT COUNT(*) FROM field_plan_data").fetchone()[0]
+            self.log.info(f"   - field_plan_data: {field_plan_data_count:,} records")
             
             # Continue with the fertilizer integration logic...
             return self._execute_target_year_calculation(percolation_table, target_year, fertilizer_table, result_table)
@@ -818,11 +863,11 @@ class NLES5Calculator:
                 COALESCE(fh.organic_n_hus, 0.0) as organic_n_hus,
                 COALESCE(fh.tn_t_ha, 0.0) as tn_t_ha,
                 -- Join field plan data for additional context
-                COALESCE(fp.jordbundstype, 'Unknown') as field_plan_soil_type,
-                COALESCE(fp.areal, 0.0) as field_plan_area
+                COALESCE(fp.jordbundstype, 'Unknown') as field_plan_data_soil_type,
+                COALESCE(fp.areal, 0.0) as field_plan_data_area
             FROM {percolation_table} f
             LEFT JOIN {fertilizer_table} fh ON f.cvr_number = fh.cvr_number AND fh.year = {target_year}
-            LEFT JOIN field_plan fp ON f.field_id = fp.field_id
+            LEFT JOIN field_plan_data fp ON f.field_id = fp.field_id
             WHERE f.drainage_effect IS NOT NULL
         """)
         

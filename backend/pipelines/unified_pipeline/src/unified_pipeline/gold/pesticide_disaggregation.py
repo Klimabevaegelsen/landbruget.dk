@@ -511,7 +511,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # The _process_year_pair method runs all 4 strategies and returns the count of results
             self.log.info(f"⚙️ Starting disaggregation processing for year {pesticide_year}")
             try:
-                year_results = self._process_year_pair(
+                year_results = await self._process_year_pair(
                     pesticide_year,
                     field_year,
                     agricultural_fields_path,
@@ -970,7 +970,125 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error reading fields data for year {year}: {e}")
             return None
 
-    def _process_year_pair(
+    async def _apply_agricultural_pattern_matching_to_fertilizer(self) -> None:
+        """
+        Apply agricultural pattern matching to enhance GKEA-FVM field matching for better fertilizer allocation.
+        
+        This method integrates the agricultural pattern matcher into the fertilizer disaggregation pipeline
+        to improve field-level matching accuracy. It creates enhanced mappings that can be used to better
+        allocate fertilizer applications to specific fields.
+        """
+        try:
+            # Check if we have any GKEA field plan data available
+            # The agricultural pattern matcher needs GKEA data to work
+            gkea_available = False
+            try:
+                # Look for any GKEA or field plan data that might be loaded
+                gkea_tables = self.duckdb_conn.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_name LIKE '%field_plan%' OR table_name LIKE '%gkea%'
+                """).fetchall()
+                
+                gkea_available = len(gkea_tables) > 0
+                if gkea_available:
+                    gkea_table = gkea_tables[0][0]
+                    self.log.info(f"   Found GKEA table: {gkea_table}")
+                else:
+                    self.log.info("   No GKEA field plan data found - pattern matching requires GKEA data")
+                    
+            except Exception as e:
+                self.log.warning(f"   Could not check for GKEA data: {e}")
+                gkea_available = False
+            
+            if not gkea_available:
+                self.log.info("   Skipping agricultural pattern matching - no GKEA data available")
+                return
+            
+            # Import the agricultural pattern matcher
+            from unified_pipeline.gold.agricultural_pattern_matcher import (
+                run_agricultural_pattern_matching,
+                AgriculturalPatternMatcherConfig
+            )
+            
+            # Configure for fertilizer disaggregation use (conservative settings for production)
+            config = AgriculturalPatternMatcherConfig(
+                min_pattern_score=0.85,  # Higher threshold for fertilizer allocation
+                min_field_score=0.75,    # Conservative field matching
+                max_operations_to_process=1000  # Reasonable limit for performance
+            )
+            
+            self.log.info(f"   Running agricultural pattern matching with marker table")
+            self.log.info(f"   Pattern score threshold: {config.min_pattern_score}")
+            self.log.info(f"   Field score threshold: {config.min_field_score}")
+            
+            # Run the pattern matching using the marker table we just created
+            results = await run_agricultural_pattern_matching(
+                config=config, 
+                db_connection=self.duckdb_conn,
+                fvm_table_name="marker"  # Use the marker table we created
+            )
+            
+            if results.get('matches_found', 0) > 0:
+                matches_found = results['matches_found']
+                self.log.info(f"✅ Agricultural pattern matching found {matches_found:,} additional field matches")
+                
+                # Create enhanced field mappings for fertilizer disaggregation use
+                try:
+                    self.duckdb_conn.execute("""
+                        CREATE OR REPLACE TABLE fertilizer_enhanced_field_mappings AS
+                        SELECT 
+                            gkea_field_id,
+                            fvm_field_id,
+                            'agricultural_pattern' as match_method,
+                            field_similarity_score as confidence_score,
+                            gkea_cvr,
+                            fvm_cvr,
+                            gkea_crop_code,
+                            fvm_crop_code,
+                            gkea_area_ha,
+                            fvm_area_ha
+                        FROM enhanced_gkea_fvm_matches
+                        WHERE field_similarity_score >= 0.75
+                    """)
+                    
+                    enhanced_count = self.duckdb_conn.execute(
+                        "SELECT COUNT(*) FROM fertilizer_enhanced_field_mappings"
+                    ).fetchone()[0]
+                    
+                    self.log.info(f"   Created {enhanced_count:,} enhanced field mappings for fertilizer allocation")
+                    
+                    # Log some sample mappings for verification
+                    sample_mappings = self.duckdb_conn.execute("""
+                        SELECT gkea_field_id, fvm_field_id, confidence_score, match_method
+                        FROM fertilizer_enhanced_field_mappings 
+                        ORDER BY confidence_score DESC 
+                        LIMIT 5
+                    """).fetchall()
+                    
+                    self.log.info("   Sample enhanced mappings:")
+                    for mapping in sample_mappings:
+                        self.log.info(f"     GKEA {mapping[0]} → FVM {mapping[1]} (confidence: {mapping[2]:.3f})")
+                    
+                    # Create company-to-field bridge table to leverage enhanced mappings
+                    self._create_company_field_bridge()
+                        
+                except Exception as mapping_error:
+                    self.log.warning(f"   Could not create enhanced mappings table: {mapping_error}")
+                    
+            else:
+                self.log.info("   No additional field matches found via agricultural pattern matching")
+                
+        except ImportError as e:
+            self.log.warning(f"   Could not import agricultural pattern matcher: {e}")
+            self.log.warning("   Make sure the unified pipeline backend is accessible")
+            
+        except Exception as e:
+            self.log.warning(f"   Agricultural pattern matching failed: {str(e)}")
+            # Don't raise - this is an enhancement, not a requirement
+            pass
+
+    async def _process_year_pair(
         self,
         pesticide_year: int,
         field_year: int,
@@ -1030,7 +1148,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Load both pesticide and field data into a fast in-memory database
             # This makes the complex matching queries run much faster
             self.log.info(f"🔧 Setting up DuckDB for year {pesticide_year}")
-            setup_success = self._setup_duckdb(
+            setup_success = await self._setup_duckdb(
                 agricultural_fields_path, pesticide_applications_path
             )
             if not setup_success:
@@ -1200,7 +1318,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.duckdb_conn.close()
                 self.duckdb_conn = None
 
-    def _setup_duckdb(
+    async def _setup_duckdb(
         self, agricultural_fields_path: str, pesticide_applications_path: str
     ) -> bool:
         """
@@ -1401,6 +1519,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # Drop the temporary table
         self.duckdb_conn.execute("DROP TABLE marker_temp")
         self.log.info("✅ Marker table created successfully")
+        
+        # ENHANCEMENT: Apply agricultural pattern matching to improve field coverage
+        # ========================================================================
+        # This enhances GKEA-FVM field matching which can improve fertilizer allocation accuracy
+        try:
+            self.log.info("🌾 Attempting to enhance field matching with agricultural pattern matching...")
+            await self._apply_agricultural_pattern_matching_to_fertilizer()
+        except Exception as e:
+            self.log.warning(f"⚠️ Agricultural pattern matching failed: {str(e)}")
+            self.log.warning("   Continuing with standard field matching...")
 
         self.log.info(f"🏗️ Creating pesticide table from {pesticide_applications_path}")
 
@@ -2811,6 +2939,99 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         except Exception as e:
             self.log.error(f"Error getting results: {str(e)}")
             return []
+    
+    def _create_company_field_bridge(self) -> None:
+        """Create bridge table to connect company-level fertilizer data with field-level enhanced mappings."""
+        self.log.info("🌉 Creating company-to-field bridge for enhanced matching...")
+        
+        try:
+            # Create a bridge table that connects CVR+crop combinations to enhanced field mappings
+            self.duckdb_conn.execute("""
+                CREATE OR REPLACE TABLE company_field_bridge AS
+                WITH enhanced_field_company_mapping AS (
+                    -- Get company info for enhanced field mappings
+                    SELECT 
+                        efm.gkea_field_id,
+                        efm.fvm_field_id,
+                        efm.confidence_score,
+                        efm.match_method,
+                        m.cvr_number,
+                        m.crop_code,
+                        m.area_ha as field_area,
+                        efm.gkea_area_ha,
+                        efm.fvm_area_ha
+                    FROM fertilizer_enhanced_field_mappings efm
+                    JOIN marker m ON efm.fvm_field_id = m.field_id
+                    WHERE efm.confidence_score >= 0.75  -- High-confidence matches only
+                ),
+                company_crop_enhanced_summary AS (
+                    -- Aggregate enhanced mappings by company and crop
+                    SELECT 
+                        cvr_number,
+                        crop_code,
+                        COUNT(*) as enhanced_field_count,
+                        SUM(field_area) as total_enhanced_area,
+                        AVG(confidence_score) as avg_confidence,
+                        COUNT(CASE WHEN match_method = 'agricultural_pattern' THEN 1 END) as pattern_matched_fields,
+                        STRING_AGG(fvm_field_id, ',' ORDER BY confidence_score DESC) as field_list
+                    FROM enhanced_field_company_mapping
+                    GROUP BY cvr_number, crop_code
+                ),
+                standard_company_crop_summary AS (
+                    -- Get standard company-crop summaries for comparison
+                    SELECT 
+                        cvr_number,
+                        crop_code,
+                        COUNT(*) as total_field_count,
+                        SUM(area_ha) as total_area
+                    FROM marker
+                    WHERE cvr_number IS NOT NULL AND crop_code IS NOT NULL
+                    GROUP BY cvr_number, crop_code
+                )
+                SELECT 
+                    s.cvr_number,
+                    s.crop_code,
+                    s.total_field_count,
+                    s.total_area,
+                    COALESCE(e.enhanced_field_count, 0) as enhanced_field_count,
+                    COALESCE(e.total_enhanced_area, 0.0) as enhanced_area,
+                    COALESCE(e.avg_confidence, 0.0) as avg_mapping_confidence,
+                    COALESCE(e.pattern_matched_fields, 0) as pattern_matched_fields,
+                    COALESCE(e.field_list, '') as enhanced_field_list,
+                    -- Calculate enhancement coverage
+                    CASE 
+                        WHEN e.enhanced_field_count > 0 THEN 
+                            ROUND(e.total_enhanced_area / s.total_area * 100, 2)
+                        ELSE 0.0 
+                    END as enhancement_coverage_pct,
+                    -- Determine if company-crop should use enhanced matching
+                    CASE 
+                        WHEN e.enhanced_field_count > 0 AND e.avg_confidence >= 0.8 THEN TRUE
+                        ELSE FALSE 
+                    END as use_enhanced_matching
+                FROM standard_company_crop_summary s
+                LEFT JOIN company_crop_enhanced_summary e ON s.cvr_number = e.cvr_number AND s.crop_code = e.crop_code
+            """)
+            
+            # Log bridge statistics
+            bridge_stats = self.duckdb_conn.execute("""
+                SELECT 
+                    COUNT(*) as total_company_crops,
+                    COUNT(CASE WHEN use_enhanced_matching THEN 1 END) as enhanced_company_crops,
+                    SUM(enhanced_field_count) as total_enhanced_fields,
+                    AVG(enhancement_coverage_pct) as avg_coverage_pct
+                FROM company_field_bridge
+            """).fetchone()
+            
+            if bridge_stats:
+                total_combinations, enhanced_combinations, enhanced_fields, avg_coverage = bridge_stats
+                self.log.info(f"   Bridge created: {enhanced_combinations:,}/{total_combinations:,} company-crop combinations can use enhanced matching")
+                self.log.info(f"   Enhanced fields: {enhanced_fields:,} fields with improved matching")
+                self.log.info(f"   Average coverage: {avg_coverage:.1f}% of area covered by enhanced mappings")
+            
+        except Exception as e:
+            self.log.warning(f"   Failed to create company-field bridge: {e}")
+            self.log.warning("   Enhanced matching will not be available for disaggregation")
 
     def __del__(self):
         """Clean up DuckDB connection."""
