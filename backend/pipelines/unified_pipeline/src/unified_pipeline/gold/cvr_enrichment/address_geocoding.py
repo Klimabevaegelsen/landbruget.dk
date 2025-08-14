@@ -279,7 +279,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
                                 except json.JSONDecodeError as e:
                                     self.log.warning(
-                                        f"Failed to parse P-number data for P-number {p_number}: {e}"
+                                        f"Failed to parse P-number data for P-number "
+                                        f"{p_number}: {e}"
                                     )
                                     continue
 
@@ -683,7 +684,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                         ELSE false
                     END as is_geocoded,
                     json_data as address_data_json,
-                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as 
+                        processing_timestamp,
                     json_extract(json_data, '$.batch_number')::INTEGER as batch_number
                 FROM unnest($1) as t(json_data)
             """,

@@ -47,7 +47,8 @@ class BNBOPreFilter(PreFilteringStageBase):
         raw_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_status_raw").fetchone()[0]
         decomposed_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_status_full").fetchone()[0]
         self.log.info(
-            f"📊 Input: {raw_count:,} BNBO MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+            f"📊 Input: {raw_count:,} BNBO MultiPolygons → "
+            f"{decomposed_count:,} individual polygons after ST_Dump"
         )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
@@ -87,7 +88,10 @@ class BNBOPreFilter(PreFilteringStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_filtered AS
             SELECT
-                ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as bnbo_id,
+                ROW_NUMBER() OVER (
+                    ORDER BY status_category, ST_X(ST_Centroid(geometry)), 
+                             ST_Y(ST_Centroid(geometry))
+                ) as bnbo_id,
                 status_category,
                 geometry,
                 ST_Area_Spheroid(geometry) as bnbo_area_m2
@@ -101,7 +105,8 @@ class BNBOPreFilter(PreFilteringStageBase):
         reduction_pct = (1 - intersecting_count / total_bnbo) * 100
 
         self.log.info(
-            f"🎯 BNBO REDUCTION: {total_bnbo:,} → {intersecting_count:,} polygons ({reduction_pct:.1f}% reduction)"
+            f"🎯 BNBO REDUCTION: {total_bnbo:,} → {intersecting_count:,} "
+            f"polygons ({reduction_pct:.1f}% reduction)"
         )
         self.log.info(f"📐 After ST_Dump: {total_filtered:,} BNBO pieces for downstream processing")
 

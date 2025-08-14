@@ -6,11 +6,10 @@ Handles raw fertiliser data ingestion from local parquet files or GCS.
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 
 from ..base.bronze_base import BronzeJobInterface
 from ..common.base import BronzeJobConfig, ConnectionManager
-
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,9 @@ class FertiliserBronze(BronzeJobInterface):
         
         if self.config.gcs_bucket and self.config.gcs_path:
             # GCS path - would need gsutil or GCS client
-            logger.info(f"Discovering files from GCS: {self.config.gcs_bucket}/{self.config.gcs_path}")
+            logger.info(
+                f"Discovering files from GCS: {self.config.gcs_bucket}/{self.config.gcs_path}"
+            )
             # For now, assume local files are available
             # TODO: Implement GCS file discovery
         

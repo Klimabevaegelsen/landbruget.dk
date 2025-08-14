@@ -23,7 +23,9 @@ class PropertyCadastralMergeGoldConfig(BaseJobConfig):
     name: str = "Property Cadastral Merge Gold"
     dataset: str = "property_cadastral_merged"
     type: str = "gold"
-    description: str = "Merge property owners with cadastral data for business analytics"
+    description: str = (
+        "Merge property owners with cadastral data for business analytics"
+    )
     frequency: str = "weekly"
     bucket: str = os.getenv("GCS_BUCKET")
 
@@ -53,25 +55,31 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
     def __init__(self, config: PropertyCadastralMergeGoldConfig):
         super().__init__(config)
 
-        # Configure DuckDB for large dataset processing with optimal settings for 16GB RAM
-        self.conn.execute("SET memory_limit = '12GB'")  # Use 75% of available 16GB RAM
+        # Configure DuckDB for large dataset processing with optimal settings
+        # for 16GB RAM
+        self.conn.execute("SET memory_limit = '12GB'")  # Use 75% of available
+        # 16GB RAM
         self.conn.execute("SET threads = 4")  # Use all available CPU cores
-        self.conn.execute("SET temp_directory = '/tmp'")  # Use disk for temp storage
+        self.conn.execute("SET temp_directory = '/tmp'")  # Use disk for temp
+        # storage
         self.conn.execute("INSTALL spatial")
         self.conn.execute("LOAD spatial")
 
     def _load_silver_data_streaming(
         self, silver_data: Optional[Dict[str, Any]]
     ) -> tuple[Optional[str], Optional[str]]:
-        """Load property owners and cadastral data paths for streaming processing."""
+        """Load property owners and cadastral data paths for streaming 
+        processing."""
 
         property_path = None
         cadastral_path = None
 
         if silver_data:
-            # Use in-memory data - but this is not recommended for large datasets
+            # Use in-memory data - but this is not recommended for large
+            # datasets
             self.log.warning(
-                "In-memory data passing not recommended for large datasets - using streaming"
+                "In-memory data passing not recommended for large datasets - "
+                "using streaming"
             )
             return None, None
         else:
@@ -105,7 +113,10 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
         return property_path, cadastral_path
 
     def _stream_merge_to_gcs(self, property_path: str, cadastral_path: str) -> Dict[str, Any]:
-        """Perform streaming BFE-based merge and save directly to GCS without loading into memory."""
+        """
+        Perform streaming BFE-based merge and save directly to GCS without
+        loading into memory.
+        """
 
         try:
             self.log.info("Creating property_owners table from GCS parquet file...")
@@ -211,13 +222,20 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                     # Extract CVR numbers from the company_data JSON structure
                     cvr_extraction_query = """
                     SELECT DISTINCT
-                        TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) as cvr_number
+                        TRIM(
+                            CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)
+                        ) as cvr_number
                     FROM merged_properties
                     WHERE company_data IS NOT NULL
                       AND JSON_EXTRACT_STRING(company_data, '$.cvrNummer') IS NOT NULL
-                      AND TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) != ''
-                      AND LENGTH(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR))) = 8
-                      AND REGEXP_MATCHES(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)),
+                      AND TRIM(
+                          CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)
+                      ) != ''
+                      AND LENGTH(
+                          TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR))
+                      ) = 8
+                      AND REGEXP_MATCHES(
+                          TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)),
                                         '^[1-9][0-9]{7}$')
                     ORDER BY cvr_number
                     """
@@ -227,7 +245,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
                     if cvr_numbers:
                         self.log.info(
-                            f"✅ Found {len(cvr_numbers)} unique CVR numbers from property ownership"
+                            f"✅ Found {len(cvr_numbers)} unique CVR numbers from "
+                            f"property ownership"
                         )
 
                         # Save CVR numbers using the collection utility

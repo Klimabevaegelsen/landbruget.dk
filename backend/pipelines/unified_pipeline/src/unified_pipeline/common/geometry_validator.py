@@ -1,8 +1,9 @@
 """
 Geometry validation utilities for the unified pipeline.
 
-This module provides functions for validating and transforming geometries using DuckDB-spatial,
-which offers significant performance improvements over GeoPandas for large datasets.
+This module provides functions for validating and transforming geometries using 
+DuckDB-spatial, which offers significant performance improvements over GeoPandas 
+for large datasets.
 """
 
 import duckdb
@@ -21,11 +22,12 @@ def validate_and_transform_geometries_duckdb(
     geometry_column: str = "geometry",
 ) -> None:
     """
-    Validate and transform geometries using DuckDB-spatial for optimal performance.
+    Validate and transform geometries using DuckDB-spatial for optimal 
+    performance.
 
     This function validates geometries in a DuckDB table, fixes invalid ones,
-    and transforms them to EPSG:4326. It's designed for high-performance processing
-    of large spatial datasets.
+    and transforms them to EPSG:4326. It's designed for high-performance 
+    processing of large spatial datasets.
 
     Args:
         conn: DuckDB connection with spatial extension loaded
@@ -51,13 +53,21 @@ def validate_and_transform_geometries_duckdb(
         logger.info(f"{dataset_name}: Initial features: {initial_count}")
 
         # Check if geometry column exists
-        columns = [row[0] for row in conn.execute(f"DESCRIBE {table_name}").fetchall()]
+        columns = [
+            row[0] for row in conn.execute(f"DESCRIBE {table_name}").fetchall()
+        ]
         if geometry_column not in columns:
-            logger.error(f"{dataset_name}: Geometry column '{geometry_column}' not found")
-            raise ValueError(f"Geometry column '{geometry_column}' not found in table")
+            logger.error(
+                f"{dataset_name}: Geometry column '{geometry_column}' not found"
+            )
+            raise ValueError(
+                f"Geometry column '{geometry_column}' not found in table"
+            )
 
         # Convert string geometries to spatial objects if needed
-        logger.info(f"{dataset_name}: Converting geometries to spatial objects")
+        logger.info(
+            f"{dataset_name}: Converting geometries to spatial objects"
+        )
 
         # Check the actual type of the geometry column
         geom_type_result = conn.execute(f"""
@@ -72,7 +82,9 @@ def validate_and_transform_geometries_duckdb(
 
         # Only convert if we have VARCHAR geometries
         if "VARCHAR" in geom_types:
-            logger.info(f"{dataset_name}: Converting VARCHAR geometries to spatial objects")
+            logger.info(
+                f"{dataset_name}: Converting VARCHAR geometries to spatial objects"
+            )
             conn.execute(f"""
                 UPDATE {table_name} SET
                     {geometry_column} = ST_GeomFromText({geometry_column})
@@ -81,7 +93,8 @@ def validate_and_transform_geometries_duckdb(
             """)
         else:
             logger.info(
-                f"{dataset_name}: Geometries are already spatial objects, skipping conversion"
+                f"{dataset_name}: Geometries are already spatial objects, "
+                "skipping conversion"
             )
 
         # Validate geometries and fix invalid ones
@@ -151,7 +164,8 @@ def validate_and_transform_geometries_duckdb(
 
             if is_wgs84_lon_lat:
                 logger.info(
-                    f"{dataset_name}: Data already in WGS84 (correct lon/lat order) - skipping transformation"
+                    f"{dataset_name}: Data already in WGS84 (correct lon/lat order) - "
+                    f"skipping transformation"
                 )
             elif is_wgs84_lat_lon:
                 logger.info(
@@ -163,16 +177,21 @@ def validate_and_transform_geometries_duckdb(
                 )
                 conn.execute(f"""
                     UPDATE {table_name} SET
-                        {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
+                        {geometry_column} = ST_Transform(
+                            {geometry_column}, 'EPSG:25832', 'EPSG:4326'
+                        )
                     WHERE {geometry_column} IS NOT NULL
                 """)
             else:
                 logger.warning(
-                    f"{dataset_name}: Unknown CRS (X: {min_x:.1f}-{max_x:.1f}, Y: {min_y:.1f}-{max_y:.1f}) - assuming UTM"
+                    f"{dataset_name}: Unknown CRS (X: {min_x:.1f}-{max_x:.1f}, "
+                    f"Y: {min_y:.1f}-{max_y:.1f}) - assuming UTM"
                 )
                 conn.execute(f"""
                     UPDATE {table_name} SET
-                        {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
+                        {geometry_column} = ST_Transform(
+                            {geometry_column}, 'EPSG:25832', 'EPSG:4326'
+                        )
                     WHERE {geometry_column} IS NOT NULL
                 """)
         else:
@@ -224,7 +243,8 @@ def validate_and_transform_geometries_duckdb(
                 if final_bounds:
                     final_min_x, final_max_x, final_min_y, final_max_y = final_bounds
                     logger.info(
-                        f"{dataset_name}: Final coordinates (X: {final_min_x:.3f}-{final_max_x:.3f}, Y: {final_min_y:.3f}-{final_max_y:.3f})"
+                        f"{dataset_name}: Final coordinates (X: {final_min_x:.3f}-"
+                        f"{final_max_x:.3f}, Y: {final_min_y:.3f}-{final_max_y:.3f})"
                     )
             else:
                 logger.info(f"{dataset_name}: Coordinates are in correct order")
@@ -316,7 +336,8 @@ def verify_spatial_join_usage(conn: duckdb.DuckDBPyConnection, query: str) -> bo
         else:
             logger.warning("⚠️ SPATIAL_JOIN operator not used - query may use standard join")
             logger.warning(
-                "💡 Tip: SPATIAL_JOIN requires simple spatial predicates without complex calculations in SELECT"
+                "💡 Tip: SPATIAL_JOIN requires simple spatial predicates "
+                "without complex calculations in SELECT"
             )
             logger.debug(f"Query plan:\n{explain_text}")
 

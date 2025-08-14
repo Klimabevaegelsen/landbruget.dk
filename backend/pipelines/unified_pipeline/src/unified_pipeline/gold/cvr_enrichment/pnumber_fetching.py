@@ -112,7 +112,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         self.log.info("   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(
-            f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}"
+            f"   • Address geocoding: "
+            f"{'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}"
         )
 
     @timed(name="P-number fetching processing")
@@ -442,7 +443,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
                     json_array_length(json_extract(json_data, '$.addresses')) as address_count,
                     json_data as pnumber_data_json,
-                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as 
+                        processing_timestamp,
                     NULL::INTEGER as batch_number  -- No batching
                 FROM unnest($1) as t(json_data)
             """,

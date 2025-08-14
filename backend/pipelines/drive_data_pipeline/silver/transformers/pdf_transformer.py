@@ -174,18 +174,22 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
                     common_cols_list = sorted(list(common_columns))  # Sort for consistency
                     common_cols_str = ", ".join([f'"{col}"' for col in common_cols_list])
 
-                    union_query = " UNION ALL ".join(
-                        [f"SELECT {common_cols_str} FROM {table}" for table in processed_tables]
-                    )
+                    union_parts = [
+                        f"SELECT {common_cols_str} FROM {table}"
+                        for table in processed_tables
+                    ]
+                    union_query = " UNION ALL ".join(union_parts)
                     self.conn.execute(f"CREATE TABLE {final_table} AS {union_query}")
 
                     logger.info(
-                        f"Combined {len(processed_tables)} tables using {len(common_columns)} common columns"
+                        f"Combined {len(processed_tables)} tables using "
+                        f"{len(common_columns)} common columns"
                     )
                 else:
                     # No common columns - just use the first table as fallback
                     logger.warning(
-                        f"No common columns found across {len(processed_tables)} tables, using first table only"
+                        f"No common columns found across {len(processed_tables)} tables, "
+                        f"using first table only"
                     )
                     final_table = processed_tables[0]
 
@@ -271,7 +275,9 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
                             WHEN {escaped_col_name} ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR
                                  {escaped_col_name} ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$'
                             THEN TRY_CAST({escaped_col_name} AS DATE)::VARCHAR
-                            WHEN LOWER({escaped_col_name}) IN ('yes', 'no', 'true', 'false', 'ja', 'nej')
+                            WHEN LOWER({escaped_col_name}) IN (
+                                'yes', 'no', 'true', 'false', 'ja', 'nej'
+                            )
                             THEN CASE LOWER({escaped_col_name})
                                      WHEN 'yes' THEN '1'
                                      WHEN 'true' THEN '1'
@@ -287,21 +293,29 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
                         END AS {clean_col_name}
                     """)
                 elif "INTEGER" in col_type.upper() or "BIGINT" in col_type.upper():
-                    # Handle integer columns - cast to string first, then apply date pattern detection
+                    # Handle integer columns - cast to string first,
+                    # then apply date pattern detection
                     select_parts.append(f"""
                         CASE
-                            WHEN CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR
-                                 CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$'
+                            WHEN CAST({escaped_col_name} AS VARCHAR) ~ 
+                                '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR
+                                 CAST({escaped_col_name} AS VARCHAR) ~ 
+                                 '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$'
                             THEN TRY_CAST(CAST({escaped_col_name} AS VARCHAR) AS DATE)::VARCHAR
                             ELSE CAST({escaped_col_name} AS VARCHAR)
                         END AS {clean_col_name}
                     """)
                 elif "DOUBLE" in col_type.upper() or "FLOAT" in col_type.upper():
                     # Handle float columns - convert to string
-                    select_parts.append(f"CAST({escaped_col_name} AS VARCHAR) AS {clean_col_name}")
+                    select_parts.append(
+                        f"CAST({escaped_col_name} AS VARCHAR) AS {clean_col_name}"
+                    )
                 else:
-                    # Keep other column types as-is but with clean names, cast to string for consistency
-                    select_parts.append(f"CAST({escaped_col_name} AS VARCHAR) AS {clean_col_name}")
+                    # Keep other column types as-is but with clean names,
+                    # cast to string for consistency
+                    select_parts.append(
+                        f"CAST({escaped_col_name} AS VARCHAR) AS {clean_col_name}"
+                    )
 
             # Add metadata columns
             select_parts.append(f"{table_number} AS table_number")
@@ -435,9 +449,10 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
         for pattern, mapped in visa_partial_patterns.items():
             if pattern in normalized_name:
                 # If it contains count/number indicators, add _count suffix
+                count_terms = ["antal", "count", "tal", "tael", "number"]
                 if any(
                     count_term in normalized_name
-                    for count_term in ["antal", "count", "tal", "tael", "number"]
+                    for count_term in count_terms
                 ):
                     return f"{mapped}_count"
                 return mapped

@@ -146,16 +146,21 @@ async def run_all_stages(config: FieldAnalysisStageConfig) -> Dict[str, Any]:
             # Log progress
             elapsed = time.time() - pipeline_start_time
             logger.info(
-                f"📊 Pipeline progress: Stage {stage}/4 completed in {elapsed:.1f} seconds total"
+                f"📊 Pipeline progress: Stage {stage}/4 completed in "
+                f"{elapsed:.1f} seconds total"
             )
 
         except Exception as e:
             elapsed = time.time() - pipeline_start_time
-            logger.error(f"❌ Pipeline failed at Stage {stage} after {elapsed:.1f} seconds: {e}")
+            logger.error(
+                f"❌ Pipeline failed at Stage {stage} after {elapsed:.1f} seconds: {e}"
+            )
             raise
 
     total_time = time.time() - pipeline_start_time
-    logger.info(f"🎉 Complete Field Area Analysis pipeline finished in {total_time:.1f} seconds")
+    logger.info(
+        f"🎉 Complete Field Area Analysis pipeline finished in {total_time:.1f} seconds"
+    )
 
     return {"pipeline_total_time": total_time, "stage_results": all_results}
 
@@ -180,11 +185,14 @@ Examples:
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 --disable-area-validation
   
   # Use custom bucket
-  python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 --job=fields_properties --bucket=my-bucket
+  python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 \
+    --job=fields_properties --bucket=my-bucket
 
 Stage/Job combinations:
-  Stage 0: properties_prefilter, bnbo_prefilter, wetlands_prefilter, water_projects_prefilter (no validation)
-  Stage 1: water_projects_bnbo, water_projects_wetlands, fields_properties, fields_soil_types (validation by default)
+  Stage 0: properties_prefilter, bnbo_prefilter, wetlands_prefilter, \
+           water_projects_prefilter (no validation)
+  Stage 1: water_projects_bnbo, water_projects_wetlands, fields_properties, \
+           fields_soil_types (validation by default)
   Stage 2: fields_bnbo_water, fields_wetland_water (validation by default)
   Stage 3: final_bnbo, final_wetland (validation by default)
   Stage 4: consolidate (validation by default)
@@ -268,9 +276,11 @@ async def main():
         "max_memory_gb": args.max_memory_gb,
         "max_threads": args.max_threads,
         "batch_size": args.batch_size,
-        "enable_area_validation": not args.disable_area_validation,  # Enabled by default, disabled with flag
+        "enable_area_validation": not args.disable_area_validation,
+        # Enabled by default, disabled with flag
         "area_validation_tolerance_pct": args.area_validation_tolerance_pct,
-        "fail_on_validation_error": not args.no_fail_on_validation_error,  # Fails by default, disabled with flag
+        "fail_on_validation_error": not args.no_fail_on_validation_error,
+        # Fails by default, disabled with flag
     }
 
     if args.bucket:
@@ -284,12 +294,14 @@ async def main():
     logger.info(f"   Max Threads: {config.max_threads}")
     logger.info(f"   Batch Size: {config.batch_size:,}")
     logger.info(
-        f"   Area Validation: {'ENABLED (default)' if config.enable_area_validation else 'DISABLED'}"
+        f"   Area Validation: "
+        f"{'ENABLED (default)' if config.enable_area_validation else 'DISABLED'}"
     )
     if config.enable_area_validation:
         logger.info(f"   Validation Tolerance: {config.area_validation_tolerance_pct}%")
         logger.info(
-            f"   Fail on Validation Error: {'YES (default)' if config.fail_on_validation_error else 'NO (warn only)'}"
+            f"   Fail on Validation Error: "
+            f"{'YES (default)' if config.fail_on_validation_error else 'NO (warn only)'}"
         )
 
     try:
@@ -311,14 +323,18 @@ async def main():
                 # Run all jobs in stage
                 result = await run_stage_all_jobs(stage_num, config)
         else:
-            logger.error(f"Invalid stage: {args.stage}. Use 0-4, stage0-stage4, or 'all'")
+            logger.error(
+                f"Invalid stage: {args.stage}. Use 0-4, stage0-stage4, or 'all'"
+            )
             sys.exit(1)
 
         logger.info("🎉 Pipeline execution completed successfully!")
 
         # Print summary
         if "pipeline_total_time" in result:
-            logger.info(f"📊 Total pipeline time: {result['pipeline_total_time']:.1f} seconds")
+            logger.info(
+                f"📊 Total pipeline time: {result['pipeline_total_time']:.1f} seconds"
+            )
         elif "total_time" in result:
             logger.info(f"📊 Stage execution time: {result['total_time']:.1f} seconds")
         elif "execution_time" in result:

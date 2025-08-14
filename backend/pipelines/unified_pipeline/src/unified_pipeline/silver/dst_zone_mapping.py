@@ -1,7 +1,8 @@
 """
 DST Zone Mapping silver layer component for DAGI pipeline.
 
-This module creates a spatial lookup table that maps field geometries to DST (Danmarks Statistik) zones
+This module creates a spatial lookup table that maps field geometries to DST
+(Danmarks Statistik) zones
 by combining DAGI administrative data with DST regional classifications.
 
 The module contains:
@@ -40,7 +41,9 @@ class DSTZoneMappingConfig(BaseJobConfig):
 
     name: str = "DST Zone Spatial Mapping"
     type: str = "dst_zone_mapping"
-    description: str = "Spatial lookup table for mapping field geometries to DST statistical zones"
+    description: str = (
+        "Spatial lookup table for mapping field geometries to DST statistical zones"
+    )
     dataset: str = "dst_zone_mapping"
     bucket: str = "landbrugsdata-raw-data"
 
@@ -75,12 +78,30 @@ class DSTZoneMappingConfig(BaseJobConfig):
                 "landsdele_codes": ["DK021", "DK022"],
                 "description": "Region Zealand (East and West/South Zealand)",
             },
-            "Landsdel Fyn": {"landsdele_codes": ["DK031"], "description": "Funen region"},
-            "Landsdel Sydjylland": {"landsdele_codes": ["DK032"], "description": "South Jutland"},
-            "Landsdel Vestjylland": {"landsdele_codes": ["DK041"], "description": "West Jutland"},
-            "Landsdel Østjylland": {"landsdele_codes": ["DK042"], "description": "East Jutland"},
-            "Region Nordjylland": {"landsdele_codes": ["DK050"], "description": "North Jutland"},
-            "Landsdel Bornholm": {"landsdele_codes": ["DK014"], "description": "Bornholm island"},
+            "Landsdel Fyn": {
+                "landsdele_codes": ["DK031"], 
+                "description": "Funen region"
+            },
+            "Landsdel Sydjylland": {
+                "landsdele_codes": ["DK032"], 
+                "description": "South Jutland"
+            },
+            "Landsdel Vestjylland": {
+                "landsdele_codes": ["DK041"], 
+                "description": "West Jutland"
+            },
+            "Landsdel Østjylland": {
+                "landsdele_codes": ["DK042"], 
+                "description": "East Jutland"
+            },
+            "Region Nordjylland": {
+                "landsdele_codes": ["DK050"], 
+                "description": "North Jutland"
+            },
+            "Landsdel Bornholm": {
+                "landsdele_codes": ["DK014"], 
+                "description": "Bornholm island"
+            },
         },
         description="Mapping of DST regions to DAGI landsdele codes",
     )
@@ -118,10 +139,19 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             # Required DAGI layers for DST mapping
             required_layers = ["landsdele", "regioner", "kommuner"]
 
-            # Map layer-specific column mappings based on actual DAGI silver data structure
+            # Map layer-specific column mappings based on actual DAGI silver
+            # data structure
             layer_column_mapping = {
-                "kommuner": {"code_col": "code", "name_col": "name", "region_col": "region_code"},
-                "regioner": {"code_col": "code", "name_col": "name", "region_col": "nuts2"},
+                "kommuner": {
+                    "code_col": "code", 
+                    "name_col": "name", 
+                    "region_col": "region_code"
+                },
+                "regioner": {
+                    "code_col": "code", 
+                    "name_col": "name", 
+                    "region_col": "nuts2"
+                },
                 "landsdele": {
                     "code_col": "code",  # landsdele actually has a code column
                     "name_col": "name",
@@ -175,7 +205,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                         f"INSERT INTO {layer}_raw VALUES ({placeholders})", values
                                     )
 
-                            # Create standardized table with spatial geometry - use layer-specific column mapping
+                            # Create standardized table with spatial geometry
+                            # use layer-specific column mapping
                             if layer == "kommuner":
                                 code_column = "kode"
                             elif layer == "regioner":
@@ -369,7 +400,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                     ) as tmp_file:
                                         temp_path = tmp_file.name
 
-                                    # Create a temporary view with the selected columns in the GCS connection
+                                    # Create a temporary view with the selected columns
+                                    # in the GCS connection
                                     conn.execute(f"""
                                         CREATE OR REPLACE VIEW temp_layer_view AS
                                         SELECT {select_clause}
@@ -400,7 +432,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                                 except Exception as e:
                                     self.log.warning(
-                                        f"Failed optimized transfer for {layer}, falling back to row-by-row: {e}"
+                                        f"Failed optimized transfer for {layer}, "
+                                        f"falling back to row-by-row: {e}"
                                     )
                                     # Fallback to row-by-row copying
                                     rows = conn.execute(f"""
@@ -511,8 +544,10 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     l.name as landsdel_name,
                     '' as landsdel_dagi_id,
                     l.region_code as dagi_region_code,
-                    l.name as dagi_region_name,  -- Use name as region_name since we don't have separate region names
-                    '' as dagi_region_nuts2,     -- Empty for now since regioner table might not be available
+                    l.name as dagi_region_name,  -- Use name as region_name since we
+                    -- don't have separate region names
+                    '' as dagi_region_nuts2,     -- Empty for now since regioner table
+                    -- might not be available
                     STRING_AGG(dm.dst_region, '|' ORDER BY dm.dst_region) as dst_regions,
                     l.geometry_wkt as geometry,
                     l.area_m2,

@@ -71,9 +71,13 @@ class FinancialDocumentsConfig(BaseJobConfig):
                 self.shared_config.model_copy(update={"test_limit": cli_config.test_limit}),
             )
         if cli_config.max_financial_documents is not None:
-            object.__setattr__(self, "max_financial_documents", cli_config.max_financial_documents)
+            object.__setattr__(
+                self, "max_financial_documents", cli_config.max_financial_documents
+            )
         if cli_config.parse_financial_xml is not None:
-            object.__setattr__(self, "parse_financial_xml", cli_config.parse_financial_xml)
+            object.__setattr__(
+                self, "parse_financial_xml", cli_config.parse_financial_xml
+            )
 
 
 class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface):
@@ -111,7 +115,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         self.log.info("Financial documents step initialized")
         self.log.info("📋 Configuration:")
         self.log.info("   • Processing mode: Single job (no batching)")
-        self.log.info(f"   • Max documents per company: {self.config.max_financial_documents}")
+        self.log.info(
+            f"   • Max documents per company: {self.config.max_financial_documents}"
+        )
         self.log.info(f"   • Parse XML: {self.config.parse_financial_xml}")
         self.log.info(f"   • XML only: {self.config.xml_only}")
 
@@ -142,7 +148,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             table_name = self._save_financial_data(processed_data)
 
             self.log.info(
-                f"Financial documents step completed successfully. Data saved to: {table_name}"
+                f"Financial documents step completed successfully. Data saved to: "
+                f"{table_name}"
             )
             return table_name
 
@@ -160,31 +167,41 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         """
         if self.config.shared_config.enable_independent_execution:
             self.log.info(
-                "Loading company data from latest available file (independent execution mode)"
+                "Loading company data from latest available file "
+                "(independent execution mode)"
             )
         else:
             self.log.info(
-                "Loading company data from company fetching step (pipeline dependency mode)"
+                "Loading company data from company fetching step "
+                "(pipeline dependency mode)"
             )
 
-        # Get input paths from company fetching step (with independent execution support)
+        # Get input paths from company fetching step (with independent
+        # execution support)
         input_paths = get_step_input_paths(
             CVREnrichmentStep.FINANCIAL_DOCUMENTS,
             self.date_pattern,
-            total_batches=5,  # Company fetching creates 5 batch files (ignored in independent mode)
+            total_batches=5,  # Company fetching creates 5 batch files
+                              # (ignored in independent mode)
             bucket=self.config.bucket,
-            enable_independent_execution=self.config.shared_config.enable_independent_execution,
+            enable_independent_execution=(
+                self.config.shared_config.enable_independent_execution
+            ),
             max_days_back=self.config.shared_config.max_days_back_for_inputs,
         )
 
         if not input_paths:
             if self.config.shared_config.enable_independent_execution:
                 raise ValueError(
-                    f"No company data found within {self.config.shared_config.max_days_back_for_inputs} days. "
-                    f"Please run the company fetching step first or disable independent execution."
+                    f"No company data found within "
+                    f"{self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"Please run the company fetching step first or disable "
+                    f"independent execution."
                 )
             else:
-                raise ValueError("No input paths found for financial documents step")
+                raise ValueError(
+                    "No input paths found for financial documents step"
+                )
 
         all_companies = []
 
@@ -197,13 +214,16 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 import os
 
                 if os.getenv("GITHUB_ACTIONS") == "true":
-                    # Use artifact data in GitHub Actions - look for consolidated company data
+                    # Use artifact data in GitHub Actions - look for
+                    # consolidated company data
                     artifact_path = "/tmp/cvr_company_data.parquet"
                     if os.path.exists(artifact_path):
                         self.log.info("Using company data from artifact")
                         local_path = artifact_path
                     else:
-                        self.log.warning(f"Company artifact not found: {artifact_path}")
+                        self.log.warning(
+                            f"Company artifact not found: {artifact_path}"
+                        )
                         continue
 
                     # Load company data from artifact
@@ -212,7 +232,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                         SELECT cvr_number, company_name, company_data_json
                         FROM read_parquet(?)
                         WHERE company_data_json IS NOT NULL
-                    """,
+                        """,
                         [local_path],
                     ).fetchall()
 
@@ -225,7 +245,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             all_companies.append(company_data)
                         except json.JSONDecodeError as e:
                             self.log.warning(
-                                f"Failed to parse company data for CVR {cvr_number}: {e}"
+                                f"Failed to parse company data for CVR "
+                                f"{cvr_number}: {e}"
                             )
                             continue
 
@@ -234,7 +255,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
                 else:
                     # Use GCS temp download for local development
-                    self.log.info(f"Local development - downloading from GCS: {input_path}")
+                    self.log.info(
+                        f"Local development - downloading from GCS: {input_path}"
+                    )
                     with self.gcs_access._temp_download(input_path) as temp_file:
                         # Load company data from temp file
                         result = self.conn.execute(
@@ -242,11 +265,12 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             SELECT cvr_number, company_name, company_data_json
                             FROM read_parquet(?)
                             WHERE company_data_json IS NOT NULL
-                        """,
+                            """,
                             [temp_file],
                         ).fetchall()
 
-                        # Parse company JSON data inside the context manager
+                        # Parse company JSON data inside the context
+                        # manager
                         for cvr_number, company_name, company_json in result:
                             try:
                                 company_data = json.loads(company_json)
@@ -255,12 +279,15 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                                 all_companies.append(company_data)
                             except json.JSONDecodeError as e:
                                 self.log.warning(
-                                    f"Failed to parse company data for CVR {cvr_number}: {e}"
+                                    f"Failed to parse company data for CVR "
+                                    f"{cvr_number}: {e}"
                                 )
                                 continue
 
             except Exception as e:
-                self.log.error(f"Failed to load company data from {input_path}: {e}")
+                self.log.error(
+                    f"Failed to load company data from {input_path}: {e}"
+                )
                 continue
 
         # Process all companies (no batching)
@@ -313,7 +340,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
                 # Download XML content if configured
                 if self.config.parse_financial_xml and docs:
-                    docs = self._download_and_parse_xml_documents(docs, cvr_number)
+                    docs = self._download_and_parse_xml_documents(
+                        docs, cvr_number
+                    )
 
                 if docs:
                     financial_results[cvr_number] = {
@@ -326,17 +355,23 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     successful += 1
                 else:
                     failed += 1
-                    self.log.debug(f"No financial documents found for CVR: {cvr_number}")
+                    self.log.debug(
+                        f"No financial documents found for CVR: {cvr_number}"
+                    )
 
             except Exception as e:
                 failed += 1
-                self.log.error(f"Error fetching financial documents for CVR {cvr_number}: {e}")
+                self.log.error(
+                    f"Error fetching financial documents for CVR {cvr_number}: {e}"
+                )
 
         summary = {
             "total": len(company_batch),
             "successful": successful,
             "failed": failed,
-            "success_rate": successful / len(company_batch) if company_batch else 0,
+            "success_rate": (
+                successful / len(company_batch) if company_batch else 0
+            ),
         }
 
         self.log.info(
@@ -375,8 +410,12 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     if document_url and document_url.endswith(".xml"):
                         self.log.debug(f"Downloading XML from: {document_url}")
 
-                        # Download XML content
-                        xml_content = self.cvr_api_client.download_financial_document(document_url)
+                                        # Download XML content
+                        xml_content = (
+                            self.cvr_api_client.download_financial_document(
+                                document_url
+                            )
+                        )
 
                         # Add XML content to document
                         doc_copy = doc.copy()
@@ -384,17 +423,22 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                         doc_copy["xml_size_bytes"] = len(xml_content)
                         doc_copy["download_success"] = True
 
-                        # Parse financial metrics from XML using proper XBRL parsing
+                        # Parse financial metrics from XML using proper XBRL
+                        # parsing
                         try:
-                            financial_metrics = self._parse_xbrl_financial_data(xml_content)
+                            financial_metrics = (
+                                self._parse_xbrl_financial_data(xml_content)
+                            )
 
                             doc_copy["financial_metrics"] = {
                                 "parse_success": True,
-                                **financial_metrics,  # Add all extracted XBRL metrics
+                                **financial_metrics,  # Add all extracted XBRL
+                                                       # metrics
                             }
                         except Exception as parse_e:
                             self.log.warning(
-                                f"Failed to parse XBRL data for CVR {cvr_number}: {parse_e}"
+                                f"Failed to parse XBRL data for CVR "
+                                f"{cvr_number}: {parse_e}"
                             )
                             doc_copy["financial_metrics"] = {
                                 "parse_success": False,
@@ -416,7 +460,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     enriched_docs.append(doc_copy)
 
             except Exception as e:
-                self.log.warning(f"Failed to download XML document for CVR {cvr_number}: {e}")
+                self.log.warning(
+                    f"Failed to download XML document for CVR {cvr_number}: {e}"
+                )
                 doc_copy = doc.copy()
                 doc_copy["download_success"] = False
                 doc_copy["download_error"] = str(e)
@@ -475,15 +521,21 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             current_instant_context = None
 
             # Look for the most recent duration context
-            duration_contexts = {k: v for k, v in contexts.items() if v["type"] == "duration"}
+            duration_contexts = {
+                k: v for k, v in contexts.items() if v["type"] == "duration"
+            }
             if duration_contexts:
                 sorted_duration = sorted(
-                    duration_contexts.items(), key=lambda x: x[1].get("end_date", ""), reverse=True
+                    duration_contexts.items(),
+                    key=lambda x: x[1].get("end_date", ""),
+                    reverse=True,
                 )
                 current_duration_context = sorted_duration[0][0]
 
             # Look for the most recent instant context
-            instant_contexts = {k: v for k, v in contexts.items() if v["type"] == "instant"}
+            instant_contexts = {
+                k: v for k, v in contexts.items() if v["type"] == "instant"
+            }
             if instant_contexts:
                 sorted_instant = sorted(
                     instant_contexts.items(),
@@ -496,17 +548,27 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             if not current_duration_context:
                 current_duration_context = "c1"
             if not current_instant_context:
-                current_instant_context = "c4" if "c4" in contexts else current_duration_context
+                current_instant_context = (
+                    "c4" if "c4" in contexts else current_duration_context
+                )
 
             # Key financial elements to extract (Danish XBRL taxonomy)
             duration_elements = {
                 # Income Statement items (use duration context)
                 "net_profit_loss": "ProfitLoss",
-                "operating_profit_loss": "ProfitLossFromOrdinaryOperatingActivities",
-                "profit_loss_before_tax": "ProfitLossFromOrdinaryActivitiesBeforeTax",
+                "operating_profit_loss": (
+                    "ProfitLossFromOrdinaryOperatingActivities"
+                ),
+                "profit_loss_before_tax": (
+                    "ProfitLossFromOrdinaryActivitiesBeforeTax"
+                ),
                 "employee_benefits_expense": "EmployeeBenefitsExpense",
                 "average_number_of_employees": "AverageNumberOfEmployees",
-                "depreciation_expense": "DepreciationAmortisationExpenseAndImpairmentLossesOfPropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss",
+                "depreciation_expense": (
+                    "DepreciationAmortisationExpenseAndImpairmentLossesOf"
+                    "PropertyPlantAndEquipmentAndIntangibleAssetsRecognised"
+                    "InProfitOrLoss"
+                ),
                 "other_finance_income": "OtherFinanceIncome",
                 "other_finance_expenses": "OtherFinanceExpenses",
                 "tax_expense": "TaxExpense",
@@ -520,9 +582,15 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 "current_assets": "CurrentAssets",
                 "contributed_capital": "ContributedCapital",
                 "cash_and_cash_equivalents": "CashAndCashEquivalents",
-                "liabilities_other_than_provisions": "LiabilitiesOtherThanProvisions",
-                "shortterm_liabilities_other_than_provisions": "ShorttermLiabilitiesOtherThanProvisions",
-                "longterm_liabilities_other_than_provisions": "LongtermLiabilitiesOtherThanProvisions",
+                "liabilities_other_than_provisions": (
+                    "LiabilitiesOtherThanProvisions"
+                ),
+                "shortterm_liabilities_other_than_provisions": (
+                    "ShorttermLiabilitiesOtherThanProvisions"
+                ),
+                "longterm_liabilities_other_than_provisions": (
+                    "LongtermLiabilitiesOtherThanProvisions"
+                ),
                 "provisions": "Provisions",
                 "property_plant_equipment": "PropertyPlantAndEquipment",
             }
@@ -609,12 +677,17 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             # Add processing metadata
             company_financial["processing_timestamp"] = datetime.now().isoformat()
             company_financial["pipeline_run_id"] = self.date_pattern
-            company_financial["processing_step"] = CVREnrichmentStep.FINANCIAL_DOCUMENTS.value
-            # company_financial["batch_number"] = self.config.batch_number  # No batching
+            company_financial["processing_step"] = (
+                CVREnrichmentStep.FINANCIAL_DOCUMENTS.value
+            )
+            # company_financial["batch_number"] = self.config.batch_number
+            # No batching
 
             # Calculate summary statistics
             documents = company_financial.get("documents", [])
-            xml_documents = [d for d in documents if d.get("download_success")]
+            xml_documents = [
+                d for d in documents if d.get("download_success")
+            ]
 
             company_financial["xml_document_count"] = len(xml_documents)
             company_financial["total_xml_size_bytes"] = sum(
@@ -626,9 +699,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             latest_date = None
 
             for doc in xml_documents:
-                if doc.get("financial_metrics") and doc["financial_metrics"].get("parse_success"):
+                if (
+                    doc.get("financial_metrics")
+                    and doc["financial_metrics"].get("parse_success")
+                ):
                     doc_date = doc.get("reporting_period", {}).get("end_date")
-                    if doc_date and (not latest_date or doc_date > latest_date):
+                    if doc_date and (
+                        not latest_date or doc_date > latest_date
+                    ):
                         latest_date = doc_date
                         latest_metrics = doc["financial_metrics"]
 
@@ -641,10 +719,18 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         summary = {
             "total_companies": len(financial_results),
             "companies_with_documents": len(processed_financial),
-            "total_documents": sum(c.get("document_count", 0) for c in processed_financial),
-            "total_xml_documents": sum(c.get("xml_document_count", 0) for c in processed_financial),
+            "total_documents": sum(
+                c.get("document_count", 0) for c in processed_financial
+            ),
+            "total_xml_documents": sum(
+                c.get("xml_document_count", 0) for c in processed_financial
+            ),
             "companies_with_financial_metrics": len(
-                [c for c in processed_financial if c.get("latest_financial_metrics")]
+                [
+                    c
+                    for c in processed_financial
+                    if c.get("latest_financial_metrics")
+                ]
             ),
             # "batch_number": self.config.batch_number,  # No batching
             # "total_batches": self.config.total_batches,  # No batching
@@ -658,9 +744,10 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         }
 
         self.log.info(
-            f"Processed {summary['companies_with_documents']} companies with financial documents "
-            f"({summary['total_xml_documents']} XML documents, "
-            f"{summary['companies_with_financial_metrics']} with parsed metrics)"
+            f"Processed {summary['companies_with_documents']} companies with "
+            f"financial documents ({summary['total_xml_documents']} XML "
+            f"documents, {summary['companies_with_financial_metrics']} with "
+            f"parsed metrics)"
         )
 
         return processed_data
@@ -668,7 +755,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
     @timed(name="Saving financial data")
     def _save_financial_data(self, processed_data: Dict[str, Any]) -> str:
         """
-        Save processed financial documents data to GCS using batch processing to avoid memory issues.
+        Save processed financial documents data to GCS using batch processing
+        to avoid memory issues.
 
         Args:
             processed_data: Processed financial data
@@ -688,16 +776,19 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
         if financial_data:
             self.log.info(
-                f"🔄 Processing {len(financial_data)} companies in batches to avoid memory issues"
+                f"🔄 Processing {len(financial_data)} companies in batches to "
+                f"avoid memory issues"
             )
 
-            # Process in batches to avoid memory issues (similar to data_consolidation.py)
+            # Process in batches to avoid memory issues (similar to
+            # data_consolidation.py)
             batch_size = 50  # Process 50 companies at a time
             total_companies = len(financial_data)
             num_batches = (total_companies + batch_size - 1) // batch_size
 
             self.log.info(
-                f"📦 Processing {total_companies} companies in {num_batches} batches of {batch_size}"
+                f"📦 Processing {total_companies} companies in {num_batches} "
+                f"batches of {batch_size}"
             )
 
             # Create empty table with correct schema first
@@ -723,32 +814,53 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 batch_data = financial_data[start_idx:end_idx]
 
                 self.log.info(
-                    f"📦 Processing batch {batch_idx + 1}/{num_batches}: companies {start_idx}-{end_idx - 1}"
+                    f"📦 Processing batch {batch_idx + 1}/{num_batches}: "
+                    f"companies {start_idx}-{end_idx - 1}"
                 )
 
                 try:
                     # Convert batch to JSON strings for DuckDB
-                    json_strings = [json.dumps(financial) for financial in batch_data]
+                    json_strings = [
+                        json.dumps(financial) for financial in batch_data
+                    ]
 
                     # Insert batch data into table
                     self.conn.execute(
                         f"""
                         INSERT INTO {table_name}
                         SELECT
-                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                            json_extract(json_data, '$.document_count')::INTEGER as document_count,
-                            json_extract(json_data, '$.xml_document_count')::INTEGER as xml_document_count,
-                            json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as total_xml_size_bytes,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as latest_reporting_date,
+                            json_extract(
+                                json_data, '$.cvr_number'
+                            )::INTEGER as cvr_number,
+                            json_extract(
+                                json_data, '$.company_name'
+                            )::VARCHAR as company_name,
+                            json_extract(
+                                json_data, '$.document_count'
+                            )::INTEGER as document_count,
+                            json_extract(
+                                json_data, '$.xml_document_count'
+                            )::INTEGER as xml_document_count,
+                            json_extract(
+                                json_data, '$.total_xml_size_bytes'
+                            )::INTEGER as total_xml_size_bytes,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as latest_reporting_date,
                             CASE
-                                WHEN json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL
+                                WHEN json_extract(
+                                    json_data, '$.latest_financial_metrics'
+                                ) IS NOT NULL
                                 THEN true
                                 ELSE false
                             END as has_financial_metrics,
                             json_data as financial_data_json,
-                            json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
-                            json_extract(json_data, '$.batch_number')::INTEGER as batch_number
+                            json_extract(
+                                json_data, '$.processing_timestamp'
+                            )::VARCHAR as processing_timestamp,
+                            json_extract(
+                                json_data, '$.batch_number'
+                            )::INTEGER as batch_number
                         FROM unnest($1) as t(json_data)
                     """,
                         [json_strings],
@@ -763,13 +875,18 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
                 except Exception as e:
                     self.log.error(f"Error processing batch {batch_idx + 1}: {e}")
-                    if "Out of Memory" in str(e) or "memory" in str(e).lower():
-                        self.log.warning("⚠️ Memory exhaustion detected - stopping processing")
+                    if (
+                        "Out of Memory" in str(e) or "memory" in str(e).lower()
+                    ):
+                        self.log.warning(
+                            "⚠️ Memory exhaustion detected - stopping processing"
+                        )
                         break
                     raise
 
             self.log.info(
-                f"✅ Created table {table_name} with {len(financial_data)} companies using batch processing"
+                f"✅ Created table {table_name} with {len(financial_data)} "
+                f"companies using batch processing"
             )
         else:
             # Create empty table with schema
@@ -803,10 +920,13 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
         if os.getenv("GITHUB_ACTIONS") == "true":
             self.log.info(
-                "GitHub Actions detected - saving financial data locally for artifact sharing"
+                "GitHub Actions detected - saving financial data locally for "
+                "artifact sharing"
             )
             local_path = "/tmp/cvr_financial_data.parquet"
-            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+            self.conn.execute(
+                f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)"
+            )
             self.log.info(f"Saved financial data locally to {local_path}")
 
         # Save summary data separately
@@ -817,7 +937,10 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
     def _save_summary_data(self, summary: Dict[str, Any]) -> None:
         """Save processing summary data."""
         # No batching - single summary file
-        summary_path = f"gold/{self.config.dataset}/{self.date_pattern}/financial_summary.json"
+        summary_path = (
+            f"gold/{self.config.dataset}/{self.date_pattern}/"
+            f"financial_summary.json"
+        )
 
         self.gcs_access.upload_json(
             data=summary, gcs_path=f"gs://{self.config.bucket}/{summary_path}"
@@ -826,7 +949,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         self.log.info(f"Saved processing summary to {summary_path}")
 
     def _cleanup_memory_after_batch(self) -> None:
-        """Aggressive memory cleanup after processing a batch (copied from data_consolidation.py)."""
+        """Aggressive memory cleanup after processing a batch (copied from
+        data_consolidation.py)."""
         try:
             # DuckDB-specific cleanup
             self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL
@@ -841,7 +965,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             try:
                 # Clear any cached query plans
                 self.conn.execute("PRAGMA cache_size = 0")
-                self.conn.execute("PRAGMA cache_size = -2000")  # Reset to reasonable cache
+                self.conn.execute(
+                "PRAGMA cache_size = -2000"
+            )  # Reset to reasonable cache
 
                 # Force temporary directory cleanup
                 self.conn.execute("PRAGMA temp_store = memory")
@@ -849,7 +975,10 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             except Exception as pragma_e:
                 self.log.debug(f"Pragma cleanup warning: {pragma_e}")
 
-            self.log.debug(f"Memory cleanup: collected {collected} objects, checkpoint completed")
+            self.log.debug(
+                f"Memory cleanup: collected {collected} objects, "
+                f"checkpoint completed"
+            )
 
         except Exception as e:
             self.log.debug(f"Memory cleanup warning: {e}")

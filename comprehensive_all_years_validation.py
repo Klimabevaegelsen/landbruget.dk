@@ -3,9 +3,11 @@
 Comprehensive validation of ALL fertiliser files across ALL years.
 """
 
-import pandas as pd
-from pathlib import Path
 import re
+from pathlib import Path
+
+import pandas as pd
+
 
 def comprehensive_validation():
     """Comprehensive validation of every single fertiliser file."""
@@ -22,7 +24,7 @@ def comprehensive_validation():
     for f in sorted(all_files):
         print(f"  - {f.name}")
     
-    print(f"\n🧪 TESTING ALL 5 GKEA FILES INDIVIDUALLY")
+    print("\n🧪 TESTING ALL 5 GKEA FILES INDIVIDUALLY")
     print("-" * 60)
     
     # Test ALL 5 GKEA files
@@ -70,7 +72,7 @@ def comprehensive_validation():
                 print(f"    Valid CVR format: {cvr_valid}")
             
             # Test areas and field numbers - need to identify correct columns
-            print(f"  🔍 Looking for area and field number patterns:")
+            print("  🔍 Looking for area and field number patterns:")
             
             for col in df.columns[1:10]:  # Check columns 1-10
                 values = sample_data[col].tolist()
@@ -82,7 +84,7 @@ def comprehensive_validation():
                         avg_val = sum(numeric_vals) / len(numeric_vals)
                         if 0.1 <= avg_val <= 100:  # Reasonable hectare range
                             print(f"    {col} (AREA candidate): {values} (avg: {avg_val:.2f})")
-                except:
+                except (ValueError, TypeError, AttributeError):
                     pass
                 
                 # Check if looks like field numbers
@@ -90,7 +92,7 @@ def comprehensive_validation():
                 if field_pattern and not all(str(v).replace('.','').replace(',','').isdigit() for v in values if v):
                     print(f"    {col} (FIELD candidate): {values}")
     
-    print(f"\n🧪 DEEP DIVE: GØDNINGSREGNSKABER FILES")
+    print("\n🧪 DEEP DIVE: GØDNINGSREGNSKABER FILES")
     print("-" * 60)
     
     goedning_files = [f for f in all_files if 'Gødningsregnskaber' in f.name]
@@ -132,7 +134,7 @@ def comprehensive_validation():
                 sample_vals = df[col].dropna().unique()[:5]
                 print(f"  {col}: {list(sample_vals)}")
     
-    print(f"\n🧪 EFTERAFGRØDER VERIFICATION (ALL 4 YEARS)")
+    print("\n🧪 EFTERAFGRØDER VERIFICATION (ALL 4 YEARS)")
     print("-" * 60)
     
     efteraf_files = [f for f in all_files if 'Efterafgrøder' in f.name]

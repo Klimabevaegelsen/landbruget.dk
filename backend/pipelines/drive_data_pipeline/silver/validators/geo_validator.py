@@ -160,7 +160,8 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                                 except Exception:
                                     self.add_error(
                                         result,
-                                        f"Invalid geometry at row {row_num}: Could not determine reason",
+                                        f"Invalid geometry at row {row_num}: "
+                                        f"Could not determine reason",
                                     )
                 except Exception as e:
                     self.add_warning(result, f"Could not validate geometries: {str(e)}")
@@ -174,7 +175,8 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
             if valid_geom_count > 0:
                 self.add_warning(
                     result,
-                    f"CRS validation: Assuming geometries are in EPSG:25832, will transform to {self.target_crs}",
+                    f"CRS validation: Assuming geometries are in EPSG:25832, "
+                    f"will transform to {self.target_crs}",
                 )
 
             # Clean up temporary table
@@ -281,10 +283,18 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                     CASE
                         WHEN {self.geometry_column} IS NULL THEN NULL
                         WHEN ST_IsValid(ST_GeomFromText({self.geometry_column})) THEN
-                            ST_Transform(ST_GeomFromText({self.geometry_column}), 'EPSG:25832', '{self.target_crs}')
+                            ST_Transform(
+                                ST_GeomFromText({self.geometry_column}), 
+                                'EPSG:25832', 
+                                '{self.target_crs}'
+                            )
                         ELSE
                             -- Try to fix invalid geometries
-                            ST_Transform(ST_MakeValid(ST_GeomFromText({self.geometry_column})), 'EPSG:25832', '{self.target_crs}')
+                            ST_Transform(
+                                ST_MakeValid(ST_GeomFromText({self.geometry_column})), 
+                                'EPSG:25832', 
+                                '{self.target_crs}'
+                            )
                     END as {self.geometry_column}
                 FROM {source_table}
             """)

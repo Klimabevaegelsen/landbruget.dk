@@ -166,8 +166,13 @@ class BaseSource(Generic[T], ABC):
         if pipeline_start_env:
             try:
                 # Parse GitHub's ISO timestamp format
-                self.pipeline_start_time = datetime.fromisoformat(pipeline_start_env.replace('Z', '+00:00'))
-                self.log.info(f"Using shared pipeline start time from environment: {self.pipeline_start_time}")
+                self.pipeline_start_time = datetime.fromisoformat(
+                    pipeline_start_env.replace('Z', '+00:00')
+                )
+                self.log.info(
+                    f"Using shared pipeline start time from environment: "
+                    f"{self.pipeline_start_time}"
+                )
             except (ValueError, TypeError) as e:
                 self.log.warning(f"Failed to parse PIPELINE_START_TIME environment variable: {e}")
                 self.pipeline_start_time = datetime.now()
@@ -202,7 +207,8 @@ class BaseSource(Generic[T], ABC):
             # ✅ MIGRATION: Install latest spatial extension with SPATIAL_JOIN operator support
             # Based on DuckDB-spatial PR #545 merged in v1.2.2+
             try:
-                # Force install latest spatial extension to ensure SPATIAL_JOIN operator is available
+                # Force install latest spatial extension to ensure
+                # SPATIAL_JOIN operator is available
                 self.conn.execute("FORCE INSTALL spatial")
                 self.conn.execute("LOAD spatial")
 
@@ -231,7 +237,8 @@ class BaseSource(Generic[T], ABC):
                         )
                     else:
                         self.log.warning(
-                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN operator not detected"
+                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN "
+                            "operator not detected"
                         )
 
                 except Exception as test_e:
@@ -271,10 +278,14 @@ class BaseSource(Generic[T], ABC):
             self.conn.execute("""
                 CREATE OR REPLACE FUNCTION uuid5(namespace, data) AS (
                     SELECT CONCAT(
-                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT(namespace,
+                                          CAST(data AS VARCHAR))), 1, 8), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT(namespace,
+                                          CAST(data AS VARCHAR))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('md5', CONCAT(namespace,
+                                               CAST(data AS VARCHAR))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT(namespace,
+                                                      CAST(data AS VARCHAR))), 17, 3)), '-',
                         SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
                     )
                 )
@@ -288,11 +299,16 @@ class BaseSource(Generic[T], ABC):
                 self.conn.execute("""
                     CREATE OR REPLACE FUNCTION uuid5(namespace, data) AS (
                         SELECT CONCAT(
-                            SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
-                            SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
-                            '5', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
-                            CONCAT('8', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
-                            SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
+                            SUBSTR(md5(CONCAT(namespace,
+                                             CAST(data AS VARCHAR))), 1, 8), '-',
+                            SUBSTR(md5(CONCAT(namespace,
+                                             CAST(data AS VARCHAR))), 9, 4), '-',
+                            '5', SUBSTR(md5(CONCAT(namespace,
+                                                  CAST(data AS VARCHAR))), 13, 3), '-',
+                            CONCAT('8', SUBSTR(md5(CONCAT(namespace,
+                                                         CAST(data AS VARCHAR))), 17, 3)), '-',
+                            SUBSTR(md5(CONCAT(namespace,
+                                             CAST(data AS VARCHAR))), 21, 12)
                         )
                     )
                 """)
@@ -538,7 +554,8 @@ class BaseSource(Generic[T], ABC):
                 # Get row count for logging using shared connection
                 row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                 self.log.info(
-                    f"✅ Successfully loaded {row_count} records using unified connection from {latest_file_name}"
+                    f"✅ Successfully loaded {row_count} records using "
+                    f"unified connection from {latest_file_name}"
                 )
 
                 # Return table name - caller can use self.conn to access it
@@ -1075,7 +1092,8 @@ class BaseSource(Generic[T], ABC):
             stage: Processing stage (should NOT be 'bronze' due to memory constraints)
 
         Note:
-            Bronze stage documentation is not supported due to memory constraints with large raw datasets.
+            Bronze stage documentation is not supported due to memory constraints
+            with large raw datasets.
             Use 'silver', 'gold', or other processed stages instead.
         """
         if not self._standardized_schema_manager:
@@ -1127,7 +1145,8 @@ class BaseSource(Generic[T], ABC):
         self, dataset: str, filter_condition: str, table_name: str = None
     ) -> str:
         """
-        ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table - NO DataFrame conversion.
+        ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table
+        - NO DataFrame conversion.
         """
         gcs_path = self._get_latest_silver_path(dataset)
         table_name = table_name or f"silver_{dataset}_filtered"
@@ -1327,7 +1346,10 @@ class BaseSource(Generic[T], ABC):
             GCS path where data was saved
         """
         # Build GCS path using existing logic
-        gcs_path = f"gs://{bucket}/{stage}/{dataset}_{self.date_pattern}/{self.date_pattern}/{dataset}_{self.date_pattern}.parquet"
+        gcs_path = (
+            f"gs://{bucket}/{stage}/{dataset}_{self.date_pattern}/"
+            f"{self.date_pattern}/{dataset}_{self.date_pattern}.parquet"
+        )
 
         # Use enhanced save method with native acceleration
         native_used = self.save_table_with_native_acceleration(

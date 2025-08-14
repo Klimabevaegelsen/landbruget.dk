@@ -192,8 +192,10 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             COUNT(*) as total_records,
             COUNT(CASE WHEN company_id IS NULL OR company_id = '' THEN 1 END) as missing_company_id,
             COUNT(CASE WHEN year IS NULL THEN 1 END) as missing_year,
-            COUNT(CASE WHEN nationality IS NULL OR nationality = '' THEN 1 END) as missing_nationality,
-            COUNT(CASE WHEN first_permits_count IS NULL OR first_permits_count <= 0 THEN 1 END) as invalid_permits,
+            COUNT(CASE WHEN nationality IS NULL OR nationality = '' THEN 1 END) as 
+                missing_nationality,
+            COUNT(CASE WHEN first_permits_count IS NULL OR first_permits_count <= 0 THEN 1 END) as 
+                invalid_permits,
             COUNT(CASE WHEN year < 2019 OR year > 2025 THEN 1 END) as invalid_year_range
         FROM work_permits
         """).fetchone()

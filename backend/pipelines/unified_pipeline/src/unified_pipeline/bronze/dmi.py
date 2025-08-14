@@ -127,7 +127,10 @@ class DMIApiClient:
         params = {
             "parameterId": parameter_id,
             "limit": 10000,  # Increased limit for monthly data spanning many years
-            "datetime": f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            "datetime": (
+                f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/"
+                f"{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            ),
         }
 
         try:
@@ -208,7 +211,8 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         """
         try:
             self.log.info(
-                f"📡 Fetching DMI monthly grid data for {parameter_id} from {start_time:%Y-%m} to {end_time:%Y-%m}"
+                f"📡 Fetching DMI monthly grid data for {parameter_id} "
+                f"from {start_time:%Y-%m} to {end_time:%Y-%m}"
             )
 
             # Helper to advance one month without pandas
@@ -314,14 +318,16 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         """
         try:
             self.log.info(
-                f"Starting DMI bronze processing for monthly data - parameters: {self.config.parameters}"
+                f"Starting DMI bronze processing for monthly data - "
+                f"parameters: {self.config.parameters}"
             )
 
             # Calculate time range
             start_time, end_time = self._calculate_time_range()
             years_span = end_time.year - start_time.year + 1
             self.log.info(
-                f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} to {end_time.strftime('%Y-%m')} ({years_span} years)"
+                f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} "
+                f"to {end_time.strftime('%Y-%m')} ({years_span} years)"
             )
 
             # Create semaphore to limit concurrent requests

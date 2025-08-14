@@ -15,7 +15,8 @@ from .base import PreFilteringStageBase
 
 
 class WetlandsPreFilter(PreFilteringStageBase):
-    """Pre-filter wetland polygons to only those intersecting with agricultural fields."""
+    """Pre-filter wetland polygons to only those intersecting with 
+    agricultural fields."""
 
     def __init__(self, config=None):
         if config is None:
@@ -33,9 +34,11 @@ class WetlandsPreFilter(PreFilteringStageBase):
         self.log.info("Loading full wetlands dataset (1.6M polygons)...")
         self._load_silver_dataset(CONFIG.wetlands_dataset, "wetlands_raw")
 
-        # CRITICAL: Decompose wetlands with ST_Dump BEFORE spatial join to prevent memory issues
+        # CRITICAL: Decompose wetlands with ST_Dump BEFORE spatial join
+        # to prevent memory issues
         self.log.info(
-            "Decomposing wetland MultiPolygons with ST_Dump to prevent memory overflow..."
+            "Decomposing wetland MultiPolygons with ST_Dump to prevent "
+            "memory overflow..."
         )
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_full AS
@@ -49,7 +52,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
         raw_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_raw").fetchone()[0]
         decomposed_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_full").fetchone()[0]
         self.log.info(
-            f"📊 Input: {raw_count:,} wetland MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+            f"📊 Input: {raw_count:,} wetland MultiPolygons → "
+            f"{decomposed_count:,} individual polygons after ST_Dump"
         )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
@@ -57,7 +61,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
         Pre-filter wetlands using chunked processing to manage memory.
 
         OPTIMIZATION STRATEGY:
-        1. Process wetlands in chunks (100K at a time) - smaller than properties due to complexity
+        1. Process wetlands in chunks (100K at a time) - smaller than 
+           properties due to complexity
         2. Fields (600K) as BUILD side - gets spatial indexed per chunk
         3. Wetlands chunks as PROBE side - processed incrementally
         4. Only keep wetlands that intersect with ANY field
@@ -73,7 +78,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
         num_chunks = (total_wetlands + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"🚀 Pre-filtering {total_wetlands:,} wetlands in {num_chunks} chunks of {chunk_size:,}"
+            f"🚀 Pre-filtering {total_wetlands:,} wetlands in {num_chunks} "
+            f"chunks of {chunk_size:,}"
         )
 
         # Initialize filtered wetlands table
@@ -95,10 +101,12 @@ class WetlandsPreFilter(PreFilteringStageBase):
 
             chunk_start = time.time()
             self.log.info(
-                f"📦 Chunk {chunk_num + 1}/{num_chunks} (offset: {offset:,}) - {progress_pct:.1f}%"
+                f"📦 Chunk {chunk_num + 1}/{num_chunks} (offset: {offset:,}) - "
+                f"{progress_pct:.1f}%"
             )
 
-            # Create wetlands chunk with deterministic ordering to prevent cross-chunk duplicates
+            # Create wetlands chunk with deterministic ordering to prevent
+            # cross-chunk duplicates
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_chunk AS
                 SELECT
@@ -137,7 +145,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
             chunk_time = time.time() - chunk_start
 
             self.log.info(
-                f"  ✅ Chunk {chunk_num + 1}: {chunk_filtered:,}/{chunk_count:,} wetlands kept ({chunk_filtered / chunk_count * 100:.1f}%) - {chunk_time:.1f}s"
+                f"  ✅ Chunk {chunk_num + 1}: {chunk_filtered:,}/{chunk_count:,} "
+                f"wetlands kept ({chunk_filtered / chunk_count * 100:.1f}%) - {chunk_time:.1f}s"
             )
 
             # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
@@ -149,7 +158,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
             SELECT
                 -- Deterministic fragment key based on initial decomposed geometry
                 md5(CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
-                -- Legacy numeric ID retained for backward compatibility (non-deterministic ordering)
+                -- Legacy numeric ID retained for backward compatibility
+                -- (non-deterministic ordering)
                 ROW_NUMBER() OVER (
                     ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
                 ) AS wetland_id,
@@ -162,7 +172,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
         cols = [
             r[0]
             for r in self.conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_filtered'"
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'wetlands_filtered'"
             ).fetchall()
         ]
         if "wetland_key" not in [c.lower() for c in cols]:
@@ -177,7 +188,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
         reduction_pct = (1 - total_intersecting / total_wetlands) * 100
 
         self.log.info(
-            f"🎯 MASSIVE WETLANDS REDUCTION: {total_wetlands:,} → {total_intersecting:,} polygons ({reduction_pct:.1f}% reduction)"
+            f"🎯 MASSIVE WETLANDS REDUCTION: {total_wetlands:,} → "
+            f"{total_intersecting:,} polygons ({reduction_pct:.1f}% reduction)"
         )
         self.log.info(
             f"📐 After ST_Dump: {total_filtered:,} wetland pieces for downstream processing"
@@ -195,7 +207,9 @@ class WetlandsPreFilter(PreFilteringStageBase):
             "reduction_percentage": reduction_pct,
             "processing_time_seconds": processing_time,
             "output_path": output_path,
-            "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 2 wetlands processing",
+            "performance_improvement": (
+                f"{reduction_pct:.1f}% reduction in Stage 2 wetlands processing"
+            ),
         }
 
     def _save_output_data(self, result: Dict[str, Any]):
