@@ -3,8 +3,10 @@
 Verify column mappings for each year of fertiliser data.
 """
 
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+
 
 def verify_each_year():
     """Check the actual column structure for each year and file type."""
@@ -88,7 +90,11 @@ def verify_each_year():
             print(f"   Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
             
             # Show key columns that we care about
-            key_columns = ['cvr_number', 'kommune', 'vir_navn', 'planaar'] if 'planaar' in df.columns else ['cvr_number', 'kommune', 'vir_navn']
+            key_columns = (
+                ['cvr_number', 'kommune', 'vir_navn', 'planaar']
+                if 'planaar' in df.columns
+                else ['cvr_number', 'kommune', 'vir_navn']
+            )
             existing_key_cols = [col for col in key_columns if col in df.columns]
             
             print(f"   📊 Key columns present: {existing_key_cols}")

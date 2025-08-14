@@ -13,8 +13,7 @@ with consistent column names, data types, and unified schemas.
 """
 
 import logging
-from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, Optional
 
 import duckdb
 
@@ -81,7 +80,9 @@ class FertiliserSilver(SilverJobInterface):
             # Create main harmonized table
             harmonized_table = await self.harmonize_fertiliser_data(input_path)
             
-            logger.info(f"Fertiliser data harmonization completed. Created table: {harmonized_table}")
+            logger.info(
+                f"Fertiliser data harmonization completed. Created table: {harmonized_table}"
+            )
             return harmonized_table
             
         except Exception as e:
@@ -167,9 +168,17 @@ class FertiliserSilver(SilverJobInterface):
             conn.execute(create_sql)
             
             # Add indexes for performance
-            conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_year ON {harmonized_table}(year)")
-            conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_cvr ON {harmonized_table}(cvr_number)")
-            conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_source ON {harmonized_table}(data_source)")
+            conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_year ON {harmonized_table}(year)"
+            )
+            conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_cvr "
+                f"ON {harmonized_table}(cvr_number)"
+            )
+            conn.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{self.table_name}_source "
+                f"ON {harmonized_table}(data_source)"
+            )
             
             # Log summary statistics
             summary = conn.execute(f"""
@@ -190,7 +199,9 @@ class FertiliserSilver(SilverJobInterface):
             
             return harmonized_table
     
-    def _process_efterafgroeder_files(self, conn: duckdb.DuckDBPyConnection, input_data_path: str) -> str:
+    def _process_efterafgroeder_files(
+        self, conn: duckdb.DuckDBPyConnection, input_data_path: str
+    ) -> str:
         """Process and harmonize Efterafgrøder (cover crops) files."""
         logger.info("Processing Efterafgrøder files")
         
@@ -256,7 +267,9 @@ class FertiliserSilver(SilverJobInterface):
             
             try:
                 # Check if file exists
-                df_check = conn.execute(f"SELECT COUNT(*) as cnt FROM read_parquet('{file_pattern}')").fetchone()
+                df_check = conn.execute(
+                    f"SELECT COUNT(*) as cnt FROM read_parquet('{file_pattern}')"
+                ).fetchone()
                 if df_check[0] == 0:
                     logger.warning(f"No data found in {file_pattern}")
                     continue
@@ -274,7 +287,9 @@ class FertiliserSilver(SilverJobInterface):
                 ])
                 
                 # Add marknummer if available (2022, 2023)
-                column_names = conn.execute(f"DESCRIBE SELECT * FROM read_parquet('{file_pattern}')").fetchdf()['column_name'].values
+                column_names = conn.execute(
+                    f"DESCRIBE SELECT * FROM read_parquet('{file_pattern}')"
+                ).fetchdf()['column_name'].values
                 if 'marknummer' in column_names:
                     select_columns.append('marknummer')
                 else:
@@ -283,7 +298,9 @@ class FertiliserSilver(SilverJobInterface):
                 # Add mapped columns  
                 for original_col, standard_col in column_mappings.items():
                     if standard_col == 'faktisk_areal_ha' or standard_col == 'omregnet_areal_ha':
-                        select_columns.append(f"CAST(REPLACE({original_col}, ',', '.') as DOUBLE) as {standard_col}")
+                        select_columns.append(
+                            f"CAST(REPLACE({original_col}, ',', '.') as DOUBLE) as {standard_col}"
+                        )
                     else:
                         select_columns.append(f"{original_col} as {standard_col}")
                 
@@ -330,7 +347,7 @@ class FertiliserSilver(SilverJobInterface):
         gkea_files = [
             {
                 'pattern': 'GKEA2021_Markplan_med_Gødningsoplysninger',
-                'journal_col': 'gkea2021_markplan_goedningskvote',  # CORRECTED: First column is journal
+                'journal_col': 'gkea2021_markplan_goedningskvote',  # First column is journal
                 'columns': {
                     'column_1': 'cvr_number',        # CVR (8-digit numbers)
                     'column_5': 'marknummer',        # Marknummer (CORRECTED: was column_6)
@@ -342,7 +359,7 @@ class FertiliserSilver(SilverJobInterface):
             },
             {
                 'pattern': 'GKEA2022_Markplan_med_Gødningsoplysninger',
-                'journal_col': 'gkea2022_markplan_goedningskvote',  # CORRECTED: First column is journal
+                'journal_col': 'gkea2022_markplan_goedningskvote',  # First column is journal
                 'columns': {
                     'column_1': 'cvr_number',        # CVR (8-digit numbers)
                     'column_3': 'marknummer',        # Marknummer (CORRECTED: was column_4)
@@ -354,7 +371,7 @@ class FertiliserSilver(SilverJobInterface):
             },
             {
                 'pattern': 'GKEA2023_Markplan_med_Gødningsoplysninger_Aktindsigt',
-                'journal_col': 'gkea2023_markplan_goedningskvote',  # CORRECTED: First column is journal
+                'journal_col': 'gkea2023_markplan_goedningskvote',  # First column is journal
                 'columns': {
                     'column_1': 'cvr_number',        # CVR (8-digit numbers)
                     'column_3': 'marknummer',        # Marknummer (CORRECTED: was column_4)
@@ -371,13 +388,13 @@ class FertiliserSilver(SilverJobInterface):
                     'column_1': 'cvr_number',        # CVR
                     'column_4': 'marknummer',        # Marknummer
                     'column_5': 'areal_ha',          # Areal (CORRECTED: was column_6)
-                    'column_6': 'harmoni_areal_ha',  # Areal Omregnet Til EA (CORRECTED: was column_14)
+                    'column_6': 'harmoni_areal_ha',  # Areal Omregnet Til EA
                     'column_14': 'hovedafgroede'     # Hoved afgrøde (CORRECTED: was column_5)
                 }
             },
             {
                 'pattern': 'GKEA2024_Markplan_med_Gødningsoplysninger',
-                'journal_col': 'gkea2024_markplan_med_goedningsoplysninger',  # CORRECTED: First column is journal
+                'journal_col': 'gkea2024_markplan_med_goedningsoplysninger',  # First column
                 'columns': {
                     'column_1': 'cvr_number',        # CVR (8-digit numbers)
                     'column_3': 'marknummer',        # Marknummer (CORRECTED: was column_4)
@@ -405,8 +422,13 @@ class FertiliserSilver(SilverJobInterface):
                 
                 # Add mapped columns
                 for original_col, standard_col in column_mappings.items():
-                    if standard_col in ['areal_ha', 'harmoni_areal_ha', 'n_kvote_mark', 'fosfortal']:
-                        select_columns.append(f"CAST(NULLIF(REPLACE({original_col}, ',', '.'), '') as DOUBLE) as {standard_col}")
+                    if standard_col in [
+                        'areal_ha', 'harmoni_areal_ha', 'n_kvote_mark', 'fosfortal'
+                    ]:
+                        select_columns.append(
+                            f"CAST(NULLIF(REPLACE({original_col}, ',', '.'), '') "
+                            f"as DOUBLE) as {standard_col}"
+                        )
                     else:
                         select_columns.append(f"NULLIF(TRIM({original_col}), '') as {standard_col}")
                 
@@ -433,7 +455,9 @@ class FertiliserSilver(SilverJobInterface):
         
         return table_name
     
-    def _process_goedningsregnskaber_files(self, conn: duckdb.DuckDBPyConnection, input_data_path: str) -> str:
+    def _process_goedningsregnskaber_files(
+        self, conn: duckdb.DuckDBPyConnection, input_data_path: str
+    ) -> str:
         """Process Gødningsregnskaber (fertilizer accounts) files.""" 
         logger.info("Processing Gødningsregnskaber files")
         

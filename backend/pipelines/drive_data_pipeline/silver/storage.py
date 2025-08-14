@@ -218,7 +218,10 @@ class SilverStorageManager(DuckDBProcessor):
                 return csv_path
 
             except Exception as csv_error:
-                error_msg = f"Failed to save file {filename}: Parquet failed ({str(e)}), CSV failed ({str(csv_error)})"
+                error_msg = (
+                    f"Failed to save file {filename}: Parquet failed ({str(e)}), "
+                    f"CSV failed ({str(csv_error)})"
+                )
                 logger.error(error_msg)
                 raise StorageError(error_msg) from csv_error
 
