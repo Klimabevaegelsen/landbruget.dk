@@ -83,6 +83,7 @@ class SilverProcessor:
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
         from .transformers.excel_transformer import ExcelTransformer
+        from .transformers.fertiliser_transformer import FertiliserTransformer
         from .transformers.work_permits_transformer import WorkPermitsTransformer
 
         # Initialize transformers map
@@ -92,6 +93,7 @@ class SilverProcessor:
                 use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
                 ocr_language="dan+eng",
             ),
+            "Fertiliser": FertiliserTransformer(),
             "WorkPermits": WorkPermitsTransformer(),
         }
 
