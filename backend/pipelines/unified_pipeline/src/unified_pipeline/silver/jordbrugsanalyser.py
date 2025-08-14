@@ -464,7 +464,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             # Create processed table with spatial geometries
             bronze_conn.execute("""
                 CREATE OR REPLACE TABLE processed_features AS
-                SELECT 
+                SELECT
                     *,
                     ST_GeomFromText(geometry) as geom,
                     ST_IsValid(ST_GeomFromText(geometry)) as is_valid_geometry

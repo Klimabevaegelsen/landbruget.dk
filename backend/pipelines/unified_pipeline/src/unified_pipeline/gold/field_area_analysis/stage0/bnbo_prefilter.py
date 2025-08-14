@@ -37,7 +37,7 @@ class BNBOPreFilter(PreFilteringStageBase):
         self.log.info("Decomposing BNBO MultiPolygons with ST_Dump to prevent memory overflow...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_status_full AS
-            SELECT 
+            SELECT
                 status_category,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM bnbo_status_raw
@@ -86,7 +86,7 @@ class BNBOPreFilter(PreFilteringStageBase):
         self.log.info("Adding unique IDs to filtered BNBO polygons...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_filtered AS
-            SELECT 
+            SELECT
                 ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as bnbo_id,
                 status_category,
                 geometry,

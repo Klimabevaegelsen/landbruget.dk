@@ -293,7 +293,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
             self.conn.execute(
                 f"""
                 CREATE OR REPLACE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     payload,
                     ? as source,
                     ? as year,

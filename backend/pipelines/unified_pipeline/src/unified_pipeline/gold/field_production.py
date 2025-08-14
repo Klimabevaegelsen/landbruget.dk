@@ -107,7 +107,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self._configure_memory_optimizations()
 
     def _configure_memory_optimizations(self):
-        """Configure DuckDB memory optimizations for GitHub Actions environment with 
+        """Configure DuckDB memory optimizations for GitHub Actions environment with
         aggressive resource management."""
         if not self.config.enable_memory_optimizations:
             return
@@ -350,7 +350,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
         try:
             test_query = """
-                EXPLAIN SELECT COUNT(*) 
+                EXPLAIN SELECT COUNT(*)
                 FROM current_year_fields f
                 JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
                 LIMIT 1
@@ -615,11 +615,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.execute("DROP TABLE IF EXISTS final_production_estimates")
             self.conn.execute("""
                 CREATE TABLE final_production_estimates AS
-                SELECT * FROM (VALUES 
-                    ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy', 
+                SELECT * FROM (VALUES
+                    ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy',
                      0.0, 'dummy', 0.0, 'dummy', 'dummy', current_timestamp, 'dummy', 'dummy')
-                ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming, 
-                       landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha, 
+                ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming,
+                       landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha,
                        yield_estimation_method, production_estimate_hkg, production_unit, geometry_wkt, created_at,
                        field_uuid, primary_field_id)
                 WHERE false
@@ -795,7 +795,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             else:
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE year_fields_with_zones AS
-                    SELECT 
+                    SELECT
                         f.field_id,
                         f.block_id,
                         f.cvr_number,
@@ -829,7 +829,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             self.conn.execute("""
                 CREATE OR REPLACE TABLE year_production_estimates AS
-                SELECT 
+                SELECT
                     -- JOIN KEYS
                     f.field_id,
                     f.block_id,
@@ -851,23 +851,23 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         halm1.straw_value,
                         hst77_national.harvest_value
                     ) as yield_estimate_hkg_ha,
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, 
-                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                    CASE
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
+                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL
                         THEN 'dst_region_match'
                         ELSE 'no_yield_data'
                     END as yield_estimation_method,
                     -- PRODUCTION ESTIMATE
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, 
-                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
-                        THEN f.area_ha * COALESCE(hst77.harvest_value, gartn1.horticulture_value, 
+                    CASE
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
+                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL
+                        THEN f.area_ha * COALESCE(hst77.harvest_value, gartn1.horticulture_value,
                                                  fro.seed_value, halm1.straw_value, hst77_national.harvest_value)
                         ELSE NULL
                     END as production_estimate_hkg,
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, 
-                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                    CASE
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
+                                     fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL
                         THEN 'hkg'
                         ELSE NULL
                     END as production_unit,
@@ -879,19 +879,19 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.field_uuid,
                     f.primary_field_id
                 FROM year_fields_with_zones f
-                LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions 
-                    AND hst77.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions
+                    AND hst77.time_period = CAST(f.year AS VARCHAR)
                     AND hst77.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions 
-                    AND gartn1.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions
+                    AND gartn1.time_period = CAST(f.year AS VARCHAR)
                     AND gartn1.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR)
                     AND fro.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions 
-                    AND halm1.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions
+                    AND halm1.time_period = CAST(f.year AS VARCHAR)
                     AND halm1.unit_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_hst77 hst77_national ON hst77_national.area_name ILIKE '%Hele landet%' 
-                    AND hst77_national.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_hst77 hst77_national ON hst77_national.area_name ILIKE '%Hele landet%'
+                    AND hst77_national.time_period = CAST(f.year AS VARCHAR)
                     AND hst77_national.measure_name ILIKE '%udbytte%'
             """)
 
@@ -955,7 +955,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
         self.conn.execute("""
             CREATE TABLE year_fields_with_zones AS
-            SELECT 
+            SELECT
                 NULL::VARCHAR as field_id,
                 NULL::VARCHAR as block_id,
                 NULL::VARCHAR as cvr_number,
@@ -994,7 +994,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Perform spatial join for this batch
             self.conn.execute("""
                 INSERT INTO year_fields_with_zones
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -1055,7 +1055,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Create table based on year (block_id available from 2008+)
         create_query = f"""
             CREATE OR REPLACE TABLE current_year_fields AS
-            SELECT 
+            SELECT
                 {field_id_select},
                 {block_id_select},
                 {cvr_number_select},
@@ -1104,7 +1104,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Create table based on year (block_id available from 2008+)
         create_query = f"""
             CREATE OR REPLACE TABLE current_year_fields AS
-            SELECT 
+            SELECT
                 {field_id_select},
                 {block_id_select},
                 {cvr_number_select},
@@ -1162,13 +1162,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText for spatial indexing
             self.conn.execute("""
                 CREATE OR REPLACE TABLE dst_zones AS
-                SELECT 
+                SELECT
                     landsdel_code,
                     landsdel_name,
                     dst_regions,
                     ST_GeomFromText(geometry) as geometry
                 FROM dst_zones_raw
-                WHERE geometry IS NOT NULL 
+                WHERE geometry IS NOT NULL
                 AND geometry != ''
                 AND geometry != 'NULL'
             """)
@@ -1206,7 +1206,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         try:
             # Get summary statistics
             summary = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
                     COUNT(DISTINCT year) as years_covered,
                     COUNT(DISTINCT crop_type) as crops_covered,
@@ -1243,7 +1243,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             # Summary by year
             year_summary = self.conn.execute("""
-                SELECT 
+                SELECT
                     year,
                     COUNT(*) as year_count,
                     COUNT(production_estimate_hkg) as year_with_production,

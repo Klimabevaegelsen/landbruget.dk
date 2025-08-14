@@ -1526,7 +1526,8 @@ class CVRAPIClient:
                             self.log.debug(f"Successfully parsed P-number: {pnumber}")
                         else:
                             self.log.warning(
-                                f"Parsed P-number data has no p_number field: {list(parsed_data.keys())}"
+                                f"Parsed P-number data has no p_number field: "
+                                f"{list(parsed_data.keys())}"
                             )
                     else:
                         self.log.warning(
@@ -1538,7 +1539,8 @@ class CVRAPIClient:
                     continue
 
             self.log.debug(
-                f"P-number batch parsing completed: {len(results)} successful out of {len(hits)} hits"
+                f"P-number batch parsing completed: {len(results)} successful "
+                f"out of {len(hits)} hits"
             )
             return results
 

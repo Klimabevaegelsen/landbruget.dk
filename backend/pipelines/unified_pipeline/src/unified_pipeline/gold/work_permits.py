@@ -102,7 +102,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             # Create work_permits table from silver parquet files
             create_table_sql = f"""
             CREATE OR REPLACE TABLE work_permits AS
-            SELECT 
+            SELECT
                 company_id,
                 year,
                 nationality,
@@ -144,7 +144,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
 
             # Log basic statistics
             stats_result = self.conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_records,
                 COUNT(DISTINCT company_id) as unique_companies,
                 COUNT(DISTINCT nationality) as unique_nationalities,
@@ -188,7 +188,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
 
         # Check for data quality issues
         quality_checks = self.conn.execute("""
-        SELECT 
+        SELECT
             COUNT(*) as total_records,
             COUNT(CASE WHEN company_id IS NULL OR company_id = '' THEN 1 END) as missing_company_id,
             COUNT(CASE WHEN year IS NULL THEN 1 END) as missing_year,
@@ -231,7 +231,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             ):
                 self.log.info("🧹 Removing invalid records")
                 self.conn.execute("""
-                DELETE FROM work_permits 
+                DELETE FROM work_permits
                 WHERE company_id IS NULL OR company_id = ''
                    OR year IS NULL
                    OR nationality IS NULL OR nationality = ''
@@ -267,7 +267,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
             # Create summary table first
             self.conn.execute(f"""
             CREATE OR REPLACE TABLE work_permits_summary AS
-            SELECT 
+            SELECT
                 '{timestamp}' as processing_timestamp,
                 COUNT(*) as total_records,
                 COUNT(DISTINCT company_id) as unique_companies,

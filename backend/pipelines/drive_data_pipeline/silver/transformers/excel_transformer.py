@@ -244,7 +244,8 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
 
                     sheets_data.append((clean_sheet_name, table_name))
                     logger.debug(
-                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' with {len(df)} rows"
+                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' "
+                        f"with {len(df)} rows"
                     )
 
                 except Exception as e:
@@ -515,7 +516,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Simplified query without complex row filtering to avoid parsing issues
             self.conn.execute(f"""
                 CREATE TABLE {result_table} AS
-                SELECT 
+                SELECT
                     {transformations_sql}
                 FROM {table_name}
                 WHERE 1=1

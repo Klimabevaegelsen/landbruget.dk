@@ -40,7 +40,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         self.log.info("Preparing agricultural fields (keeping original multipolygons)...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -64,7 +64,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         self.log.info("Decomposing soil types with ST_Dump for optimal spatial indexing...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types AS
-            SELECT 
+            SELECT
                 soil_description,  -- Only keep useful Danish soil type classification
                 UNNEST(ST_Dump(geometry)).geom as geometry,
                 ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as soil_area_m2
@@ -81,7 +81,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         # Store input area reference for validation
         if self._should_validate_areas():
             fields_area_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as field_count,
                     SUM(field_area_m2) as total_area
                 FROM agricultural_fields
@@ -120,7 +120,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_intersections AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -151,7 +151,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_meaningful AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -162,7 +162,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 intersection_geometry,
                 soil_intersection_area_m2
             FROM field_soil_intersections
-            WHERE 
+            WHERE
                 -- Area filtering to remove noise (post-join, non-spatial)
                 soil_intersection_area_m2 > 100  -- Minimum 100m² intersection
                 AND (soil_intersection_area_m2 / field_area_m2) > 0.01  -- Minimum 1% coverage
@@ -186,7 +186,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_foundation AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -203,7 +203,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         # STEP 4: Create simplified areas table (cleaned up - removed useless columns)
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_soil_areas AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -230,7 +230,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         # Get soil type statistics
         soil_stats = self.conn.execute("""
-            SELECT 
+            SELECT
                 soil_description,
                 COUNT(*) as intersection_count,
                 COUNT(DISTINCT field_uuid) as field_count,
@@ -242,7 +242,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         # Get coverage statistics
         coverage_stats = self.conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_intersections,
                 COUNT(DISTINCT field_uuid) as fields_with_soil,
                 COUNT(DISTINCT soil_description) as unique_soil_types
@@ -336,7 +336,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         try:
             # Get validation statistics from output table
             stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     -- Total soil intersection area (what we actually created)
                     SUM(COALESCE(soil_intersection_area_m2, 0)) as total_intersection_area,
                     

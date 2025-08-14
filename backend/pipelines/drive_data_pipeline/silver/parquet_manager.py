@@ -91,8 +91,9 @@ class ParquetManager(DuckDBProcessor):
                 try:
                     # Export from DuckDB table to parquet
                     self.conn.execute(f"""
-                        COPY {table_name} TO '{temp_path}' 
-                        (FORMAT PARQUET, COMPRESSION {self.compression}, ROW_GROUP_SIZE {row_group_size})
+                        COPY {table_name} TO '{temp_path}'
+                        (FORMAT PARQUET, COMPRESSION {self.compression},
+                         ROW_GROUP_SIZE {row_group_size})
                     """)
 
                     # Add schema metadata if provided
@@ -144,8 +145,9 @@ class ParquetManager(DuckDBProcessor):
 
                 # Export directly from DuckDB
                 self.conn.execute(f"""
-                    COPY {table_name} TO '{output_path}' 
-                    (FORMAT PARQUET, COMPRESSION {self.compression}, ROW_GROUP_SIZE {row_group_size})
+                    COPY {table_name} TO '{output_path}'
+                    (FORMAT PARQUET, COMPRESSION {self.compression},
+                     ROW_GROUP_SIZE {row_group_size})
                 """)
 
                 # Add schema metadata if provided (requires reading and rewriting)
@@ -231,11 +233,11 @@ class ParquetManager(DuckDBProcessor):
             # Create spatial table using DuckDB-spatial
             self.conn.execute(f"""
                 CREATE TABLE {spatial_table} AS
-                SELECT 
+                SELECT
                     * EXCLUDE ({latitude_col}, {longitude_col}),
                     ST_Point({longitude_col}, {latitude_col}) as geometry
                 FROM {table_name}
-                WHERE {latitude_col} IS NOT NULL 
+                WHERE {latitude_col} IS NOT NULL
                   AND {longitude_col} IS NOT NULL
                   AND {latitude_col} BETWEEN -90 AND 90
                   AND {longitude_col} BETWEEN -180 AND 180
@@ -280,7 +282,7 @@ class ParquetManager(DuckDBProcessor):
                 try:
                     # Export geometry as WKT for geopandas conversion
                     df = self.conn.execute(f"""
-                        SELECT 
+                        SELECT
                             * EXCLUDE ({geometry_column}),
                             ST_AsText({geometry_column}) as {geometry_column}
                         FROM {table_name}
@@ -317,7 +319,7 @@ class ParquetManager(DuckDBProcessor):
 
                 # Export geometry as WKT for geopandas conversion
                 df = self.conn.execute(f"""
-                    SELECT 
+                    SELECT
                         * EXCLUDE ({geometry_column}),
                         ST_AsText({geometry_column}) as {geometry_column}
                     FROM {table_name}
@@ -379,7 +381,7 @@ class ParquetManager(DuckDBProcessor):
                 # Create spatial table
                 self.conn.execute(f"""
                     CREATE TABLE {table_name} AS
-                    SELECT 
+                    SELECT
                         * EXCLUDE ({geometry_column}_wkt),
                         ST_GeomFromText({geometry_column}_wkt) as {geometry_column}
                     FROM {table_name}_temp

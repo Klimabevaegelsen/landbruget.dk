@@ -491,7 +491,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
             # Convert geometry XML to actual geometries using DuckDB-spatial
             self.conn.execute(f"""
-                ALTER TABLE {combined_table} 
+                ALTER TABLE {combined_table}
                 ADD COLUMN geometry_spatial GEOMETRY
             """)
 
@@ -508,11 +508,11 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
             # Get all records with geometry_xml
             rows = self.conn.execute(f"""
-                SELECT 
-                    ROWID, 
+                SELECT
+                    ROWID,
                     geometry_xml,
                     layer
-                FROM {combined_table} 
+                FROM {combined_table}
                 WHERE geometry_xml IS NOT NULL
             """).fetchall()
 
@@ -527,7 +527,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                             # First try direct conversion
                             self.conn.execute(
                                 f"""
-                                UPDATE {combined_table} 
+                                UPDATE {combined_table}
                                 SET geometry_spatial = ST_GeomFromText(?)
                                 WHERE ROWID = ?
                             """,
@@ -554,7 +554,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                                         # Update with repaired geometry
                                         self.conn.execute(
                                             f"""
-                                            UPDATE {combined_table} 
+                                            UPDATE {combined_table}
                                             SET geometry_spatial = ST_GeomFromText(?)
                                             WHERE ROWID = ?
                                         """,
@@ -570,12 +570,14 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                                         if repair_valid and repair_valid[0]:
                                             converted_count += 1
                                             self.log.debug(
-                                                f"Fixed invalid geometry for row {rowid} with ST_MakeValid"
+                                                f"Fixed invalid geometry for row {rowid} "
+                                                f"with ST_MakeValid"
                                             )
                                         else:
                                             failed_count += 1
                                             self.log.debug(
-                                                f"ST_MakeValid repair failed validation for row {rowid}"
+                                                f"ST_MakeValid repair failed validation "
+                                                f"for row {rowid}"
                                             )
                                     else:
                                         failed_count += 1

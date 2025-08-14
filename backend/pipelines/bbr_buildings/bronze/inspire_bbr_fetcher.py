@@ -298,7 +298,7 @@ class InspireBBRFetcher:
             category_sql = "'" + "','".join(categories) + "'"
 
             query = f"""
-            SELECT 
+            SELECT
                 inspireId_localId as building_uuid,
                 externalReference_reference1 as external_ref,
                 currentUse,
@@ -342,7 +342,7 @@ class InspireBBRFetcher:
 
         # Extract all residential, agriculture, and publicServices buildings
         query = f"""
-        SELECT 
+        SELECT
             inspireId_localId as building_uuid,
             externalReference_reference1 as external_ref,
             currentUse,
@@ -352,8 +352,8 @@ class InspireBBRFetcher:
             numberOfFloorsAboveGround as floors,
             numberOfDwellings as dwellings,
             addressRepresentation as address,
-            CASE 
-                WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings') 
+            CASE
+                WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings')
                     THEN 'residential'
                 WHEN currentUse = 'agriculture' THEN 'agriculture'
                 WHEN currentUse = 'publicServices' THEN 'publicServices'
@@ -592,9 +592,9 @@ class InspireBBRFetcher:
                       id_lokalId: {{ in: {uuids_list} }}
                     }}
                   ) {{
-                    nodes {{ 
-                      id_lokalId 
-                      byg021BygningensAnvendelse 
+                    nodes {{
+                      id_lokalId
+                      byg021BygningensAnvendelse
                     }}
                   }}
                 }}
@@ -1023,16 +1023,16 @@ class InspireBBRFetcher:
             # Load the GPKG data
             self.logger.info("Loading building data from GPKG...")
             conn.execute(f"""
-                CREATE TABLE buildings AS 
+                CREATE TABLE buildings AS
                 SELECT * FROM ST_Read('{gpkg_path}')
             """)
 
             # Get building counts for each category
             total_counts = conn.execute("""
-                SELECT 
+                SELECT
                     currentUse,
                     COUNT(*) as count
-                FROM buildings 
+                FROM buildings
                 WHERE currentUse IN (
                     'individualResidence', 'collectiveResidence', 'twoDwellings',
                     'agriculture', 'publicServices'
@@ -1062,7 +1062,7 @@ class InspireBBRFetcher:
                     conn.execute(f"""
                         CREATE OR REPLACE TABLE category_buildings AS
                         SELECT inspireId_localId as building_uuid
-                        FROM buildings 
+                        FROM buildings
                         WHERE currentUse IN ('{use_filter}')
                         LIMIT {sample_size}
                     """)
@@ -1070,7 +1070,7 @@ class InspireBBRFetcher:
                     conn.execute(f"""
                         CREATE OR REPLACE TABLE category_buildings AS
                         SELECT inspireId_localId as building_uuid
-                        FROM buildings 
+                        FROM buildings
                         WHERE currentUse IN ('{use_filter}')
                     """)
 

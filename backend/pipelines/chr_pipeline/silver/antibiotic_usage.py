@@ -25,7 +25,7 @@ def create_antibiotic_usage_table(
         logging.warning("Cannot create antibiotic_usage: vetstat_raw table missing. Creating empty table with schema.")
         # ✅ MIGRATION: Create empty table using DuckDB directly instead of pandas
         empty_table_sql = """
-            SELECT 
+            SELECT
                 CAST(NULL AS VARCHAR) as entity_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS BIGINT) as chr_number,
@@ -63,7 +63,7 @@ def create_antibiotic_usage_table(
         )
         # ✅ MIGRATION: Create empty table using DuckDB directly instead of pandas
         empty_table_sql = """
-            SELECT 
+            SELECT
                 CAST(NULL AS VARCHAR) as entity_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
                 CAST(NULL AS BIGINT) as chr_number,

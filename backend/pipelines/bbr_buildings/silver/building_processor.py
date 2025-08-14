@@ -99,7 +99,7 @@ class BuildingProcessor:
             # Fix: Cast both UUID types to VARCHAR for proper join
             conn.execute("""
                 CREATE OR REPLACE TABLE enriched_buildings AS
-                SELECT 
+                SELECT
                     jb.*,
                     ia.current_use,
                     ia.building_nature,
@@ -124,16 +124,17 @@ class BuildingProcessor:
 
         conn.execute(f"""
             CREATE OR REPLACE TABLE processed_buildings AS
-            SELECT 
+            SELECT
                 BBRUUID as building_uuid,
                 geometry as geo_building_polygon,
                 ST_Centroid(geometry) as geo_building_centroid,
                 bygningstype as building_type,
                 building_area_m2 as building_floor_area_sqm,
                 join_status,
-                CASE 
-                    WHEN current_use IN ('individualResidence', 'collectiveResidence', 'twoDwellings') 
-                        THEN 'residential'
+                CASE
+                    WHEN current_use IN (
+                        'individualResidence', 'collectiveResidence', 'twoDwellings'
+                    ) THEN 'residential'
                     WHEN current_use = 'agriculture' THEN 'agricultural'
                     WHEN current_use = 'publicServices' THEN 'educational'
                     ELSE 'other'
@@ -157,12 +158,16 @@ class BuildingProcessor:
 
         # Get processing statistics
         stats = conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT building_uuid) as unique_buildings,
                 AVG(building_floor_area_sqm) as avg_floor_area,
-                COUNT(*) FILTER (WHERE building_usage_category = 'residential') as residential_count,
-                COUNT(*) FILTER (WHERE building_usage_category = 'agricultural') as agricultural_count,
+                COUNT(*) FILTER (
+                    WHERE building_usage_category = 'residential'
+                ) as residential_count,
+                COUNT(*) FILTER (
+                    WHERE building_usage_category = 'agricultural'
+                ) as agricultural_count,
                 COUNT(*) FILTER (WHERE building_usage_category = 'educational') as educational_count
             FROM processed_buildings
         """).fetchone()
