@@ -131,7 +131,7 @@ def perform_uuid_join_optimized(
         print("🎯 Using all GeoDanmark buildings directly (no expensive aggregation)...")
         conn.execute("""
             CREATE OR REPLACE TABLE geodanmark_buildings AS
-            SELECT 
+            SELECT
                 BBRUUID,
                 bygningstype,
                 geometri as geometry,
@@ -168,7 +168,7 @@ def perform_uuid_join_optimized(
             print("🔧 Pre-computing UUID strings for faster join...")
             conn.execute("""
                 CREATE OR REPLACE TABLE inspire_attributes_with_uuid AS
-                SELECT 
+                SELECT
                     *,
                     LOWER(CONCAT(
                         SUBSTR(hex(building_uuid), 1, 8), '-',
@@ -183,7 +183,7 @@ def perform_uuid_join_optimized(
             # Fast direct join using pre-computed UUID strings
             uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
-            SELECT 
+            SELECT
                 g.BBRUUID,
                 g.geometry,
                 g.bygningstype,
@@ -209,7 +209,7 @@ def perform_uuid_join_optimized(
             # Basic table with all GeoDanmark buildings (no attributes join needed)
             uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
-            SELECT 
+            SELECT
                 g.BBRUUID,
                 g.geometry,
                 g.bygningstype,
@@ -224,7 +224,7 @@ def perform_uuid_join_optimized(
 
         # Get results with spatial statistics
         final_stats = conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT BBRUUID) as unique_buildings,
                 AVG(building_area_m2) as avg_building_area,
@@ -303,10 +303,10 @@ def perform_uuid_join_optimized(
                 try:
                     # Check if it's a table or view by querying information schema
                     result = conn.execute(f"""
-                        SELECT table_type FROM information_schema.tables 
+                        SELECT table_type FROM information_schema.tables
                         WHERE table_name = '{object_name}'
                         UNION ALL
-                        SELECT 'VIEW' as table_type FROM information_schema.views 
+                        SELECT 'VIEW' as table_type FROM information_schema.views
                         WHERE table_name = '{object_name}'
                     """).fetchall()
 
@@ -391,7 +391,7 @@ def perform_true_spatial_join_example(
     try:
         # This query structure will trigger the SPATIAL_JOIN operator
         spatial_join_query = f"""
-        EXPLAIN SELECT 
+        EXPLAIN SELECT
             b.BBRUUID,
             b.geometry as building_geometry,
             f.field_id,
@@ -399,9 +399,9 @@ def perform_true_spatial_join_example(
             ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) as intersection_area_m2
         FROM {buildings_table} b
         INNER JOIN {spatial_features_table} f ON ST_Intersects(b.geometry, f.geometry)
-        WHERE ST_IsValid(b.geometry) 
+        WHERE ST_IsValid(b.geometry)
         AND ST_IsValid(f.geometry)
-        AND ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) > 10  
+        AND ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) > 10
         -- Minimum 10m² intersection
         """
 
@@ -410,7 +410,8 @@ def perform_true_spatial_join_example(
         spatial_join_detected = any("SPATIAL_JOIN" in str(row) for row in explain_result)
 
         print(
-            f"🔍 SPATIAL_JOIN operator would be used: {'✅ YES' if spatial_join_detected else '❌ NO'}"
+            f"🔍 SPATIAL_JOIN operator would be used: "
+            f"{'✅ YES' if spatial_join_detected else '❌ NO'}"
         )
 
         if spatial_join_detected:
@@ -490,7 +491,7 @@ def perform_chunked_spatial_join(
     # This prevents duplicate rows for buildings with complex geometries
     conn.execute("""
         CREATE OR REPLACE TABLE geodanmark_buildings AS
-        SELECT 
+        SELECT
             BBRUUID,
             bygningstype,
             ST_Union_Agg(geometri) as geometry,
@@ -518,7 +519,8 @@ def perform_chunked_spatial_join(
     total_chunks = (len(building_ids) + chunk_size - 1) // chunk_size
 
     print(
-        f"📊 Processing {len(building_ids):,} building IDs in {total_chunks} chunks of {chunk_size:,}"
+        f"📊 Processing {len(building_ids):,} building IDs in "
+        f"{total_chunks} chunks of {chunk_size:,}"
     )
 
     # GitHub Actions timeout monitoring (6-hour limit)
@@ -531,7 +533,7 @@ def perform_chunked_spatial_join(
     # Initialize results table with proper schema
     conn.execute("""
         CREATE OR REPLACE TABLE joined_results AS
-        SELECT 
+        SELECT
             CAST(NULL AS VARCHAR) as BBRUUID,
             CAST(NULL AS GEOMETRY) as geometry,
             CAST(NULL AS VARCHAR) as bygningstype,
@@ -550,7 +552,8 @@ def perform_chunked_spatial_join(
                 elapsed_hours = (datetime.now() - start_time).total_seconds() / 3600
                 if elapsed_hours > timeout_hours:
                     print(
-                        f"⏰ GitHub Actions timeout approaching ({elapsed_hours:.1f}h), stopping gracefully"
+                        f"⏰ GitHub Actions timeout approaching "
+                        f"({elapsed_hours:.1f}h), stopping gracefully"
                     )
                     break
 
@@ -573,7 +576,7 @@ def perform_chunked_spatial_join(
             # DuckDB Spatial v1.2.2 SPATIAL_JOIN compliance (PR #545)
             join_query = f"""
             INSERT INTO joined_results
-            SELECT 
+            SELECT
                 g.BBRUUID,
                 g.geometry,
                 g.bygningstype,
@@ -627,7 +630,7 @@ def perform_chunked_spatial_join(
 
         # Get final results with spatial statistics
         final_stats = conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT BBRUUID) as unique_buildings,
                 AVG(building_area_m2) as avg_building_area,
@@ -650,7 +653,7 @@ def perform_chunked_spatial_join(
             output_file = output_dir / "joined_buildings.geoparquet"
             conn.execute(f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         BBRUUID,
                         geometry,
                         bygningstype,
@@ -678,7 +681,9 @@ def perform_chunked_spatial_join(
                 "chunks_processed": successful_chunks,
                 "avg_building_area_m2": avg_area,
                 "total_building_area_m2": total_area,
-                "optimization_used": "ST_Dump + minimum area filtering + spatial functions (fallback)",
+                "optimization_used": (
+                    "ST_Dump + minimum area filtering + spatial functions (fallback)"
+                ),
             }
         else:
             print("❌ No matching buildings found in any chunk")
@@ -1151,7 +1156,7 @@ def run_silver_layer(
             temp_conn.execute("INSTALL spatial")
             temp_conn.execute("LOAD spatial")
             temp_conn.execute(f"""
-                COPY (SELECT * FROM read_parquet('{main_joined_file}')) 
+                COPY (SELECT * FROM read_parquet('{main_joined_file}'))
                 TO '{temp_joined_file}' (FORMAT PARQUET)
             """)
             temp_conn.close()
@@ -1250,7 +1255,8 @@ def _load_bronze_data(
 
                         attributes_df = pd.read_parquet(attr_location)
                         logger.info(
-                            f"✅ Loaded {len(attributes_df):,} attribute records from {attr_location}"
+                            f"✅ Loaded {len(attributes_df):,} attribute records "
+                            f"from {attr_location}"
                         )
                         break
 

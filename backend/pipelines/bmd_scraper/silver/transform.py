@@ -543,19 +543,19 @@ class BMDTransformer:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pfas_enhanced AS
                 SELECT *,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN {pfas_check_sql} THEN true
                         ELSE false
                     END AS contains_pfas,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN LOWER({active_ingredient_col}) LIKE '%diquat%' THEN true
                         ELSE false
                     END AS contains_diquat,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
-                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%' 
+                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%'
                             OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
                         ELSE false
                     END AS contains_glyphosate
@@ -564,20 +564,20 @@ class BMDTransformer:
 
             # Log detection statistics
             pfas_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_pfas = true
             """).fetchone()[0]
 
             diquat_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_diquat = true
             """).fetchone()[0]
 
             glyphosate_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_glyphosate = true
             """).fetchone()[0]
 

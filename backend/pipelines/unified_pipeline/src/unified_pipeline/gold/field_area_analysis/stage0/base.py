@@ -18,7 +18,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
         # Optimize fields table for spatial indexing
         self.conn.execute("""
             CREATE OR REPLACE TABLE fields_for_filtering AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
@@ -67,7 +67,7 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
 
             # Export table to temporary file using DuckDB COPY
             self.conn.execute(f"""
-                COPY {table_name} TO '{temp_path}' 
+                COPY {table_name} TO '{temp_path}'
                 (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
             """)
 

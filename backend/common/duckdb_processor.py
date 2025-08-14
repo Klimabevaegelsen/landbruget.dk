@@ -85,7 +85,7 @@ class SharedDuckDBProcessor:
             table_name = f"{self.dataset_name}_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM read_parquet('{parquet_path}')
         """)
         return table_name
@@ -96,7 +96,7 @@ class SharedDuckDBProcessor:
             table_name = f"{self.dataset_name}_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM read_csv('{csv_path}', AUTO_DETECT=TRUE, HEADER=TRUE)
         """)
         return table_name
@@ -107,7 +107,7 @@ class SharedDuckDBProcessor:
             table_name = f"{self.dataset_name}_geo_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM ST_Read('{geospatial_path}')
         """)
         return table_name
@@ -130,7 +130,7 @@ class SharedDuckDBProcessor:
             table_name = f"{self.dataset_name}_gcs_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM read_parquet('{gcs_path}')
         """)
         return table_name

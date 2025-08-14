@@ -107,7 +107,7 @@ class DosageComplianceAnalyzer:
         matched_codes_str = ",".join([f"'{code}'" for code in matched_codes])
 
         query = f"""
-        SELECT 
+        SELECT
             crop_code,
             pesticide_registration_number,
             pesticide_name,
@@ -115,22 +115,22 @@ class DosageComplianceAnalyzer:
             dosage_unit,
             area_ha,
             dosage_quantity / area_ha as dosage_per_ha,
-            CASE 
+            CASE
                 WHEN dosage_unit = 2 THEN 'kg'
-                WHEN dosage_unit = 4 THEN 'l' 
+                WHEN dosage_unit = 4 THEN 'l'
                 WHEN dosage_unit = 5 THEN 'tablets'
                 ELSE 'unknown'
             END as unit_name,
             COUNT(*) as application_count
-        FROM pesticides 
-        WHERE aar = '2024' 
+        FROM pesticides
+        WHERE aar = '2024'
           AND crop_code IN ({matched_codes_str})
-          AND pesticide_registration_number IS NOT NULL 
+          AND pesticide_registration_number IS NOT NULL
           AND pesticide_registration_number != ''
-          AND area_ha > 0 
+          AND area_ha > 0
           AND dosage_quantity > 0
           AND dosage_unit IN (2, 4, 5)
-        GROUP BY crop_code, pesticide_registration_number, pesticide_name, 
+        GROUP BY crop_code, pesticide_registration_number, pesticide_name,
                  total_dosage, dosage_unit, area_ha, dosage_per_ha, unit_name
         ORDER BY dosage_per_ha DESC
         """
@@ -420,9 +420,9 @@ For applications where API limits are available:
 3. **Crop Matching**: Used comprehensive crop code mapping with
    {len(self.crop_mapping)} validated matches
 4. **API Source**: Plante IT Pesticide Service (pesticideservice.dlbr.dk)
-5. **Tolerance Levels**: 
+5. **Tolerance Levels**:
    - Compliant: ≤ API limit
-   - Minor excess: 1.0-1.1x API limit  
+   - Minor excess: 1.0-1.1x API limit
    - Moderate excess: 1.1-2.0x API limit
    - Major excess: >2.0x API limit
 

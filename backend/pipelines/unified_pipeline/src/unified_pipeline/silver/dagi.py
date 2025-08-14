@@ -212,7 +212,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             processed_table = f"processed_{layer_type}"
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {processed_table} AS
-                SELECT 
+                SELECT
                     {select_clause},
                     ST_GeomFromGeoJSON(geometry_json) as geometry,
                     ST_IsValid(ST_GeomFromGeoJSON(geometry_json)) as is_valid_geometry,
@@ -234,7 +234,7 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
             # Transform to target CRS if needed (after validation ensures WGS84)
             if self.config.target_crs != "EPSG:4326":
                 self.conn.execute(f"""
-                    UPDATE {processed_table} 
+                    UPDATE {processed_table}
                     SET geometry = ST_Transform(geometry, 'EPSG:4326', '{self.config.target_crs}')
                     WHERE geometry IS NOT NULL
                 """)

@@ -663,7 +663,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     json_extract(json_data, '$.source_type')::VARCHAR as source_type,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
@@ -677,10 +677,10 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     json_extract(json_data, '$.geometry_wkt')::VARCHAR as geometry_wkt,
                     json_extract(json_data, '$.dawa_enriched')::BOOLEAN as dawa_enriched,
                     json_extract(json_data, '$.datavask_enriched')::BOOLEAN as datavask_enriched,
-                    CASE 
-                        WHEN json_extract(json_data, '$.latitude') IS NOT NULL 
-                        THEN true 
-                        ELSE false 
+                    CASE
+                        WHEN json_extract(json_data, '$.latitude') IS NOT NULL
+                        THEN true
+                        ELSE false
                     END as is_geocoded,
                     json_data as address_data_json,
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,

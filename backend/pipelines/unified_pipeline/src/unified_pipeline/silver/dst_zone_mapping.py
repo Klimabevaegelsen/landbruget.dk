@@ -223,7 +223,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                             self.conn.execute(f"""
                                 CREATE TABLE {layer} AS
-                                SELECT 
+                                SELECT
                                     {select_clause},
                                     ST_GeomFromText(geometry_wkt) as geometry,
                                     geometry_wkt,
@@ -379,13 +379,13 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                                     # Export to temporary file
                                     conn.execute(f"""
-                                        COPY temp_layer_view TO '{temp_path}' 
+                                        COPY temp_layer_view TO '{temp_path}'
                                         (FORMAT PARQUET, COMPRESSION zstd)
                                     """)
 
                                     # Import into main connection
                                     self.conn.execute(f"""
-                                        CREATE OR REPLACE TABLE {layer} AS 
+                                        CREATE OR REPLACE TABLE {layer} AS
                                         SELECT * FROM read_parquet('{temp_path}')
                                     """)
 
@@ -506,7 +506,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             # Use the standardized table names that were created in the base connection
             conn.execute("""
                 CREATE TABLE dst_zone_lookup AS
-                SELECT 
+                SELECT
                     l.code as landsdel_code,
                     l.name as landsdel_name,
                     '' as landsdel_dagi_id,
@@ -524,7 +524,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                 FROM landsdele l
                 LEFT JOIN dst_mappings_raw dm ON l.code = dm.landsdel_code
                 WHERE dm.landsdel_code IS NOT NULL
-                GROUP BY l.code, l.name, l.region_code, 
+                GROUP BY l.code, l.name, l.region_code,
                          l.geometry_wkt, l.area_m2, l.centroid_x, l.centroid_y
             """)
 
@@ -556,7 +556,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
             conn.execute("""
                 CREATE TABLE dst_zone_reference AS
-                SELECT 
+                SELECT
                     landsdel_code,
                     landsdel_name,
                     landsdel_dagi_id,

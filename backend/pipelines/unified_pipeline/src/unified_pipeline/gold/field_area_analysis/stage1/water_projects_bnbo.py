@@ -52,7 +52,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         # Step 1: Decompose multipolygons with ST_Dump
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_status_decomposed AS
-            SELECT 
+            SELECT
                 status_category,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM bnbo_status_raw
@@ -61,7 +61,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         # Step 2: Add unique IDs with ROW_NUMBER using the decomposed geometries
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_status AS
-            SELECT 
+            SELECT
                 ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as bnbo_id,
                 status_category,
                 geometry
@@ -73,7 +73,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects AS
-            SELECT 
+            SELECT
                 project_id,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM water_projects_raw
@@ -100,7 +100,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         # Optimized spatial intersection query - focus on water projects covering BNBO
         intersection_query = """
         CREATE OR REPLACE TABLE water_projects_bnbo_intersections AS
-        SELECT 
+        SELECT
             wp.project_id,
             b.bnbo_id,  -- Add unique BNBO ID for foundation data joins
             b.status_category,

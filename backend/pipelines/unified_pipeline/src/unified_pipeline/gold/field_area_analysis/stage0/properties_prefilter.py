@@ -63,7 +63,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
         # Initialize filtered properties table
         self.conn.execute("""
             CREATE OR REPLACE TABLE properties_filtered AS
-            SELECT 
+            SELECT
                 bestemtFastEjendomBFENr,
                 geometry,
                 ST_Area_Spheroid(geometry) as property_area_m2
@@ -86,7 +86,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
             # Create property chunk
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE properties_chunk AS
-                SELECT 
+                SELECT
                     bestemtFastEjendomBFENr,
                     geometry,
                     ST_Area_Spheroid(geometry) as property_area_m2
@@ -116,7 +116,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
             # Append to main filtered table
             if chunk_filtered > 0:
                 self.conn.execute("""
-                    INSERT INTO properties_filtered 
+                    INSERT INTO properties_filtered
                     SELECT * FROM chunk_filtered
                 """)
 

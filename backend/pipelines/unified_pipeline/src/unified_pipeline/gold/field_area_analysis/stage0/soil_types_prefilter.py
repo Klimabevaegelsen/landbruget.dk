@@ -39,7 +39,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         )
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types_full AS
-            SELECT 
+            SELECT
                 soil_code,
                 soil_description,  -- Only meaningful soil data (8 Danish soil types)
                 UNNEST(ST_Dump(geometry)).geom as geometry
@@ -91,7 +91,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.log.info("Adding unique IDs to filtered soil types polygons...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types_filtered AS
-            SELECT 
+            SELECT
                 ROW_NUMBER() OVER (ORDER BY soil_description, soil_code, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as soil_id,
                 soil_code,
                 soil_description,  -- Only meaningful Danish soil types
@@ -115,7 +115,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
 
         # Get Danish soil type breakdown
         soil_type_stats = self.conn.execute("""
-            SELECT 
+            SELECT
                 soil_description,
                 COUNT(*) as polygon_count,
                 SUM(soil_area_m2) / 1000000 as total_area_km2

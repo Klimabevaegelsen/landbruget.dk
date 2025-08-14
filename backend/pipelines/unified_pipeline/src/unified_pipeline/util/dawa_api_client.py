@@ -140,7 +140,7 @@ class DAWAAPIClient:
 
         Args:
             address_ids: List of DAWA address IDs
-            max_concurrent: Maximum number of concurrent requests 
+            max_concurrent: Maximum number of concurrent requests
                 (not implemented yet - sequential for now)
 
         Returns:

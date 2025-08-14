@@ -45,7 +45,8 @@ def extract_data_from_xml_chunk(xml_chunk):
             # Log the actual body content if response element is not found for debugging
             body_content_sample = ET.tostring(body, encoding="unicode", method="xml")[:200]
             logging.warning(
-                f"VetStat_CHRHentAntibiotikaForbrugResponse not found in SOAP Body. Body starts with: {body_content_sample}..."
+                f"VetStat_CHRHentAntibiotikaForbrugResponse not found in SOAP Body. "
+                f"Body starts with: {body_content_sample}..."
             )
             return []
 
@@ -100,7 +101,8 @@ def parse_vetstat_xml(input_file: Path, output_file: Path):
                 all_data.extend(chunk_data)
                 if chunk_data:
                     logging.info(f"Successfully parsed chunk {i} with {len(chunk_data)} records")
-                # else: # DEBUG: Removed the generic 'No data extracted' log here, handled in extract_data_from_xml_chunk
+                # else: # DEBUG: Removed the generic 'No data extracted' log here,
+                # handled in extract_data_from_xml_chunk
                 # logging.warning(f"No data extracted from chunk {i}") # DEBUG: Commented out
 
         # Write the collected data to JSON Lines format

@@ -39,7 +39,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
         )
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_full AS
-            SELECT 
+            SELECT
                 toerv_pct,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM wetlands_raw
@@ -79,7 +79,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
         # Initialize filtered wetlands table
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_intersecting AS
-            SELECT 
+            SELECT
                 toerv_pct,
                 geometry
             FROM wetlands_full
@@ -101,7 +101,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
             # Create wetlands chunk with deterministic ordering to prevent cross-chunk duplicates
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_chunk AS
-                SELECT 
+                SELECT
                     toerv_pct,
                     geometry
                 FROM wetlands_full
@@ -129,7 +129,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
             # Append to main filtered table
             if chunk_filtered > 0:
                 self.conn.execute("""
-                    INSERT INTO wetlands_intersecting 
+                    INSERT INTO wetlands_intersecting
                     SELECT * FROM chunk_filtered
                 """)
 
@@ -146,7 +146,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
         )
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_filtered AS
-            SELECT 
+            SELECT
                 -- Deterministic fragment key based on initial decomposed geometry
                 md5(CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
                 -- Legacy numeric ID retained for backward compatibility (non-deterministic ordering)

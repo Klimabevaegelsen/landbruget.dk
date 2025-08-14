@@ -52,7 +52,7 @@ class DemoEnhancedPipeline(BaseSource):
         self.log.info("\n📊 Creating sample data...")
         self.conn.execute("""
             CREATE TABLE sample_data AS
-            SELECT 
+            SELECT
                 i as id,
                 'Sample record ' || i as name,
                 random() * 100 as value,
@@ -79,7 +79,7 @@ class DemoEnhancedPipeline(BaseSource):
         # Demo 4: Show raw data processing capability
         self.log.info("\n🎯 Testing SQL processing capabilities...")
         result = self.conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_records,
                 AVG(value) as avg_value,
                 MIN(date_created) as earliest_date,

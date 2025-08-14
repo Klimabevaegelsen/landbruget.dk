@@ -267,21 +267,21 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
                 if "VARCHAR" in col_type.upper() or "TEXT" in col_type.upper():
                     # Handle string columns - try to detect dates, booleans, numbers
                     select_parts.append(f"""
-                        CASE 
-                            WHEN {escaped_col_name} ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
-                                 {escaped_col_name} ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
+                        CASE
+                            WHEN {escaped_col_name} ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR
+                                 {escaped_col_name} ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$'
                             THEN TRY_CAST({escaped_col_name} AS DATE)::VARCHAR
                             WHEN LOWER({escaped_col_name}) IN ('yes', 'no', 'true', 'false', 'ja', 'nej')
-                            THEN CASE LOWER({escaped_col_name}) 
+                            THEN CASE LOWER({escaped_col_name})
                                      WHEN 'yes' THEN '1'
-                                     WHEN 'true' THEN '1' 
+                                     WHEN 'true' THEN '1'
                                      WHEN 'ja' THEN '1'
                                      WHEN 'no' THEN '0'
                                      WHEN 'false' THEN '0'
                                      WHEN 'nej' THEN '0'
                                      ELSE {escaped_col_name}
                                  END
-                            WHEN {escaped_col_name} ~ '^-?\\d+\\.?\\d*$' 
+                            WHEN {escaped_col_name} ~ '^-?\\d+\\.?\\d*$'
                             THEN TRY_CAST({escaped_col_name} AS DOUBLE)::VARCHAR
                             ELSE {escaped_col_name}
                         END AS {clean_col_name}
@@ -289,9 +289,9 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
                 elif "INTEGER" in col_type.upper() or "BIGINT" in col_type.upper():
                     # Handle integer columns - cast to string first, then apply date pattern detection
                     select_parts.append(f"""
-                        CASE 
-                            WHEN CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR 
-                                 CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$' 
+                        CASE
+                            WHEN CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR
+                                 CAST({escaped_col_name} AS VARCHAR) ~ '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$'
                             THEN TRY_CAST(CAST({escaped_col_name} AS VARCHAR) AS DATE)::VARCHAR
                             ELSE CAST({escaped_col_name} AS VARCHAR)
                         END AS {clean_col_name}

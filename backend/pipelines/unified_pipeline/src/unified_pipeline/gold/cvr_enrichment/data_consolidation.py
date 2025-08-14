@@ -94,20 +94,20 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         # Create company UUID function using UUID5 with consistent namespace
         self.conn.execute("""
             CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
-                SELECT CASE 
+                SELECT CASE
                     WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
                          OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
                     THEN NULL
                     ELSE CONCAT(
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
                                       TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
                                                TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr', 
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
                     )
                 END
@@ -387,16 +387,16 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             # The parquet file contains processed financial summary data, not raw metrics
             result = self.conn.execute(
                 f"""
-                SELECT 
-                    cvr_number, 
-                    company_name, 
-                    COALESCE(document_count, 0) as document_count, 
-                    xml_document_count, 
-                    total_xml_size_bytes, 
-                    latest_reporting_date, 
-                    COALESCE(has_financial_metrics, false) as has_financial_metrics, 
-                    financial_data_json, 
-                    processing_timestamp, 
+                SELECT
+                    cvr_number,
+                    company_name,
+                    COALESCE(document_count, 0) as document_count,
+                    xml_document_count,
+                    total_xml_size_bytes,
+                    latest_reporting_date,
+                    COALESCE(has_financial_metrics, false) as has_financial_metrics,
+                    financial_data_json,
+                    processing_timestamp,
                     batch_number
                 FROM {table_name}
                 WHERE cvr_number IS NOT NULL
@@ -410,8 +410,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             # For local artifacts, use the expected JSON format
             result = self.conn.execute(
                 """
-                SELECT cvr_number, company_name, document_count, xml_document_count, 
-                       total_xml_size_bytes, latest_reporting_date, has_financial_metrics, 
+                SELECT cvr_number, company_name, document_count, xml_document_count,
+                       total_xml_size_bytes, latest_reporting_date, has_financial_metrics,
                        financial_data_json, processing_timestamp, batch_number
                 FROM read_parquet(?)
                 WHERE financial_data_json IS NOT NULL
@@ -424,7 +424,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             cvr_number = row[0]
             try:
                 # Now we always select all columns from parquet format
-                # Based on actual data: cvr_number, company_name, document_count, xml_document_count, 
+                # Based on actual data: cvr_number, company_name, document_count, xml_document_count,
                 # total_xml_size_bytes, latest_reporting_date, has_financial_metrics, financial_data_json, processing_timestamp, batch_number
                 document_count = row[2]  # document_count is the 3rd column (index 2)
                 has_financial_metrics = row[6]  # has_financial_metrics is the 7th column (index 6)
@@ -918,41 +918,41 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         self.conn.execute(
             f"""
             CREATE TABLE {table_name} AS
-            SELECT 
+            SELECT
                 company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                 json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR as 
+                json_extract(json_data, '$.company_type_description')::VARCHAR as
                     company_type_description,
                 json_extract(json_data, '$.status')::VARCHAR as status,
                 json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                 json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as 
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as
                     advertisement_protection,
-                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as 
+                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as
                     address_latitude,
-                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as 
+                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as
                     address_longitude,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as 
+                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as
                     address_coordinate_system,
-                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as 
+                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as
                     address_srid,
-                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as 
+                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as
                     address_geom_wkt,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as 
+                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as
                     address_coordinate_quality,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as 
+                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as
                     address_coordinate_source,
                 json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                 json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                 json_array_length(json_extract(json_data, '$.addresses')) as address_count,
                 json_array_length(json_extract(json_data, '$.pnumber_data')) as pnumber_count,
-                json_extract(json_data, '$.financial_document_count')::INTEGER as 
+                json_extract(json_data, '$.financial_document_count')::INTEGER as
                     financial_document_count,
-                CASE 
-                    WHEN json_extract(json_data, '$.financial_metrics') IS NOT NULL 
-                    THEN true 
-                    ELSE false 
+                CASE
+                    WHEN json_extract(json_data, '$.financial_metrics') IS NOT NULL
+                    THEN true
+                    ELSE false
                 END as has_financial_metrics,
                 {("json_data as company_data_json," if self.config.include_raw_json else "")}
                 json_extract(json_data, '$.consolidation_timestamp')::VARCHAR as consolidation_timestamp,
@@ -986,7 +986,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.source_type')::VARCHAR as source_type,
@@ -1006,10 +1006,10 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     json_extract(json_data, '$.dawa_enriched')::BOOLEAN as dawa_enriched,
                     json_extract(json_data, '$.datavask_enriched')::BOOLEAN as datavask_enriched,
                     json_extract(json_data, '$.is_current')::BOOLEAN as is_current,
-                    CASE 
-                        WHEN json_extract(json_data, '$.latitude') IS NOT NULL 
-                        THEN true 
-                        ELSE false 
+                    CASE
+                        WHEN json_extract(json_data, '$.latitude') IS NOT NULL
+                        THEN true
+                        ELSE false
                     END as is_geocoded
                 FROM unnest($1) as t(json_data)
             """,
@@ -1065,7 +1065,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     company_uuid(json_extract(json_data, '$.parent_cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
@@ -1120,7 +1120,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.document_count')::INTEGER as document_count,
@@ -1156,7 +1156,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.company_name')::VARCHAR as company_name,
@@ -1254,36 +1254,36 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         self.conn.execute(
             f"""
             INSERT INTO {table_name}
-            SELECT 
+            SELECT
                 company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                 json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR as 
+                json_extract(json_data, '$.company_type_description')::VARCHAR as
                     company_type_description,
                 json_extract(json_data, '$.status')::VARCHAR as status,
                 json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                 json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as 
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as
                     advertisement_protection,
-                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as 
+                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as
                     address_latitude,
-                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as 
+                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as
                     address_longitude,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as 
+                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as
                     address_coordinate_system,
-                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as 
+                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as
                     address_srid,
-                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as 
+                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as
                     address_geom_wkt,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as 
+                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as
                     address_coordinate_quality,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as 
+                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as
                     address_coordinate_source,
                 json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                 json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                 json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
                 json_extract(json_data, '$.source_pipeline_count')::INTEGER as source_pipeline_count,
-                json_extract(json_data, '$.financial_document_count')::INTEGER as 
+                json_extract(json_data, '$.financial_document_count')::INTEGER as
                     financial_document_count,
                 json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
                 json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
@@ -1369,9 +1369,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
             # Sample results
             sample_results = self.conn.execute(f"""
-                SELECT cvr_number, company_name, company_type_description, founded_date, 
+                SELECT cvr_number, company_name, company_type_description, founded_date,
                        source_pipelines, financial_document_count
-                FROM {table_name} 
+                FROM {table_name}
                 LIMIT 5
             """).fetchall()
 
@@ -1442,7 +1442,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                             WHERE json_extract(json_data, '$.addresses') IS NOT NULL
                             AND json_array_length(json_extract(json_data, '$.addresses')) > 0
                         )
-                        SELECT 
+                        SELECT
                             company_uuid(cvr_number) as company_uuid,
                             cvr_number,
                             TRY(address_parsed.full_address) as full_address,
@@ -1486,7 +1486,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                             WHERE json_extract(json_data, '$.addresses') IS NOT NULL
                             AND json_array_length(json_extract(json_data, '$.addresses')) > 0
                         )
-                        SELECT 
+                        SELECT
                             company_uuid(cvr_number) as company_uuid,
                             cvr_number,
                             TRY(address_parsed.full_address) as full_address,
@@ -1549,7 +1549,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.conn.execute(
                     f"""
                     INSERT INTO {table_name}_leadership
-                    SELECT 
+                    SELECT
                         company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                         json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                         unnest(json_transform(json_extract(json_data, '$.leadership'), $2)) as leadership_data
@@ -1566,7 +1566,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             result = self.conn.execute(
                 """
                 WITH financial_sample AS (
-                    SELECT 
+                    SELECT
                         unnest(json_extract(json_data, '$.financial_documents')) as financial_doc
                     FROM unnest($1) as t(json_data)
                     WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
@@ -1636,7 +1636,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
     def _process_financial_chunk(self, json_strings: list, table_name: str) -> None:
         """Process financial documents for a chunk of companies with sophisticated metrics (ported from original)."""
-        # Check for financial data in the merged company structure 
+        # Check for financial data in the merged company structure
         financial_check = self.conn.execute(
             """
             SELECT COUNT(*)
@@ -1654,7 +1654,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 INSERT INTO {table_name}_financial
-                SELECT 
+                SELECT
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     NULL as publication_type,
@@ -1733,7 +1733,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.conn.execute(
                     f"""
                     INSERT INTO {table_name}_industries
-                    SELECT 
+                    SELECT
                         company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                         json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                         unnest(json_transform(json_extract(json_data, '$.industries'), $2)) as industry_data

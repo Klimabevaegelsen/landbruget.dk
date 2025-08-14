@@ -167,9 +167,9 @@ class BaseSource(Generic[T], ABC):
             try:
                 # Parse GitHub's ISO timestamp format
                 self.pipeline_start_time = datetime.fromisoformat(pipeline_start_env.replace('Z', '+00:00'))
-                logger.info(f"Using shared pipeline start time from environment: {self.pipeline_start_time}")
+                self.log.info(f"Using shared pipeline start time from environment: {self.pipeline_start_time}")
             except (ValueError, TypeError) as e:
-                logger.warning(f"Failed to parse PIPELINE_START_TIME environment variable: {e}")
+                self.log.warning(f"Failed to parse PIPELINE_START_TIME environment variable: {e}")
                 self.pipeline_start_time = datetime.now()
         else:
             self.pipeline_start_time = datetime.now()
@@ -215,7 +215,7 @@ class BaseSource(Generic[T], ABC):
                     test_result = self.conn.execute("""
                         EXPLAIN SELECT * FROM (
                             SELECT 1 as id, ST_Point(0, 0) as geom
-                        ) t1 
+                        ) t1
                         INNER JOIN (
                             SELECT 1 as id, ST_Point(0, 0) as geom
                         ) t2 ON ST_Intersects(t1.geom, t2.geom)
@@ -616,7 +616,7 @@ class BaseSource(Generic[T], ABC):
                             tmp_file.flush()
 
                             self.conn.execute(f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """)
 
@@ -632,7 +632,7 @@ class BaseSource(Generic[T], ABC):
                         tmp_file.flush()
 
                         self.conn.execute(f"""
-                            CREATE TABLE {table_name} AS 
+                            CREATE TABLE {table_name} AS
                             SELECT * FROM read_json_auto('{tmp_file.name}')
                         """)
 
@@ -710,7 +710,7 @@ class BaseSource(Generic[T], ABC):
                                 tmp_file.flush()
 
                                 self.conn.execute(f"""
-                                    CREATE TABLE {table_name} AS 
+                                    CREATE TABLE {table_name} AS
                                     SELECT * FROM read_json_auto('{tmp_file.name}')
                                 """)
 
@@ -726,7 +726,7 @@ class BaseSource(Generic[T], ABC):
                                 tmp_file.flush()
 
                                 self.conn.execute(f"""
-                                    CREATE TABLE {table_name} AS 
+                                    CREATE TABLE {table_name} AS
                                     SELECT * FROM read_json_auto('{tmp_file.name}')
                                 """)
 
@@ -779,7 +779,7 @@ class BaseSource(Generic[T], ABC):
 
                             self.conn.execute(
                                 f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """
                             )
@@ -797,7 +797,7 @@ class BaseSource(Generic[T], ABC):
 
                             self.conn.execute(
                                 f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """
                             )
@@ -872,7 +872,7 @@ class BaseSource(Generic[T], ABC):
                             tmp_file.flush()
 
                             self.conn.execute(f"""
-                                CREATE TABLE {temp_table_name} AS 
+                                CREATE TABLE {temp_table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """)
 
@@ -882,7 +882,7 @@ class BaseSource(Generic[T], ABC):
                         # List of values
                         values_str = ", ".join([f"'{v}'" for v in data])
                         self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
+                            CREATE TABLE {temp_table_name} AS
                             SELECT unnest([{values_str}]) as value
                         """)
                 elif isinstance(data, dict):
@@ -893,7 +893,7 @@ class BaseSource(Generic[T], ABC):
                         tmp_file.flush()
 
                         self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
+                            CREATE TABLE {temp_table_name} AS
                             SELECT * FROM read_json_auto('{tmp_file.name}')
                         """)
 

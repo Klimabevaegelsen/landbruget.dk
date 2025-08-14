@@ -106,7 +106,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         self.log.info("📦 Step 1: Creating property_bnbo_intersections")
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_bnbo_intersections AS
-            SELECT 
+            SELECT
                 p.field_uuid,
                 p.bfe_number,
                 fbi.field_id,
@@ -125,7 +125,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         self.log.info("📦 Step 2: Creating property_bnbo_water_intersections")
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_bnbo_water_intersections AS
-            SELECT 
+            SELECT
                 p.field_uuid,
                 p.bfe_number,
                 fbwi.field_id,
@@ -201,28 +201,28 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
 
         # Check property_bnbo_intersections geometry validity
         invalid_bnbo = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM property_bnbo_intersections 
+            SELECT COUNT(*)
+            FROM property_bnbo_intersections
             WHERE property_bnbo_geometry IS NULL OR NOT ST_IsValid(property_bnbo_geometry)
         """).fetchone()[0]
 
         # Check property_bnbo_water_intersections geometry validity
         invalid_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM property_bnbo_water_intersections 
+            SELECT COUNT(*)
+            FROM property_bnbo_water_intersections
             WHERE property_bnbo_water_geometry IS NULL OR NOT ST_IsValid(property_bnbo_water_geometry)
         """).fetchone()[0]
 
         # Check for empty geometries
         empty_bnbo = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM property_bnbo_intersections 
+            SELECT COUNT(*)
+            FROM property_bnbo_intersections
             WHERE property_bnbo_geometry IS NOT NULL AND ST_IsEmpty(property_bnbo_geometry)
         """).fetchone()[0]
 
         empty_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM property_bnbo_water_intersections 
+            SELECT COUNT(*)
+            FROM property_bnbo_water_intersections
             WHERE property_bnbo_water_geometry IS NOT NULL AND ST_IsEmpty(property_bnbo_water_geometry)
         """).fetchone()[0]
 

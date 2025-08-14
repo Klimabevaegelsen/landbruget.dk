@@ -106,7 +106,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         self.log.info("📦 Step 1: Creating property_wetland_intersections")
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_wetland_intersections AS
-            SELECT 
+            SELECT
                 p.field_uuid,
                 p.bfe_number,
                 fwi.field_id,
@@ -125,7 +125,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         self.log.info("📦 Step 2: Creating property_wetland_water_intersections")
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_wetland_water_intersections AS
-            SELECT 
+            SELECT
                 p.field_uuid,
                 p.bfe_number,
                 fwwi.field_id,
@@ -201,28 +201,28 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
 
         # Check property_wetland_intersections geometry validity
         invalid_wetland = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM property_wetland_intersections 
+            SELECT COUNT(*)
+            FROM property_wetland_intersections
             WHERE property_wetland_geometry IS NULL OR NOT ST_IsValid(property_wetland_geometry)
         """).fetchone()[0]
 
         # Check property_wetland_water_intersections geometry validity
         invalid_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM property_wetland_water_intersections 
+            SELECT COUNT(*)
+            FROM property_wetland_water_intersections
             WHERE property_wetland_water_geometry IS NULL OR NOT ST_IsValid(property_wetland_water_geometry)
         """).fetchone()[0]
 
         # Check for empty geometries
         empty_wetland = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM property_wetland_intersections 
+            SELECT COUNT(*)
+            FROM property_wetland_intersections
             WHERE property_wetland_geometry IS NOT NULL AND ST_IsEmpty(property_wetland_geometry)
         """).fetchone()[0]
 
         empty_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM property_wetland_water_intersections 
+            SELECT COUNT(*)
+            FROM property_wetland_water_intersections
             WHERE property_wetland_water_geometry IS NOT NULL AND ST_IsEmpty(property_wetland_water_geometry)
         """).fetchone()[0]
 

@@ -371,11 +371,11 @@ def test_create_dissolved_df_with_test_data(bnbo_status_silver: BNBOStatusSilver
     input_table = "test_input_table"
     bnbo_status_silver.conn.execute(f"""
         CREATE TABLE {input_table} AS
-        SELECT 
+        SELECT
             'Action Required' as status_category,
             ST_GeomFromText('POLYGON((0 0, 0 2, 2 2, 2 0, 0 0))') as geometry_spatial
         UNION ALL
-        SELECT 
+        SELECT
             'Completed' as status_category,
             ST_GeomFromText('POLYGON((3 3, 3 5, 5 5, 5 3, 3 3))') as geometry_spatial
     """)
@@ -407,7 +407,7 @@ def test_create_dissolved_df_empty_input(bnbo_status_silver: BNBOStatusSilver) -
     input_table = "test_empty_table"
     bnbo_status_silver.conn.execute(f"""
         CREATE TABLE {input_table} AS
-        SELECT 
+        SELECT
             CAST(NULL AS VARCHAR) as status_category,
             CAST(NULL AS GEOMETRY) as geometry_spatial
         WHERE FALSE
@@ -430,7 +430,7 @@ def test_save_data(
     table_name = "test_bnbo_table"
     bnbo_status_silver.conn.execute(f"""
         CREATE TABLE {table_name} AS
-        SELECT 'Action Required' as status_category, 
+        SELECT 'Action Required' as status_category,
                ST_GeomFromText('POLYGON((0 0, 0 1, 1 1, 1 0, 0 0))') as geometry
     """)
 

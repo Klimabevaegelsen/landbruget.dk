@@ -295,9 +295,9 @@ class SchemaToGitHub:
         try:
             # Get all user tables
             query = """
-            SELECT table_name 
-            FROM duckdb_tables() 
-            WHERE NOT internal 
+            SELECT table_name
+            FROM duckdb_tables()
+            WHERE NOT internal
             AND NOT temporary
             """
 
