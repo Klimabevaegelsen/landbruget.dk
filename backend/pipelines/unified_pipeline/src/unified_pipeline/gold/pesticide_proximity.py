@@ -290,8 +290,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         # Get unique fields from current disaggregation data
         unique_fields = self.conn.execute("""
-            SELECT COUNT(DISTINCT field_uuid) 
-            FROM current_disaggregation 
+            SELECT COUNT(DISTINCT field_uuid)
+            FROM current_disaggregation
             WHERE field_uuid IS NOT NULL
         """).fetchone()[0]
 
@@ -350,7 +350,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
-                SELECT * FROM fields_with_geometry 
+                SELECT * FROM fields_with_geometry
                 ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
@@ -358,11 +358,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 2: Pre-filter buildings to residential only
             self.conn.execute("""
                 CREATE OR REPLACE TABLE residential_buildings AS
-                SELECT 
+                SELECT
                     address,
                     ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
-                FROM data_bbr_buildings_silver 
-                WHERE category_group = 'residential' 
+                FROM data_bbr_buildings_silver
+                WHERE category_group = 'residential'
                   AND address IS NOT NULL
                   AND geometry IS NOT NULL
             """)
@@ -370,12 +370,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO residential_proximity
-                SELECT 
+                SELECT
                     f.field_uuid,
-                    CASE 
+                    CASE
                         WHEN COUNT(b.address) > 0 THEN
                             string_agg(
-                                b.address || ':' || 
+                                b.address || ':' ||
                                 ROUND(ST_Distance(f.field_geom_utm, b.building_geom_utm), 1) || 'm',
                                 chr(10)
                                 ORDER BY ST_Distance(f.field_geom_utm, b.building_geom_utm)
@@ -440,7 +440,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
-                SELECT * FROM fields_with_geometry 
+                SELECT * FROM fields_with_geometry
                 ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
@@ -448,11 +448,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 2: Pre-filter buildings to educational only
             self.conn.execute("""
                 CREATE OR REPLACE TABLE educational_buildings AS
-                SELECT 
+                SELECT
                     address,
                     ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
-                FROM data_bbr_buildings_silver 
-                WHERE category_group = 'publicServices' 
+                FROM data_bbr_buildings_silver
+                WHERE category_group = 'publicServices'
                   AND address IS NOT NULL
                   AND geometry IS NOT NULL
             """)
@@ -460,12 +460,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO educational_proximity
-                SELECT 
+                SELECT
                     f.field_uuid,
-                    CASE 
+                    CASE
                         WHEN COUNT(b.address) > 0 THEN
                             string_agg(
-                                b.address || ':' || 
+                                b.address || ':' ||
                                 ROUND(ST_Distance(f.field_geom_utm, b.building_geom_utm), 1) || 'm',
                                 chr(10)
                                 ORDER BY ST_Distance(f.field_geom_utm, b.building_geom_utm)
@@ -530,7 +530,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
-                SELECT * FROM fields_with_geometry 
+                SELECT * FROM fields_with_geometry
                 ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
@@ -538,18 +538,18 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 2: Pre-filter water features
             self.conn.execute("""
                 CREATE OR REPLACE TABLE water_features AS
-                SELECT 
+                SELECT
                     ST_Transform(geometry_spatial, 'EPSG:4326', 'EPSG:25832') as water_geom_utm
-                FROM data_water_typology_silver 
+                FROM data_water_typology_silver
                 WHERE geometry_spatial IS NOT NULL
             """)
 
             # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO water_proximity
-                SELECT 
+                SELECT
                     f.field_uuid,
-                    CASE 
+                    CASE
                         WHEN MIN(ST_Distance(f.field_geom_utm, w.water_geom_utm)) IS NOT NULL
                         THEN ROUND(MIN(ST_Distance(f.field_geom_utm, w.water_geom_utm)), 1) || 'm'
                         ELSE ''

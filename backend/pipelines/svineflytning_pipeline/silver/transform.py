@@ -336,7 +336,7 @@ class SvineflytningSilverProcessor:
 
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE silver_movements AS
-            SELECT 
+            SELECT
                 -- Movement identification
                 Id as movement_id,
                 Oprindelse as origin_system,
@@ -361,7 +361,7 @@ class SvineflytningSilverProcessor:
                 Afsender_Ejendom_DatoOpdatering as sender_property_updated,
                 Afsender_UdlandsEjendom as sender_foreign_property,
                 
-                -- Receiver information  
+                -- Receiver information
                 Modtager_Landekode as receiver_country_code,
                 Modtager_ChrNummer as receiver_chr_number,
                 Modtager_BesaetningsNummer as receiver_herd_number,
@@ -404,15 +404,15 @@ class SvineflytningSilverProcessor:
                 _chunk_end_date as source_period_end,
                 
                 -- Data quality flags
-                CASE 
-                    WHEN Handling = 'slet' THEN true 
-                    ELSE false 
+                CASE
+                    WHEN Handling = 'slet' THEN true
+                    ELSE false
                 END as is_deleted,
-                CASE 
+                CASE
                     WHEN Id IS NULL THEN true
                     ELSE false
                 END as is_invalid,
-                CASE 
+                CASE
                     WHEN AntalDyr_AntalDyrIAlt IS NULL OR AntalDyr_AntalDyrIAlt <= 0 THEN true
                     ELSE false
                 END as missing_animal_count
@@ -478,7 +478,7 @@ class SvineflytningSilverProcessor:
                 UNION ALL
                 SELECT * FROM receiver_properties
             )
-            SELECT 
+            SELECT
                 chr_number,
                 herd_number,
                 address,
@@ -495,8 +495,8 @@ class SvineflytningSilverProcessor:
                 ARRAY_AGG(DISTINCT property_role) as roles
             FROM all_properties
             WHERE chr_number IS NOT NULL
-            GROUP BY chr_number, herd_number, address, city_name, postal_code, 
-                     postal_district, municipality_code, municipality_name, 
+            GROUP BY chr_number, herd_number, address, city_name, postal_code,
+                     postal_district, municipality_code, municipality_name,
                      date_created, date_updated, foreign_property
         """)
 

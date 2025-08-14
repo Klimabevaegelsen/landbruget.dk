@@ -39,7 +39,7 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         )
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects_full AS
-            SELECT 
+            SELECT
                 project_id,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM water_projects_raw
@@ -93,7 +93,7 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         self.log.info("Adding areas to filtered water projects...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects_filtered AS
-            SELECT 
+            SELECT
                 project_id,
                 geometry,
                 ST_Area_Spheroid(geometry) as project_area_m2

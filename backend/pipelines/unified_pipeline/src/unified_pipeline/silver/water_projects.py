@@ -606,7 +606,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
 
         for offset in range(0, total_rows, batch_size):
             batch_geometries = self.conn.execute(f"""
-                SELECT geometry FROM {table_name}_temp 
+                SELECT geometry FROM {table_name}_temp
                 LIMIT {batch_size} OFFSET {offset}
             """).fetchall()
 
@@ -620,7 +620,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     # If successful, update the main table
                     self.conn.execute(
                         f"""
-                        UPDATE {table_name}_temp 
+                        UPDATE {table_name}_temp
                         SET geometry_spatial = ST_GeomFromText(?)
                         WHERE geometry = ?
                     """,
@@ -702,7 +702,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 # Create empty table with proper schema
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                    SELECT 
+                    SELECT
                         CAST(NULL AS VARCHAR) as project_id,
                         CAST(NULL AS GEOMETRY) as geometry,
                         CAST(NULL AS INTEGER) as feature_count,
@@ -729,7 +729,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 # Create empty table
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                    SELECT 
+                    SELECT
                         CAST(NULL AS VARCHAR) as project_id,
                         CAST(NULL AS GEOMETRY) as geometry,
                         CAST(0 AS INTEGER) as feature_count,
@@ -742,7 +742,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name}_temp AS
-                SELECT 
+                SELECT
                     geometry_spatial as geometry_for_transform
                 FROM {input_table_name}
                 WHERE geometry_spatial IS NOT NULL
@@ -760,7 +760,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             # Now dissolve the transformed geometries
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                SELECT 
+                SELECT
                     'water_project_dissolved' as project_id,
                     ST_Union_Agg(geometry_for_transform) as geometry,
                     COUNT(*) as feature_count,
@@ -788,7 +788,7 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             empty_table_name = f"{dataset}_dissolved_empty"
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {empty_table_name} AS
-                SELECT 
+                SELECT
                     CAST(NULL AS VARCHAR) as project_id,
                     CAST(NULL AS GEOMETRY) as geometry,
                     CAST(0 AS INTEGER) as feature_count,

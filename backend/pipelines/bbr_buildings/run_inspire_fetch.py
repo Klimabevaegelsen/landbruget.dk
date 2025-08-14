@@ -180,7 +180,7 @@ def _save_attributes_streaming(attributes_data: list[dict[str, Any]], output_dir
 
                 # Append to existing parquet file
                 conn.execute("""
-                    INSERT INTO buildings 
+                    INSERT INTO buildings
                     SELECT * FROM temp_chunk
                 """)
 

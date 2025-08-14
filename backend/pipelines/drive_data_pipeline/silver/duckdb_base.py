@@ -54,7 +54,7 @@ class DuckDBProcessor:
             table_name = f"{self.dataset_name}_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM read_parquet('{parquet_path}')
         """)
         logger.info(f"Created table {table_name} from parquet: {parquet_path}")
@@ -66,7 +66,7 @@ class DuckDBProcessor:
             table_name = f"{self.dataset_name}_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM read_csv('{csv_path}', AUTO_DETECT=TRUE, HEADER=TRUE)
         """)
         logger.info(f"Created table {table_name} from CSV: {csv_path}")
@@ -80,7 +80,7 @@ class DuckDBProcessor:
             table_name = f"{self.dataset_name}_geo_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM ST_Read('{geospatial_path}')
         """)
         logger.info(f"Created spatial table {table_name} from: {geospatial_path}")
@@ -152,10 +152,10 @@ class DuckDBProcessor:
         try:
             # Check if it's a table or view by querying information schema
             result = self.conn.execute(f"""
-                SELECT table_type FROM information_schema.tables 
+                SELECT table_type FROM information_schema.tables
                 WHERE table_name = '{table_name}'
                 UNION ALL
-                SELECT 'VIEW' as table_type FROM information_schema.views 
+                SELECT 'VIEW' as table_type FROM information_schema.views
                 WHERE table_name = '{table_name}'
             """).fetchall()
 

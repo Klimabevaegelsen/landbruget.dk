@@ -91,9 +91,9 @@ def create_properties_table(
 
         # Create geometry from coordinates using DuckDB-spatial SQL
         properties_with_geom = con.sql("""
-            SELECT 
+            SELECT
                 *,
-                CASE 
+                CASE
                     WHEN geo_coord_x_source IS NOT NULL AND geo_coord_y_source IS NOT NULL THEN
                         ST_Transform(ST_Point(geo_coord_x_source, geo_coord_y_source), 'EPSG:25832', 'EPSG:4326')
                     WHEN geo_coord_x_measured IS NOT NULL AND geo_coord_y_measured IS NOT NULL THEN
@@ -176,7 +176,7 @@ def create_property_owners_table(
         # Extract property owner information using SQL
         property_owners_base = con.sql("""
             WITH unnested_besaetninger AS (
-                SELECT 
+                SELECT
                     Response.EjendomsOplysninger.ChrNummer AS chr_number,
                     UNNEST(Response.EjendomsOplysninger.Besaetninger.Besaetning) AS besaetning
                 FROM ejendom_oplys_raw
@@ -309,7 +309,7 @@ def create_property_users_table(
         # Extract property user information using SQL
         property_users_base = con.sql("""
             WITH unnested_besaetninger AS (
-                SELECT 
+                SELECT
                     Response.EjendomsOplysninger.ChrNummer AS chr_number,
                     UNNEST(Response.EjendomsOplysninger.Besaetninger.Besaetning) AS besaetning
                 FROM ejendom_oplys_raw

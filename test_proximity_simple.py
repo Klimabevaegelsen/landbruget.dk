@@ -28,21 +28,21 @@ def test_simple_proximity() -> None:
 
         # Load just 100 disaggregation records
         conn.execute(f"""
-            CREATE TABLE sample_disaggregation AS 
+            CREATE TABLE sample_disaggregation AS
             SELECT * FROM '{gold_dir / "pesticide_disaggregation_2021_2022.parquet"}'
             LIMIT 100
         """)
 
         # Load field data
         conn.execute(f"""
-            CREATE TABLE sample_fields AS 
+            CREATE TABLE sample_fields AS
             SELECT * FROM '{silver_dir / "fvm_marker_2022.parquet"}'
             WHERE field_uuid IN (SELECT field_uuid FROM sample_disaggregation)
         """)
 
         # Load just 1000 buildings
         conn.execute(f"""
-            CREATE TABLE sample_buildings AS 
+            CREATE TABLE sample_buildings AS
             SELECT * FROM '{silver_dir / "joined_buildings.parquet"}'
             WHERE category_group = 'residential' AND address IS NOT NULL
             LIMIT 1000
@@ -80,10 +80,10 @@ def test_simple_proximity() -> None:
         print("\n🧪 Testing coordinate transformation...")
         conn.execute("""
             CREATE TABLE fields_utm AS
-            SELECT 
+            SELECT
                 field_uuid,
                 ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as geom_utm
-            FROM sample_fields 
+            FROM sample_fields
             WHERE geometry IS NOT NULL
         """)
 
@@ -109,7 +109,7 @@ def test_simple_proximity() -> None:
         print("\n🧪 Testing LEFT JOIN proximity...")
         conn.execute("""
             CREATE TABLE proximity_test AS
-            SELECT 
+            SELECT
                 f.field_uuid,
                 COUNT(b.address) as nearby_buildings
             FROM fields_utm f
@@ -129,10 +129,10 @@ def test_simple_proximity() -> None:
 
         # Show some results
         sample_results = conn.execute("""
-            SELECT field_uuid, nearby_buildings 
-            FROM proximity_test 
-            WHERE nearby_buildings > 0 
-            ORDER BY nearby_buildings DESC 
+            SELECT field_uuid, nearby_buildings
+            FROM proximity_test
+            WHERE nearby_buildings > 0
+            ORDER BY nearby_buildings DESC
             LIMIT 5
         """).fetchall()
 

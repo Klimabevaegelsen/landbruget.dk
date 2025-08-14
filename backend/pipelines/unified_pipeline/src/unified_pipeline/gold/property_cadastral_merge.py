@@ -136,8 +136,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             try:
                 # Test if we can access the BFE number from the nested structure
                 test_result = self.conn.execute("""
-                    SELECT properties.bestemtFastEjendomBFENr as bfe_number 
-                    FROM property_owners 
+                    SELECT properties.bestemtFastEjendomBFENr as bfe_number
+                    FROM property_owners
                     LIMIT 1
                 """).fetchone()
 
@@ -159,7 +159,7 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             self.log.info("Performing BFE-based merge and creating result table...")
             merge_query = f"""
             CREATE OR REPLACE TABLE merged_properties AS
-            SELECT 
+            SELECT
                 p.{bfe_column} as bfe_number,
                 p.properties.ejendePerson as person_data,
                 p.properties.ejendeVirksomhed as company_data,
@@ -210,14 +210,14 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                 try:
                     # Extract CVR numbers from the company_data JSON structure
                     cvr_extraction_query = """
-                    SELECT DISTINCT 
+                    SELECT DISTINCT
                         TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) as cvr_number
-                    FROM merged_properties 
+                    FROM merged_properties
                     WHERE company_data IS NOT NULL
                       AND JSON_EXTRACT_STRING(company_data, '$.cvrNummer') IS NOT NULL
                       AND TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) != ''
                       AND LENGTH(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR))) = 8
-                      AND REGEXP_MATCHES(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)), 
+                      AND REGEXP_MATCHES(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)),
                                         '^[1-9][0-9]{7}$')
                     ORDER BY cvr_number
                     """

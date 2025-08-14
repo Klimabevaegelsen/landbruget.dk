@@ -103,7 +103,7 @@ def test_workflow_integration() -> bool:
             workflow_content = f.read()
 
         required_elements = [
-            "herd_discovery", "discovery_year:", "--discovery-year", 
+            "herd_discovery", "discovery_year:", "--discovery-year",
             "Year for herd volume discovery"
         ]
 

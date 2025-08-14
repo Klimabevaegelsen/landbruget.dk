@@ -313,9 +313,9 @@ def extract_cvr_numbers_from_table(
     """
     try:
         query = f"""
-        SELECT DISTINCT {cvr_column} 
-        FROM {table_name} 
-        WHERE {cvr_column} IS NOT NULL 
+        SELECT DISTINCT {cvr_column}
+        FROM {table_name}
+        WHERE {cvr_column} IS NOT NULL
         AND {cvr_column} != ''
         AND LENGTH(TRIM({cvr_column})) = 8
         AND {cvr_column} ~ '^[1-9][0-9]{{7}}$'  -- 8 digits, not starting with 0

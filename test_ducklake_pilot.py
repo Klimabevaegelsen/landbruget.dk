@@ -132,7 +132,7 @@ class DuckLakePilot:
             # Create silver table (processed data)
             self.conn.execute("""
                 CREATE TABLE silver.bmd_processed AS
-                SELECT 
+                SELECT
                     company_name,
                     cvr_number,
                     registration_date,
@@ -168,7 +168,7 @@ class DuckLakePilot:
             # Validate data quality
             result = self.conn.execute("""
                 SELECT COUNT(*) as invalid_count
-                FROM bronze.bmd_raw 
+                FROM bronze.bmd_raw
                 WHERE cvr_number IS NULL OR data_quality_score < 0.5
             """).fetchone()
 
@@ -182,7 +182,7 @@ class DuckLakePilot:
             # Process data into silver layer
             self.conn.execute("""
                 INSERT INTO silver.bmd_processed
-                SELECT 
+                SELECT
                     company_name,
                     cvr_number,
                     registration_date,
@@ -218,14 +218,14 @@ class DuckLakePilot:
 
             # Add new column
             self.conn.execute("""
-                ALTER TABLE silver.bmd_processed 
+                ALTER TABLE silver.bmd_processed
                 ADD COLUMN sustainability_score DOUBLE DEFAULT 0.0
             """)
             logger.info("✅ Added sustainability_score column")
 
             # Update existing records
             self.conn.execute("""
-                UPDATE silver.bmd_processed 
+                UPDATE silver.bmd_processed
                 SET sustainability_score = data_quality_score * 0.9 + RANDOM() * 0.1
             """)
             logger.info("✅ Updated sustainability scores")
@@ -255,7 +255,7 @@ class DuckLakePilot:
 
             # Make some changes
             self.conn.execute("""
-                UPDATE silver.bmd_processed 
+                UPDATE silver.bmd_processed
                 SET sustainability_score = sustainability_score + 0.1
                 WHERE cvr_number % 10 = 0
             """)
@@ -293,7 +293,7 @@ class DuckLakePilot:
 
             # Complex analytical query
             results = self.conn.execute("""
-                SELECT 
+                SELECT
                     EXTRACT(YEAR FROM registration_date) as reg_year,
                     COUNT(*) as company_count,
                     AVG(data_quality_score) as avg_quality,

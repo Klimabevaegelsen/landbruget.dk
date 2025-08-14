@@ -438,12 +438,12 @@ def process_chr_data_streaming(
                         # Load batch into temporary table - use appropriate reader based on file type
                         if pattern.endswith(".parquet"):
                             con.raw_sql(f"""
-                                CREATE OR REPLACE TABLE temp_batch AS 
+                                CREATE OR REPLACE TABLE temp_batch AS
                                 SELECT * FROM read_parquet(['{batch_file_list}'])
                             """)
                         else:
                             con.raw_sql(f"""
-                                CREATE OR REPLACE TABLE temp_batch AS 
+                                CREATE OR REPLACE TABLE temp_batch AS
                                 SELECT * FROM read_json_auto(['{batch_file_list}'], maximum_object_size=1073741824)
                             """)
 
@@ -463,7 +463,8 @@ def process_chr_data_streaming(
                         con.raw_sql("DROP TABLE temp_batch")
 
                     logging.info(
-                        f"✅ Loaded {table_name}: {total_records:,} records from {len(matching_files)} files "\n                        f"(processed in batches)"
+                        f"✅ Loaded {table_name}: {total_records:,} records from "
+                        f"{len(matching_files)} files (processed in batches)"
                     )
                     loaded_tables[dataset_key] = table_name
 
@@ -509,7 +510,7 @@ def process_chr_data_streaming(
 
                             # Load into DuckDB using read_parquet
                             con.raw_sql(f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_parquet('{str(temp_path)}')
                             """)
 
@@ -528,8 +529,8 @@ def process_chr_data_streaming(
 
                             # Load into DuckDB using read_json_auto for robust JSON parsing
                             con.raw_sql(f"""
-                                CREATE TABLE {table_name} AS 
-                                SELECT * FROM read_json_auto('{str(temp_path)}', 
+                                CREATE TABLE {table_name} AS
+                                SELECT * FROM read_json_auto('{str(temp_path)}',
                                                            maximum_object_size=1073741824)
                             """)
 
@@ -606,8 +607,8 @@ def process_chr_data_streaming(
                     # Load consolidated JSONL into DuckDB
                     try:
                         con.raw_sql(f"""
-                            CREATE TABLE vetstat AS 
-                            SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', 
+                            CREATE TABLE vetstat AS
+                            SELECT * FROM read_json_auto('{str(temp_jsonl_path)}',
                                                        maximum_object_size=1073741824)
                         """)
                         logging.info("Successfully created VetStat table in DuckDB")
@@ -730,7 +731,8 @@ def process_chr_data_streaming(
                             parquet_path = silver_dir / "property_owners.parquet"
                             if parquet_path.exists():
                                 con.raw_sql(
-                                    f"CREATE OR REPLACE TABLE property_owners AS "\n                                    f"SELECT * FROM read_parquet('{parquet_path}')"
+                                    f"CREATE OR REPLACE TABLE property_owners AS "
+                                    f"SELECT * FROM read_parquet('{parquet_path}')"
                                 )
                         except Exception as e:
                             logging.warning(f"Failed to register property_owners table for CVR collection: {e}")
@@ -745,7 +747,8 @@ def process_chr_data_streaming(
                             parquet_path = silver_dir / "property_users.parquet"
                             if parquet_path.exists():
                                 con.raw_sql(
-                                    f"CREATE OR REPLACE TABLE property_users AS SELECT * FROM read_parquet('{parquet_path}')"
+                                    f"CREATE OR REPLACE TABLE property_users AS "
+                                    f"SELECT * FROM read_parquet('{parquet_path}')"
                                 )
                         except Exception as e:
                             logging.warning(f"Failed to register property_users table for CVR collection: {e}")
@@ -1026,7 +1029,8 @@ def process_chr_data(
                         )
                     else:
                         logging.warning(
-                            f"XML parser succeeded but output file is empty or missing: {vetstat_antibiotics_jsonl_path}"
+                            f"XML parser succeeded but output file is empty or missing: "
+                            f"{vetstat_antibiotics_jsonl_path}"
                         )
                 else:
                     logging.warning("⚠️ VetStat XML processing failed, proceeding without antibiotic data")
@@ -1181,7 +1185,9 @@ def process_chr_data(
                     # Set to 1GB (1073741824 bytes)
                     max_obj_size_bytes = 1073741824
                     con.con.sql(
-                        f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(temp_jsonl_path)}', maximum_object_size={max_obj_size_bytes});"
+                        f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM "
+                        f"read_json_auto('{str(temp_jsonl_path)}', "
+                        f"maximum_object_size={max_obj_size_bytes});"
                     )
                     raw_tables[table_name] = con.table(table_name)  # Get Ibis table reference
 
@@ -1250,12 +1256,15 @@ def process_chr_data(
 
                         if file_key.endswith(".parquet"):
                             con.con.sql(
-                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet(['{file_list_str}']);"
+                                f"CREATE OR REPLACE TABLE {table_name} AS "
+                                f"SELECT * FROM read_parquet(['{file_list_str}']);"
                             )
                         else:
                             max_obj_size_bytes = 1073741824  # 1GB
                             con.con.sql(
-                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto(['{file_list_str}'], maximum_object_size={max_obj_size_bytes});"
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM "
+                                f"read_json_auto(['{file_list_str}'], "
+                                f"maximum_object_size={max_obj_size_bytes});"
                             )
                         raw_tables[table_name] = con.table(table_name)
                         successfully_loaded = True
@@ -1276,13 +1285,16 @@ def process_chr_data(
                         if file_path.suffix.lower() == ".parquet":
                             # Use read_parquet for parquet files
                             con.con.sql(
-                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_parquet('{str(file_path)}');"
+                                f"CREATE OR REPLACE TABLE {table_name} AS "
+                                f"SELECT * FROM read_parquet('{str(file_path)}');"
                             )
                         else:
                             # Use read_json_auto for JSON files
                             max_obj_size_bytes = 1073741824  # 1GB
                             con.con.sql(
-                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM read_json_auto('{str(file_path)}', maximum_object_size={max_obj_size_bytes});"
+                                f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM "
+                                f"read_json_auto('{str(file_path)}', "
+                                f"maximum_object_size={max_obj_size_bytes});"
                             )
                         raw_tables[table_name] = con.table(table_name)
                         successfully_loaded = True
@@ -1298,7 +1310,8 @@ def process_chr_data(
             optional_tables = ["cattle_movements", "spf_su_herds"]
             if table_name in optional_tables:
                 logging.warning(
-                    f"Optional table '{table_name}' not found - skipping (this is normal if the corresponding bronze step wasn't run)"
+                    f"Optional table '{table_name}' not found - skipping "
+                    f"(this is normal if the corresponding bronze step wasn't run)"
                 )
             else:
                 logging.error(f"Failed to load table '{table_name}' from all available sources.")
@@ -1425,7 +1438,8 @@ def process_chr_data(
                         parquet_path = silver_dir / "property_owners.parquet"
                         if parquet_path.exists():
                             con.con.execute(
-                                f"CREATE OR REPLACE TABLE property_owners AS SELECT * FROM read_parquet('{parquet_path}')"
+                                f"CREATE OR REPLACE TABLE property_owners AS "
+                                f"SELECT * FROM read_parquet('{parquet_path}')"
                             )
                     except Exception as e:
                         logging.warning(f"Failed to register property_owners table for CVR collection: {e}")
@@ -1440,7 +1454,8 @@ def process_chr_data(
                         parquet_path = silver_dir / "property_users.parquet"
                         if parquet_path.exists():
                             con.con.execute(
-                                f"CREATE OR REPLACE TABLE property_users AS SELECT * FROM read_parquet('{parquet_path}')"
+                                f"CREATE OR REPLACE TABLE property_users AS "
+                                f"SELECT * FROM read_parquet('{parquet_path}')"
                             )
                     except Exception as e:
                         logging.warning(f"Failed to register property_users table for CVR collection: {e}")

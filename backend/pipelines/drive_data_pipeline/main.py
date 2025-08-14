@@ -143,7 +143,8 @@ def _save_discovered_cvr_numbers(
                         # Fallback to existing temp file method
                         with gcs_access._temp_download(file_path) as temp_file:
                             conn.execute(
-                                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{temp_file}')"
+                                f"CREATE TABLE {table_name} AS "
+                                f"SELECT * FROM read_parquet('{temp_file}')"
                             )
                 else:
                     # Local file - use directly
@@ -258,7 +259,8 @@ class ProgressTracker:
                 )
             else:
                 print(
-                    f"Bronze progress: {self.bronze_stats['downloaded_files']} files processed (total unknown)"
+                    f"Bronze progress: {self.bronze_stats['downloaded_files']} "
+                    f"files processed (total unknown)"
                 )
 
     def start_silver_operation(self, total_files: int) -> None:
@@ -296,7 +298,8 @@ class ProgressTracker:
                 )
             else:
                 print(
-                    f"Silver progress: {self.silver_stats['processed_files']} files processed (total unknown)"
+                    f"Silver progress: {self.silver_stats['processed_files']} "
+                    f"files processed (total unknown)"
                 )
 
     def print_summary(self) -> None:
@@ -320,7 +323,8 @@ class ProgressTracker:
         if self.silver_stats["total_files"] > 0:
             print("\nSilver Layer:")
             print(
-                f"  Files processed: {self.silver_stats['processed_files']}/{self.silver_stats['total_files']}"
+                f"  Files processed: {self.silver_stats['processed_files']}/"
+                f"{self.silver_stats['total_files']}"
             )
             if self.silver_stats["processing_errors"] > 0:
                 print(f"  Processing errors: {self.silver_stats['processing_errors']}")
@@ -543,7 +547,8 @@ def main() -> int:
                 # Count files to process for progress tracking using storage manager
                 # This ensures compatibility with both local and GCS storage
                 try:
-                    # Use storage manager to list metadata files (which correspond to processable files)
+                    # Use storage manager to list metadata files
+                    # (which correspond to processable files)
                     metadata_files = storage_manager.list_files(
                         bronze_run_path, pattern="*.metadata.json"
                     )
@@ -667,7 +672,8 @@ def main() -> int:
                         try:
                             table_name = f"drive_data_{i + 1}"
                             conn.execute(
-                                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
+                                f"CREATE TABLE {table_name} AS "
+                                f"SELECT * FROM read_parquet('{file_path}')"
                             )
                             table_names.append(table_name)
                         except Exception as e:

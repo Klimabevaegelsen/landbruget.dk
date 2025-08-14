@@ -230,7 +230,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         JOIN intl_pig_nt nt ON SUBSTRING(sv.traces_document, 9) = SUBSTRING(nt.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document IS NOT NULL
         AND nt.i_2_imsoc_reference IS NOT NULL
         
@@ -290,7 +290,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         JOIN intl_pig_cl cl ON SUBSTRING(sv.traces_document, 9) = SUBSTRING(cl.i_2_certificate_reference_number, 10)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document IS NOT NULL
         AND cl.i_2_certificate_reference_number IS NOT NULL
         
@@ -350,7 +350,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         JOIN intl_pig_2024_2025 new ON SUBSTRING(sv.traces_document, 9) = SUBSTRING(new.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document IS NOT NULL
         AND new.i_2_imsoc_reference IS NOT NULL
         
@@ -410,7 +410,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         JOIN intl_pig_nt nt ON SUBSTRING(sv.traces_document, 3) = SUBSTRING(nt.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document LIKE 'DK%'
         AND nt.i_2_imsoc_reference IS NOT NULL
         
@@ -470,7 +470,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         JOIN intl_pig_nt nt ON SUBSTRING(sv.traces_document, 7) = SUBSTRING(nt.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document LIKE 'EU.DK.%'
         AND nt.i_2_imsoc_reference IS NOT NULL
         
@@ -530,7 +530,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         JOIN intl_pig_2024_2025 new ON SUBSTRING(sv.traces_document, 7) = SUBSTRING(new.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document LIKE 'EU.DK.%'
         AND new.i_2_imsoc_reference IS NOT NULL
         
@@ -589,9 +589,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.is_invalid,
             sv.missing_animal_count
         FROM svineflytning sv
-        JOIN intl_pig_nt nt ON CONCAT(EXTRACT(YEAR FROM sv.movement_date), '.', LPAD(sv.traces_document, 7, '0')) 
+        JOIN intl_pig_nt nt ON CONCAT(EXTRACT(YEAR FROM sv.movement_date), '.', LPAD(sv.traces_document, 7, '0'))
             = SUBSTRING(nt.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document ~ '^[0-9]+$'
         AND nt.i_2_imsoc_reference IS NOT NULL
         
@@ -652,9 +652,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         FROM svineflytning sv
         JOIN intl_pig_2024_2025 new ON CONCAT(
             EXTRACT(YEAR FROM sv.movement_date), '.', LPAD(sv.traces_document, 7, '0')
-        ) 
+        )
             = SUBSTRING(new.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document ~ '^[0-9]+$'
         AND new.i_2_imsoc_reference IS NOT NULL
         
@@ -714,7 +714,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         JOIN intl_pig_nt nt ON sv.traces_document = SUBSTRING(nt.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document ~ '^[0-9]{4}\\.[0-9]+$'
         AND nt.i_2_imsoc_reference IS NOT NULL
         
@@ -774,7 +774,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         JOIN intl_pig_2024_2025 new ON sv.traces_document = SUBSTRING(new.i_2_imsoc_reference, 13)
-        WHERE sv.receiver_country_code != 'DK' 
+        WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document ~ '^[0-9]{4}\\.[0-9]+$'
         AND new.i_2_imsoc_reference IS NOT NULL
     """)
@@ -783,7 +783,7 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
     # Include all comprehensive columns in the final deduplicated table
     conn.execute("""
         CREATE OR REPLACE TABLE certificate_matched_movements AS
-        SELECT 
+        SELECT
             traces_document,
             sender_chr_number,
             receiver_chr_number,
@@ -837,9 +837,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         FROM (
             SELECT *,
                 ROW_NUMBER() OVER (
-                    PARTITION BY traces_document, sender_chr_number, receiver_chr_number, movement_date 
-                    ORDER BY 
-                        CASE 
+                    PARTITION BY traces_document, sender_chr_number, receiver_chr_number, movement_date
+                    ORDER BY
+                        CASE
                             WHEN intl_dataset = 'international_pig_2024_2025' THEN 1
                             WHEN intl_dataset = 'international_pig_nt' THEN 2
                             WHEN intl_dataset = 'international_pig_cl' THEN 3
@@ -870,7 +870,7 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
         CREATE OR REPLACE TABLE unified_cattle_traces AS
         SELECT * FROM (
             -- CL version (2017-2024) - has different schema
-            SELECT 
+            SELECT
                 i_2_certificate_reference_number as certificate,
                 strptime(i_15_date_and_time_of_departure, '%Y-%m-%d %H:%M:%S')::DATE as movement_date,
                 i_15_date_and_time_of_departure as raw_datetime,
@@ -887,7 +887,7 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
             UNION ALL
             
             -- NT version (2017-2024) - has different schema than CL, with deduplication
-            SELECT 
+            SELECT
                 i_2_imsoc_reference as certificate,
                 strptime(i_14_dato_og_klokkeslaet_for_afgang, '%Y-%m-%d %H:%M:%S')::DATE as movement_date,
                 i_14_dato_og_klokkeslaet_for_afgang as raw_datetime,
@@ -901,7 +901,7 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
             FROM (
                 SELECT *,
                     ROW_NUMBER() OVER (
-                        PARTITION BY i_2_imsoc_reference 
+                        PARTITION BY i_2_imsoc_reference
                         ORDER BY i_14_dato_og_klokkeslaet_for_afgang DESC
                     ) as rn
                 FROM intl_cattle_traces_nt
@@ -912,7 +912,7 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
             UNION ALL
             
             -- Combined 2024-2025 (same schema as NT) - cattle only
-            SELECT 
+            SELECT
                 i_2_imsoc_reference as certificate,
                 strptime(i_14_dato_og_klokkeslaet_for_afgang, '%Y-%m-%d %H:%M:%S')::DATE as movement_date,
                 i_14_dato_og_klokkeslaet_for_afgang as raw_datetime,
@@ -926,8 +926,8 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
             FROM intl_combined_traces_2024_2025
             WHERE i_14_dato_og_klokkeslaet_for_afgang != '-'
             AND (
-                i_30_commodities LIKE '%cattle%' 
-                OR i_30_commodities LIKE '%bovine%' 
+                i_30_commodities LIKE '%cattle%'
+                OR i_30_commodities LIKE '%bovine%'
                 OR i_30_commodities LIKE '%Cattle%'
             )
         ) all_traces
@@ -945,11 +945,11 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
             chr.counterparty_herd as receiver_chr_number,
             chr.movement_date,
             chr.animal_count as total_animals,
-            CASE 
+            CASE
                 WHEN ct.receiver_country != 'Danmark' AND ct.receiver_country != 'DK' THEN ct.receiver_country
                 ELSE 'DK'
             END as receiver_country_code,
-            CASE 
+            CASE
                 WHEN ct.sender_country != 'Danmark' AND ct.sender_country != 'DK' THEN ct.sender_country
                 ELSE 'DK'
             END as sender_country_code,
@@ -1000,11 +1000,11 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
         JOIN chr_properties sender_prop ON chr.reporting_herd_number = sender_prop.chr_number
         JOIN chr_properties receiver_prop ON chr.counterparty_herd = receiver_prop.chr_number
         JOIN unified_cattle_traces ct ON chr.movement_date = ct.movement_date
-        WHERE 
+        WHERE
             -- Only process CHR movements that are flagged as international
             chr.is_international = true
             -- Match international movements (either direction)
-            AND (((ct.sender_country = 'Danmark' OR ct.sender_country = 'DK') 
+            AND (((ct.sender_country = 'Danmark' OR ct.sender_country = 'DK')
                   AND (ct.receiver_country != 'Danmark' AND ct.receiver_country != 'DK'))
                  OR
                  ((ct.sender_country != 'Danmark' AND ct.sender_country != 'DK')
@@ -1020,9 +1020,9 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                     LOWER(sender_prop.municipality_name) = LOWER(ct.sender_city)
                     OR
                     -- Match by address string similarity
-                    (sender_prop.address IS NOT NULL AND ct.sender_address IS NOT NULL 
+                    (sender_prop.address IS NOT NULL AND ct.sender_address IS NOT NULL
                      AND (LOWER(sender_prop.address) LIKE '%' || LOWER(SPLIT_PART(ct.sender_address, ' ', 1)) || '%'
-                          OR LOWER(ct.sender_address) LIKE '%' || 
+                          OR LOWER(ct.sender_address) LIKE '%' ||
                           LOWER(SPLIT_PART(sender_prop.address, ' ', 1)) || '%'))
                 )
                 OR
@@ -1035,9 +1035,9 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                     LOWER(receiver_prop.municipality_name) = LOWER(ct.sender_city)
                     OR
                     -- Match by address string similarity
-                    (receiver_prop.address IS NOT NULL AND ct.sender_address IS NOT NULL 
+                    (receiver_prop.address IS NOT NULL AND ct.sender_address IS NOT NULL
                      AND (LOWER(receiver_prop.address) LIKE '%' || LOWER(SPLIT_PART(ct.sender_address, ' ', 1)) || '%'
-                          OR LOWER(ct.sender_address) LIKE '%' || 
+                          OR LOWER(ct.sender_address) LIKE '%' ||
                           LOWER(SPLIT_PART(receiver_prop.address, ' ', 1)) || '%'))
                 )
             )
@@ -1075,7 +1075,7 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
 
     conn.execute("""
         CREATE OR REPLACE TABLE unified_transportation_dataset AS
-        SELECT 
+        SELECT
             cm.*,
             
             -- Sender information from CHR herds
@@ -1093,13 +1093,13 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
             sender_p.postal_code as sender_postal_code,
             sender_p.municipality_name as sender_municipality,
             
-            -- Receiver address information  
+            -- Receiver address information
             receiver_p.address as receiver_address,
             receiver_p.postal_code as receiver_postal_code,
             receiver_p.municipality_name as receiver_municipality,
             
             -- COMPREHENSIVE Destination type classification
-            CASE 
+            CASE
                 -- Slaughterhouses
                 WHEN receiver_h.business_type_name LIKE '%slagteri%' THEN 'Slaughterhouse'
                 
@@ -1130,18 +1130,18 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
                 WHEN receiver_h.business_type_name LIKE '%sædopsamling%' THEN 'AI Station'
                 
                 -- Trading and markets
-                WHEN receiver_h.business_type_name LIKE '%handel%' 
-                    OR receiver_h.business_type_name LIKE '%marked%' 
+                WHEN receiver_h.business_type_name LIKE '%handel%'
+                    OR receiver_h.business_type_name LIKE '%marked%'
                     THEN 'Market/Trading'
                 
                 -- Hobby and recreational
                 WHEN receiver_h.business_type_name LIKE '%Hobby%' THEN 'Hobby Farm'
-                WHEN receiver_h.business_type_name LIKE '%pension%' 
-                    OR receiver_h.business_type_name LIKE '%rideskole%' 
+                WHEN receiver_h.business_type_name LIKE '%pension%'
+                    OR receiver_h.business_type_name LIKE '%rideskole%'
                     THEN 'Boarding/Riding School'
                 WHEN receiver_h.business_type_name LIKE '%Stutteri%' THEN 'Stud Farm'
-                WHEN receiver_h.business_type_name LIKE '%væddeløb%' 
-                    OR receiver_h.business_type_name LIKE '%træning%' 
+                WHEN receiver_h.business_type_name LIKE '%væddeløb%'
+                    OR receiver_h.business_type_name LIKE '%træning%'
                     THEN 'Racing/Training'
                 
                 -- Other livestock operations
@@ -1165,7 +1165,7 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
             END as destination_type,
             
             -- COMPREHENSIVE Origin type classification (same logic)
-            CASE 
+            CASE
                 WHEN sender_h.business_type_name LIKE '%slagteri%' THEN 'Slaughterhouse'
                 WHEN sender_h.business_type_name = 'Forarbejdningsanlæg' THEN 'Rendering Plant'
                 WHEN sender_h.business_type_name LIKE '%sammenbringning%' THEN 'Collection Center'
@@ -1183,16 +1183,16 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
                 WHEN sender_h.business_type_name LIKE '%karantæne%' THEN 'Quarantine Facility'
                 WHEN sender_h.business_type_name LIKE '%forsøg%' THEN 'Research Facility'
                 WHEN sender_h.business_type_name LIKE '%sædopsamling%' THEN 'AI Station'
-                WHEN sender_h.business_type_name LIKE '%handel%' 
-                    OR sender_h.business_type_name LIKE '%marked%' 
+                WHEN sender_h.business_type_name LIKE '%handel%'
+                    OR sender_h.business_type_name LIKE '%marked%'
                     THEN 'Market/Trading'
                 WHEN sender_h.business_type_name LIKE '%Hobby%' THEN 'Hobby Farm'
-                WHEN sender_h.business_type_name LIKE '%pension%' 
-                    OR sender_h.business_type_name LIKE '%rideskole%' 
+                WHEN sender_h.business_type_name LIKE '%pension%'
+                    OR sender_h.business_type_name LIKE '%rideskole%'
                     THEN 'Boarding/Riding School'
                 WHEN sender_h.business_type_name LIKE '%Stutteri%' THEN 'Stud Farm'
-                WHEN sender_h.business_type_name LIKE '%væddeløb%' 
-                    OR sender_h.business_type_name LIKE '%træning%' 
+                WHEN sender_h.business_type_name LIKE '%væddeløb%'
+                    OR sender_h.business_type_name LIKE '%træning%'
                     THEN 'Racing/Training'
                 WHEN sender_h.business_type_name LIKE '%Øvrige%' THEN 'Other Livestock'
                 WHEN sender_h.business_type_name LIKE '%besætning%' THEN 'Livestock Farm'
@@ -1242,8 +1242,8 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
     logger.info("\n🔄 Movement Types:")
     movement_types = conn.execute("""
         SELECT movement_type, COUNT(*) as count, SUM(total_animals) as animals
-        FROM unified_transportation_dataset 
-        GROUP BY movement_type 
+        FROM unified_transportation_dataset
+        GROUP BY movement_type
         ORDER BY count DESC
     """).fetchall()
 
@@ -1254,17 +1254,17 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
     # Species breakdown
     logger.info("\n🐷🐄 Species Distribution:")
     species_codes = conn.execute("""
-        SELECT 
+        SELECT
             species_code,
-            CASE 
+            CASE
                 WHEN species_code = 12 THEN 'Cattle'
-                WHEN species_code = 15 THEN 'Pigs' 
+                WHEN species_code = 15 THEN 'Pigs'
                 ELSE 'Other'
             END as species_name,
-            COUNT(*) as count, 
+            COUNT(*) as count,
             SUM(total_animals) as animals
-        FROM unified_transportation_dataset 
-        GROUP BY species_code 
+        FROM unified_transportation_dataset
+        GROUP BY species_code
         ORDER BY count DESC
     """).fetchall()
 
@@ -1276,9 +1276,9 @@ def generate_summary_statistics(conn: duckdb.DuckDBPyConnection) -> None:
     logger.info("\n🏭 Top Destination Types:")
     dest_types = conn.execute("""
         SELECT destination_type, COUNT(*) as count, SUM(total_animals) as animals
-        FROM unified_transportation_dataset 
-        GROUP BY destination_type 
-        ORDER BY count DESC 
+        FROM unified_transportation_dataset
+        GROUP BY destination_type
+        ORDER BY count DESC
         LIMIT 10
     """).fetchall()
 

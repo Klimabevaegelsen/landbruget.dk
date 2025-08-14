@@ -436,7 +436,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,

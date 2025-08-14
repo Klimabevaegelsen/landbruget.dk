@@ -385,7 +385,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
-            SELECT 
+            SELECT
                 *,
                 ST_GeomFromText(geometry) as geometry_spatial,
                 geometry as geometry_wgs84
@@ -428,7 +428,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             # Create dissolved geometries for each category using transformed coordinates
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                SELECT 
+                SELECT
                     status_category,
                     ST_Union_Agg(geometry_spatial) as dissolved_geometry
                 FROM {input_table_name}
@@ -449,7 +449,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 # Create empty table with proper schema
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                    SELECT 
+                    SELECT
                         CAST(NULL AS VARCHAR) as status_category,
                         CAST(NULL AS GEOMETRY) as geometry,
                         CAST(NULL AS TIMESTAMP) as dissolved_at
@@ -474,7 +474,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 # Create final table with overlap handling
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
-                    SELECT 
+                    SELECT
                         'Action Required' as status_category,
                         dissolved_geometry as geometry,
                         CURRENT_TIMESTAMP as dissolved_at
@@ -483,12 +483,12 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                     
                     UNION ALL
                     
-                    SELECT 
+                    SELECT
                         'Completed' as status_category,
                         ST_Difference(
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} 
+                            (SELECT dissolved_geometry FROM {dissolved_table_name}
                              WHERE status_category = 'Completed'),
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} 
+                            (SELECT dissolved_geometry FROM {dissolved_table_name}
                              WHERE status_category = 'Action Required')
                         ) as geometry,
                         CURRENT_TIMESTAMP as dissolved_at
@@ -497,7 +497,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 # No overlaps to handle, use original dissolved geometries
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
-                    SELECT 
+                    SELECT
                         status_category,
                         dissolved_geometry as geometry,
                         CURRENT_TIMESTAMP as dissolved_at
@@ -529,7 +529,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             empty_table_name = "bnbo_dissolved_empty"
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {empty_table_name} AS
-                SELECT 
+                SELECT
                     CAST(NULL AS VARCHAR) as status_category,
                     CAST(NULL AS GEOMETRY) as geometry,
                     CAST(NULL AS TIMESTAMP) as dissolved_at

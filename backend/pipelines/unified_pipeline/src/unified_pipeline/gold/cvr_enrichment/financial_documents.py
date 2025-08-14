@@ -734,17 +734,17 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     self.conn.execute(
                         f"""
                         INSERT INTO {table_name}
-                        SELECT 
+                        SELECT
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                             json_extract(json_data, '$.company_name')::VARCHAR as company_name,
                             json_extract(json_data, '$.document_count')::INTEGER as document_count,
                             json_extract(json_data, '$.xml_document_count')::INTEGER as xml_document_count,
                             json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as total_xml_size_bytes,
                             json_extract(json_data, '$.latest_reporting_date')::VARCHAR as latest_reporting_date,
-                            CASE 
-                                WHEN json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL 
-                                THEN true 
-                                ELSE false 
+                            CASE
+                                WHEN json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL
+                                THEN true
+                                ELSE false
                             END as has_financial_metrics,
                             json_data as financial_data_json,
                             json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,

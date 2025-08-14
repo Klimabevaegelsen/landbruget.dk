@@ -170,9 +170,11 @@ class SchemaAdapter(DuckDBProcessor):
             elif target_type == DataType.BOOLEAN:
                 # Handle various boolean representations
                 return f"""
-                    CASE 
-                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN ('true', '1', 'yes', 'ja', 't', 'y') THEN true
-                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN ('false', '0', 'no', 'nej', 'f', 'n') THEN false
+                    CASE
+                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN
+                            ('true', '1', 'yes', 'ja', 't', 'y') THEN true
+                        WHEN LOWER(CAST({expr} AS VARCHAR)) IN
+                            ('false', '0', 'no', 'nej', 'f', 'n') THEN false
                         ELSE TRY_CAST({expr} AS BOOLEAN)
                     END
                 """
@@ -250,7 +252,9 @@ class SchemaAdapter(DuckDBProcessor):
                     # Try to convert a sample of the data
                     sample_query = f"""
                         SELECT COUNT(*) as total_count,
-                               COUNT(CASE WHEN TRY_CAST({source_col} AS {self._get_duckdb_type(col_schema.data_type)}) IS NOT NULL THEN 1 END) as valid_count
+                               COUNT(CASE WHEN TRY_CAST({source_col} AS
+                                   {self._get_duckdb_type(col_schema.data_type)}) IS NOT NULL
+                                   THEN 1 END) as valid_count
                         FROM {table_name}
                         WHERE {source_col} IS NOT NULL
                         LIMIT 1000
@@ -264,7 +268,8 @@ class SchemaAdapter(DuckDBProcessor):
                     ):  # Allow 5% conversion failures
                         invalid_count = total_count - valid_count
                         column_errors.append(
-                            f"Data type validation failed: {invalid_count}/{total_count} values cannot be converted to {col_schema.data_type.value}"
+                            f"Data type validation failed: {invalid_count}/{total_count} "
+                            f"values cannot be converted to {col_schema.data_type.value}"
                         )
 
                 except Exception as e:
@@ -274,7 +279,7 @@ class SchemaAdapter(DuckDBProcessor):
                 if not col_schema.nullable:
                     try:
                         null_count = self.conn.execute(f"""
-                            SELECT COUNT(*) FROM {table_name} 
+                            SELECT COUNT(*) FROM {table_name}
                             WHERE {source_col} IS NULL
                         """).fetchone()[0]
 

@@ -70,7 +70,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         self.log.info("Decomposing water projects with ST_Dump for optimal spatial indexing...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects AS
-            SELECT 
+            SELECT
                 project_id,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM water_projects_raw
@@ -92,7 +92,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
-            SELECT 
+            SELECT
                 wetland_key, -- Deterministic fragment key for stable joins
                 wetland_id,  -- Legacy numeric ID retained for compatibility
                 toerv_pct,   -- Keep wetland type for analysis
@@ -165,7 +165,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             # Create wetlands batch (ST_Dump already applied in wetlands table)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch_raw AS
-                SELECT 
+                SELECT
                     wetland_key,
                     wetland_id,
                     toerv_pct,
@@ -178,7 +178,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             # Calculate areas (wetland_id already exists from main wetlands table)
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetlands_batch AS
-                SELECT 
+                SELECT
                     wetland_key,
                     wetland_id,  -- Use existing wetland_id from decomposed wetlands table
                     toerv_pct,  -- Keep wetland type for analysis
@@ -203,26 +203,26 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
                 # Sample a few geometries to check validity and CRS
             sample_wetland = self.conn.execute("""
-                SELECT 
-                    ST_IsValid(geometry), 
+                SELECT
+                    ST_IsValid(geometry),
                     ST_Area_Spheroid(geometry),
                     'unknown' as srid,
                     ST_GeometryType(geometry),
                     ST_X(ST_Centroid(geometry)),
                     ST_Y(ST_Centroid(geometry))
-                FROM wetlands_batch 
+                FROM wetlands_batch
                 LIMIT 1
             """).fetchone()
 
             sample_water = self.conn.execute("""
-                SELECT 
-                    ST_IsValid(geometry), 
+                SELECT
+                    ST_IsValid(geometry),
                     ST_Area_Spheroid(geometry),
                     'unknown' as srid,
                     ST_GeometryType(geometry),
                     ST_X(ST_Centroid(geometry)),
                     ST_Y(ST_Centroid(geometry))
-                FROM water_projects 
+                FROM water_projects
                 LIMIT 1
             """).fetchone()
 
@@ -241,7 +241,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             # Create intersection records for this batch
             batch_query = """
             CREATE OR REPLACE TABLE batch_intersections AS
-            SELECT 
+            SELECT
                 wb.wetland_key,
                 wb.wetland_id,
                 wb.toerv_pct,  -- Wetland type for analysis
@@ -271,7 +271,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
             # Log batch progress
             batch_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     SUM(w.wetland_area_m2) / 1000000 as total_area_km2,
                     COUNT(*) as wetland_pieces_processed
                 FROM wetlands_batch w
@@ -315,7 +315,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.log.info("No intersection files found - creating empty intersection table")
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetland_water_intersections AS
-                SELECT 
+                SELECT
                     CAST(NULL AS VARCHAR) as wetland_key,  -- Missing column that caused the error!
                     CAST(NULL AS BIGINT) as wetland_id,
                     CAST(NULL AS VARCHAR) as toerv_pct,
@@ -356,7 +356,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         try:
             # Check water projects CRS and area
             wp_sample = conn.execute("""
-                SELECT 
+                SELECT
                     ST_XMin(geometry) as min_x,
                     ST_XMax(geometry) as max_x,
                     ST_YMin(geometry) as min_y,
@@ -365,8 +365,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     ST_Area(geometry) as area_planar,
                     ST_IsValid(geometry) as is_valid,
                     ST_GeometryType(geometry) as geom_type
-                FROM water_projects 
-                WHERE geometry IS NOT NULL 
+                FROM water_projects
+                WHERE geometry IS NOT NULL
                 LIMIT 1
             """).fetchone()
 
@@ -388,7 +388,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
             # Check wetlands CRS and area
             w_sample = conn.execute("""
-                SELECT 
+                SELECT
                     ST_XMin(geometry) as min_x,
                     ST_XMax(geometry) as max_x,
                     ST_YMin(geometry) as min_y,
@@ -397,8 +397,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     ST_Area(geometry) as area_planar,
                     ST_IsValid(geometry) as is_valid,
                     ST_GeometryType(geometry) as geom_type
-                FROM wetlands_raw 
-                WHERE geometry IS NOT NULL 
+                FROM wetlands_raw
+                WHERE geometry IS NOT NULL
                 LIMIT 1
             """).fetchone()
 
@@ -446,7 +446,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.log.info("🧪 Testing manual coordinate transformation:")
             try:
                 test_result = conn.execute("""
-                    SELECT 
+                    SELECT
                         ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326') as transformed_point,
                         ST_X(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) as lon,
                         ST_Y(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) as lat

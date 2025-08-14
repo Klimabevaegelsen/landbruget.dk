@@ -62,8 +62,8 @@ def validate_and_transform_geometries_duckdb(
         # Check the actual type of the geometry column
         geom_type_result = conn.execute(f"""
             SELECT DISTINCT typeof({geometry_column}) as geom_type
-            FROM {table_name} 
-            WHERE {geometry_column} IS NOT NULL 
+            FROM {table_name}
+            WHERE {geometry_column} IS NOT NULL
             LIMIT 5
         """).fetchall()
 
@@ -74,9 +74,9 @@ def validate_and_transform_geometries_duckdb(
         if "VARCHAR" in geom_types:
             logger.info(f"{dataset_name}: Converting VARCHAR geometries to spatial objects")
             conn.execute(f"""
-                UPDATE {table_name} SET 
+                UPDATE {table_name} SET
                     {geometry_column} = ST_GeomFromText({geometry_column})
-                WHERE {geometry_column} IS NOT NULL 
+                WHERE {geometry_column} IS NOT NULL
                     AND typeof({geometry_column}) = 'VARCHAR'
             """)
         else:
@@ -86,7 +86,7 @@ def validate_and_transform_geometries_duckdb(
 
         # Validate geometries and fix invalid ones
         invalid_count = conn.execute(f"""
-            SELECT COUNT(*) FROM {table_name} 
+            SELECT COUNT(*) FROM {table_name}
             WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
         """).fetchone()[0]
 
@@ -96,14 +96,14 @@ def validate_and_transform_geometries_duckdb(
             # Try to fix invalid geometries
             try:
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
+                    UPDATE {table_name} SET
                         {geometry_column} = ST_MakeValid({geometry_column})
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """)
 
                 # Check how many are still invalid
                 still_invalid = conn.execute(f"""
-                    SELECT COUNT(*) FROM {table_name} 
+                    SELECT COUNT(*) FROM {table_name}
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """).fetchone()[0]
 
@@ -112,14 +112,14 @@ def validate_and_transform_geometries_duckdb(
                         f"{dataset_name}: {still_invalid} geometries remain invalid, removing them"
                     )
                     conn.execute(f"""
-                        DELETE FROM {table_name} 
+                        DELETE FROM {table_name}
                         WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                     """)
 
             except Exception:
                 # Remove invalid geometries if ST_MakeValid fails
                 conn.execute(f"""
-                    DELETE FROM {table_name} 
+                    DELETE FROM {table_name}
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """)
                 logger.info(f"{dataset_name}: Removed {invalid_count} invalid geometries")
@@ -127,7 +127,7 @@ def validate_and_transform_geometries_duckdb(
         # Detect CRS before transformation by checking coordinate bounds
         logger.info(f"{dataset_name}: Detecting coordinate reference system")
         initial_bounds = conn.execute(f"""
-            SELECT 
+            SELECT
                 MIN(ST_XMin({geometry_column})) as min_x,
                 MAX(ST_XMax({geometry_column})) as max_x,
                 MIN(ST_YMin({geometry_column})) as min_y,
@@ -162,7 +162,7 @@ def validate_and_transform_geometries_duckdb(
                     f"{dataset_name}: Data in Danish UTM (EPSG:25832) - transforming to WGS84"
                 )
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
+                    UPDATE {table_name} SET
                         {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
                     WHERE {geometry_column} IS NOT NULL
                 """)
@@ -171,21 +171,21 @@ def validate_and_transform_geometries_duckdb(
                     f"{dataset_name}: Unknown CRS (X: {min_x:.1f}-{max_x:.1f}, Y: {min_y:.1f}-{max_y:.1f}) - assuming UTM"
                 )
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
+                    UPDATE {table_name} SET
                         {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
                     WHERE {geometry_column} IS NOT NULL
                 """)
         else:
             logger.warning(f"{dataset_name}: Could not detect CRS - assuming UTM and transforming")
             conn.execute(f"""
-                UPDATE {table_name} SET 
+                UPDATE {table_name} SET
                     {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
                 WHERE {geometry_column} IS NOT NULL
             """)
 
         # Apply coordinate flipping if needed - check bounds AFTER any transformation
         post_transform_bounds = conn.execute(f"""
-            SELECT 
+            SELECT
                 MIN(ST_XMin({geometry_column})) as min_x,
                 MAX(ST_XMax({geometry_column})) as max_x,
                 MIN(ST_YMin({geometry_column})) as min_y,
@@ -204,14 +204,14 @@ def validate_and_transform_geometries_duckdb(
             if is_wgs84_lat_lon_after:
                 logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix lat/lon order")
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
+                    UPDATE {table_name} SET
                         {geometry_column} = ST_FlipCoordinates({geometry_column})
                     WHERE {geometry_column} IS NOT NULL
                 """)
 
                 # Verify the flip worked
                 final_bounds = conn.execute(f"""
-                    SELECT 
+                    SELECT
                         MIN(ST_XMin({geometry_column})) as min_x,
                         MAX(ST_XMax({geometry_column})) as max_x,
                         MIN(ST_YMin({geometry_column})) as min_y,
@@ -231,7 +231,7 @@ def validate_and_transform_geometries_duckdb(
 
         # Final validation in WGS84
         invalid_wgs84 = conn.execute(f"""
-            SELECT COUNT(*) FROM {table_name} 
+            SELECT COUNT(*) FROM {table_name}
             WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
         """).fetchone()[0]
 
@@ -243,13 +243,13 @@ def validate_and_transform_geometries_duckdb(
             # Try to fix again
             try:
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
+                    UPDATE {table_name} SET
                         {geometry_column} = ST_MakeValid({geometry_column})
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """)
 
                 final_invalid = conn.execute(f"""
-                    SELECT COUNT(*) FROM {table_name} 
+                    SELECT COUNT(*) FROM {table_name}
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """).fetchone()[0]
 
@@ -258,21 +258,21 @@ def validate_and_transform_geometries_duckdb(
                         f"{dataset_name}: {final_invalid} geometries remain invalid, removing them"
                     )
                     conn.execute(f"""
-                        DELETE FROM {table_name} 
+                        DELETE FROM {table_name}
                         WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                     """)
 
             except Exception:
                 # Remove invalid geometries if ST_MakeValid fails
                 conn.execute(f"""
-                    DELETE FROM {table_name} 
+                    DELETE FROM {table_name}
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """)
                 logger.info(f"{dataset_name}: Removed {invalid_wgs84} invalid geometries")
 
         # Remove null and empty geometries
         conn.execute(f"""
-            DELETE FROM {table_name} 
+            DELETE FROM {table_name}
             WHERE {geometry_column} IS NULL OR ST_IsEmpty({geometry_column})
         """)
 

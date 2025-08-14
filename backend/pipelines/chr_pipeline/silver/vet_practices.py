@@ -24,7 +24,8 @@ def create_vet_practices_table(con, bes_details_raw, silver_dir):
         SELECT DISTINCT -- Ensure final distinctness
             response_item.Besaetning.BesPraksis.PraksisNavn AS practice_name,
             response_item.Besaetning.BesPraksis.PraksisAdresse AS address,
-            CAST(response_item.Besaetning.BesPraksis.PraksisPostNummer AS STRING) AS postal_code, -- Cast PostNummer to string
+            CAST(response_item.Besaetning.BesPraksis.PraksisPostNummer AS STRING) AS postal_code,
+            -- Cast PostNummer to string
             response_item.Besaetning.BesPraksis.PraksisPostDistrikt AS postal_district,
             response_item.Besaetning.BesPraksis.PraksisTelefonNummer AS phone,
             response_item.Besaetning.BesPraksis.PraksisMobilNummer AS mobile,
@@ -32,7 +33,8 @@ def create_vet_practices_table(con, bes_details_raw, silver_dir):
             response_item.Besaetning.BesPraksis.PraksisNr AS practice_number, -- Adding PraksisNr as it might be useful
             response_item.Besaetning.BesPraksis.PraksisByNavn AS city -- Adding City Name
         FROM unnested_response
-        WHERE response_item.Besaetning.BesPraksis.PraksisNr IS NOT NULL -- Filter out null practice numbers after extraction
+        WHERE response_item.Besaetning.BesPraksis.PraksisNr IS NOT NULL
+        -- Filter out null practice numbers after extraction
     """)
 
     # Add cleaning/casting using mutate
