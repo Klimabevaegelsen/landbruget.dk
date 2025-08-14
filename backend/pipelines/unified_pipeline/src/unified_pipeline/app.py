@@ -112,6 +112,8 @@ from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverC
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.water_typology import WaterTypologySilver, WaterTypologySilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
+from unified_pipeline.silver.fertiliser import FertiliserSilver, FertiliserSilverConfig
+from unified_pipeline.bronze.fertiliser import FertiliserBronze, FertiliserBronzeConfig
 from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
@@ -502,6 +504,14 @@ def execute(cli_config: cli.CliConfig) -> int:
             cli.Stage.all: [
                 # Note: This requires work permits silver data from drive pipeline to be available
                 (WorkPermitsGold, WorkPermitsGoldConfig),
+            ],
+        },
+        cli.Source.fertiliser: {
+            cli.Stage.bronze: [(FertiliserBronze, FertiliserBronzeConfig)],
+            cli.Stage.silver: [(FertiliserSilver, FertiliserSilverConfig)],
+            cli.Stage.all: [
+                (FertiliserBronze, FertiliserBronzeConfig),
+                (FertiliserSilver, FertiliserSilverConfig),
             ],
         },
     }
