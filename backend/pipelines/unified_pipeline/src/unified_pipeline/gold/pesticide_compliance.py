@@ -285,7 +285,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             await self._save_results(all_results, summary_stats)
 
             self.logger.info(
-                f"✅ Compliance analysis completed: {total_issues} issues across {len(total_companies)} companies"
+                f"✅ Compliance analysis completed: {total_issues} issues "
+                f"across {len(total_companies)} companies"
             )
 
             return {
@@ -355,7 +356,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         udløbsdato as expiry_date,
                         frist_for_anvendelse_og_besiddelse as restriction_date,
                         -- Parse restriction date for comparison
-                        TRY_CAST(frist_for_anvendelse_og_besiddelse AS DATE) as restriction_date_parsed,
+                        TRY_CAST(
+                            frist_for_anvendelse_og_besiddelse AS DATE
+                        ) as restriction_date_parsed,
                         -- Additional fields for analysis
                         formulering as formulation,
                         verwendelse as application_area
@@ -402,7 +405,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         self.logger.info(f"📄 Loading disaggregated pesticide data from: {latest_path}")
         self.logger.info(
-            f"📅 Agricultural year from path: {agricultural_year_from_path} (application year: {application_year})"
+            f"📅 Agricultural year from path: {agricultural_year_from_path} "
+            f"(application year: {application_year})"
         )
 
         # Load disaggregated pesticide data using proper GCS access pattern
@@ -442,7 +446,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         app_count = self.conn.execute("SELECT COUNT(*) FROM pesticide_applications").fetchone()[0]
         years_available = self.conn.execute(
-            "SELECT DISTINCT agricultural_year FROM pesticide_applications WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
+            "SELECT DISTINCT agricultural_year FROM pesticide_applications "
+            "WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
         ).fetchall()
 
         field_count = self.conn.execute(
@@ -593,7 +598,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             self.logger.info(f"📊 Loaded {limit_count} dosage limits from API")
         else:
             self.conn.execute(
-                "CREATE OR REPLACE TABLE dosage_limits (crop_code VARCHAR, api_crop_id INTEGER, api_crop_name VARCHAR, registration_number VARCHAR, product_name VARCHAR, max_dosage_app DOUBLE, product_unit VARCHAR, max_applications INTEGER)"
+                "CREATE OR REPLACE TABLE dosage_limits ("
+                "crop_code VARCHAR, api_crop_id INTEGER, api_crop_name VARCHAR, "
+                "registration_number VARCHAR, product_name VARCHAR, max_dosage_app DOUBLE, "
+                "product_unit VARCHAR, max_applications INTEGER)"
             )
             self.logger.warning("⚠️ No dosage limits found from API")
 
@@ -635,7 +643,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         else:
             # Analyze all available years
             available_years = self.conn.execute(
-                "SELECT DISTINCT agricultural_year FROM pesticide_applications WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
+                "SELECT DISTINCT agricultural_year FROM pesticide_applications "
+                "WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
             ).fetchall()
             return [year[0] for year in available_years if year[0] in self.agricultural_years]
 
@@ -653,10 +662,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         year_info = self.agricultural_years[ag_year]
 
-        # Detect potential compliance issues by comparing restriction dates with agricultural year period
+        # Detect potential compliance issues by comparing restriction dates with
+        # agricultural year period
         # Using disaggregated data which has field-level allocations with field_uuid
         # Issues occur when:
-        # 1. POTENTIAL_VIOLATION: Restriction date is before the agricultural year (already restricted when applied)
+        # 1. POTENTIAL_VIOLATION: Restriction date is before the agricultural year
+        #    (already restricted when applied)
         # 2. WITHDRAWN_PRODUCT_USE: Product status indicates withdrawal/expiry
         compliance_query = f"""
         SELECT
@@ -687,13 +698,18 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
                 WHEN a.dosage_unit != d.product_unit THEN 'UNIT_MISMATCH'
                 WHEN a.allocated_area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
-                WHEN (a.dosage_quantity / a.allocated_area_ha) <= d.max_dosage_app THEN 'DOSAGE_COMPLIANT'
-                WHEN (a.dosage_quantity / a.allocated_area_ha) <= d.max_dosage_app * 2.0 THEN 'MODERATE_OVERDOSE'
+                WHEN (
+                    a.dosage_quantity / a.allocated_area_ha
+                ) <= d.max_dosage_app THEN 'DOSAGE_COMPLIANT'
+                WHEN (
+                    a.dosage_quantity / a.allocated_area_ha
+                ) <= d.max_dosage_app * 2.0 THEN 'MODERATE_OVERDOSE'
                 ELSE 'MAJOR_OVERDOSE'
             END as dosage_compliance_status,
             -- Dosage ratio (actual / allowed)
             CASE
-                WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0 AND a.allocated_area_ha > 0
+                WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0
+                     AND a.allocated_area_ha > 0
                      AND a.dosage_unit = d.product_unit THEN
                     (a.dosage_quantity / a.allocated_area_ha) / d.max_dosage_app
                 ELSE NULL
@@ -701,10 +717,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             -- Categorize compliance status
             CASE
                 WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'TIMING_VIOLATION'
-                WHEN b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet' THEN 'WITHDRAWN_PRODUCT_USE'
-                WHEN d.max_dosage_app IS NOT NULL AND a.allocated_area_ha > 0 AND a.dosage_quantity IS NOT NULL
+                WHEN b.product_status = 'Tilbagekaldt'
+                     OR b.product_status = 'Udløbet' THEN 'WITHDRAWN_PRODUCT_USE'
+                WHEN d.max_dosage_app IS NOT NULL AND a.allocated_area_ha > 0
+                     AND a.dosage_quantity IS NOT NULL
                      AND a.dosage_unit = d.product_unit
-                     AND (a.dosage_quantity / a.allocated_area_ha) > d.max_dosage_app THEN 'DOSAGE_VIOLATION'
+                     AND (
+                         a.dosage_quantity / a.allocated_area_ha
+                     ) > d.max_dosage_app THEN 'DOSAGE_VIOLATION'
                 ELSE 'COMPLIANT'
             END as compliance_status,
             -- Analysis metadata
@@ -799,10 +819,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         )
 
         self.logger.info(
-            f"📊 {ag_year}: {total_violations} total violations ({timing_violations} timing, {withdrawn_uses} withdrawn, {dosage_violations} dosage)"
+            f"📊 {ag_year}: {total_violations} total violations "
+            f"({timing_violations} timing, {withdrawn_uses} withdrawn, {dosage_violations} dosage)"
         )
         self.logger.info(
-            f"✅ Compliance rate: {compliance_rate:.1f}% ({compliant_applications}/{total_applications} applications)"
+            f"✅ Compliance rate: {compliance_rate:.1f}% "
+            f"({compliant_applications}/{total_applications} applications)"
         )
         self.logger.info(
             f"🏢 Companies analyzed: {companies_analyzed}, Fields analyzed: {fields_analyzed}"
@@ -880,7 +902,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "top_companies_with_issues": top_companies_with_issues,
             "analysis_date": datetime.now().isoformat(),
             "methodology": {
-                "issue_detection": "Field-level applications of products with restriction dates before agricultural year",
+                "issue_detection": (
+                    "Field-level applications of products with restriction dates "
+                    "before agricultural year"
+                ),
                 "data_sources": [
                     "BMD pesticide database",
                     "Pesticide disaggregation (field-level allocations)",
@@ -933,7 +958,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     f"🔗 API crop name column present: {'api_crop_name' in column_names}"
                 )
                 self.logger.info(
-                    f"🌐 Plante IT crop name column present: {'api_crop_name_from_plante_it' in column_names}"
+                    f"🌐 Plante IT crop name column present: "
+                    f"{'api_crop_name_from_plante_it' in column_names}"
                 )
                 self.logger.info(
                     f"🧪 Pesticide name column present: {'pesticide_name' in column_names}"
@@ -942,10 +968,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     f"💊 API max dosage column present: {'api_max_dosage_per_ha' in column_names}"
                 )
                 self.logger.info(
-                    f"📊 Actual dosage per ha column present: {'actual_dosage_per_ha' in column_names}"
+                    f"📊 Actual dosage per ha column present: "
+                    f"{'actual_dosage_per_ha' in column_names}"
                 )
                 self.logger.info(
-                    f"⚖️ Dosage compliance status column present: {'dosage_compliance_status' in column_names}"
+                    f"⚖️ Dosage compliance status column present: "
+                    f"{'dosage_compliance_status' in column_names}"
                 )
                 self.logger.info(
                     f"📈 Dosage ratio column present: {'dosage_ratio' in column_names}"
@@ -1023,7 +1051,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         report += f"""
 ## Methodology
 
-- **Violation Detection**: Applications after BMD restriction date (frist_for_anvendelse_og_besiddelse)
+- **Violation Detection**: Applications after BMD restriction date
+  (frist_for_anvendelse_og_besiddelse)
 - **Data Sources**: BMD pesticide database + Agricultural pesticide applications
 - **Temporal Alignment**: Agricultural years (August 1 - July 31)
 - **Analysis Focus**: Clear violations only (no speculation about edge cases)
@@ -1036,7 +1065,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
 ## Data Quality
 
-This analysis provides comprehensive regulatory compliance monitoring for Danish agricultural pesticide usage, identifying definitive violations for regulatory enforcement.
+This analysis provides comprehensive regulatory compliance monitoring for Danish
+agricultural pesticide usage, identifying definitive violations for regulatory
+enforcement.
 
 Analysis completed: {summary["analysis_date"]}
 """
