@@ -1821,8 +1821,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                                 p.AcreageSize * 100
                                  <= {self.config.area_tolerance_pct}
                                  THEN 'main'
-                            WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
+                            WHEN ABS(p.AcreageSize -
+                                     non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                                 p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                                  THEN 'nonorg'
                             ELSE 'neither'
                         END as best_strategy
@@ -1866,11 +1867,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
                     -- Proportional dosage based on field area
-                    (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) * p.DosageQuantity as DosageQuantity,
+                    (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) * p.DosageQuantity
+                        as DosageQuantity,
                     p.DosageUnit,
                     'ethical_main_' || CAST(m_fields.field_uuid AS VARCHAR) as MatchedFieldID,
                     'block_' || CAST(m_fields.field_id AS VARCHAR) as MatchedBlockID,
-                    p.AcreageSize * (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) as AllocatedArea,
+                    p.AcreageSize * (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop)
+                        as AllocatedArea,
                     'Ethical_Best_Match_Main_Strategy' as AllocationMethod,
                     -- High confidence since we chose this as the best match
                     0.95 as MatchConfidence,
@@ -1950,8 +1953,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                                 p.AcreageSize * 100
                                  <= {self.config.area_tolerance_pct}
                                  THEN 'main'
-                            WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
-                            p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
+                            WHEN ABS(p.AcreageSize -
+                                     non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                                 p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                                  THEN 'nonorg'
                             ELSE 'neither'
                         END as best_strategy
@@ -2011,7 +2015,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 FROM BestMatchEvaluation p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
-                                            AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
+                        AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
                 JOIN marker m_fields
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND non_organic_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
@@ -2038,7 +2042,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Log the ethical impact
             best_match_stats = self.duckdb_conn.execute("""
                 SELECT
-                    COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Main_Strategy' THEN 1 END) as main_wins,
+                    COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Main_Strategy'
+                              THEN 1 END) as main_wins,
                     COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Non_Organic_Strategy'
                                THEN 1 END) as nonorg_wins
                 FROM disaggregated_pesticide_applications
@@ -2048,14 +2053,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             if best_match_stats:
                 main_wins, nonorg_wins = best_match_stats
                 self.log.info(
-                    f"🌟 Ethical best-match results: Main={main_wins:,}, Non-organic={nonorg_wins:,}"
+                    f"🌟 Ethical best-match results: Main={main_wins:,}, "
+                    f"Non-organic={nonorg_wins:,}"
                 )
                 self.log.info(
                     f"✅ {nonorg_wins:,} farmers benefited from more accurate non-organic matching!"
                 )
 
             self.log.info(
-                f"🎯 Ethical best-match processing completed: {total_processed:,} applications processed"
+                f"🎯 Ethical best-match processing completed: "
+                f"{total_processed:,} applications processed"
             )
             return total_processed
 
@@ -2070,7 +2077,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         WHAT THIS STRATEGY DOES:
         =======================
-        This is the core strategy that solves most pesticide disaggregation cases. Here's how it works:
+        This is the core strategy that solves most pesticide disaggregation cases.
+        Here's how it works:
 
         1. GROUP BY COMPANY + CROP: For each company, group all their fields by crop type
            Example: Company ABC has 3 wheat fields (10ha, 8ha, 7ha) = 25ha total wheat
@@ -2129,17 +2137,21 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     CAST(p.cvr_number AS VARCHAR) as cvr_number,
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
-                    p.DosageQuantity * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop) as DosageQuantity,
+                    p.DosageQuantity * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop)
+                        as DosageQuantity,
                     p.DosageUnit,
                     'marker_' || CAST(m_fields.field_id AS VARCHAR) as MatchedFieldID,
                     'block_' || CAST(m_fields.block_id AS VARCHAR) as MatchedBlockID,
                     -- THE MAGIC FORMULA: Proportional distribution based on field size
                     -- pesticide_amount * (this_field_area / total_company_crop_area)
-                    p.AcreageSize * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop) as AllocatedArea,
+                    p.AcreageSize * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop)
+                        as AllocatedArea,
                     'Marker_ApplicationAreaToTotalFieldArea_FieldProportional' as AllocationMethod,
                     -- Confidence score: higher when areas match more closely
-                    GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) /
-                        p.AcreageSize / ({self.config.area_tolerance_pct}/100.0))) as MatchConfidence,
+                    GREATEST(0.0, 1.0 - (ABS(p.AcreageSize -
+                        marker_totals.TotalMarkerAreaForCVRCrop) /
+                        p.AcreageSize / ({self.config.area_tolerance_pct}/100.0)))
+                        as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     -- Add field UUID support
@@ -2158,7 +2170,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     p.AcreageSize > 0 AND marker_totals.TotalMarkerAreaForCVRCrop > 0
                     -- THE CRITICAL FILTER: Only match if areas are within 2% tolerance
                     -- This 2% is the magic number that achieved 92% coverage!
-                    AND ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100
+                    AND ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) /
+                        p.AcreageSize * 100
                         <= {self.config.area_tolerance_pct}
                     AND m_fields.cvr_number IS NOT NULL
                     AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
@@ -2175,14 +2188,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
                     SELECT DISTINCT OriginalPesticideRowID
                     FROM disaggregated_pesticide_applications
-                    WHERE AllocationMethod = 'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'
+                    WHERE AllocationMethod =
+                          'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'
                 )
             """)
 
             # Count how many records we successfully processed
             count_result = self.duckdb_conn.execute(
                 "SELECT COUNT(*) FROM disaggregated_pesticide_applications " +
-                "WHERE AllocationMethod = 'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'"
+                "WHERE AllocationMethod = " +
+                "'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'"
             ).fetchone()
             processed_count = count_result[0] if count_result else 0
 
@@ -2238,14 +2253,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     CAST(p.cvr_number AS VARCHAR) as cvr_number,
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
-                    p.DosageQuantity * (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as DosageQuantity,
+                    p.DosageQuantity * (m_fields.area_ha /
+                        non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as DosageQuantity,
                     p.DosageUnit,
                     'marker_non_organic_' || CAST(m_fields.field_id AS VARCHAR) as MatchedFieldID,
                     'block_' || CAST(m_fields.block_id AS VARCHAR) as MatchedBlockID,
                     p.AcreageSize * (m_fields.area_ha /
-                        non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as AllocatedArea,
-                    'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional' as AllocationMethod,
-                    GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize / ({self.config.area_tolerance_pct}/100.0))) as MatchConfidence,
+                        non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop)
+                        as AllocatedArea,
+                    ('Marker_NonOrganic_ApplicationAreaToTotalFieldArea_'
+                     'FieldProportional') as AllocationMethod,
+                    GREATEST(0.0, 1.0 - (ABS(p.AcreageSize -
+                        non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                        p.AcreageSize / ({self.config.area_tolerance_pct}/100.0)))
+                        as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     -- Add field UUID support
@@ -2254,13 +2275,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 FROM pending_pesticide_rows p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
-                                         AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
+                    AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
                 JOIN marker m_fields
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND non_organic_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
                 WHERE
                     p.AcreageSize > 0 AND non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0
-                    AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                    AND ABS(
+                        p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop
+                    ) /
                             p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                     AND m_fields.cvr_number IS NOT NULL
                     AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
@@ -2277,13 +2300,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
                     SELECT DISTINCT OriginalPesticideRowID
                     FROM disaggregated_pesticide_applications
-                    WHERE AllocationMethod = 'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'
+                    WHERE AllocationMethod = (
+                        'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'
+                    )
                 )
             """)
 
             # Get count of processed records
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications "
+                "WHERE AllocationMethod = "
+                "'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'"
             ).fetchone()
             processed_count = count_result[0] if count_result else 0
 
@@ -2399,12 +2426,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Get count of processed records
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Partial_Field_Coverage_SingleField'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications "
+                "WHERE AllocationMethod = 'Partial_Field_Coverage_SingleField'"
             ).fetchone()
             processed_count = count_result[0] if count_result else 0
 
             self.log.info(
-                f"Partial Field Coverage: Processed {processed_count} pesticide applications with partial field coverage using optimized batch operations."
+                f"Partial Field Coverage: Processed {processed_count} pesticide applications "
+                f"with partial field coverage using optimized batch operations."
             )
             return processed_count
 
@@ -2447,12 +2476,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             if pending_count == 0:
                 self.log.info(
-                    "✅ All records already processed by strategies 1-3 - spatial clustering not needed"
+                    "✅ All records already processed by strategies 1-3 - "
+                    "spatial clustering not needed"
                 )
                 return 0
 
             # Get pending CVR+crop combinations to process in chunks
-            # OPTIMIZATION: Only get combinations that actually have pending records AND multiple fields with geometry
+            # OPTIMIZATION: Only get combinations that actually have pending records
+            # AND multiple fields with geometry
             self.log.info(
                 "🔍 Getting CVR+crop combinations with pending records and multiple fields..."
             )
@@ -2493,21 +2524,25 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     f.field_count
                 FROM PendingCombinations p
                 INNER JOIN FieldCounts f ON p.CVR_Str = f.CVR_Str AND p.Crop_Str = f.Crop_Str
-                ORDER BY p.pending_count DESC  -- Process combinations with most pending records first
+                ORDER BY p.pending_count DESC
+                -- Process combinations with most pending records first
             """).fetchall()
 
             if not pending_cvr_crops:
                 self.log.info(
-                    "✅ No CVR+crop combinations found with both pending records and multiple fields"
+                    "✅ No CVR+crop combinations found with both pending records "
+                    "and multiple fields"
                 )
                 return 0
 
             self.log.info(
-                f"📊 Found {len(pending_cvr_crops):,} CVR+crop combinations with pending records and 2+ fields"
+                f"📊 Found {len(pending_cvr_crops):,} CVR+crop combinations "
+                f"with pending records and 2+ fields"
             )
             self.log.info(
-                ("🔍 Top combinations: " +
-                 f"{[(cvr, crop, pending, fields) for cvr, crop, pending, fields in pending_cvr_crops[:5]]}")
+                "🔍 Top combinations: " +
+                str([(cvr, crop, pending, fields) 
+                     for cvr, crop, pending, fields in pending_cvr_crops[:5]])
             )
 
             # Convert to list of tuples for processing
@@ -2530,7 +2565,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             for i in range(0, len(cvr_crop_combinations), chunk_size):
                 if chunks_processed >= max_chunks:
                     self.log.warning(
-                        f"⚠️ Reached maximum chunk limit ({max_chunks}) - stopping spatial clustering"
+                        f"⚠️ Reached maximum chunk limit ({max_chunks}) - "
+                        f"stopping spatial clustering"
                     )
                     break
 
@@ -2567,7 +2603,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self._finalize_spatial_clustering()
 
             self.log.info(
-                f"Adjacent Fields Spatial Cluster: Processed {total_processed} pesticide applications " +
+                f"Adjacent Fields Spatial Cluster: Processed {total_processed} "
+                f"pesticide applications " +
                 f"across {chunks_processed} chunks."
             )
             return total_processed
@@ -2621,7 +2658,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Log current chunk for debugging
             self.log.info(
-                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} CVR+crop combinations " +
+                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} "
+                f"CVR+crop combinations " +
                 f"(total: {total_combinations}) [1 thread, no insertion order]"
             )
 
@@ -2654,7 +2692,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             insert_query = f"""
                 WITH PendingCVRCrops AS (
                     -- Process only this specific chunk of CVR+crop combinations
-                    SELECT CVR_Str, Crop_Str FROM (VALUES {cvr_crop_in_clause}) AS t(CVR_Str, Crop_Str)
+                    SELECT CVR_Str, Crop_Str 
+                    FROM (VALUES {cvr_crop_in_clause}) AS t(CVR_Str, Crop_Str)
                 ),
                 FilteredFields AS (
                     -- CRITICAL FIX: Filter fields by CVR+crop BEFORE spatial operations
@@ -2690,7 +2729,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         f1.CVR_Str = f2.CVR_Str
                         AND f1.Crop_Str = f2.Crop_Str
                         AND f1.field_uuid != f2.field_uuid
-                        AND ST_DWithin(f1.geometry, f2.geometry, 10.0)  -- Spatial join on filtered data only
+                        AND ST_DWithin(f1.geometry, f2.geometry, 10.0)
+                        -- Spatial join on filtered data only
                 ),
                 -- Build connected components using recursive CTE (Union-Find algorithm)
                 ConnectedComponents AS (
@@ -2790,7 +2830,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         ca.cluster_field_areas,
                         ca.cluster_field_count,
                         -- Calculate area match quality
-                        ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 as area_diff_pct
+                        ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 
+                            as area_diff_pct
                     FROM pending_pesticide_rows p
                     JOIN ClusterAreas ca ON
                         TRIM(CAST(p.cvr_number AS VARCHAR)) = ca.CVR_Str
@@ -2835,7 +2876,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     fa.AcreageSize * (fa.field_area / fa.cluster_total_area) as AllocatedArea,
                     'Adjacent_Fields_Spatial_Cluster_AreaMatched' as AllocationMethod,
                     -- Confidence based on area match quality and cluster size
-                    GREATEST(0.5, 1.0 - (fa.area_diff_pct / {self.config.area_tolerance_pct})) as MatchConfidence,
+                    GREATEST(0.5, 1.0 - (fa.area_diff_pct / {self.config.area_tolerance_pct})) 
+                        as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     -- Add field UUID support - need to join back to marker table
