@@ -92,7 +92,10 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types_filtered AS
             SELECT
-                ROW_NUMBER() OVER (ORDER BY soil_description, soil_code, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as soil_id,
+                ROW_NUMBER() OVER (
+                    ORDER BY soil_description, soil_code, ST_X(ST_Centroid(geometry)), 
+                             ST_Y(ST_Centroid(geometry))
+                ) as soil_id,
                 soil_code,
                 soil_description,  -- Only meaningful Danish soil types
                 geometry,
@@ -108,7 +111,8 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.log.info(f"   Original: {total_soil_types:,} soil type polygons")
         self.log.info(f"   Filtered: {total_filtered:,} soil type polygons")
         self.log.info(
-            f"   Reduction: {reduction_pct:.1f}% ({total_soil_types - total_filtered:,} polygons removed)"
+            f"   Reduction: {reduction_pct:.1f}% "
+            f"({total_soil_types - total_filtered:,} polygons removed)"
         )
         self.log.info(f"   Processing time: {processing_time:.1f} seconds")
         self.log.info(f"   🚀 Stage 1D will be {total_soil_types / total_filtered:.1f}x faster")
@@ -139,7 +143,9 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             "processing_time": processing_time,
             "output_path": output_path,
             "soil_type_breakdown": soil_type_stats,
-            "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 1D soil types processing",
+            "performance_improvement": (
+                f"{reduction_pct:.1f}% reduction in Stage 1D soil types processing"
+            ),
         }
 
     def _save_output_data(self, result: Dict[str, Any]):

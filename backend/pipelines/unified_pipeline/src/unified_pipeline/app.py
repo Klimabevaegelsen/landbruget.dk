@@ -23,6 +23,7 @@ from unified_pipeline.bronze.cadastral import CadastralBronze, CadastralBronzeCo
 from unified_pipeline.bronze.dagi import DAGIBronze, DAGIBronzeConfig
 from unified_pipeline.bronze.dmi import DMIBronze, DMIBronzeConfig
 from unified_pipeline.bronze.dst import DSTBronze, DSTBronzeConfig
+from unified_pipeline.bronze.fertiliser import FertiliserBronze, FertiliserBronzeConfig
 from unified_pipeline.bronze.fvm_wfs import FVMWFSBronze, FVMWFSBronzeConfig
 from unified_pipeline.bronze.jordbrugsanalyser import (
     JordbrugsanalyserBronze,
@@ -103,6 +104,7 @@ from unified_pipeline.silver.dagi import DAGISilver, DAGISilverConfig
 from unified_pipeline.silver.dmi import DMISilver, DMISilverConfig
 from unified_pipeline.silver.dst import DSTSilver, DSTSilverConfig
 from unified_pipeline.silver.dst_zone_mapping import DSTZoneMapping, DSTZoneMappingConfig
+from unified_pipeline.silver.fertiliser import FertiliserSilver, FertiliserSilverConfig
 from unified_pipeline.silver.fvm_wfs import FVMWFSSilver, FVMWFSSilverConfig
 from unified_pipeline.silver.jordbrugsanalyser import (
     JordbrugsanalyserSilver,
@@ -112,8 +114,6 @@ from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverC
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.water_typology import WaterTypologySilver, WaterTypologySilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
-from unified_pipeline.silver.fertiliser import FertiliserSilver, FertiliserSilverConfig
-from unified_pipeline.bronze.fertiliser import FertiliserBronze, FertiliserBronzeConfig
 from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
@@ -202,7 +202,8 @@ async def execute_pipeline_jobs(
                     )
                     if total_size > 10_000_000:  # More than 10MB of string data
                         log.info(
-                            f"📊 Bronze data size: {total_size:,} chars (will be cleared after silver processing)"
+                            f"📊 Bronze data size: {total_size:,} chars "
+                            f"(will be cleared after silver processing)"
                         )
 
             elif issubclass(job_cls, SilverJobInterface):
@@ -224,7 +225,8 @@ async def execute_pipeline_jobs(
                     dataset_name = instance.config.dataset
                     silver_data[dataset_name] = result
                     log.info(
-                        f"Silver job {job_cls.__name__} completed successfully using {stage_description}"
+                        f"Silver job {job_cls.__name__} completed successfully "
+                        f"using {stage_description}"
                     )
                 else:
                     log.error(f"Silver job {job_cls.__name__} failed - no data returned")
@@ -251,11 +253,13 @@ async def execute_pipeline_jobs(
                 # Gold stage - pass collected silver data
                 print(f"🚨 APP: About to call {job_cls.__name__}.run() with silver_data")
                 print(
-                    f"🚨 APP: Silver data keys: {list(silver_data.keys()) if silver_data else 'None'}"
+                    f"🚨 APP: Silver data keys: "
+                    f"{list(silver_data.keys()) if silver_data else 'None'}"
                 )
                 await instance.run(silver_data=silver_data)
                 print(f"🚨 APP: {job_cls.__name__}.run() completed successfully")
-                # Gold jobs don't return data, so we consider them successful if they don't raise an exception
+                # Gold jobs don't return data, so we consider them successful
+                # if they don't raise an exception
                 job_successful = True
                 log.info(f"Gold job {job_cls.__name__} completed successfully using silver data")
 
@@ -415,7 +419,8 @@ def execute(cli_config: cli.CliConfig) -> int:
         cli.Source.field_production: {
             cli.Stage.gold: [(FieldProductionGold, FieldProductionGoldConfig)],
             cli.Stage.all: [
-                # Note: This requires agricultural_fields and dst_zone_mapping silver data to be available
+                # Note: This requires agricultural_fields and dst_zone_mapping
+                # silver data to be available
                 # These should be run separately first or through dependent pipelines
                 (FieldProductionGold, FieldProductionGoldConfig),
             ],
@@ -540,12 +545,14 @@ def execute(cli_config: cli.CliConfig) -> int:
         return 1
     elif successful_jobs < total_jobs:
         log.warning(
-            f"⚠️  Pipeline completed with partial success: {successful_jobs}/{total_jobs} jobs completed successfully"
+            f"⚠️  Pipeline completed with partial success: "
+            f"{successful_jobs}/{total_jobs} jobs completed successfully"
         )
         return 0  # Still consider it a success if at least one job completed
     else:
         log.info(
-            f"✅ Pipeline completed successfully: {successful_jobs}/{total_jobs} jobs completed successfully"
+            f"✅ Pipeline completed successfully: "
+            f"{successful_jobs}/{total_jobs} jobs completed successfully"
         )
         return 0
 
@@ -613,7 +620,8 @@ def execute(cli_config: cli.CliConfig) -> int:
     "--pesticide-year",
     "pesticide_year",
     type=int,
-    help="Year filter for pesticide matrix jobs (e.g., 2018). If not specified, processes all available years.",
+    help="Year filter for pesticide matrix jobs (e.g., 2018). "
+         "If not specified, processes all available years.",
     required=False,
 )
 @click.option(
@@ -627,7 +635,8 @@ def execute(cli_config: cli.CliConfig) -> int:
     "--total-batches",
     "total_batches",
     type=int,
-    help="Total number of batches for parallel processing. Used with CVR enrichment pipeline steps.",
+    help="Total number of batches for parallel processing. "
+         "Used with CVR enrichment pipeline steps.",
     required=False,
 )
 def run_cli(
@@ -659,7 +668,8 @@ def run_cli(
 
     Example:
         $ python -m unified_pipeline -s bnbo -j bronze
-        $ python -m unified_pipeline -s fvm_wfs -j bronze --fvm-layer-type markblokke --fvm-year 2024
+        $ python -m unified_pipeline -s fvm_wfs -j bronze \
+            --fvm-layer-type markblokke --fvm-year 2024
     """
     app_config = cli.CliConfig(
         env=cli.Env(env),

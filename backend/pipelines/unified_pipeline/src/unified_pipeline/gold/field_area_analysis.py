@@ -139,7 +139,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     field_uuid,
                     'legacy_' || CAST(cvr_number AS VARCHAR) || '_' ||
-                    CAST(block_id AS VARCHAR) || '_' || CAST(field_id AS VARCHAR)
+                    CAST(block_id AS VARCHAR) || '_' ||
+                    CAST(field_id AS VARCHAR)
                 ) as primary_field_id,
                 {latest_year} as year,
                 CASE
@@ -315,7 +316,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     SUM(CASE
                         WHEN b.status_category IS NOT NULL AND wp.project_id IS NOT NULL
-                        THEN ST_Area_Spheroid(ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom))
+                        THEN ST_Area_Spheroid(
+                            ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom)
+                        )
                         ELSE 0
                     END), 0
                 ) as bnbo_covered_by_water_projects_m2,
@@ -332,7 +335,9 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     SUM(CASE
                         WHEN w.wetland_id IS NOT NULL AND wp.project_id IS NOT NULL
-                        THEN ST_Area_Spheroid(ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom))
+                        THEN ST_Area_Spheroid(
+                            ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom)
+                        )
                         ELSE 0
                     END), 0
                 ) as wetland_covered_by_water_projects_m2
@@ -361,7 +366,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 
                 CASE
                     WHEN total_bnbo_area_m2 > 0
-                    THEN ((total_bnbo_area_m2 - bnbo_covered_by_water_projects_m2) / total_bnbo_area_m2) * 100
+                    THEN (
+                        (total_bnbo_area_m2 - bnbo_covered_by_water_projects_m2) /
+                        total_bnbo_area_m2
+                    ) * 100
                     ELSE 0
                 END as bnbo_not_covered_by_water_projects_pct,
                 
@@ -374,7 +382,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 
                 CASE
                     WHEN total_wetland_area_m2 > 0
-                    THEN ((total_wetland_area_m2 - wetland_covered_by_water_projects_m2) / total_wetland_area_m2) * 100
+                    THEN (
+                        (total_wetland_area_m2 - wetland_covered_by_water_projects_m2) /
+                        total_wetland_area_m2
+                    ) * 100
                     ELSE 0
                 END as wetland_not_covered_by_water_projects_pct,
                 
@@ -391,10 +402,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COUNT(*) as total_fields,
                 COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
                 COUNT(CASE WHEN total_wetland_area_m2 > 0 THEN 1 END) as fields_with_wetlands,
-                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct ELSE NULL END)
-                    as avg_bnbo_coverage,
-                AVG(CASE WHEN total_wetland_area_m2 > 0 THEN wetland_covered_by_water_projects_pct ELSE NULL END)
-                    as avg_wetland_coverage
+                AVG(
+                    CASE WHEN total_bnbo_area_m2 > 0
+                    THEN bnbo_covered_by_water_projects_pct ELSE NULL END
+                ) as avg_bnbo_coverage,
+                AVG(
+                    CASE WHEN total_wetland_area_m2 > 0
+                    THEN wetland_covered_by_water_projects_pct ELSE NULL END
+                ) as avg_wetland_coverage
             FROM field_coverage_percentages
         """).fetchone()
 
@@ -460,12 +475,16 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                         f.block_id,
                         f.cvr_number,
                         p.bfe_number,
-                        ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) / f.field_area_m2 * 100 as area_share,
+                        ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) /
+                        f.field_area_m2 * 100 as area_share,
                         f.field_uuid,
                         f.primary_field_id
                     FROM fields_with_wetlands f
                     JOIN properties_chunk p ON ST_Intersects(f.geom, p.geom)
-                WHERE ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) / f.field_area_m2 > 0.01
+                WHERE (
+                    ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) /
+                    f.field_area_m2 > 0.01
+                )
             """)
 
             processed += chunk_size_actual
@@ -521,9 +540,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 LEFT JOIN field_property_results p
                     ON COALESCE(f.field_uuid, f.primary_field_id) =
                        COALESCE(p.field_uuid, p.primary_field_id)
-                LEFT JOIN field_coverage_percentages ec
-                    ON COALESCE(f.field_uuid, f.primary_field_id) =
-                       COALESCE(ec.field_uuid, ec.primary_field_id)
+                LEFT JOIN field_coverage_percentages ec ON (
+                    COALESCE(f.field_uuid, f.primary_field_id) =
+                    COALESCE(ec.field_uuid, ec.primary_field_id)
+                )
             """)
         elif has_environmental_coverage:
             self.conn.execute("""
@@ -552,9 +572,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     ec.field_bnbo_coverage_pct,
                     ec.field_wetland_coverage_pct
                     FROM fields_with_wetlands f
-                LEFT JOIN field_coverage_percentages ec
-                    ON COALESCE(f.field_uuid, f.primary_field_id) =
-                       COALESCE(ec.field_uuid, ec.primary_field_id)
+                LEFT JOIN field_coverage_percentages ec ON (
+                    COALESCE(f.field_uuid, f.primary_field_id) =
+                    COALESCE(ec.field_uuid, ec.primary_field_id)
+                )
                 """)
         else:
             # Fallback without environmental coverage
@@ -607,10 +628,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 SELECT
                     COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
                     COUNT(CASE WHEN total_wetland_area_m2 > 0 THEN 1 END) as fields_with_wetlands,
-                    AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct ELSE NULL END)
-                    as avg_bnbo_coverage,
-                    AVG(CASE WHEN total_wetland_area_m2 > 0 THEN wetland_covered_by_water_projects_pct ELSE NULL END)
-                    as avg_wetland_coverage
+                    AVG(
+                        CASE WHEN total_bnbo_area_m2 > 0
+                        THEN bnbo_covered_by_water_projects_pct ELSE NULL END
+                    ) as avg_bnbo_coverage,
+                    AVG(
+                        CASE WHEN total_wetland_area_m2 > 0
+                        THEN wetland_covered_by_water_projects_pct ELSE NULL END
+                    ) as avg_wetland_coverage
                 FROM field_area_analysis_final
                 WHERE total_bnbo_area_m2 IS NOT NULL OR total_wetland_area_m2 IS NOT NULL
             """).fetchone()
@@ -635,9 +660,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 },
                 "water_projects": {
                     "count": water_project_coverage,
-                    "percentage": water_project_coverage / total_fields * 100
-                    if total_fields > 0
-                    else 0,
+                    "percentage": (
+                        water_project_coverage / total_fields * 100
+                        if total_fields > 0
+                        else 0
+                    ),
                 },
                 "wetlands": {
                     "count": wetland_coverage,
@@ -645,7 +672,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 },
                 "properties": {
                     "count": property_coverage,
-                    "percentage": property_coverage / total_fields * 100 if total_fields > 0 else 0,
+                    "percentage": (
+                        property_coverage / total_fields * 100
+                        if total_fields > 0
+                        else 0
+                    ),
                 },
             },
             "environmental_coverage_by_water_projects": environmental_stats,

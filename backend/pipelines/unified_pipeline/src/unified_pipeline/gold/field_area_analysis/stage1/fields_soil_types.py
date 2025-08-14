@@ -1,6 +1,7 @@
 """Stage 1D: Fields × Soil Types Base Intersection - OPTIMIZED
 
-Optimized field analysis with soil type intersections using DuckDB Spatial v1.2.2 SPATIAL_JOIN operator.
+Optimized field analysis with soil type intersections using DuckDB Spatial
+v1.2.2 SPATIAL_JOIN operator.
 Creates foundation dataset for environmental coverage calculations.
 
 MAJOR OPTIMIZATIONS:
@@ -130,9 +131,11 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 s.soil_description,  -- Only keep useful soil classification (Danish soil types)
                 -- Calculate intersection geometry and area in single operation
                 ST_Intersection(f.geometry, s.geometry) as intersection_geometry,
-                ST_Area_Spheroid(ST_Intersection(f.geometry, s.geometry)) as soil_intersection_area_m2
+                ST_Area_Spheroid(ST_Intersection(f.geometry, s.geometry))
+                    as soil_intersection_area_m2
             FROM soil_types s  -- BUILD side (smaller, pre-filtered dataset - gets spatial indexed)
-            JOIN agricultural_fields f ON ST_Intersects(s.geometry, f.geometry)  -- PROBE side (larger dataset)
+            -- PROBE side (larger dataset)
+            JOIN agricultural_fields f ON ST_Intersects(s.geometry, f.geometry)
         """)
 
         spatial_time = time.time() - spatial_start
@@ -141,7 +144,8 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
         ).fetchone()[0]
 
         self.log.info(
-            f"✅ SPATIAL_JOIN completed in {spatial_time:.1f}s: {raw_intersections:,} raw intersections"
+            f"✅ SPATIAL_JOIN completed in {spatial_time:.1f}s: "
+            f"{raw_intersections:,} raw intersections"
         )
 
         # STEP 2: Post-join filtering (NO SPATIAL WHERE CLAUSES)
@@ -397,26 +401,35 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 )
 
             self.log.info(
-                f"📊 Field Count - Input: {input_reference['field_count']:,}, Output: {distinct_field_count:,} distinct fields ({field_count_diff:+,})"
+                f"📊 Field Count - Input: {input_reference['field_count']:,}, "
+                f"Output: {distinct_field_count:,} distinct fields ({field_count_diff:+,})"
             )
             self.log.info(f"📊 Field Distribution - {fields_with_soil_data:,} with soil data")
             self.log.info(f"📊 Area Coverage - Input: {input_reference['total_area']:,.0f} m²")
             self.log.info(
-                f"📊              - Soil intersections: {total_intersection_area:,.0f} m² ({soil_coverage_pct:.1f}% coverage)"
+                f"📊              - Soil intersections: {total_intersection_area:,.0f} m² "
+                f"({soil_coverage_pct:.1f}% coverage)"
             )
             self.log.info(
-                f"📊              - Total effective: {total_intersection_area:,.0f} m² ({area_difference_pct:+.3f}%)"
+                f"📊              - Total effective: {total_intersection_area:,.0f} m² "
+                f"({area_difference_pct:+.3f}%)"
             )
             self.log.info(
-                f"📊 Soil Coverage Gap: {input_reference['total_area'] - total_intersection_area:,.0f} m² ({100 - soil_coverage_pct:.1f}%) expected due to soil data gaps"
+                f"📊 Soil Coverage Gap: "
+                f"{input_reference['total_area'] - total_intersection_area:,.0f} m² "
+                f"({100 - soil_coverage_pct:.1f}%) expected due to soil data gaps"
             )
             self.log.info(
-                f"📊 Record Creation - {total_records:,} field×soil records (~{total_records / distinct_field_count:.1f} soil types per field)"
+                f"📊 Record Creation - {total_records:,} field×soil records "
+                f"(~{total_records / distinct_field_count:.1f} soil types per field)"
             )
 
             # Handle validation failure
             if not validation_passed:
-                error_msg = f"Stage 1 validation failed - Field count valid: {field_count_valid}, Area valid: {area_valid}"
+                error_msg = (
+                    f"Stage 1 validation failed - Field count valid: {field_count_valid}, "
+                    f"Area valid: {area_valid}"
+                )
                 if self.validation_config.fail_on_validation_error:
                     from ..area_validation import ValidationException
 

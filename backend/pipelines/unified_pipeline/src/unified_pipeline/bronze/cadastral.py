@@ -38,14 +38,19 @@ class CadastralBronzeConfig(BaseJobConfig):
     batch_size: int = 10000
     max_concurrent: int = 5
     request_timeout: int = 300
-    storage_batch_size: int = 10000  # Increased for better performance with 16GB RAM
+    storage_batch_size: int = 10000  # Increased for better performance
+    # with 16GB RAM
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=300
     )
-    headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
+    headers: dict[str, str] = {
+        "User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"
+    }
     request_semaphore: Semaphore = Semaphore(max_concurrent)
     type: str = "wfs"
-    url: str = "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS"
+    url: str = (
+        "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS"
+    )
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()
     save_local: bool = os.getenv("SAVE_LOCAL", False)
@@ -93,12 +98,15 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
         pass_env = os.getenv("DATAFORDELER_PASSWORD") or os.getenv("WFS_PASSWORD")
         if not user_env or not pass_env:
             raise ValueError(
-                "Missing credentials: set DATAFORDELER_USERNAME/PASSWORD or WFS_USERNAME/PASSWORD"
+                "Missing credentials: set DATAFORDELER_USERNAME/PASSWORD or "
+                "WFS_USERNAME/PASSWORD"
             )
         self.username = user_env
         self.password = pass_env
         self.total_timeout_config = aiohttp.ClientTimeout(
-            total=self.config.request_timeout, connect=60, sock_read=self.config.request_timeout
+            total=self.config.request_timeout, 
+            connect=60, 
+            sock_read=self.config.request_timeout
         )
 
     def _get_base_params(self):
@@ -116,14 +124,17 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
     def _get_params(self, start_index=0):
         """Get WFS request parameters with pagination"""
         params = self._get_base_params()
-        params.update({"startIndex": str(start_index), "count": str(self.page_size)})
+        params.update({
+            "startIndex": str(start_index), 
+            "count": str(self.page_size)
+        })
         return params
 
     def _parse_geometry(self, geom_elem):
         """Parse GML geometry to WKT using pure coordinate-based approach.
 
-        ✅ OPTIMIZED: This method now creates WKT directly from coordinates without
-        using shapely, providing better performance for large datasets.
+        ✅ OPTIMIZED: This method now creates WKT directly from coordinates 
+        without using shapely, providing better performance for large datasets.
         """
         try:
             pos_lists = geom_elem.findall(".//gml:posList", self.namespaces)
@@ -137,10 +148,14 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
                 coords = [float(x) for x in pos_list.text.strip().split()]
                 # Keep the original 3D coordinate handling - take x,y and skip z
-                pairs = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 3)]
+                pairs = [
+                    (coords[i], coords[i + 1]) for i in range(0, len(coords), 3)
+                ]
 
                 if len(pairs) < 4:
-                    logger.warning(f"Not enough coordinate pairs ({len(pairs)}) to form a polygon")
+                    logger.warning(
+                        f"Not enough coordinate pairs ({len(pairs)}) to form a polygon"
+                    )
                     continue
 
                 try:
@@ -273,19 +288,22 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
                     valid_count = len(features)
                     self.log.info(
-                        f"Chunk {start_index}: parsed {valid_count} valid features out of {len(feature_elements)} elements"
+                        f"Chunk {start_index}: parsed {valid_count} valid features "
+                        f"out of {len(feature_elements)} elements"
                     )
 
                     # Validate that we're getting reasonable numbers
                     if valid_count == 0 and len(feature_elements) > 0:
                         self.log.warning(
-                            f"No valid features parsed from {len(feature_elements)} elements - possible parsing issue"
+                            f"No valid features parsed from {len(feature_elements)} "
+                            f"elements - possible parsing issue"
                         )
                     elif (
                         valid_count < len(feature_elements) * 0.5
                     ):  # If we're losing more than 50% of features
                         self.log.warning(
-                            f"Low feature parsing success rate: {valid_count}/{len(feature_elements)}"
+                            f"Low feature parsing success rate: "
+                            f"{valid_count}/{len(feature_elements)}"
                         )
 
                     return features
@@ -314,7 +332,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                             # Log progress every 10,000 features
                             if total_processed % 10000 == 0:
                                 logger.info(
-                                    f"Progress: {total_processed:,}/{total_features:,} features ({(total_processed / total_features) * 100:.1f}%)"
+                                    f"Progress: {total_processed:,}/{total_features:,} features "
+                                    f"({(total_processed / total_features) * 100:.1f}%)"
                                 )
 
                     except Exception as e:
@@ -357,7 +376,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 number_returned = root.get("numberReturned", "0")
 
                 self.log.info(
-                    f"WFS response metadata - numberMatched: {number_matched}, numberReturned: {number_returned}"
+                    f"WFS response metadata - numberMatched: {number_matched}, "
+                    f"numberReturned: {number_returned}"
                 )
 
                 if number_matched == "*":
@@ -385,7 +405,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 # Add sanity check for unreasonable numbers
                 if total_available > 5000000:  # Adjust threshold as needed
                     self.log.warning(
-                        f"Unusually high feature count: {total_available:,}. This may indicate an issue."
+                        f"Unusually high feature count: {total_available:,}. "
+                        f"This may indicate an issue."
                     )
                 self.log.info(f"Total available features: {total_available:,}")
                 return total_available

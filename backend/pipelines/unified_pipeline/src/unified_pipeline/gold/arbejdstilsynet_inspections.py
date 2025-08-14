@@ -20,7 +20,9 @@ class ArbjdstilsynetInspectionsGoldConfig(BaseJobConfig):
     name: str = "Arbejdstilsynet Inspections Gold"
     dataset: str = "arbejdstilsynet_inspections"
     type: str = "gold"
-    description: str = "Clean and standardize workplace inspection data for business analytics"
+    description: str = (
+        "Clean and standardize workplace inspection data for business analytics"
+    )
     frequency: str = "weekly"
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
@@ -38,18 +40,23 @@ class ArbjdstilsynetInspectionsGold(
         self.gcs_access = GCSDataAccess()
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    async def run(self, silver_data: Optional[Dict[str, pd.DataFrame]] = None) -> bool:
+    async def run(
+        self, silver_data: Optional[Dict[str, pd.DataFrame]] = None
+    ) -> bool:
         """
         Process silver data into gold layer.
 
         Args:
-            silver_data: Optional in-memory silver data from previous pipeline stages
+            silver_data: Optional in-memory silver data from previous 
+                pipeline stages
 
         Returns:
             bool: Success status
         """
         try:
-            self.logger.info("🏆 Starting Arbejdstilsynet Inspections Gold processing")
+            self.logger.info(
+                "🏆 Starting Arbejdstilsynet Inspections Gold processing"
+            )
 
             # Load silver data
             df = await self._load_silver_data(silver_data)
@@ -66,11 +73,15 @@ class ArbjdstilsynetInspectionsGold(
             # Save gold data
             await self._save_data(df_gold, stage="gold")
 
-            self.logger.info("✅ Arbejdstilsynet Inspections Gold processing completed")
+            self.logger.info(
+                "✅ Arbejdstilsynet Inspections Gold processing completed"
+            )
             return True
 
         except Exception as e:
-            self.logger.error(f"❌ Error in Arbejdstilsynet Inspections Gold processing: {e}")
+            self.logger.error(
+                f"❌ Error in Arbejdstilsynet Inspections Gold processing: {e}"
+            )
             return False
 
     async def _load_silver_data(
@@ -87,7 +98,10 @@ class ArbjdstilsynetInspectionsGold(
             self.logger.info("💾 Loading silver data from GCS storage")
 
             # Find latest silver data using pattern matching
-            pattern = f"gs://{self.config.bucket}/silver/{self.config.silver_dataset}/*/workplace_inspections.parquet"
+            pattern = (
+                f"gs://{self.config.bucket}/silver/{self.config.silver_dataset}"
+                f"/*/workplace_inspections.parquet"
+            )
             files = self.gcs_access.list_files_with_timestamps(pattern)
 
             if not files:
@@ -186,7 +200,9 @@ class ArbjdstilsynetInspectionsGold(
                 "kraeftfremkaldende belastninger": "Kræftfremkaldende belastninger",
                 "luftvejsbelastninger": "Luftvejsbelastninger",
                 "asbest": "Asbest",
-                "nedfald af genstande, sammenstyrtning m.m.": "Nedfald af genstande, sammenstyrtning m.m.",
+                "nedfald af genstande, sammenstyrtning m.m.": (
+                    "Nedfald af genstande, sammenstyrtning m.m."
+                ),
                 "oevrige ulykkesrisici": "Øvrige ulykkesrisici",
                 "psykisk arbejdsmiljoe": "Psykisk arbejdsmiljø",
                 "stoej": "Støj",
@@ -210,11 +226,19 @@ class ArbjdstilsynetInspectionsGold(
             industry_mapping = {
                 "avl af malkekvaeg": "Avl af malkekvæg",
                 "avl af smaagrise": "Avl af smågrise",
-                "dyrkning af groentsager og meloner, roedder og rodknolde": "Dyrkning af grøntsager og meloner, rødder og rodknolde",
-                "dyrkning af korn (undtagen ris), baelgfrugter og olieholdige froe": "Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø",
-                "stoetteaktiviteter i forbindelse med planteavl": "Støtteaktiviteter i forbindelse med planteavl",
+                "dyrkning af groentsager og meloner, roedder og rodknolde": (
+                    "Dyrkning af grøntsager og meloner, rødder og rodknolde"
+                ),
+                "dyrkning af korn (undtagen ris), baelgfrugter og olieholdige froe": (
+                    "Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø"
+                ),
+                "stoetteaktiviteter i forbindelse med planteavl": (
+                    "Støtteaktiviteter i forbindelse med planteavl"
+                ),
                 "anlaeg af ledningsnet til vaesker": "Anlæg af ledningsnet til væsker",
-                "anlaeg af ledningsnet til elektricitet og tele": "Anlæg af ledningsnet til elektricitet og tele",
+                "anlaeg af ledningsnet til elektricitet og tele": (
+                    "Anlæg af ledningsnet til elektricitet og tele"
+                ),
                 "anlaeg af jernbaner og undergrundsbaner": "Anlæg af jernbaner og undergrundsbaner",
                 "forberedende byggepladsarbejder": "Forberedende byggepladsarbejder",
                 "anlaeg af veje og motorveje": "Anlæg af veje og motorveje",
@@ -333,7 +357,8 @@ class ArbjdstilsynetInspectionsGold(
             df_validated["data_quality_score"] = quality_score.clip(0, 1)
 
             self.logger.info(
-                f"✅ Validated {len(df_validated)} records with average quality score: {df_validated['data_quality_score'].mean():.3f}"
+                f"✅ Validated {len(df_validated)} records with average quality score: "
+                f"{df_validated['data_quality_score'].mean():.3f}"
             )
             return df_validated
 

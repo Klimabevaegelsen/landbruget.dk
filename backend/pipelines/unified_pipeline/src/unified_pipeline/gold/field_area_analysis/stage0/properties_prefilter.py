@@ -57,7 +57,8 @@ class PropertiesPreFilter(PreFilteringStageBase):
         num_chunks = (total_properties + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"🚀 Pre-filtering {total_properties:,} properties in {num_chunks} chunks of {chunk_size:,}"
+            f"🚀 Pre-filtering {total_properties:,} properties in {num_chunks} "
+            f"chunks of {chunk_size:,}"
         )
 
         # Initialize filtered properties table
@@ -124,7 +125,8 @@ class PropertiesPreFilter(PreFilteringStageBase):
             chunk_time = time.time() - chunk_start
 
             self.log.info(
-                f"  ✅ Chunk {chunk_num + 1}: {chunk_filtered:,}/{chunk_count:,} properties kept ({chunk_filtered / chunk_count * 100:.1f}%) - {chunk_time:.1f}s"
+                f"  ✅ Chunk {chunk_num + 1}: {chunk_filtered:,}/{chunk_count:,} "
+                f"properties kept ({chunk_filtered / chunk_count * 100:.1f}%) - {chunk_time:.1f}s"
             )
 
         # Final statistics
@@ -132,10 +134,12 @@ class PropertiesPreFilter(PreFilteringStageBase):
         reduction_pct = (1 - total_filtered / total_properties) * 100
 
         self.log.info(
-            f"🎯 MASSIVE REDUCTION: {total_properties:,} → {total_filtered:,} properties ({reduction_pct:.1f}% reduction)"
+            f"🎯 MASSIVE REDUCTION: {total_properties:,} → {total_filtered:,} "
+            f"properties ({reduction_pct:.1f}% reduction)"
         )
         self.log.info(
-            f"⚡ Stage 1 complexity reduced from {total_properties * 600000 / 1e9:.1f}B to {total_filtered * 600000 / 1e9:.1f}B combinations"
+            f"⚡ Stage 1 complexity reduced from {total_properties * 600000 / 1e9:.1f}B "
+            f"to {total_filtered * 600000 / 1e9:.1f}B combinations"
         )
 
         # Export filtered properties using standard pipeline pattern
@@ -148,7 +152,9 @@ class PropertiesPreFilter(PreFilteringStageBase):
             "reduction_percentage": reduction_pct,
             "processing_time_seconds": processing_time,
             "output_path": output_path,
-            "performance_improvement": f"{total_properties / total_filtered:.1f}x reduction in Stage 1 complexity",
+            "performance_improvement": (
+                f"{total_properties / total_filtered:.1f}x reduction in Stage 1 complexity"
+            ),
         }
 
     def _save_output_data(self, result: Dict[str, Any]):

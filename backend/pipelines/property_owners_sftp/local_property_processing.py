@@ -118,7 +118,8 @@ class PropertyDataProcessor:
                         self.source_crs = "EPSG:25832"
                     else:
                         logger.warning(
-                            f"Uncertain CRS detection. X range: {min_x:.0f}-{max_x:.0f}, Y range: {min_y:.0f}-{max_y:.0f}"
+                            f"Uncertain CRS detection. X range: {min_x:.0f}-{max_x:.0f}, "
+                            f"Y range: {min_y:.0f}-{max_y:.0f}"
                         )
                         logger.warning("Assuming Danish UTM Zone 32N (EPSG:25832)")
                         self.source_crs = "EPSG:25832"
