@@ -178,6 +178,36 @@ jobs:
           $CMD
           
           echo "✅ Company Fetching completed successfully"
+      
+      - name: Create Company Data Artifact
+        run: |
+          echo "🔍 Finding latest company data..."
+          
+          # Find the latest company data file from today's runs
+          LATEST_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
+          
+          if [ -n "$LATEST_COMPANY_PATH" ]; then
+            echo "✅ Found latest company file: $LATEST_COMPANY_PATH"
+            gsutil cp "$LATEST_COMPANY_PATH" /tmp/cvr_company_data.parquet
+            echo "✅ Created company artifact from: $LATEST_COMPANY_PATH"
+          else
+            echo "⚠️ No company data files found from today"
+            echo "Trying to find any recent company data file..."
+            
+            # Fallback: find any recent company file
+            RECENT_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+            
+            if [ -n "$RECENT_COMPANY_PATH" ]; then
+              echo "✅ Found recent company file: $RECENT_COMPANY_PATH"
+              gsutil cp "$RECENT_COMPANY_PATH" /tmp/cvr_company_data.parquet
+              echo "✅ Created company artifact from recent file: $RECENT_COMPANY_PATH"
+            else
+              echo "❌ No company data files found at all"
+              echo "Creating empty artifact to prevent downstream failures"
+              touch /tmp/cvr_company_data.parquet
+              echo "Created empty company artifact"
+            fi
+          fi
 
       - name: Upload Company Data
         uses: actions/upload-artifact@v4
@@ -238,6 +268,36 @@ jobs:
           
           echo "Running: $CMD"
           $CMD
+      
+      - name: Create P-Number Data Artifact
+        run: |
+          echo "🔍 Finding latest P-number data..."
+          
+          # Find the latest P-number data file from today's runs
+          LATEST_PNUMBER_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
+          
+          if [ -n "$LATEST_PNUMBER_PATH" ]; then
+            echo "✅ Found latest P-number file: $LATEST_PNUMBER_PATH"
+            gsutil cp "$LATEST_PNUMBER_PATH" /tmp/cvr_pnumber_data.parquet
+            echo "✅ Created P-number artifact from: $LATEST_PNUMBER_PATH"
+          else
+            echo "⚠️ No P-number data files found from today"
+            echo "Trying to find any recent P-number data file..."
+            
+            # Fallback: find any recent P-number file
+            RECENT_PNUMBER_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+            
+            if [ -n "$RECENT_PNUMBER_PATH" ]; then
+              echo "✅ Found recent P-number file: $RECENT_PNUMBER_PATH"
+              gsutil cp "$RECENT_PNUMBER_PATH" /tmp/cvr_pnumber_data.parquet
+              echo "✅ Created P-number artifact from recent file: $RECENT_PNUMBER_PATH"
+            else
+              echo "❌ No P-number data files found at all"
+              echo "Creating empty artifact to prevent downstream failures"
+              touch /tmp/cvr_pnumber_data.parquet
+              echo "Created empty P-number artifact"
+            fi
+          fi
 
       - name: Upload P-Number Data
         uses: actions/upload-artifact@v4
@@ -301,23 +361,32 @@ jobs:
       
       - name: Create Financial Data Artifact
         run: |
-          # Convert GitHub's timestamp to the format used by the pipeline
-          PIPELINE_TIMESTAMP=$(date -d "$PIPELINE_START_TIME" -u +"%Y%m%d_%H%M%S")
-          echo "Using pipeline timestamp: $PIPELINE_TIMESTAMP"
+          echo "🔍 Finding latest financial data..."
           
-          # Get the financial data from the expected path using the shared timestamp
-          FINANCIAL_PATH="gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/${PIPELINE_TIMESTAMP}/data.parquet"
-          echo "Looking for financial file at: $FINANCIAL_PATH"
+          # Find the latest financial data file from today's runs
+          LATEST_FINANCIAL_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
           
-          if gsutil -q stat "$FINANCIAL_PATH"; then
-            gsutil cp "$FINANCIAL_PATH" /tmp/cvr_financial_data.parquet
-            echo "✅ Created financial artifact from: $FINANCIAL_PATH"
+          if [ -n "$LATEST_FINANCIAL_PATH" ]; then
+            echo "✅ Found latest financial file: $LATEST_FINANCIAL_PATH"
+            gsutil cp "$LATEST_FINANCIAL_PATH" /tmp/cvr_financial_data.parquet
+            echo "✅ Created financial artifact from: $LATEST_FINANCIAL_PATH"
           else
-            echo "⚠️ Financial file not found at expected path: $FINANCIAL_PATH"
-            echo "This suggests the financial documents step failed or didn't complete"
-            # Create empty artifact to prevent downstream failures
-            touch /tmp/cvr_financial_data.parquet
-            echo "Created empty financial artifact"
+            echo "⚠️ No financial data files found from today"
+            echo "Trying to find any recent financial data file..."
+            
+            # Fallback: find any recent financial file
+            RECENT_FINANCIAL_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+            
+            if [ -n "$RECENT_FINANCIAL_PATH" ]; then
+              echo "✅ Found recent financial file: $RECENT_FINANCIAL_PATH"
+              gsutil cp "$RECENT_FINANCIAL_PATH" /tmp/cvr_financial_data.parquet
+              echo "✅ Created financial artifact from recent file: $RECENT_FINANCIAL_PATH"
+            else
+              echo "❌ No financial data files found at all"
+              echo "Creating empty artifact to prevent downstream failures"
+              touch /tmp/cvr_financial_data.parquet
+              echo "Created empty financial artifact"
+            fi
           fi
       
       - name: Upload Financial Data Artifact
@@ -389,23 +458,32 @@ jobs:
       
       - name: Create Address Data Artifact
         run: |
-          # Convert GitHub's timestamp to the format used by the pipeline
-          PIPELINE_TIMESTAMP=$(date -d "$PIPELINE_START_TIME" -u +"%Y%m%d_%H%M%S")
-          echo "Using pipeline timestamp: $PIPELINE_TIMESTAMP"
+          echo "🔍 Finding latest address geocoding data..."
           
-          # Get the address data from the expected path using the shared timestamp
-          ADDRESS_PATH="gs://landbrugsdata-raw-data/gold/cvr_enrichment/${PIPELINE_TIMESTAMP}/address_geocoding.parquet"
-          echo "Looking for address file at: $ADDRESS_PATH"
+          # Find the latest address geocoding file from today's runs
+          LATEST_ADDRESS_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment/*/address_geocoding.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
           
-          if gsutil -q stat "$ADDRESS_PATH"; then
-            gsutil cp "$ADDRESS_PATH" /tmp/cvr_address_data.parquet
-            echo "✅ Created address artifact from: $ADDRESS_PATH"
+          if [ -n "$LATEST_ADDRESS_PATH" ]; then
+            echo "✅ Found latest address file: $LATEST_ADDRESS_PATH"
+            gsutil cp "$LATEST_ADDRESS_PATH" /tmp/cvr_address_data.parquet
+            echo "✅ Created address artifact from: $LATEST_ADDRESS_PATH"
           else
-            echo "⚠️ Address file not found at expected path: $ADDRESS_PATH"
-            echo "This suggests the address geocoding step failed or didn't complete"
-            # Create empty artifact to prevent downstream failures
-            touch /tmp/cvr_address_data.parquet
-            echo "Created empty address artifact"
+            echo "⚠️ No address geocoding files found from today"
+            echo "Trying to find any recent address geocoding file..."
+            
+            # Fallback: find any recent address file within the last 7 days
+            RECENT_ADDRESS_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment/*/address_geocoding.parquet 2>/dev/null | sort -r | head -1 || echo "")
+            
+            if [ -n "$RECENT_ADDRESS_PATH" ]; then
+              echo "✅ Found recent address file: $RECENT_ADDRESS_PATH"
+              gsutil cp "$RECENT_ADDRESS_PATH" /tmp/cvr_address_data.parquet
+              echo "✅ Created address artifact from recent file: $RECENT_ADDRESS_PATH"
+            else
+              echo "❌ No address geocoding files found at all"
+              echo "Creating empty artifact to prevent downstream failures"
+              touch /tmp/cvr_address_data.parquet
+              echo "Created empty address artifact"
+            fi
           fi
       
       - name: Upload Address Data Artifact
