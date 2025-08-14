@@ -3,9 +3,10 @@
 Analyze fertilizer parquet files to understand their structure and identify harmonization needs.
 """
 
-import pandas as pd
-import os
 from pathlib import Path
+
+import pandas as pd
+
 
 def analyze_parquet_files():
     """Analyze all parquet files in the fertiliser directory."""
@@ -49,7 +50,10 @@ def analyze_parquet_files():
                 print(f"\n⚠️  Found {duplicates:,} duplicate rows")
             
             # Check for common date/time columns
-            date_cols = [col for col in df.columns if any(word in col.lower() for word in ['date', 'tid', 'år', 'year'])]
+            date_cols = [
+                col for col in df.columns
+                if any(word in col.lower() for word in ['date', 'tid', 'år', 'year'])
+            ]
             if date_cols:
                 print(f"\nDate-related columns: {date_cols}")
                 for col in date_cols[:3]:  # Show first 3
