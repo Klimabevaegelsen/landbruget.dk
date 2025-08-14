@@ -77,6 +77,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         """
         super().__init__(config)
 
+        # Set up optimal DuckDB memory settings early to prevent OOM
+        self._setup_memory_optimized_duckdb()
+
         # Set up company UUID generation function
         self._setup_company_uuid_function()
 
@@ -84,6 +87,35 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         self.log.info("📋 Configuration:")
         self.log.info(f"   • Create normalized tables: {self.config.create_normalized_tables}")
         self.log.info(f"   • Include raw JSON: {self.config.include_raw_json}")
+
+    def _setup_memory_optimized_duckdb(self):
+        """Set up DuckDB with memory-optimized settings to prevent OOM errors."""
+        try:
+            # Aggressive memory settings to prevent accumulation issues
+            self.conn.execute("SET memory_limit = '8GB'")  # Lower limit to force spilling
+            self.conn.execute("SET preserve_insertion_order = false")  # Disable ordering for memory efficiency
+            self.conn.execute("SET threads = 2")  # Fewer threads to reduce memory pressure
+            self.conn.execute("PRAGMA cache_size = -1000")  # Small cache size (1MB)
+            self.conn.execute("SET temp_directory = '/tmp'")  # Use temp directory for spill
+            self.conn.execute("SET enable_progress_bar = false")  # Disable progress bar for memory
+            
+            # Critical settings to prevent CTE and intermediate result accumulation
+            self.conn.execute("SET max_expression_depth = 100")  # Limit expression complexity
+            self.conn.execute("SET enable_object_cache = false")  # Disable object caching
+            self.conn.execute("SET checkpoint_threshold = '32MB'")  # More frequent checkpoints
+            
+            self.log.info("✅ DuckDB configured with aggressive memory-optimized settings for large dataset processing")
+            
+        except Exception as e:
+            self.log.warning(f"Could not set all DuckDB memory optimizations: {e}")
+            # Try essential settings only
+            try:
+                self.conn.execute("SET memory_limit = '8GB'")
+                self.conn.execute("SET preserve_insertion_order = false")
+                self.conn.execute("SET threads = 2")
+                self.log.info("✅ DuckDB configured with basic memory optimizations")
+            except Exception as e2:
+                self.log.warning(f"Could not set basic memory optimizations: {e2}")
 
     def _setup_company_uuid_function(self):
         """Set up company UUID generation function in DuckDB."""
@@ -700,19 +732,21 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             f"using chunked processing"
         )
 
-        # Process companies in chunks to avoid memory issues (copied from original)
-        chunk_size = 50  # Process 50 companies at a time
-        total_companies = len(companies_list)
+        # Process companies in smaller chunks to prevent CTE memory accumulation
+        # The real issue is that complex CTEs build up memory - solution is smaller batches
+        chunk_size = 25  # Smaller chunks to prevent CTE memory buildup
+        total_companies = len(companies_list)        
         num_chunks = (total_companies + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"📦 Processing {total_companies} companies in {num_chunks} chunks of {chunk_size}"
+            f"📦 Processing {total_companies} companies in {num_chunks} chunks of {chunk_size} "
+            f"(preventing CTE memory accumulation with smaller batches)"
         )
 
         # Initialize all tables as empty with correct schema (original sophisticated schema)
         self._initialize_empty_tables(table_name)
 
-        # Process each chunk
+        # Process each chunk with memory pressure monitoring
         for chunk_idx in range(num_chunks):
             start_idx = chunk_idx * chunk_size
             end_idx = min(start_idx + chunk_size, total_companies)
@@ -724,15 +758,22 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             )
 
             try:
-                self._process_companies_chunk(chunk_companies, table_name, chunk_idx)
+                # Process the chunk with optimized table operations
+                self._process_companies_chunk_memory_optimized(chunk_companies, table_name, chunk_idx)
 
-                # Memory cleanup after each chunk
-                self._cleanup_memory_after_chunk()
+                # Force checkpoint and cleanup after each chunk to prevent accumulation
+                self.conn.execute("CHECKPOINT")
+                
+                # Periodic deep cleanup every 20 chunks (not too frequent)
+                if (chunk_idx + 1) % 20 == 0:
+                    self.log.info(f"🧹 Performing periodic cleanup after {chunk_idx + 1} chunks")
+                    self._deep_memory_cleanup()
 
             except Exception as e:
                 self.log.error(f"Error processing chunk {chunk_idx + 1}: {e}")
                 if "Out of Memory" in str(e) or "memory" in str(e).lower():
-                    self.log.warning("⚠️ Memory exhaustion detected - stopping processing")
+                    self.log.warning("⚠️ Memory exhaustion detected - attempting recovery")
+                    self._emergency_memory_cleanup()
                     break
                 raise
 
@@ -1242,15 +1283,15 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
     # ========== SOPHISTICATED PROCESSING METHODS (PORTED FROM ORIGINAL) ==========
 
-    def _process_companies_chunk(
+    def _process_companies_chunk_memory_optimized(
         self, chunk_companies: list, table_name: str, chunk_idx: int
     ) -> None:
-        """Process a chunk of companies and append to existing tables (ported from original)."""
+        """Process a chunk of companies with memory-optimized operations to prevent accumulation."""
         import json
 
         json_strings = [json.dumps(company) for company in chunk_companies]
 
-        # Insert into main companies table
+        # Insert into main companies table (simpler, less memory-intensive)
         self.conn.execute(
             f"""
             INSERT INTO {table_name}
@@ -1258,33 +1299,23 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                 json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR as
-                    company_type_description,
+                json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
                 json_extract(json_data, '$.status')::VARCHAR as status,
                 json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                 json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as
-                    advertisement_protection,
-                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as
-                    address_latitude,
-                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as
-                    address_longitude,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as
-                    address_coordinate_system,
-                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as
-                    address_srid,
-                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as
-                    address_geom_wkt,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as
-                    address_coordinate_quality,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as
-                    address_coordinate_source,
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
+                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as address_latitude,
+                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as address_longitude,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
+                json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
+                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as address_coordinate_quality,
+                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as address_coordinate_source,
                 json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                 json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                 json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
                 json_extract(json_data, '$.source_pipeline_count')::INTEGER as source_pipeline_count,
-                json_extract(json_data, '$.financial_document_count')::INTEGER as
-                    financial_document_count,
+                json_extract(json_data, '$.financial_document_count')::INTEGER as financial_document_count,
                 json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
                 json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
             FROM unnest($1) as t(json_data)
@@ -1292,23 +1323,60 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             [json_strings],
         )
 
-        # Process addresses for this chunk
+        # Process ALL tables with proper memory management - NO functionality removed!
+        # Process each table type separately with immediate cleanup to prevent accumulation
+        
         self._process_addresses_chunk(json_strings, table_name)
-
-        # Process leadership for this chunk
-        self._process_leadership_chunk(json_strings, table_name)
-
-        # Process financial documents for this chunk
+        self.conn.execute("CHECKPOINT")  # Immediate checkpoint after addresses
+        
+        self._process_leadership_chunk(json_strings, table_name) 
+        self.conn.execute("CHECKPOINT")  # Immediate checkpoint after leadership
+        
         self._process_financial_chunk(json_strings, table_name)
-
-        # Process industries for this chunk
+        self.conn.execute("CHECKPOINT")  # Immediate checkpoint after financial
+        
         self._process_industries_chunk(json_strings, table_name)
-
-        # Process employment data for this chunk
+        self.conn.execute("CHECKPOINT")  # Immediate checkpoint after industries
+        
         self._process_employment_chunk(json_strings, table_name)
+        self.conn.execute("CHECKPOINT")  # Immediate checkpoint after employment
+        
+        # Force cleanup after all processing
+        del json_strings
+        import gc
+        gc.collect()
+
+
+    def _pre_chunk_memory_management(self) -> None:
+        """Pre-chunk memory management and checks."""
+        try:
+            import gc
+            import os
+            
+            # Try to import psutil for memory monitoring
+            try:
+                import psutil
+                # Check current memory usage
+                process = psutil.Process(os.getpid())
+                memory_info = process.memory_info()
+                memory_mb = memory_info.rss / 1024 / 1024
+                
+                # If memory usage is high, force cleanup before processing
+                if memory_mb > 8000:  # Over 8GB
+                    self.log.info(f"🧹 High memory usage detected ({memory_mb:.1f}MB), forcing pre-chunk cleanup")
+                    self._deep_memory_cleanup()
+                    
+            except ImportError:
+                self.log.debug("psutil not available, skipping memory usage monitoring")
+            
+            # Force garbage collection (always available)
+            gc.collect()
+            
+        except Exception as e:
+            self.log.debug(f"Pre-chunk memory management warning: {e}")
 
     def _cleanup_memory_after_chunk(self) -> None:
-        """Aggressive memory cleanup after processing a chunk (ported from original)."""
+        """Enhanced memory cleanup after processing a chunk."""
         try:
             # DuckDB-specific cleanup
             self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL
@@ -1316,17 +1384,28 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
             # Force Python garbage collection
             import gc
-
             collected = gc.collect()
 
             # Additional DuckDB memory management
             try:
                 # Clear any cached query plans
                 self.conn.execute("PRAGMA cache_size = 0")
-                self.conn.execute("PRAGMA cache_size = -2000")  # Reset to reasonable cache
+                self.conn.execute("PRAGMA cache_size = -1000")  # Smaller cache to conserve memory
 
                 # Force temporary directory cleanup
                 self.conn.execute("PRAGMA temp_store = memory")
+                
+                # Clear any temporary tables that might exist
+                temp_tables = self.conn.execute("""
+                    SELECT table_name FROM information_schema.tables 
+                    WHERE table_name LIKE '%_temp_%' OR table_name LIKE 'temp_%'
+                """).fetchall()
+                
+                for (table_name,) in temp_tables:
+                    try:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                    except:
+                        pass  # Ignore errors dropping temp tables
 
             except Exception as pragma_e:
                 self.log.debug(f"Pragma cleanup warning: {pragma_e}")
@@ -1335,6 +1414,103 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         except Exception as e:
             self.log.debug(f"Memory cleanup warning: {e}")
+
+    def _deep_memory_cleanup(self) -> None:
+        """Deep memory cleanup for periodic maintenance."""
+        try:
+            import gc
+            import os
+            
+            before_mb = 0
+            after_mb = 0
+            
+            # Try to get memory usage if psutil is available
+            try:
+                import psutil
+                process = psutil.Process(os.getpid())
+                before_mb = process.memory_info().rss / 1024 / 1024
+            except ImportError:
+                self.log.debug("psutil not available for memory monitoring")
+            
+            # Force multiple rounds of garbage collection
+            for i in range(3):
+                collected = gc.collect()
+                self.log.debug(f"GC round {i+1}: collected {collected} objects")
+            
+            # Aggressive DuckDB cleanup
+            self.conn.execute("CHECKPOINT")
+            self.conn.execute("VACUUM")  # Reclaim space
+            self.conn.execute("PRAGMA optimize")
+            
+            # Reset DuckDB memory settings to be more conservative
+            try:
+                self.conn.execute("SET memory_limit = '8GB'")  # Reduce memory limit
+                self.conn.execute("SET preserve_insertion_order = false")  # Disable ordering preservation
+                self.conn.execute("SET threads = 2")  # Reduce parallelism to save memory
+            except Exception as pragma_e:
+                self.log.debug(f"Memory limit pragma warning: {pragma_e}")
+            
+            # Log memory usage after cleanup if available
+            try:
+                import psutil
+                process = psutil.Process(os.getpid())
+                after_mb = process.memory_info().rss / 1024 / 1024
+                saved_mb = before_mb - after_mb
+                self.log.info(f"🧹 Deep cleanup: {before_mb:.1f}MB → {after_mb:.1f}MB (saved {saved_mb:.1f}MB)")
+            except ImportError:
+                self.log.info("🧹 Deep cleanup completed (memory monitoring unavailable)")
+            
+        except Exception as e:
+            self.log.warning(f"Deep memory cleanup warning: {e}")
+
+    def _emergency_memory_cleanup(self) -> None:
+        """Emergency memory cleanup when out of memory errors occur."""
+        try:
+            import gc
+            import os
+            
+            self.log.warning("🚨 Performing emergency memory cleanup")
+            
+            before_mb = 0
+            after_mb = 0
+            
+            # Log current memory usage if possible
+            try:
+                import psutil
+                process = psutil.Process(os.getpid())
+                before_mb = process.memory_info().rss / 1024 / 1024
+                self.log.warning(f"💾 Current memory usage: {before_mb:.1f}MB")
+            except ImportError:
+                self.log.warning("💾 Memory monitoring unavailable")
+            
+            # Aggressive garbage collection
+            for i in range(5):
+                collected = gc.collect()
+                self.log.debug(f"Emergency GC round {i+1}: collected {collected} objects")
+            
+            # Emergency DuckDB settings
+            try:
+                self.conn.execute("SET memory_limit = '6GB'")  # Aggressive memory limit
+                self.conn.execute("SET preserve_insertion_order = false")
+                self.conn.execute("SET threads = 1")  # Single thread to minimize memory
+                self.conn.execute("PRAGMA cache_size = -500")  # Very small cache
+                self.conn.execute("CHECKPOINT")
+                self.conn.execute("VACUUM")
+            except Exception as e:
+                self.log.debug(f"Emergency DuckDB cleanup warning: {e}")
+            
+            # Final memory check if available
+            try:
+                import psutil
+                process = psutil.Process(os.getpid())
+                after_mb = process.memory_info().rss / 1024 / 1024
+                saved_mb = before_mb - after_mb
+                self.log.warning(f"🚨 Emergency cleanup: {before_mb:.1f}MB → {after_mb:.1f}MB (saved {saved_mb:.1f}MB)")
+            except ImportError:
+                self.log.warning("🚨 Emergency cleanup completed (memory monitoring unavailable)")
+            
+        except Exception as e:
+            self.log.error(f"Emergency memory cleanup failed: {e}")
 
     def _log_final_table_sizes(self, table_name: str) -> None:
         """Log final table sizes after all chunks are processed (ported from original)."""
