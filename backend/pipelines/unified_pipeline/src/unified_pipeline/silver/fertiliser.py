@@ -18,7 +18,7 @@ from typing import Dict, List, Optional, Any
 
 import duckdb
 
-from ..common.base import BaseJobConfig, ConnectionManager, SilverJobInterface
+from ..common.base import BaseJobConfig, BaseSource, SilverJobInterface
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +48,12 @@ class FertiliserSilverConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
 
 
-class FertiliserSilver(SilverJobInterface):
+class FertiliserSilver(BaseSource[FertiliserSilverConfig], SilverJobInterface):
     """Processor for harmonizing and standardizing fertiliser data."""
     
     def __init__(self, config: FertiliserSilverConfig):
         """Initialize the fertiliser processor."""
         super().__init__(config)
-        self.config = config
-        self.connection_manager = ConnectionManager()
         self.table_name = "fertiliser_harmonized"
         self.schema_name = "silver"
     
