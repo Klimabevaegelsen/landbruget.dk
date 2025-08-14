@@ -179,33 +179,39 @@ jobs:
           
           echo "✅ Company Fetching completed successfully"
       
-      - name: Create Company Data Artifact
+      - name: Verify Company Data Artifact
         run: |
-          echo "🔍 Finding latest company data..."
-          
-          # Find the latest company data file from today's runs
-          LATEST_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
-          
-          if [ -n "$LATEST_COMPANY_PATH" ]; then
-            echo "✅ Found latest company file: $LATEST_COMPANY_PATH"
-            gsutil cp "$LATEST_COMPANY_PATH" /tmp/cvr_company_data.parquet
-            echo "✅ Created company artifact from: $LATEST_COMPANY_PATH"
+          # Check if the company fetching step already created the artifact file
+          if [ -f "/tmp/cvr_company_data.parquet" ]; then
+            echo "✅ Company data artifact already exists from the fetching step"
+            ls -lh /tmp/cvr_company_data.parquet
           else
-            echo "⚠️ No company data files found from today"
-            echo "Trying to find any recent company data file..."
+            echo "⚠️ Company data artifact not found, looking for latest available data..."
             
-            # Fallback: find any recent company file
-            RECENT_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+            # Find the latest company data file from today's runs
+            LATEST_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
             
-            if [ -n "$RECENT_COMPANY_PATH" ]; then
-              echo "✅ Found recent company file: $RECENT_COMPANY_PATH"
-              gsutil cp "$RECENT_COMPANY_PATH" /tmp/cvr_company_data.parquet
-              echo "✅ Created company artifact from recent file: $RECENT_COMPANY_PATH"
+            if [ -n "$LATEST_COMPANY_PATH" ]; then
+              echo "✅ Found latest company file: $LATEST_COMPANY_PATH"
+              gsutil cp "$LATEST_COMPANY_PATH" /tmp/cvr_company_data.parquet
+              echo "✅ Created company artifact from: $LATEST_COMPANY_PATH"
             else
-              echo "❌ No company data files found at all"
-              echo "Creating empty artifact to prevent downstream failures"
-              touch /tmp/cvr_company_data.parquet
-              echo "Created empty company artifact"
+              echo "⚠️ No company data files found from today"
+              echo "Trying to find any recent company data file..."
+              
+              # Fallback: find any recent company file
+              RECENT_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+              
+              if [ -n "$RECENT_COMPANY_PATH" ]; then
+                echo "✅ Found recent company file: $RECENT_COMPANY_PATH"
+                gsutil cp "$RECENT_COMPANY_PATH" /tmp/cvr_company_data.parquet
+                echo "✅ Created company artifact from recent file: $RECENT_COMPANY_PATH"
+              else
+                echo "❌ No company data files found at all"
+                echo "Creating empty artifact to prevent downstream failures"
+                touch /tmp/cvr_company_data.parquet
+                echo "Created empty company artifact"
+              fi
             fi
           fi
 
@@ -269,33 +275,39 @@ jobs:
           echo "Running: $CMD"
           $CMD
       
-      - name: Create P-Number Data Artifact
+      - name: Verify P-Number Data Artifact
         run: |
-          echo "🔍 Finding latest P-number data..."
-          
-          # Find the latest P-number data file from today's runs
-          LATEST_PNUMBER_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
-          
-          if [ -n "$LATEST_PNUMBER_PATH" ]; then
-            echo "✅ Found latest P-number file: $LATEST_PNUMBER_PATH"
-            gsutil cp "$LATEST_PNUMBER_PATH" /tmp/cvr_pnumber_data.parquet
-            echo "✅ Created P-number artifact from: $LATEST_PNUMBER_PATH"
+          # Check if the P-number fetching step already created the artifact file
+          if [ -f "/tmp/cvr_pnumber_data.parquet" ]; then
+            echo "✅ P-number data artifact already exists from the fetching step"
+            ls -lh /tmp/cvr_pnumber_data.parquet
           else
-            echo "⚠️ No P-number data files found from today"
-            echo "Trying to find any recent P-number data file..."
+            echo "⚠️ P-number data artifact not found, looking for latest available data..."
             
-            # Fallback: find any recent P-number file
-            RECENT_PNUMBER_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+            # Find the latest P-number data file from today's runs
+            LATEST_PNUMBER_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
             
-            if [ -n "$RECENT_PNUMBER_PATH" ]; then
-              echo "✅ Found recent P-number file: $RECENT_PNUMBER_PATH"
-              gsutil cp "$RECENT_PNUMBER_PATH" /tmp/cvr_pnumber_data.parquet
-              echo "✅ Created P-number artifact from recent file: $RECENT_PNUMBER_PATH"
+            if [ -n "$LATEST_PNUMBER_PATH" ]; then
+              echo "✅ Found latest P-number file: $LATEST_PNUMBER_PATH"
+              gsutil cp "$LATEST_PNUMBER_PATH" /tmp/cvr_pnumber_data.parquet
+              echo "✅ Created P-number artifact from: $LATEST_PNUMBER_PATH"
             else
-              echo "❌ No P-number data files found at all"
-              echo "Creating empty artifact to prevent downstream failures"
-              touch /tmp/cvr_pnumber_data.parquet
-              echo "Created empty P-number artifact"
+              echo "⚠️ No P-number data files found from today"
+              echo "Trying to find any recent P-number data file..."
+              
+              # Fallback: find any recent P-number file
+              RECENT_PNUMBER_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+              
+              if [ -n "$RECENT_PNUMBER_PATH" ]; then
+                echo "✅ Found recent P-number file: $RECENT_PNUMBER_PATH"
+                gsutil cp "$RECENT_PNUMBER_PATH" /tmp/cvr_pnumber_data.parquet
+                echo "✅ Created P-number artifact from recent file: $RECENT_PNUMBER_PATH"
+              else
+                echo "❌ No P-number data files found at all"
+                echo "Creating empty artifact to prevent downstream failures"
+                touch /tmp/cvr_pnumber_data.parquet
+                echo "Created empty P-number artifact"
+              fi
             fi
           fi
 
