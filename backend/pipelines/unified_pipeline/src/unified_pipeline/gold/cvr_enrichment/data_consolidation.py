@@ -734,7 +734,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Process companies in smaller chunks to prevent CTE memory accumulation
         # The real issue is that complex CTEs build up memory - solution is smaller batches
-        chunk_size = 1  # Process one company at a time to avoid any memory accumulation issues
+        chunk_size = 100  # Reasonable batch size - not too big to cause memory issues, not too small to be slow
         total_companies = len(companies_list)        
         num_chunks = (total_companies + chunk_size - 1) // chunk_size
 
@@ -768,8 +768,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 import gc
                 gc.collect()
                 
-                # Periodic deep cleanup every 1000 companies (reasonable frequency)
-                if (chunk_idx + 1) % 1000 == 0:
+                # Periodic deep cleanup every 10 chunks (reasonable frequency)
+                if (chunk_idx + 1) % 10 == 0:
                     self.log.info(f"🧹 Performing periodic cleanup after {chunk_idx + 1} chunks")
                     self._deep_memory_cleanup()
 
@@ -781,6 +781,10 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     break
                 raise
 
+        # Process employment data separately at the end to avoid memory accumulation
+        self.log.info("🏭 Processing employment data separately to avoid memory issues")
+        self._process_all_employment_data(companies_list, table_name)
+        
         # Log final table sizes
         self._log_final_table_sizes(table_name)
 
@@ -1342,8 +1346,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         self._process_industries_chunk(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after industries
         
-        self._process_employment_chunk(json_strings, table_name)
-        self.conn.execute("CHECKPOINT")  # Immediate checkpoint after employment
+        # Skip employment processing in chunks - do it separately at the end
+        # self._process_employment_chunk(json_strings, table_name)
+        # self.conn.execute("CHECKPOINT")  # Immediate checkpoint after employment
         
         # Force cleanup after all processing
         del json_strings
@@ -1923,6 +1928,86 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 """,
                     [json_strings, industry_schema[0]],
                 )
+
+    def _process_all_employment_data(self, companies_list: list, table_name: str) -> None:
+        """Process all employment data separately to avoid memory accumulation in chunks."""
+        import json
+        
+        self.log.info(f"Processing employment data for {len(companies_list)} companies in separate batches")
+        
+        employment_types = [
+            ("annual_employment", "annual"),
+            ("quarterly_employment", "quarterly"),
+            ("monthly_employment", "monthly"),
+            ("replacement_monthly_employment", "replacement_monthly"),
+        ]
+        
+        for employment_field, table_suffix in employment_types:
+            self.log.info(f"Processing {employment_field} data...")
+            
+            # Process employment data in smaller batches to avoid memory issues
+            batch_size = 500  # Process 500 companies at a time for employment
+            total_batches = (len(companies_list) + batch_size - 1) // batch_size
+            
+            for batch_idx in range(total_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min(start_idx + batch_size, len(companies_list))
+                batch_companies = companies_list[start_idx:end_idx]
+                
+                json_strings = [json.dumps(company) for company in batch_companies]
+                
+                # Check if any companies in this batch have this employment type
+                employment_check = self.conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                """,
+                    [json_strings, employment_field],
+                ).fetchone()[0]
+
+                if employment_check > 0:
+                    # Get schema for this employment type
+                    employment_schema = self.conn.execute(
+                        """
+                        WITH employment_sample AS (
+                            SELECT json_extract(json_data, '$.employment_data.' || $2) as employment_json
+                            FROM unnest($1) as t(json_data)
+                            WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
+                            AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                            LIMIT 1
+                        )
+                        SELECT json_structure(employment_json) FROM employment_sample
+                    """,
+                        [json_strings, employment_field],
+                    ).fetchone()
+
+                    if employment_schema and employment_schema[0]:
+                        # Insert employment data for this batch
+                        self.conn.execute(
+                            f"""
+                            INSERT INTO {table_name}_employment_{table_suffix}
+                            SELECT
+                                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                                json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                                unnest(json_transform(json_extract(json_data, '$.employment_data.{employment_field}'), $2)) as employment_data
+                            FROM unnest($1) as t(json_data)
+                            WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
+                            AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                        """,
+                            [json_strings, employment_schema[0]],
+                        )
+                
+                # Clean up after each batch
+                del json_strings
+                import gc
+                gc.collect()
+                
+                if (batch_idx + 1) % 5 == 0:  # Every 5 batches
+                    self.conn.execute("CHECKPOINT")
+            
+            self.log.info(f"Completed processing {employment_field} data")
 
     def _process_employment_chunk(self, json_strings: list, table_name: str) -> None:
         """Process employment data for a chunk of companies (ported from original)."""
