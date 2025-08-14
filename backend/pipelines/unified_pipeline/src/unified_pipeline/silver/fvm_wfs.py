@@ -610,7 +610,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     # Add empty block_id column using DuckDB
                     result_table = f"marker_with_null_block_{year}"
                     self.conn.execute(
-                        f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                        f"CREATE OR REPLACE TABLE {result_table} AS "
+                        f"SELECT *, NULL as block_id FROM {marker_table}"
                     )
                     return result_table
 
@@ -636,7 +637,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     # Add empty block_id column using DuckDB
                     result_table = f"marker_with_null_block_{year}"
                     self.conn.execute(
-                        f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                        f"CREATE OR REPLACE TABLE {result_table} AS "
+                        f"SELECT *, NULL as block_id FROM {marker_table}"
                     )
                     return result_table
 
@@ -679,7 +681,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             CREATE OR REPLACE TABLE {markblokke_table}_wkt AS
                             SELECT *,
                                 CASE WHEN {markblokke_geom_col} IS NOT NULL
-                                     THEN ST_AsText({markblokke_geom_col}) ELSE NULL END as {markblokke_geom_col}_wkt
+                                     THEN ST_AsText({markblokke_geom_col})
+                                     ELSE NULL END as {markblokke_geom_col}_wkt
                             FROM {markblokke_table}
                         """)
                         markblokke_table = f"{markblokke_table}_wkt"
@@ -724,7 +727,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     marker_geom_expr = f"m.{geom_col}"
                     markblokke_geom_expr = f"b.{markblokke_geom_col}"
 
-                # Create filtered tables with only non-NULL geometries for optimal SPATIAL_JOIN operator usage
+                # Create filtered tables with only non-NULL geometries
+                # for optimal SPATIAL_JOIN operator usage
                 marker_filtered = f"{marker_table}_filtered"
                 markblokke_filtered = f"{markblokke_table}_filtered"
 
@@ -740,13 +744,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 # Perform spatial join using DuckDB-spatial with ONLY spatial predicate
                 # for optimal SPATIAL_JOIN operator
-                # Based on PR #545: SPATIAL_JOIN operator requires single spatial predicate in JOIN condition
+                # Based on PR #545: SPATIAL_JOIN operator requires
+                # single spatial predicate in JOIN condition
                 spatial_join_query = f"""
                     SELECT
                         m.*,
                         b.{block_id_column} as block_id
                     FROM {marker_filtered} m
-                    LEFT JOIN {markblokke_filtered} b ON ST_Intersects({marker_geom_expr}, {markblokke_geom_expr})
+                    LEFT JOIN {markblokke_filtered} b
+                        ON ST_Intersects({marker_geom_expr}, {markblokke_geom_expr})
                 """
 
                 # Get block count for logging
@@ -759,7 +765,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 ).fetchone()[0]
 
                 self.log.info(
-                    f"Executing DuckDB-spatial join for {marker_count} markers with {block_count} blocks in {year}"
+                    f"Executing DuckDB-spatial join for {marker_count} markers "
+                    f"with {block_count} blocks in {year}"
                 )
 
                 # Verify SPATIAL_JOIN operator is being used for optimal performance
@@ -785,7 +792,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 # Add markers that didn't have geometry (NULL geometries) back to the result
                 if result_count < original_marker_count:
                     self.log.info(
-                        f"Adding {original_marker_count - result_count} markers without valid geometry"
+                        f"Adding {original_marker_count - result_count} markers "
+                        f"without valid geometry"
                     )
 
                     # Get markers with NULL geometry and add to final result
@@ -829,7 +837,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 # Add empty block_id column using DuckDB
                 result_table = f"marker_with_null_block_{year}"
                 self.conn.execute(
-                    f"CREATE OR REPLACE TABLE {result_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                    f"CREATE OR REPLACE TABLE {result_table} AS "
+                    f"SELECT *, NULL as block_id FROM {marker_table}"
                 )
                 return result_table
 
@@ -842,7 +851,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             try:
                 fallback_table = f"marker_fallback_result_{year}"
                 self.conn.execute(
-                    f"CREATE OR REPLACE TABLE {fallback_table} AS SELECT *, NULL as block_id FROM {marker_table}"
+                    f"CREATE OR REPLACE TABLE {fallback_table} AS "
+                    f"SELECT *, NULL as block_id FROM {marker_table}"
                 )
                 return fallback_table
             except Exception:
@@ -859,7 +869,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
         Args:
             raw_df:  containing raw payloads from the bronze layer
-            layer_type: Type of layer being processed (Markblokke, Marker, Smaabiotoper, OrganicAreas)
+            layer_type: Type of layer being processed 
+                (Markblokke, Marker, Smaabiotoper, OrganicAreas)
             year: Year of the data being processed
 
         Returns:
@@ -969,7 +980,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 {where_clause}
             """
 
-            # ✅ MIGRATION: Create table with unique name per year and layer type to prevent overwrites
+            # ✅ MIGRATION: Create table with unique name per year and layer type
+            # to prevent overwrites
             final_table_name = f"final_processed_{layer_type.lower()}_{year}"
 
             # For Marker data, log the filtering impact
@@ -1011,7 +1023,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 if not has_block_id or not has_block_data:
                     self.log.info(
-                        f"Block ID not available in Marker data for {year}, attempting spatial join with Markblokke"
+                        f"Block ID not available in Marker data for {year}, "
+                        f"attempting spatial join with Markblokke"
                     )
                     # ❌ ELIMINATED: No more wasteful  conversion
                     # temp_df = self.conn.execute("SELECT * FROM final_processed")
@@ -1023,7 +1036,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     # If result is a table name, use it; otherwise register the result
                     if isinstance(result_table, str):
                         self.conn.execute(
-                            f"CREATE OR REPLACE TABLE {final_table_name} AS SELECT * FROM {result_table}"
+                            f"CREATE OR REPLACE TABLE {final_table_name} AS "
+                            f"SELECT * FROM {result_table}"
                         )
                     else:
                         self.conn.register(final_table_name, result_table)
@@ -1256,7 +1270,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             f"SELECT COUNT(*) FROM temp_marker_{year}"
                         ).fetchone()[0]
                         self.log.info(
-                            f"Loaded {marker_count:,} marker fields for {year} from {latest_marker_file}"
+                            f"Loaded {marker_count:,} marker fields for {year} "
+                            f"from {latest_marker_file}"
                         )
                     except Exception as e:
                         self.log.warning(f"Could not load marker data for {year}: {e}")
@@ -1280,7 +1295,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             f"SELECT COUNT(*) FROM temp_organic_{year}"
                         ).fetchone()[0]
                         self.log.info(
-                            f"Loaded {organic_count:,} organic fields for {year} from {latest_organic_file}"
+                            f"Loaded {organic_count:,} organic fields for {year} "
+                            f"from {latest_organic_file}"
                         )
                     except Exception as e:
                         self.log.warning(f"Could not load organic data for {year}: {e}")
@@ -1308,7 +1324,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     ).fetchone()[0]
 
                     self.log.info(
-                        f"Filtered to {filtered_marker_count:,} marker and {filtered_organic_count:,} "
+                        f"Filtered to {filtered_marker_count:,} marker and "
+                        f"{filtered_organic_count:,} "
                         f"organic fields with valid geometries"
                     )
 
@@ -1342,11 +1359,13 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         explain_text = " ".join([str(row) for row in explain_result])
                         if "SPATIAL_JOIN" in explain_text:
                             self.log.info(
-                                f"✅ SPATIAL_JOIN operator detected for {year} - using optimized spatial indexing"
+                                f"✅ SPATIAL_JOIN operator detected for {year} - "
+                                f"using optimized spatial indexing"
                             )
                         else:
                             self.log.warning(
-                                f"⚠️ SPATIAL_JOIN operator not detected for {year} - falling back to nested loop"
+                                f"⚠️ SPATIAL_JOIN operator not detected for {year} - "
+                                f"falling back to nested loop"
                             )
                     except Exception:
                         self.log.debug(f"Could not verify SPATIAL_JOIN operator for {year}")
@@ -1529,7 +1548,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                                 f"SELECT COUNT(*) FROM temp_subsidy_{year}"
                             ).fetchone()[0]
                             self.log.info(
-                                f"Loaded {subsidy_count:,} {layer_type} records for {year} from {latest_subsidy_file}"
+                                f"Loaded {subsidy_count:,} {layer_type} records for {year} "
+                                f"from {latest_subsidy_file}"
                             )
                         except Exception as e:
                             self.log.warning(f"Could not load {layer_type} data for {year}: {e}")
@@ -1559,7 +1579,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                                 f"SELECT COUNT(*) FROM temp_marker_{year}"
                             ).fetchone()[0]
                             self.log.info(
-                                f"Loaded {marker_count:,} marker fields with UUID for {year} from {latest_marker_file}"
+                                f"Loaded {marker_count:,} marker fields with UUID for {year} "
+                                f"from {latest_marker_file}"
                             )
                         except Exception as e:
                             self.log.warning(f"Could not load marker data for {year}: {e}")
@@ -1574,7 +1595,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         # Pre-filter to remove NULL geometries for optimal performance
                         self.conn.execute(f"""
                             CREATE OR REPLACE TABLE temp_subsidy_filtered_{year} AS
-                            SELECT * FROM temp_subsidy_{year} WHERE geometry IS NOT NULL AND field_id IS NOT NULL
+                            SELECT * FROM temp_subsidy_{year}
+                            WHERE geometry IS NOT NULL AND field_id IS NOT NULL
                         """)
 
                         filtered_subsidy_count = self.conn.execute(
@@ -1592,7 +1614,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         """)
 
                         # Perform spatial matching with field_id validation
-                        # Find marker fields that contain the centroid of subsidy fields AND have matching field_id
+                        # Find marker fields that contain the centroid of subsidy fields
+                        # AND have matching field_id
                         enrichment_query = f"""
                             UPDATE temp_subsidy_{year} SET
                                 field_uuid = field_matches.field_uuid
@@ -1601,7 +1624,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                                     s.rowid as subsidy_rowid,
                                     m.field_uuid
                                 FROM temp_subsidy_filtered_{year} s
-                                INNER JOIN temp_marker_{year} m ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
+                                INNER JOIN temp_marker_{year} m
+                                    ON ST_Contains(m.geometry, ST_Centroid(s.geometry))
                                 WHERE s.field_id = m.field_id
                             ) AS field_matches
                             WHERE temp_subsidy_{year}.rowid = field_matches.subsidy_rowid
@@ -1611,7 +1635,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         total_enriched += matches_updated
 
                         self.log.info(
-                            f"Enriched {matches_updated:,} {layer_type} records with field_uuid for {year}"
+                            f"Enriched {matches_updated:,} {layer_type} records "
+                            f"with field_uuid for {year}"
                         )
 
                         # Save the enriched subsidy data back to GCS
@@ -1641,7 +1666,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         continue
 
             self.log.info(
-                f"Subsidy field UUID enrichment completed - enriched {total_enriched:,} total subsidy records"
+                f"Subsidy field UUID enrichment completed - "
+                f"enriched {total_enriched:,} total subsidy records"
             )
 
         except Exception as e:

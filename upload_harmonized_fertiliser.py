@@ -4,7 +4,7 @@ Script to upload harmonized fertiliser data to GCS.
 """
 
 import datetime
-from pathlib import Path
+
 
 def upload_harmonized_data():
     """Upload harmonized fertiliser data to GCS."""
