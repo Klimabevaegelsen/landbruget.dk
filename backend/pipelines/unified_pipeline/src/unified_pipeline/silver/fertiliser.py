@@ -18,8 +18,7 @@ from typing import Dict, List, Optional, Any
 
 import duckdb
 
-from ..base.silver_base import SilverJobInterface  
-from ..common.base import BaseJobConfig, ConnectionManager
+from ..common.base import BaseJobConfig, ConnectionManager, SilverJobInterface
 
 logger = logging.getLogger(__name__)
 
