@@ -48,10 +48,10 @@ from unified_pipeline.gold.cvr_enrichment.company_fetching import (
     CompanyFetchingConfig,
 )
 from unified_pipeline.gold.cvr_enrichment.cvr_collection import CVRCollection, CVRCollectionConfig
-from unified_pipeline.gold.cvr_enrichment.data_consolidation import (
-    DataConsolidation,
-    DataConsolidationConfig,
-)
+# from unified_pipeline.gold.cvr_enrichment.data_consolidation import (
+#     DataConsolidation,
+#     DataConsolidationConfig,
+# )  # REMOVED: Data consolidation step eliminated in architecture redesign
 from unified_pipeline.gold.cvr_enrichment.financial_documents import (
     FinancialDocuments,
     FinancialDocumentsConfig,
@@ -465,7 +465,7 @@ def execute(cli_config: cli.CliConfig) -> int:
             cli.Stage.pnumber_fetching: [(PNumberFetching, PNumberFetchingConfig)],
             cli.Stage.financial_documents: [(FinancialDocuments, FinancialDocumentsConfig)],
             cli.Stage.address_geocoding: [(AddressGeocoding, AddressGeocodingConfig)],
-            cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
+            # cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],  # REMOVED: Eliminated in redesign
         },
         cli.Source.dst: {
             cli.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
