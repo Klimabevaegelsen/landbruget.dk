@@ -207,20 +207,19 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     # Load company data from artifact
                     result = self.conn.execute(
                         """
-                        SELECT cvr_number, company_data_json
+                        SELECT cvr_number, extracted_pnumbers_json
                         FROM read_parquet(?)
-                        WHERE company_data_json IS NOT NULL
+                        WHERE extracted_pnumbers_json IS NOT NULL
                     """,
                         [local_path],
                     ).fetchall()
 
                     # Extract P-numbers from each company
-                    for cvr_number, company_json in result:
+                    for cvr_number, pnumbers_json in result:
                         total_companies += 1
 
                         try:
-                            company_data = json.loads(company_json)
-                            extracted_pnumbers = company_data.get("extracted_pnumbers", [])
+                            extracted_pnumbers = json.loads(pnumbers_json) if pnumbers_json else []
 
                             if extracted_pnumbers:
                                 cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
@@ -231,7 +230,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
 
                         except json.JSONDecodeError as e:
                             self.log.warning(
-                                f"Failed to parse company data for CVR {cvr_number}: {e}"
+                                f"Failed to parse P-numbers data for CVR {cvr_number}: {e}"
                             )
                             continue
 
@@ -245,20 +244,19 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                         # Load company data from temp file
                         result = self.conn.execute(
                             """
-                            SELECT cvr_number, company_data_json
+                            SELECT cvr_number, extracted_pnumbers_json
                             FROM read_parquet(?)
-                            WHERE company_data_json IS NOT NULL
+                            WHERE extracted_pnumbers_json IS NOT NULL
                         """,
                             [temp_file],
                         ).fetchall()
 
                         # Extract P-numbers from each company inside the context manager
-                        for cvr_number, company_json in result:
+                        for cvr_number, pnumbers_json in result:
                             total_companies += 1
 
                             try:
-                                company_data = json.loads(company_json)
-                                extracted_pnumbers = company_data.get("extracted_pnumbers", [])
+                                extracted_pnumbers = json.loads(pnumbers_json) if pnumbers_json else []
 
                                 if extracted_pnumbers:
                                     cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
@@ -269,7 +267,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
 
                             except json.JSONDecodeError as e:
                                 self.log.warning(
-                                    f"Failed to parse company data for CVR {cvr_number}: {e}"
+                                    f"Failed to parse P-numbers data for CVR {cvr_number}: {e}"
                                 )
                                 continue
 
