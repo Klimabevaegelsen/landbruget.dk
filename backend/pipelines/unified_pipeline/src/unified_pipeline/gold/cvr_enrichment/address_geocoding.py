@@ -358,6 +358,15 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 self.log.error(f"Failed to process addresses from {input_path}: {e}")
                 continue
 
+        # Apply test limit if configured
+        if self.config.shared_config.test_limit is not None:
+            # Limit addresses based on test_limit (approximate, since we're limiting by address count)
+            max_addresses = self.config.shared_config.test_limit * 3  # Rough estimate: 3 addresses per company
+            original_count = len(all_addresses)
+            if original_count > max_addresses:
+                all_addresses = all_addresses[:max_addresses]
+                self.log.info(f"Applied test limit: processing {len(all_addresses)} addresses (limited from {original_count} due to test_limit={self.config.shared_config.test_limit})")
+        
         # Process all addresses (no batching)
         batch_addresses = all_addresses
         self.log.info(f"Extracted {len(batch_addresses)} addresses from all sources")
