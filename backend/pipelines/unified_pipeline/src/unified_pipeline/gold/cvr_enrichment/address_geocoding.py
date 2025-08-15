@@ -801,8 +801,19 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         # Load existing company table from GCS
         company_table = "cvr_companies_with_geocoding"
         
-        # Get the company data path - companies are saved in separate dataset
-        company_input_path = f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/{self.date_pattern}/data.parquet"
+        # Get the company data path - find most recent company data
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from unified_pipeline.gold.cvr_enrichment.shared.config import _find_latest_file_with_pattern
+        
+        gcs_access = GCSDataAccess()
+        company_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/*/data.parquet"
+        company_input_path = _find_latest_file_with_pattern(
+            gcs_access, company_pattern, self.config.shared_config.max_days_back_for_inputs
+        )
+        
+        if not company_input_path:
+            self.log.warning(f"No company data found within {self.config.shared_config.max_days_back_for_inputs} days")
+            return
         
         try:
             # Create table from GCS company data
@@ -866,8 +877,19 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         # Load existing pnumber table from GCS
         pnumber_table = "cvr_pnumbers_with_geocoding"
         
-        # Get the pnumber data path - pnumbers are saved in separate dataset  
-        pnumber_input_path = f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/{self.date_pattern}/data.parquet"
+        # Get the pnumber data path - find most recent pnumber data
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from unified_pipeline.gold.cvr_enrichment.shared.config import _find_latest_file_with_pattern
+        
+        gcs_access = GCSDataAccess()
+        pnumber_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
+        pnumber_input_path = _find_latest_file_with_pattern(
+            gcs_access, pnumber_pattern, self.config.shared_config.max_days_back_for_inputs
+        )
+        
+        if not pnumber_input_path:
+            self.log.warning(f"No pnumber data found within {self.config.shared_config.max_days_back_for_inputs} days")
+            return
         
         try:
             # Create table from GCS pnumber data
