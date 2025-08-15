@@ -802,11 +802,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         company_table = "cvr_companies_with_geocoding"
         
         # Get the company data path from the same input resolution used in extraction
-        from unified_pipeline.gold.cvr_enrichment.shared.config import get_step_input_paths, CVREnrichmentStep
+        from unified_pipeline.gold.cvr_enrichment.shared.config import (
+            get_step_input_paths,
+            CVREnrichmentStep,
+        )
         input_paths = get_step_input_paths(
             CVREnrichmentStep.ADDRESS_GEOCODING,
-            self.gcs_access,
-            self.config.bucket,
+            self.date_pattern,
+            bucket=self.config.bucket,
             max_days_back=self.config.shared_config.max_days_back_for_inputs
         )
         
@@ -884,11 +887,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         pnumber_table = "cvr_pnumbers_with_geocoding"
         
         # Get the pnumber data path from the same input resolution used in extraction
-        from unified_pipeline.gold.cvr_enrichment.shared.config import get_step_input_paths, CVREnrichmentStep
+        from unified_pipeline.gold.cvr_enrichment.shared.config import (
+            get_step_input_paths,
+            CVREnrichmentStep,
+        )
         input_paths = get_step_input_paths(
             CVREnrichmentStep.ADDRESS_GEOCODING,
-            self.gcs_access,
-            self.config.bucket,
+            self.date_pattern,
+            bucket=self.config.bucket,
             max_days_back=self.config.shared_config.max_days_back_for_inputs
         )
         
