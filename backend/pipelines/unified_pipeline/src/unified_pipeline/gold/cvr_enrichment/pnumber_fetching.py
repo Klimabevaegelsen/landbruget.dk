@@ -466,7 +466,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         # Save to GCS
         self._save_data(
             data=table_name,
-            dataset="cvr_pnumbers",
+            dataset="cvr_enrichment_pnumbers",
             bucket=self.config.bucket,
             stage="gold",
             filename="data.parquet",
