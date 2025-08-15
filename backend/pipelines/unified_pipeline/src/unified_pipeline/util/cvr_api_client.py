@@ -800,15 +800,12 @@ class CVRAPIClient:
             company_data = company_data.copy()
             company_data["addresses"] = enriched_addresses
 
-            # Add primary address geometry to top level for easy access
-            current_geocoded = [
-                addr
-                for addr in enriched_addresses
-                if addr.get("is_current") and addr.get("dawa_enriched")
-            ]
-
-            if current_geocoded:
-                primary_address = current_geocoded[0]  # Use first current geocoded address
+            # Add primary address geometry using intelligent selection
+            from .primary_address_selector import select_primary_address_for_company_table
+            
+            primary_address = select_primary_address_for_company_table(enriched_addresses)
+            
+            if primary_address:
                 company_data["primary_address_geometry"] = {
                     "latitude": primary_address.get("latitude"),  # WGS84 latitude
                     "longitude": primary_address.get("longitude"),  # WGS84 longitude
@@ -1938,15 +1935,12 @@ class CVRAPIClient:
             pnumber_data = pnumber_data.copy()
             pnumber_data["addresses"] = enriched_addresses
 
-            # Add primary address geometry to top level for easy access
-            current_geocoded = [
-                addr
-                for addr in enriched_addresses
-                if addr.get("is_current") and addr.get("dawa_enriched")
-            ]
-
-            if current_geocoded:
-                primary_address = current_geocoded[0]  # Use first current geocoded address
+            # Add primary address geometry using intelligent selection
+            from .primary_address_selector import select_primary_address_for_company_table
+            
+            primary_address = select_primary_address_for_company_table(enriched_addresses)
+            
+            if primary_address:
                 pnumber_data["primary_address_geometry"] = {
                     "latitude": primary_address.get("latitude"),  # WGS84 latitude
                     "longitude": primary_address.get("longitude"),  # WGS84 longitude
