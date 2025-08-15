@@ -7,6 +7,7 @@ for the companies, processing them in batches for parallel execution.
 
 import json
 import os
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -138,7 +139,11 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             # Step 3: Process and parse financial data
             processed_data = self._process_financial_data(financial_data)
 
-            # Step 4: Save financial data
+            # Step 4: Process employment data directly (moved from data_consolidation)
+            self.log.info("⚙️ Step 4a/5: Processing employment data directly to avoid memory bottleneck")
+            self._process_employment_data_directly(company_batch)
+
+            # Step 5: Save financial data
             table_name = self._save_financial_data(processed_data)
 
             self.log.info(
@@ -746,7 +751,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                                 THEN true
                                 ELSE false
                             END as has_financial_metrics,
-                            json_data as financial_data_json,
+                            -- json_data as financial_data_json,  -- Removed to prevent memory bloat
                             json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
                             json_extract(json_data, '$.batch_number')::INTEGER as batch_number
                         FROM unnest($1) as t(json_data)
@@ -824,6 +829,215 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         )
 
         self.log.info(f"Saved processing summary to {summary_path}")
+
+    def _process_employment_data_directly(self, companies_data: List[Dict]) -> None:
+        """
+        Process employment data directly to parquet files.
+        Moved from data_consolidation.py to eliminate memory bottleneck.
+        
+        This processes 1.25M employment records in batches and saves them directly
+        to separate parquet files, avoiding the memory accumulation that caused
+        the 7.4GB memory usage in data_consolidation.
+        """
+        self.log.info(f"🔄 Processing employment data for {len(companies_data)} companies")
+        
+        if not companies_data:
+            self.log.info("No companies to process for employment data")
+            return
+            
+        # Set up crypto extension for UUID generation
+        try:
+            self.conn.execute("INSTALL crypto FROM community")
+            self.conn.execute("LOAD crypto")
+        except Exception as e:
+            self.log.warning(f"Crypto extension already loaded: {e}")
+        
+        # Create company UUID function
+        self.conn.execute("""
+            CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
+                SELECT CASE
+                    WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
+                         OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
+                    THEN NULL
+                    ELSE CONCAT(
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                                      TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                                               TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                    )
+                END
+            )
+        """)
+        
+        employment_types = [
+            ("annual_employment", "annual"),
+            ("quarterly_employment", "quarterly"), 
+            ("monthly_employment", "monthly"),
+            ("replacement_monthly_employment", "replacement_monthly"),
+        ]
+        
+        for employment_field, table_suffix in employment_types:
+            self.log.info(f"📊 Processing {employment_field} data...")
+            # Process in small batches to avoid memory issues
+            self._process_employment_type_batched(
+                companies_data, employment_field, table_suffix
+            )
+            
+    def _process_employment_type_batched(self, companies_data: List[Dict], employment_field: str, table_suffix: str):
+        """Process one employment type in batches and save directly."""
+        batch_size = 500  # Small batches to avoid memory accumulation
+        table_name = f"cvr_employment_{table_suffix}"
+        
+        # Drop existing table
+        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        
+        total_companies = len(companies_data)
+        num_batches = (total_companies + batch_size - 1) // batch_size
+        total_records = 0
+        
+        self.log.info(f"📦 Processing {total_companies} companies in {num_batches} batches for {employment_field}")
+        
+        # Process companies in batches
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, total_companies)
+            batch_companies = companies_data[start_idx:end_idx]
+            
+            self.log.info(f"📦 Processing batch {batch_idx + 1}/{num_batches}: companies {start_idx}-{end_idx - 1}")
+            
+            try:
+                employment_records = self._extract_employment_records(batch_companies, employment_field)
+                if employment_records:
+                    batch_record_count = self._save_employment_batch(employment_records, table_name, batch_idx == 0)
+                    total_records += batch_record_count
+                    self.log.info(f"✅ Batch {batch_idx + 1}: {batch_record_count} {employment_field} records")
+                
+                # Clear batch data from memory
+                employment_records = None
+                batch_companies = None
+                
+                # Memory cleanup after each batch
+                self._cleanup_memory_after_batch()
+                
+            except Exception as e:
+                self.log.error(f"Error processing employment batch {batch_idx + 1}: {e}")
+                if "Out of Memory" in str(e) or "memory" in str(e).lower():
+                    self.log.warning("⚠️ Memory exhaustion detected - stopping employment processing")
+                    break
+                continue
+        
+        # Save employment table to GCS
+        if total_records > 0:
+            self._save_employment_table_to_gcs(table_name, table_suffix, total_records)
+        else:
+            self.log.info(f"No {employment_field} records found")
+            
+    def _extract_employment_records(self, companies: List[Dict], employment_field: str) -> List[Dict]:
+        """Extract employment records from company data for a specific employment type."""
+        employment_records = []
+        
+        for company in companies:
+            cvr_number = company.get("cvr_number")
+            if not cvr_number:
+                continue
+                
+            # Extract employment data from company JSON
+            employment_data = company.get("employment_data", {})
+            employment_list = employment_data.get(employment_field, [])
+            
+            if not employment_list:
+                continue
+                
+            # Process each employment record
+            for emp_record in employment_list:
+                if not emp_record:
+                    continue
+                    
+                # Create employment record with UUID
+                employment_record = {
+                    "employment_uuid": str(uuid.uuid4()),
+                    "cvr_number": cvr_number,
+                    "company_uuid": None,  # Will be calculated in SQL
+                    **emp_record  # Include all employment fields
+                }
+                employment_records.append(employment_record)
+        
+        return employment_records
+    
+    def _save_employment_batch(self, employment_records: List[Dict], table_name: str, is_first_batch: bool) -> int:
+        """Save employment records batch to DuckDB table."""
+        if not employment_records:
+            return 0
+            
+        # Convert to JSON strings for DuckDB
+        json_strings = [json.dumps(record) for record in employment_records]
+        
+        if is_first_batch:
+            # Create table on first batch
+            self.conn.execute(f"""
+                CREATE TABLE {table_name} AS
+                SELECT
+                    json_extract(json_data, '$.employment_uuid')::VARCHAR as employment_uuid,
+                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    json_extract(json_data, '$.year')::INTEGER as year,
+                    json_extract(json_data, '$.employee_count')::INTEGER as employee_count,
+                    json_extract(json_data, '$.full_time_employee_count')::INTEGER as full_time_employee_count,
+                    json_extract(json_data, '$.unit')::VARCHAR as unit,
+                    json_extract(json_data, '$.quarter')::INTEGER as quarter,
+                    json_extract(json_data, '$.month')::INTEGER as month,
+                    json_extract(json_data, '$.reporting_period')::VARCHAR as reporting_period,
+                    json_extract(json_data, '$.employment_type')::VARCHAR as employment_type,
+                    '{self.date_pattern}' as processing_timestamp
+                FROM unnest($1) as t(json_data)
+            """, [json_strings])
+        else:
+            # Insert into existing table
+            self.conn.execute(f"""
+                INSERT INTO {table_name}
+                SELECT
+                    json_extract(json_data, '$.employment_uuid')::VARCHAR as employment_uuid,
+                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    json_extract(json_data, '$.year')::INTEGER as year,
+                    json_extract(json_data, '$.employee_count')::INTEGER as employee_count,
+                    json_extract(json_data, '$.full_time_employee_count')::INTEGER as full_time_employee_count,
+                    json_extract(json_data, '$.unit')::VARCHAR as unit,
+                    json_extract(json_data, '$.quarter')::INTEGER as quarter,
+                    json_extract(json_data, '$.month')::INTEGER as month,
+                    json_extract(json_data, '$.reporting_period')::VARCHAR as reporting_period,
+                    json_extract(json_data, '$.employment_type')::VARCHAR as employment_type,
+                    '{self.date_pattern}' as processing_timestamp
+                FROM unnest($1) as t(json_data)
+            """, [json_strings])
+        
+        return len(employment_records)
+    
+    def _save_employment_table_to_gcs(self, table_name: str, table_suffix: str, total_records: int) -> None:
+        """Save employment table to GCS."""
+        self.log.info(f"💾 Saving {total_records} {table_suffix} employment records to GCS")
+        
+        # Save to GCS
+        self._save_data(
+            data=table_name,
+            dataset=f"cvr_enrichment_employment_{table_suffix}",
+            bucket=self.config.bucket,
+            stage="gold",
+            filename="data.parquet",
+        )
+        
+        # Also save locally for GitHub Actions artifact sharing
+        import os
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            local_path = f"/tmp/cvr_employment_{table_suffix}_data.parquet"
+            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+            self.log.info(f"Saved {table_suffix} employment data locally to {local_path}")
 
     def _cleanup_memory_after_batch(self) -> None:
         """Aggressive memory cleanup after processing a batch (copied from data_consolidation.py)."""

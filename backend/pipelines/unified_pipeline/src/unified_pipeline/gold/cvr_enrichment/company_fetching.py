@@ -368,11 +368,13 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.company_type_description')::VARCHAR
                         as company_type_description,
                     json_extract(json_data, '$.status')::VARCHAR as status,
+                    json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
+                    json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
+                    json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
-                    json_data as company_data_json,
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR
-                        as processing_timestamp,
-                    NULL::INTEGER as batch_number  -- No batching
+                        as processing_timestamp
+                    -- Removed json_data storage to prevent memory bloat
                 FROM unnest($1) as t(json_data)
             """,
                 [json_strings],
@@ -387,10 +389,11 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     company_name VARCHAR,
                     company_type_description VARCHAR,
                     status VARCHAR,
+                    founded_date VARCHAR,
+                    dissolution_date VARCHAR,
+                    advertisement_protection BOOLEAN,
                     pnumber_count INTEGER,
-                    company_data_json VARCHAR,
-                    processing_timestamp VARCHAR,
-                    batch_number INTEGER
+                    processing_timestamp VARCHAR
                 )
             """)
             self.log.info(f"Created empty table {table_name}")
@@ -398,10 +401,10 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Save to GCS
         self._save_data(
             data=table_name,
-            dataset=self.config.dataset,
+            dataset="cvr_companies",
             bucket=self.config.bucket,
             stage="gold",
-            filename="company_fetching.parquet",
+            filename="data.parquet",
         )
 
         # Also save locally for GitHub Actions artifact sharing

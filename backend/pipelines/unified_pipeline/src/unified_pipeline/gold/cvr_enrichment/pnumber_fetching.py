@@ -441,9 +441,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
                     json_array_length(json_extract(json_data, '$.addresses')) as address_count,
-                    json_data as pnumber_data_json,
-                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
-                    NULL::INTEGER as batch_number  -- No batching
+                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp
+                    -- Removed json_data storage to prevent memory bloat
                 FROM unnest($1) as t(json_data)
             """,
                 [json_strings],
@@ -458,9 +457,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     unit_name VARCHAR,
                     parent_cvr_number INTEGER,
                     address_count INTEGER,
-                    pnumber_data_json VARCHAR,
-                    processing_timestamp VARCHAR,
-                    batch_number INTEGER
+                    processing_timestamp VARCHAR
                 )
             """)
             self.log.info(f"Created empty table {table_name}")
@@ -468,10 +465,10 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         # Save to GCS
         self._save_data(
             data=table_name,
-            dataset=self.config.dataset,
+            dataset="cvr_pnumbers",
             bucket=self.config.bucket,
             stage="gold",
-            filename="pnumber_fetching.parquet",
+            filename="data.parquet",
         )
 
         # Also save locally for GitHub Actions artifact sharing
