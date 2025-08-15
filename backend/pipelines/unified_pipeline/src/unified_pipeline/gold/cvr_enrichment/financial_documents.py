@@ -705,7 +705,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 f"📦 Processing {total_companies} companies in {num_batches} batches of {batch_size}"
             )
 
-            # Create empty table with correct schema first
+            # Create empty table with correct schema first (no JSON bloat)
             self.conn.execute(f"""
                 CREATE TABLE {table_name} (
                     cvr_number INTEGER,
@@ -715,7 +715,6 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     total_xml_size_bytes INTEGER,
                     latest_reporting_date VARCHAR,
                     has_financial_metrics BOOLEAN,
-                    financial_data_json VARCHAR,
                     processing_timestamp VARCHAR,
                     batch_number INTEGER
                 )

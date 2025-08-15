@@ -372,10 +372,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
                     json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
-                    json_extract(json_data, '$.extracted_pnumbers')::VARCHAR as extracted_pnumbers_json,
+                    json_data as company_data_json,  -- Keep for pipeline dependencies (artifacts)
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR
                         as processing_timestamp
-                    -- Removed full json_data storage to prevent memory bloat, but kept extracted_pnumbers
                 FROM unnest($1) as t(json_data)
             """,
                 [json_strings],
@@ -394,7 +393,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     dissolution_date VARCHAR,
                     advertisement_protection BOOLEAN,
                     pnumber_count INTEGER,
-                    extracted_pnumbers_json VARCHAR,
+                    company_data_json VARCHAR,
                     processing_timestamp VARCHAR
                 )
             """)

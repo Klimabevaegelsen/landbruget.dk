@@ -207,19 +207,20 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     # Load company data from artifact
                     result = self.conn.execute(
                         """
-                        SELECT cvr_number, extracted_pnumbers_json
+                        SELECT cvr_number, company_data_json
                         FROM read_parquet(?)
-                        WHERE extracted_pnumbers_json IS NOT NULL
+                        WHERE company_data_json IS NOT NULL
                     """,
                         [local_path],
                     ).fetchall()
 
                     # Extract P-numbers from each company
-                    for cvr_number, pnumbers_json in result:
+                    for cvr_number, company_json in result:
                         total_companies += 1
 
                         try:
-                            extracted_pnumbers = json.loads(pnumbers_json) if pnumbers_json else []
+                            company_data = json.loads(company_json)
+                            extracted_pnumbers = company_data.get("extracted_pnumbers", [])
 
                             if extracted_pnumbers:
                                 cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
@@ -230,7 +231,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
 
                         except json.JSONDecodeError as e:
                             self.log.warning(
-                                f"Failed to parse P-numbers data for CVR {cvr_number}: {e}"
+                                f"Failed to parse company data for CVR {cvr_number}: {e}"
                             )
                             continue
 
@@ -244,19 +245,20 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                         # Load company data from temp file
                         result = self.conn.execute(
                             """
-                            SELECT cvr_number, extracted_pnumbers_json
+                            SELECT cvr_number, company_data_json
                             FROM read_parquet(?)
-                            WHERE extracted_pnumbers_json IS NOT NULL
+                            WHERE company_data_json IS NOT NULL
                         """,
                             [temp_file],
                         ).fetchall()
 
                         # Extract P-numbers from each company inside the context manager
-                        for cvr_number, pnumbers_json in result:
+                        for cvr_number, company_json in result:
                             total_companies += 1
 
                             try:
-                                extracted_pnumbers = json.loads(pnumbers_json) if pnumbers_json else []
+                                company_data = json.loads(company_json)
+                                extracted_pnumbers = company_data.get("extracted_pnumbers", [])
 
                                 if extracted_pnumbers:
                                     cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
@@ -267,7 +269,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
 
                             except json.JSONDecodeError as e:
                                 self.log.warning(
-                                    f"Failed to parse P-numbers data for CVR {cvr_number}: {e}"
+                                    f"Failed to parse company data for CVR {cvr_number}: {e}"
                                 )
                                 continue
 
@@ -439,8 +441,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
                     json_array_length(json_extract(json_data, '$.addresses')) as address_count,
+                    json_data as pnumber_data_json,  -- Kept for pipeline dependencies (artifacts)
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp
-                    -- Removed json_data storage to prevent memory bloat
                 FROM unnest($1) as t(json_data)
             """,
                 [json_strings],
@@ -455,6 +457,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     unit_name VARCHAR,
                     parent_cvr_number INTEGER,
                     address_count INTEGER,
+                    pnumber_data_json VARCHAR,
                     processing_timestamp VARCHAR
                 )
             """)
