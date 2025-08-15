@@ -15,11 +15,11 @@ on:
         # default: '5'
         # type: string
       skip_steps:
-        description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
+        description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding)'
         required: false
         type: string
       run_only_step:
-        description: 'Run only a specific step independently (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
+        description: 'Run only a specific step independently (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding)'
         required: false
         type: choice
         options:
@@ -29,7 +29,6 @@ on:
           - pnumber_fetching
           - financial_documents
           - address_geocoding
-          - data_consolidation
         default: ''
       log_level:
         description: 'Logging level'
@@ -507,83 +506,15 @@ jobs:
 
 
 
-  # Step 6: Data Consolidation (Sequential - must run last)
-  data_consolidation:
-    name: "Data Consolidation"
+  # Step 6: Pipeline Summary (moved from data_consolidation step)
+  pipeline_summary:
+    name: "Pipeline Summary"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding]
-    if: ${{ always() && ((github.event.inputs.run_only_step == '' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'data_consolidation')) || github.event.inputs.run_only_step == 'data_consolidation') }}
+    if: always()
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      
-      - name: Install dependencies
-        run: |
-          cd backend/pipelines/unified_pipeline
-          pip install -e .
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-      
-      - name: Download Company Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: cvr-company-data
-          path: /tmp/
-        continue-on-error: true
-      
-      - name: Download P-Number Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: cvr-pnumber-data
-          path: /tmp/
-        continue-on-error: true
-      
-      - name: Download Financial Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: cvr-financial-data
-          path: /tmp/
-        continue-on-error: true  # Don't fail if financial data not available
-      
-      - name: Download Address Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: cvr-address-data
-          path: /tmp/
-        continue-on-error: true  # Don't fail if address data not available
-
-      
-      - name: Run Data Consolidation
-        run: |
-          cd backend/pipelines/unified_pipeline
-          
-          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage data_consolidation"
-          
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
-          fi
-          
-          echo "Running: $CMD"
-          $CMD
-      
       - name: Pipeline Summary
-        if: always()
         run: |
           echo "🎉 CVR Enrichment Pipeline completed!"
           echo "📊 Pipeline Configuration:"
@@ -597,20 +528,22 @@ jobs:
           echo "   • P-Number Fetching: ${{ needs.pnumber_fetching.result }}"
           echo "   • Financial Documents: ${{ needs.financial_documents.result }}"
           echo "   • Address Geocoding: ${{ needs.address_geocoding.result }}"
-          echo "   • Data Consolidation: ${{ job.status }}"
+          echo ""
+          echo "✅ Data consolidation is now handled directly in the financial documents step"
+          echo "   as part of the CVR Enrichment Architecture Redesign"
 
   # Notification job (runs regardless of success/failure)
   notify:
     name: "Pipeline Notification"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding, data_consolidation]
+    needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding, pipeline_summary]
     if: always()
     
     steps:
       - name: Determine overall status
         id: status
         run: |
-          if [[ "${{ needs.data_consolidation.result }}" == "success" ]]; then
+          if [[ "${{ needs.address_geocoding.result }}" == "success" ]]; then
             echo "status=success" >> $GITHUB_OUTPUT
             echo "message=CVR Enrichment Pipeline completed successfully! 🎉" >> $GITHUB_OUTPUT
           elif [[ "${{ needs.cvr_collection.result }}" == "failure" ]]; then
