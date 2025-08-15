@@ -778,13 +778,13 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             """)
             self.log.info("Created empty addresses table")
 
-        # Save addresses table to GCS
+        # Save addresses table to GCS using standard CVR enrichment pattern
         self._save_data(
             data=table_name,
-            dataset="cvr_addresses",
+            dataset=self.config.dataset,  # cvr_enrichment
             bucket=self.config.bucket,
             stage="gold",
-            filename="data.parquet",
+            filename="address_geocoding.parquet",  # Use step name as filename
         )
         
         # Save summary data separately
@@ -803,8 +803,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         
         # Get the company data path from the same input resolution used in extraction
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
-            get_step_input_paths,
             CVREnrichmentStep,
+            get_step_input_paths,
         )
         input_paths = get_step_input_paths(
             CVREnrichmentStep.ADDRESS_GEOCODING,
@@ -816,7 +816,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         # Find company data path
         company_input_path = None
         for path in input_paths:
-            if "cvr_companies" in path.lower():
+            if "company" in path.lower():
                 company_input_path = path
                 break
         
@@ -866,7 +866,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 # Save updated company table back to GCS
                 self._save_data(
                     data=company_table,
-                    dataset="cvr_companies",
+                    dataset="cvr_enrichment_companies",
                     bucket=self.config.bucket,
                     stage="gold",
                     filename="data.parquet",
@@ -888,8 +888,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         
         # Get the pnumber data path from the same input resolution used in extraction
         from unified_pipeline.gold.cvr_enrichment.shared.config import (
-            get_step_input_paths,
             CVREnrichmentStep,
+            get_step_input_paths,
         )
         input_paths = get_step_input_paths(
             CVREnrichmentStep.ADDRESS_GEOCODING,
@@ -901,7 +901,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         # Find pnumber data path
         pnumber_input_path = None
         for path in input_paths:
-            if "cvr_pnumbers" in path.lower():
+            if "pnumber" in path.lower():
                 pnumber_input_path = path
                 break
         
@@ -951,7 +951,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 # Save updated pnumber table back to GCS
                 self._save_data(
                     data=pnumber_table,
-                    dataset="cvr_pnumbers",
+                    dataset="cvr_enrichment_pnumbers",
                     bucket=self.config.bucket,
                     stage="gold",
                     filename="data.parquet",

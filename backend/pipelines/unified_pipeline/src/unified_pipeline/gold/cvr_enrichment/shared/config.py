@@ -242,20 +242,20 @@ def _get_latest_input_paths_from_gcs(
 
         elif step == CVREnrichmentStep.PNUMBER_FETCHING:
             # P-number fetching depends on company fetching
-            pattern = f"gs://{bucket}/gold/cvr_companies/*/data.parquet"
+            pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
         elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
             # Financial documents depend on company fetching
-            pattern = f"gs://{bucket}/gold/cvr_companies/*/data.parquet"
+            pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
         elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
             # Address geocoding depends on both company and P-number data
-            company_pattern = f"gs://{bucket}/gold/cvr_companies/*/data.parquet"
-            pnumber_pattern = f"gs://{bucket}/gold/cvr_pnumbers/*/data.parquet"
+            company_pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
+            pnumber_pattern = f"gs://{bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
 
             latest_company = _find_latest_file_with_pattern(
                 gcs_access, company_pattern, max_days_back

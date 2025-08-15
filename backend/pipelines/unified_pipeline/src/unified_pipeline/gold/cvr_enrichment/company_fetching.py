@@ -402,7 +402,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Save to GCS
         self._save_data(
             data=table_name,
-            dataset="cvr_companies",
+            dataset="cvr_enrichment_companies",
             bucket=self.config.bucket,
             stage="gold",
             filename="data.parquet",
