@@ -801,28 +801,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         # Load existing company table from GCS
         company_table = "cvr_companies_with_geocoding"
         
-        # Get the company data path from the same input resolution used in extraction
-        from unified_pipeline.gold.cvr_enrichment.shared.config import (
-            CVREnrichmentStep,
-            get_step_input_paths,
-        )
-        input_paths = get_step_input_paths(
-            CVREnrichmentStep.ADDRESS_GEOCODING,
-            self.date_pattern,
-            bucket=self.config.bucket,
-            max_days_back=self.config.shared_config.max_days_back_for_inputs
-        )
-        
-        # Find company data path
-        company_input_path = None
-        for path in input_paths:
-            if "company" in path.lower():
-                company_input_path = path
-                break
-        
-        if not company_input_path:
-            self.log.warning("No company data path found for geocoding update")
-            return
+        # Get the company data path - companies are saved in separate dataset
+        company_input_path = f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/{self.date_pattern}/data.parquet"
         
         try:
             # Create table from GCS company data
@@ -886,28 +866,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         # Load existing pnumber table from GCS
         pnumber_table = "cvr_pnumbers_with_geocoding"
         
-        # Get the pnumber data path from the same input resolution used in extraction
-        from unified_pipeline.gold.cvr_enrichment.shared.config import (
-            CVREnrichmentStep,
-            get_step_input_paths,
-        )
-        input_paths = get_step_input_paths(
-            CVREnrichmentStep.ADDRESS_GEOCODING,
-            self.date_pattern,
-            bucket=self.config.bucket,
-            max_days_back=self.config.shared_config.max_days_back_for_inputs
-        )
-        
-        # Find pnumber data path
-        pnumber_input_path = None
-        for path in input_paths:
-            if "pnumber" in path.lower():
-                pnumber_input_path = path
-                break
-        
-        if not pnumber_input_path:
-            self.log.warning("No pnumber data path found for geocoding update")
-            return
+        # Get the pnumber data path - pnumbers are saved in separate dataset  
+        pnumber_input_path = f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/{self.date_pattern}/data.parquet"
         
         try:
             # Create table from GCS pnumber data
