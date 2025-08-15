@@ -2093,13 +2093,23 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 
             self.log.info(f"📊 Processing {employment_check:,} companies with {employment_field} data")
             
-            # Get the employment table schema
+            # Get the employment table schema using json_structure (same as original code)
             employment_schema = self.conn.execute(
-                f"SELECT column_names FROM duckdb_columns() WHERE table_name = '{table_name}_employment_{table_suffix}' LIMIT 1"
-            ).fetchall()
+                """
+                WITH employment_sample AS (
+                    SELECT json_extract(json_data, '$.employment_data.' || $2) as employment_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(employment_json) FROM employment_sample
+            """,
+                [json_strings, employment_field],
+            ).fetchone()
             
-            if not employment_schema:
-                self.log.warning(f"⚠️ No schema found for {table_name}_employment_{table_suffix}")
+            if not employment_schema or not employment_schema[0]:
+                self.log.warning(f"⚠️ No schema found for {employment_field}")
                 continue
             
             # Process this employment type only - much more memory efficient
