@@ -778,7 +778,20 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 if "Out of Memory" in str(e) or "memory" in str(e).lower():
                     self.log.warning("⚠️ Memory exhaustion detected - attempting recovery")
                     self._emergency_memory_cleanup()
-                    break
+                    
+                    # Try to continue with smaller chunk size for remaining companies
+                    if chunk_idx < num_chunks - 1:
+                        self.log.warning("🔄 Attempting to continue with smaller chunk sizes")
+                        remaining_companies = companies_list[end_idx:]
+                        if remaining_companies:
+                            # Process remaining companies with smaller chunks
+                            self._process_remaining_companies_with_smaller_chunks(
+                                remaining_companies, table_name, chunk_idx + 1
+                            )
+                        break  # Exit the main loop since we handled remaining companies
+                    else:
+                        self.log.warning("⚠️ Memory exhaustion on final chunk - stopping")
+                        break
                 raise
 
         # Employment data processing now handled via memory-efficient chunk processing
@@ -2139,3 +2152,82 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.log.error(f"❌ Error processing {employment_field}: {str(e)}")
                 # Continue with other employment types even if one fails
                 continue
+
+    def _process_remaining_companies_with_smaller_chunks(
+        self, remaining_companies: list, table_name: str, start_chunk_idx: int
+    ) -> None:
+        """
+        Process remaining companies with progressively smaller chunk sizes after memory exhaustion.
+        
+        This method implements the memory fallback strategy from the Field Production pipeline.
+        """
+        self.log.info(f"🔧 Processing {len(remaining_companies):,} remaining companies with smaller chunks")
+        
+        # Start with a much smaller chunk size after memory exhaustion
+        chunk_size = 25  # Start very small
+        max_retries = 3
+        
+        for retry in range(max_retries):
+            try:
+                self.log.info(f"🔄 Attempt {retry + 1}/{max_retries} with chunk size {chunk_size}")
+                
+                num_chunks = (len(remaining_companies) + chunk_size - 1) // chunk_size
+                self.log.info(
+                    f"📦 Processing {len(remaining_companies)} remaining companies "
+                    f"in {num_chunks} chunks of {chunk_size}"
+                )
+                
+                for chunk_idx in range(num_chunks):
+                    start_idx = chunk_idx * chunk_size
+                    end_idx = min(start_idx + chunk_size, len(remaining_companies))
+                    chunk_companies = remaining_companies[start_idx:end_idx]
+                    
+                    actual_chunk_num = start_chunk_idx + chunk_idx
+                    self.log.info(
+                        f"📦 Processing recovery chunk {chunk_idx + 1}/{num_chunks} "
+                        f"(companies {start_idx}-{end_idx - 1})"
+                    )
+                    
+                    try:
+                        self._process_companies_chunk_memory_optimized(
+                            chunk_companies, table_name, actual_chunk_num
+                        )
+                        
+                        # Aggressive cleanup after each recovery chunk
+                        self.conn.execute("CHECKPOINT")
+                        import gc
+                        gc.collect()
+                        
+                    except Exception as chunk_e:
+                        if "Out of Memory" in str(chunk_e) or "memory" in str(chunk_e).lower():
+                            self.log.error(f"❌ Memory exhaustion in recovery chunk {chunk_idx + 1}")
+                            raise  # Will be caught by outer try-except
+                        else:
+                            self.log.error(
+                                f"❌ Non-memory error in recovery chunk {chunk_idx + 1}: {chunk_e}"
+                            )
+                            raise
+                
+                # If we get here, all chunks processed successfully
+                self.log.info(f"✅ Successfully processed all {len(remaining_companies)} remaining companies")
+                return
+                
+            except Exception as e:
+                if "Out of Memory" in str(e) or "memory" in str(e).lower():
+                    if retry < max_retries - 1:
+                        # Reduce chunk size and try again
+                        old_chunk_size = chunk_size
+                        chunk_size = max(5, chunk_size // 2)  # Minimum chunk size of 5
+                        self.log.warning(f"⚠️ Reducing chunk size: {old_chunk_size} → {chunk_size}")
+                        
+                        # Emergency cleanup before retry
+                        self._emergency_memory_cleanup()
+                        continue
+                    else:
+                        self.log.error(f"❌ Failed to process remaining companies after {max_retries} attempts")
+                        self.log.error(f"💔 Lost {len(remaining_companies)} companies due to persistent memory issues")
+                        break
+                else:
+                    # Non-memory error, don't retry
+                    self.log.error(f"❌ Non-memory error processing remaining companies: {e}")
+                    break
