@@ -232,7 +232,17 @@ class GCSDataAccess:
             # This approach is 5x faster than httpfs according to benchmarks
             from fsspec import filesystem
 
-            fs = filesystem("gs")  # Uses gcsfs under the hood
+            # Use HMAC authentication if available
+            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+            
+            if gcs_access_key and gcs_secret_key:
+                fs = filesystem("gs", 
+                               access_key_id=gcs_access_key,
+                               secret_access_key=gcs_secret_key)
+            else:
+                fs = filesystem("gs")  # Uses gcsfs under the hood
+            
             self.duckdb_conn.register_filesystem(fs)
 
             logger.info("✅ DuckDB configured with spatial and gcsfs filesystem integration")
@@ -674,7 +684,6 @@ class GCSDataAccess:
 
     @retry(
         retry=retry_if_exception_type((
-            gcsfs.core.HttpError,
             ConnectionError,
             TimeoutError,
             OSError,
