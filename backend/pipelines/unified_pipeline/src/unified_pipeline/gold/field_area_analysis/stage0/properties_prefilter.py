@@ -31,7 +31,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
 
         # Load full properties dataset (PROBE side - the massive dataset)
         self.log.info("Loading full properties dataset (6.5M properties)...")
-        self._load_silver_dataset(CONFIG.properties_dataset, "properties_full")
+        self._load_gold_dataset(CONFIG.properties_dataset, "properties_full")
 
         # Log dataset sizes
         properties_count = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]

@@ -99,6 +99,31 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
         return sorted(files)[-1]  # Latest by timestamp
 
+    def _load_gold_dataset(self, dataset_name: str, table_name: str, where_clause: str = "1=1"):
+        """
+        Load a gold dataset into DuckDB using the gold data path.
+
+        Args:
+            dataset_name: Name of the dataset (e.g., 'property_cadastral_merged')
+            table_name: Name to give the table in DuckDB
+            where_clause: Optional WHERE clause for server-side filtering
+        """
+        self.log.info(f"Loading {dataset_name} from gold...")
+
+        # Get the latest gold path
+        gold_path = self._get_latest_gold_path(dataset_name)
+        
+        # Use gcs_access to query the data directly
+        if where_clause != "1=1":
+            query = f"SELECT * WHERE {where_clause}"
+            self.gcs_access.query_parquet_direct(gold_path, query, table_name)
+        else:
+            self.gcs_access.query_parquet_direct(gold_path, "SELECT *", table_name)
+
+        # Log table statistics
+        count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        self.log.info(f"✅ Loaded {count:,} rows into table {table_name}")
+
     def _get_input_area_reference(self) -> Optional[Dict[str, Any]]:
         """
         Get reference area statistics from input data for validation.
