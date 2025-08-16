@@ -1465,7 +1465,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     async def _find_latest_gkea_data_for_year(self, year: int) -> Optional[str]:
         """Find the latest GKEA fertilizer data for a specific year."""
         try:
-            # Look for GKEA data in fertiliser silver dataset using the same pattern as agricultural_pattern_matcher
+            # Look for GKEA data in fertiliser silver dataset for CVR identification
             pattern = f"gs://{self.config.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
             files = self.gcs_access.list_files(pattern)
             

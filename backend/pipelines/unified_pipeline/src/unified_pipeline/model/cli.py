@@ -77,7 +77,6 @@ class Source(Enum):
     arbejdstilsynet_inspections = "arbejdstilsynet_inspections"
     worker_safety = "worker_safety"
     work_permits = "work_permits"
-    agricultural_pattern_matcher = "agricultural_pattern_matcher"
 
 
 class Stage(Enum):
