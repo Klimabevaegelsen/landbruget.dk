@@ -826,7 +826,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # 🐛 DEBUG: Check what columns we loaded
             columns_loaded = self.conn.execute("DESCRIBE existing_companies").fetchall()
             self.log.info(f"🔍 DEBUG: Loaded {len(columns_loaded)} columns from existing companies table:")
-            for i, (col_name, col_type, _) in enumerate(columns_loaded[:10], 1):  # Show first 10
+            for i, row in enumerate(columns_loaded[:10], 1):  # Show first 10
+                col_name = row[0]
+                col_type = row[1] if len(row) > 1 else "UNKNOWN"
                 self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
             if len(columns_loaded) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_loaded) - 10} more columns")
@@ -883,7 +885,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # 🐛 DEBUG: Check what columns we're saving
             columns_saving = self.conn.execute(f"DESCRIBE {company_table}").fetchall()
             self.log.info(f"🔍 DEBUG: Saving {len(columns_saving)} columns to companies table:")
-            for i, (col_name, col_type, _) in enumerate(columns_saving[:10], 1):  # Show first 10
+            for i, row in enumerate(columns_saving[:10], 1):  # Show first 10
+                col_name = row[0]
+                col_type = row[1] if len(row) > 1 else "UNKNOWN"
                 self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
             if len(columns_saving) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_saving) - 10} more columns")
@@ -932,7 +936,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # 🐛 DEBUG: Check what columns we loaded
             columns_loaded = self.conn.execute("DESCRIBE existing_pnumbers").fetchall()
             self.log.info(f"🔍 DEBUG: Loaded {len(columns_loaded)} columns from existing P-numbers table:")
-            for i, (col_name, col_type, _) in enumerate(columns_loaded[:10], 1):  # Show first 10
+            for i, row in enumerate(columns_loaded[:10], 1):  # Show first 10
+                col_name = row[0]
+                col_type = row[1] if len(row) > 1 else "UNKNOWN"
                 self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
             if len(columns_loaded) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_loaded) - 10} more columns")
@@ -988,7 +994,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # 🐛 DEBUG: Check what columns we're saving
             columns_saving = self.conn.execute(f"DESCRIBE {pnumber_table}").fetchall()
             self.log.info(f"🔍 DEBUG: Saving {len(columns_saving)} columns to P-numbers table:")
-            for i, (col_name, col_type, _) in enumerate(columns_saving[:10], 1):  # Show first 10
+            for i, row in enumerate(columns_saving[:10], 1):  # Show first 10
+                col_name = row[0]
+                col_type = row[1] if len(row) > 1 else "UNKNOWN"
                 self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
             if len(columns_saving) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_saving) - 10} more columns")
