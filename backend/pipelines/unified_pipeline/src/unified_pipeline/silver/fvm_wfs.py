@@ -1507,10 +1507,11 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 
                 # Load GKEA data for this year with proper column naming
                 self.log.info(f"📊 Loading GKEA fertilizer data for year {year} from {gkea_path}")
-                gkea_column_name = f"gkea{year}_markplan_med_goedningsoplysninger"
+                gkea_column_name = f"gkea{year}_markplan_goedningskvote"
                 
                 table_name = f"gkea_raw_{year}" if not all_gkea_data_loaded else "gkea_raw_temp"
                 
+                # Query GKEA data, skipping header rows (first 2 rows are empty/headers)
                 self.gcs_access.query_parquet_direct(
                     gkea_path,
                     f"""
@@ -1521,7 +1522,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         TRY_CAST(column_10 AS INTEGER) as crop_code,
                         {year} as data_year
                     WHERE column_1 IS NOT NULL
+                      AND column_1 != 'CVR'  -- Skip header row
                       AND column_4 IS NOT NULL
+                      AND column_4 != 'Areal'  -- Skip header row
                       AND TRY_CAST(column_4 AS DOUBLE) > 0
                       -- PII FILTERING: Exclude DDMMYY-XXXX patterns
                       AND NOT REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]{{6}}-[0-9X]{{4}}$')
