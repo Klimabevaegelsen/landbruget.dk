@@ -698,9 +698,9 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             self.log.info(f"  {emp_type}: {count} records")
         
         # Save P-number employment table to GCS
-                self._save_data(
+        self._save_data(
             data=employment_table,
             dataset="cvr_pnumber_employment",
-                    bucket=self.config.bucket,
-                    stage="gold",
+            bucket=self.config.bucket,
+            stage="gold",
         )
