@@ -41,8 +41,15 @@ class WetlandsPreFilter(PreFilteringStageBase):
             CREATE OR REPLACE TABLE wetlands_full AS
             SELECT
                 toerv_pct,
-                UNNEST(ST_Dump(geometry)).geom as geometry
+                UNNEST(ST_Dump(
+                    CASE 
+                        WHEN geometry IS NOT NULL AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        ELSE NULL
+                    END
+                )).geom as geometry
             FROM wetlands_raw
+            WHERE geometry IS NOT NULL AND geometry != ''
         """)
 
         # Log dataset sizes
