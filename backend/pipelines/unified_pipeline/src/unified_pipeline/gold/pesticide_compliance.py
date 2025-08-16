@@ -459,18 +459,16 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(f"📅 Agricultural years available: {[y[0] for y in years_available]}")
 
     async def _load_agricultural_fields_data(self) -> None:
-        """Load agricultural fields data to get crop information for mapping."""
-        self.logger.info("📥 Loading agricultural fields data for crop mapping")
+        """Load FVM marker data to get crop information for mapping."""
+        self.logger.info("📥 Loading FVM marker data for crop mapping")
 
-        # Find latest agricultural fields data
-        pattern = (
-            f"gs://{self.config.bucket}/gold/agricultural_fields_*/*/agricultural_fields_*.parquet"
-        )
+        # Find latest FVM marker data
+        pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/data.parquet"
         files = self.gcs_access.list_files_with_timestamps(pattern)
 
         if not files:
             self.logger.warning(
-                "⚠️ Agricultural fields data not found - crop mapping will be limited"
+                "⚠️ FVM marker data not found - crop mapping will be limited"
             )
             return
 
@@ -478,9 +476,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
         latest_path, timestamp = files_sorted[0]
 
-        self.logger.info(f"📄 Loading agricultural fields data from: {latest_path}")
+        self.logger.info(f"📄 Loading FVM marker data from: {latest_path}")
 
-        # Load agricultural fields data using proper GCS access pattern
+        # Load FVM marker data using proper GCS access pattern
         with self.gcs_access._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE agricultural_fields AS
@@ -505,7 +503,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         ).fetchone()[0]
 
         self.logger.info(
-            f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes"
+            f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes from FVM marker data"
         )
 
     async def _load_dosage_limits(self) -> None:
