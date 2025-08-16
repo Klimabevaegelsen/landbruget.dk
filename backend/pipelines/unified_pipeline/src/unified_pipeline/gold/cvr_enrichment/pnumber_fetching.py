@@ -526,9 +526,10 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
-                    unnest(json_transform(json_extract(json_data, '$.employment_data.annual_employment'), '[]')) as employment_item,
+                    idx as employment_idx,
                     'annual' as employment_type
                 FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT, (json_array_length(json_extract(json_data, '$.employment_data.annual_employment')) - 1)::BIGINT) as t(idx)
                 WHERE json_extract(json_data, '$.employment_data.annual_employment') IS NOT NULL
                 AND json_array_length(json_extract(json_data, '$.employment_data.annual_employment')) > 0
                 
@@ -539,9 +540,10 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
-                    unnest(json_transform(json_extract(json_data, '$.employment_data.quarterly_employment'), '[]')) as employment_item,
+                    idx as employment_idx,
                     'quarterly' as employment_type
                 FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT, (json_array_length(json_extract(json_data, '$.employment_data.quarterly_employment')) - 1)::BIGINT) as t(idx)
                 WHERE json_extract(json_data, '$.employment_data.quarterly_employment') IS NOT NULL
                 AND json_array_length(json_extract(json_data, '$.employment_data.quarterly_employment')) > 0
                 
@@ -552,9 +554,10 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
-                    unnest(json_transform(json_extract(json_data, '$.employment_data.monthly_employment'), '[]')) as employment_item,
+                    idx as employment_idx,
                     'monthly' as employment_type
                 FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT, (json_array_length(json_extract(json_data, '$.employment_data.monthly_employment')) - 1)::BIGINT) as t(idx)
                 WHERE json_extract(json_data, '$.employment_data.monthly_employment') IS NOT NULL
                 AND json_array_length(json_extract(json_data, '$.employment_data.monthly_employment')) > 0
                 
@@ -562,28 +565,85 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             )
             SELECT
                 -- Generate employment UUID for each record
-                md5(CONCAT(p_number::VARCHAR, '_', parent_cvr_number::VARCHAR, '_', employment_type, '_', 
-                          COALESCE(json_extract(employment_item, '$.year')::VARCHAR, ''), '_',
-                          COALESCE(json_extract(employment_item, '$.quarter')::VARCHAR, ''), '_',
-                          COALESCE(json_extract(employment_item, '$.month')::VARCHAR, '')))::VARCHAR as pnumber_employment_uuid,
+                md5(CONCAT(ef.p_number::VARCHAR, '_', ef.parent_cvr_number::VARCHAR, '_', ef.employment_type, '_', 
+                          COALESCE(
+                            CASE ef.employment_type
+                                WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].year')::VARCHAR
+                                WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].year')::VARCHAR
+                                WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].year')::VARCHAR
+                            END, ''), '_',
+                          COALESCE(
+                            CASE ef.employment_type
+                                WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].quarter')::VARCHAR
+                                ELSE ''
+                            END, ''), '_',
+                          COALESCE(
+                            CASE ef.employment_type
+                                WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].month')::VARCHAR
+                                ELSE ''
+                            END, '')))::VARCHAR as pnumber_employment_uuid,
                 -- Generate company UUID for consistency with other tables
-                md5(parent_cvr_number::VARCHAR)::VARCHAR as company_uuid,
-                parent_cvr_number as cvr_number,
-                p_number,
-                unit_name,
-                TRY_CAST(json_extract(employment_item, '$.year') AS INTEGER) as year,
-                TRY_CAST(json_extract(employment_item, '$.quarter') AS INTEGER) as quarter,
-                TRY_CAST(json_extract(employment_item, '$.month') AS INTEGER) as month,
-                TRY_CAST(json_extract(employment_item, '$.total_employees') AS INTEGER) as total_employees,
-                TRY_CAST(json_extract(employment_item, '$.full_time_equivalent') AS DOUBLE) as full_time_equivalent,
-                TRY_CAST(json_extract(employment_item, '$.employees_including_owners') AS INTEGER) as employees_including_owners,
-                json_extract(employment_item, '$.fte_interval_code')::VARCHAR as fte_interval_code,
-                json_extract(employment_item, '$.employees_interval_code')::VARCHAR as employees_interval_code,
-                json_extract(employment_item, '$.owners_interval_code')::VARCHAR as owners_interval_code,
-                json_extract(employment_item, '$.last_updated')::VARCHAR as last_updated,
-                employment_type,
+                md5(ef.parent_cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                ef.parent_cvr_number as cvr_number,
+                ef.p_number,
+                ef.unit_name,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].year')
+                        WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].year')
+                        WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].year')
+                    END AS INTEGER) as year,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].quarter')
+                        ELSE NULL
+                    END AS INTEGER) as quarter,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].month')
+                        ELSE NULL
+                    END AS INTEGER) as month,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].total_employees')
+                        WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].total_employees')
+                        WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].total_employees')
+                    END AS INTEGER) as total_employees,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].full_time_equivalent')
+                        WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].full_time_equivalent')
+                        WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].full_time_equivalent')
+                    END AS DOUBLE) as full_time_equivalent,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].employees_including_owners')
+                        ELSE NULL
+                    END AS INTEGER) as employees_including_owners,
+                CASE ef.employment_type
+                    WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].fte_interval_code')::VARCHAR
+                    WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].fte_interval_code')::VARCHAR
+                    WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].fte_interval_code')::VARCHAR
+                END as fte_interval_code,
+                CASE ef.employment_type
+                    WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].employees_interval_code')::VARCHAR
+                    WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].employees_interval_code')::VARCHAR
+                    WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].employees_interval_code')::VARCHAR
+                END as employees_interval_code,
+                CASE ef.employment_type
+                    WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].owners_interval_code')::VARCHAR
+                    ELSE NULL
+                END as owners_interval_code,
+                CASE ef.employment_type
+                    WHEN 'annual' THEN json_extract(t.json_data, '$.employment_data.annual_employment[' || ef.employment_idx || '].last_updated')::VARCHAR
+                    WHEN 'quarterly' THEN json_extract(t.json_data, '$.employment_data.quarterly_employment[' || ef.employment_idx || '].last_updated')::VARCHAR
+                    WHEN 'monthly' THEN json_extract(t.json_data, '$.employment_data.monthly_employment[' || ef.employment_idx || '].last_updated')::VARCHAR
+                END as last_updated,
+                ef.employment_type,
                 NOW()::VARCHAR as processing_timestamp
-            FROM employment_flattened
+            FROM employment_flattened ef
+            JOIN unnest($1) as t(json_data) ON json_extract(t.json_data, '$.p_number')::INTEGER = ef.p_number
+                AND json_extract(t.json_data, '$.parent_cvr_number')::INTEGER = ef.parent_cvr_number
         """, [json_strings])
         
         # Get count for logging
