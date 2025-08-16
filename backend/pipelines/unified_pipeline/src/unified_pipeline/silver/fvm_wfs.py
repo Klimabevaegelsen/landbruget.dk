@@ -1567,35 +1567,52 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             existing_cvrs = list(set(existing_cvrs))  # Remove duplicates
             self.log.info(f"   Found {len(existing_cvrs):,} existing CVRs in FVM data")
             
-            if not existing_cvrs:
-                self.log.warning("No existing CVRs found in FVM data - skipping pattern matching")
-                return
-            
             # Filter GKEA to only CVRs that are NOT in FVM (the missing ones)
-            cvr_filter = "', '".join(map(str, existing_cvrs))
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE gkea_missing_cvrs AS
-                SELECT * FROM gkea_raw
-                WHERE cvr_number NOT IN ('{cvr_filter}')
-            """)
+            if existing_cvrs:
+                # Properly escape CVR values to avoid SQL syntax errors
+                escaped_cvrs = []
+                for cvr in existing_cvrs:
+                    # Convert to string and escape single quotes
+                    cvr_str = str(cvr).replace("'", "''")
+                    escaped_cvrs.append(f"'{cvr_str}'")
+                
+                cvr_filter = ', '.join(escaped_cvrs)
+                sql_query = f"""
+                    CREATE OR REPLACE TABLE gkea_missing_cvrs AS
+                    SELECT * FROM gkea_raw
+                    WHERE cvr_number NOT IN ({cvr_filter})
+                """
+                self.log.debug(f"Executing CVR filter query with {len(escaped_cvrs)} CVRs")
+                self.conn.execute(sql_query)
+            else:
+                self.log.warning("No existing CVRs found in FVM data - including all GKEA data for pattern matching")
+                # No existing CVRs, so include all GKEA data
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE gkea_missing_cvrs AS
+                    SELECT * FROM gkea_raw
+                """)
             
             # Create GKEA operations (CVR + journal_number) - ONLY multi-field operations
             self.log.info("🌾 Creating GKEA operations (multi-field only, missing CVRs only)...")
-            gkea_ops_df = self.conn.execute("""
-                SELECT 
-                    cvr_number,
-                    gkea_journal_number,
-                    COUNT(*) as field_count,
-                    SUM(area_ha) as total_area,
-                    AVG(area_ha) as avg_field_size,
-                    COUNT(DISTINCT crop_code) as crop_diversity,
-                    STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
-                FROM gkea_missing_cvrs
-                GROUP BY cvr_number, gkea_journal_number
-                HAVING COUNT(*) > 1  -- Only multi-field operations
-                   AND SUM(area_ha) > 0
-                ORDER BY cvr_number, gkea_journal_number
-            """).df()
+            try:
+                gkea_ops_df = self.conn.execute("""
+                    SELECT 
+                        cvr_number,
+                        gkea_journal_number,
+                        COUNT(*) as field_count,
+                        SUM(area_ha) as total_area,
+                        AVG(area_ha) as avg_field_size,
+                        COUNT(DISTINCT crop_code) as crop_diversity,
+                        STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
+                    FROM gkea_missing_cvrs
+                    GROUP BY cvr_number, gkea_journal_number
+                    HAVING COUNT(*) > 1  -- Only multi-field operations
+                       AND SUM(area_ha) > 0
+                    ORDER BY cvr_number, gkea_journal_number
+                """).df()
+            except Exception as e:
+                self.log.error(f"Error creating GKEA operations query: {e}")
+                raise
             
             if len(gkea_ops_df) == 0:
                 self.log.warning("No GKEA multi-field operations with missing CVRs found")
@@ -1617,24 +1634,28 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.log.info(f"🔍 Processing CVR identification for marker year {year}...")
                 
                 # Create FVM operations for this year (journal_number) - ONLY multi-field operations with missing CVRs
-                fvm_ops_df = self.conn.execute(f"""
-                    SELECT 
-                        journal_number as fvm_journal_number,
-                        COUNT(*) as field_count,
-                        SUM(area_ha) as total_area,
-                        AVG(area_ha) as avg_field_size,
-                        COUNT(DISTINCT crop_code) as crop_diversity,
-                        STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
-                    FROM {marker_table}
-                    WHERE (cvr_number IS NULL OR cvr_number = '' OR cvr_number = '0')
-                      AND journal_number IS NOT NULL
-                      AND area_ha > 0
-                      AND crop_code IS NOT NULL
-                    GROUP BY journal_number
-                    HAVING COUNT(*) > 1  -- Only multi-field operations
-                       AND SUM(area_ha) > 0
-                    ORDER BY journal_number
-                """).df()
+                try:
+                    fvm_ops_df = self.conn.execute(f"""
+                        SELECT 
+                            journal_number as fvm_journal_number,
+                            COUNT(*) as field_count,
+                            SUM(area_ha) as total_area,
+                            AVG(area_ha) as avg_field_size,
+                            COUNT(DISTINCT crop_code) as crop_diversity,
+                            STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
+                        FROM {marker_table}
+                        WHERE (cvr_number IS NULL OR cvr_number = '' OR cvr_number = '0')
+                          AND journal_number IS NOT NULL
+                          AND area_ha > 0
+                          AND crop_code IS NOT NULL
+                        GROUP BY journal_number
+                        HAVING COUNT(*) > 1  -- Only multi-field operations
+                           AND SUM(area_ha) > 0
+                        ORDER BY journal_number
+                    """).df()
+                except Exception as e:
+                    self.log.error(f"Error creating FVM operations query for {marker_table}: {e}")
+                    continue
                 
                 if len(fvm_ops_df) == 0:
                     self.log.info(f"   No FVM operations with missing CVRs found for year {year}")
