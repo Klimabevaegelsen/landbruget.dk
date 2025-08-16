@@ -91,8 +91,19 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
     def _get_latest_gold_path(self, dataset: str) -> str:
         """Get path to latest gold data file for a given dataset."""
+        # Try new standardized format first
         pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
         files = self.gcs_access.list_files(pattern)
+
+        if not files:
+            # Fallback to legacy format where file name matches dataset name
+            self.log.warning(f"No new format files found for {dataset}, trying legacy format")
+            legacy_pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/{dataset}.parquet"
+            files = self.gcs_access.list_files(legacy_pattern)
+
+            if files:
+                self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
+                return sorted(files)[-1]  # Latest by timestamp
 
         if not files:
             raise FileNotFoundError(f"No gold data found for {dataset}")
