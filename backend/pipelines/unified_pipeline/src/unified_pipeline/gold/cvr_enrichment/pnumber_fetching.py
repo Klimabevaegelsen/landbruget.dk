@@ -526,7 +526,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
-                    unnest(json_extract(json_data, '$.employment_data.annual_employment')) as employment_item,
+                    unnest(json_transform(json_extract(json_data, '$.employment_data.annual_employment'), '[]')) as employment_item,
                     'annual' as employment_type
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.annual_employment') IS NOT NULL
@@ -539,7 +539,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
-                    unnest(json_extract(json_data, '$.employment_data.quarterly_employment')) as employment_item,
+                    unnest(json_transform(json_extract(json_data, '$.employment_data.quarterly_employment'), '[]')) as employment_item,
                     'quarterly' as employment_type
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.quarterly_employment') IS NOT NULL
@@ -552,7 +552,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
-                    unnest(json_extract(json_data, '$.employment_data.monthly_employment')) as employment_item,
+                    unnest(json_transform(json_extract(json_data, '$.employment_data.monthly_employment'), '[]')) as employment_item,
                     'monthly' as employment_type
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.monthly_employment') IS NOT NULL
