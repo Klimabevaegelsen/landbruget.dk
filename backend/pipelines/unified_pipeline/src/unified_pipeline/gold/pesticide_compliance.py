@@ -96,8 +96,25 @@ class PlanteITAPI:
         """Get all pesticide products approved for a specific crop."""
         try:
             response = self.session.get(f"{self.base_url}/Products?CropId={crop_id}", timeout=30)
+            
+            # Check for authentication issues
+            if response.status_code == 401:
+                raise ValueError(f"Authentication failed for Plante IT API. Please check credentials. Status: {response.status_code}")
+            elif response.status_code == 403:
+                raise ValueError(f"Access forbidden for Plante IT API. Please check permissions. Status: {response.status_code}")
+            
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            
+            # Validate response structure
+            if not isinstance(result, list):
+                logger.warning(f"Unexpected API response format for crop {crop_id}: expected list, got {type(result)}")
+                logger.warning(f"Response content: {result}")
+            
+            return result
+        except ValueError:
+            # Re-raise authentication/permission errors
+            raise
         except Exception as e:
             logger.error(f"Error fetching products for crop {crop_id}: {e}")
             return []
@@ -108,8 +125,25 @@ class PlanteITAPI:
             response = self.session.get(
                 f"{self.base_url}/Products/{product_id}?CropId={crop_id}", timeout=30
             )
+            
+            # Check for authentication issues
+            if response.status_code == 401:
+                raise ValueError(f"Authentication failed for Plante IT API. Please check credentials. Status: {response.status_code}")
+            elif response.status_code == 403:
+                raise ValueError(f"Access forbidden for Plante IT API. Please check permissions. Status: {response.status_code}")
+            
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            
+            # Validate response structure for product details
+            if result and not isinstance(result, dict):
+                logger.warning(f"Unexpected API response format for product {product_id}: expected dict, got {type(result)}")
+                logger.warning(f"Response content: {result}")
+            
+            return result
+        except ValueError:
+            # Re-raise authentication/permission errors
+            raise
         except Exception as e:
             logger.error(f"Error fetching product {product_id} for crop {crop_id}: {e}")
             return None
@@ -567,11 +601,23 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
             # Fetch from API
             products = self.api_client.get_products_for_crop(api_crop_id)
+            
+            # Check if we're getting empty responses (could indicate auth issues)
+            if processed == 1 and not products:
+                self.logger.warning(f"⚠️ First API call returned no products for crop {api_crop_id}. This might indicate authentication issues.")
+            elif processed <= 10 and not products:
+                self.logger.warning(f"⚠️ No products returned for crop {api_crop_id} (call #{processed})")
 
             for product in products:
                 if str(product.get("RegNumber", "")).strip() == str(reg_number).strip():
+                    # Get product ID - try different possible field names
+                    product_id = product.get("Id") or product.get("id") or product.get("ID") or product.get("ProductId")
+                    if not product_id:
+                        self.logger.warning(f"⚠️ No product ID found for reg_number {reg_number}. Available fields: {list(product.keys())}")
+                        continue
+                    
                     # Get detailed product info
-                    detail = self.api_client.get_product_detail(product["Id"], api_crop_id)
+                    detail = self.api_client.get_product_detail(product_id, api_crop_id)
                     if detail:
                         dosage_info = {
                             "crop_code": crop_code,

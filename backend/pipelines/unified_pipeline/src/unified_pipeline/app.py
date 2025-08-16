@@ -674,3 +674,7 @@ def run_cli(
 #     """Run a specific pipeline by name and stage."""
 #     pipeline_jobs = get_pipeline_jobs(pipeline_name)
 #     asyncio.run(execute_pipeline_jobs(pipeline_jobs, stage))
+
+
+if __name__ == "__main__":
+    run_cli()
