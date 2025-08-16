@@ -1462,6 +1462,26 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Don't fail the entire pipeline if enrichment fails
             pass
 
+    async def _find_latest_gkea_data_for_year(self, year: int) -> Optional[str]:
+        """Find the latest GKEA fertilizer data for a specific year."""
+        try:
+            # Look for GKEA data in fertiliser silver dataset using the same pattern as agricultural_pattern_matcher
+            pattern = f"gs://{self.config.bucket}/silver/fertiliser/*/GKEA{year}_*.parquet"
+            files = self.gcs_access.list_files(pattern)
+            
+            if files:
+                # Find the most recent file by sorting (timestamps are in path)
+                latest_file = sorted(files)[-1]
+                self.log.info(f"✅ Found GKEA data for {year}: {latest_file}")
+                return latest_file
+            else:
+                self.log.info(f"ℹ️  No GKEA data found for {year} using pattern {pattern}")
+                return None
+                
+        except Exception as e:
+            self.log.warning(f"Error finding GKEA data for {year}: {e}")
+            return None
+
     async def _identify_missing_cvrs_with_gkea(self) -> None:
         """
         Identify missing CVRs in FVM marker data using GKEA agricultural pattern matching.
@@ -1473,33 +1493,58 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         try:
             self.log.info("🧠 Starting agricultural CVR identification using GKEA pattern matching...")
             
-            # Check if GKEA fertilizer data is available (use direct GCS path)
-            gkea_path = "gs://landbrugsdata-raw-data/silver/fertiliser/20250803_205033"
-            if not self.gcs_access.exists(gkea_path):
-                self.log.warning(f"GKEA fertilizer data not available at {gkea_path} - skipping CVR identification")
-                return
+            # Process each field year and find corresponding GKEA data
+            all_gkea_data_loaded = False
             
-            # Load GKEA data (excluding PII patterns) - use correct column mapping from our original script
-            self.log.info("📊 Loading GKEA fertilizer data...")
-            self.gcs_access.query_parquet_direct(
-                gkea_path,
-                """
-                SELECT 
-                    column_1 as cvr_number,
-                    gkea2024_markplan_med_goedningsoplysninger as gkea_journal_number,
-                    TRY_CAST(column_4 AS DOUBLE) as area_ha,
-                    TRY_CAST(column_10 AS INTEGER) as crop_code
-                WHERE column_1 IS NOT NULL
-                  AND column_4 IS NOT NULL
-                  AND TRY_CAST(column_4 AS DOUBLE) > 0
-                  -- PII FILTERING: Exclude DDMMYY-XXXX patterns
-                  AND NOT REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]{{6}}-[0-9X]{{4}}$')
-                  -- Only valid 8-digit CVR numbers
-                  AND LENGTH(TRIM(CAST(column_1 AS VARCHAR))) = 8
-                  AND REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]+$')
-                """,
-                "gkea_raw"
-            )
+            for year in self.config.marker_years:
+                self.log.info(f"🔍 Looking for GKEA data for field year {year}...")
+                
+                # Find GKEA data for this year using dynamic discovery
+                gkea_path = await self._find_latest_gkea_data_for_year(year)
+                if not gkea_path:
+                    self.log.warning(f"No GKEA fertilizer data found for year {year} - skipping")
+                    continue
+                
+                # Load GKEA data for this year with proper column naming
+                self.log.info(f"📊 Loading GKEA fertilizer data for year {year} from {gkea_path}")
+                gkea_column_name = f"gkea{year}_markplan_med_goedningsoplysninger"
+                
+                table_name = f"gkea_raw_{year}" if not all_gkea_data_loaded else "gkea_raw_temp"
+                
+                self.gcs_access.query_parquet_direct(
+                    gkea_path,
+                    f"""
+                    SELECT 
+                        column_1 as cvr_number,
+                        {gkea_column_name} as gkea_journal_number,
+                        TRY_CAST(column_4 AS DOUBLE) as area_ha,
+                        TRY_CAST(column_10 AS INTEGER) as crop_code,
+                        {year} as data_year
+                    WHERE column_1 IS NOT NULL
+                      AND column_4 IS NOT NULL
+                      AND TRY_CAST(column_4 AS DOUBLE) > 0
+                      -- PII FILTERING: Exclude DDMMYY-XXXX patterns
+                      AND NOT REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]{{6}}-[0-9X]{{4}}$')
+                      -- Only valid 8-digit CVR numbers
+                      AND LENGTH(TRIM(CAST(column_1 AS VARCHAR))) = 8
+                      AND REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]+$')
+                    """,
+                    table_name
+                )
+                
+                # Union with previous years' data
+                if not all_gkea_data_loaded:
+                    # First year - rename to main table
+                    self.conn.execute(f"CREATE OR REPLACE TABLE gkea_raw AS SELECT * FROM {table_name}")
+                    all_gkea_data_loaded = True
+                else:
+                    # Subsequent years - union with existing data
+                    self.conn.execute("INSERT INTO gkea_raw SELECT * FROM gkea_raw_temp")
+                    self.conn.execute("DROP TABLE gkea_raw_temp")
+            
+            if not all_gkea_data_loaded:
+                self.log.warning("No GKEA fertilizer data found for any field years - skipping CVR identification")
+                return
             
             # Find existing CVRs in FVM data to exclude from GKEA matching
             existing_cvrs = []
