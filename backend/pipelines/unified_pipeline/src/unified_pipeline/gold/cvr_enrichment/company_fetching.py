@@ -43,8 +43,8 @@ class CompanyFetchingConfig(BaseJobConfig):
 
     # Note: Address geocoding is handled in separate step
     enable_address_geocoding: bool = Field(
-        default=False,
-        description="Whether to enrich addresses with geometry (handled in separate step)",
+        default=True,
+        description="Whether to enrich addresses with geometry and populate primary_address field",
     )
 
     model_config = {"frozen": True}
