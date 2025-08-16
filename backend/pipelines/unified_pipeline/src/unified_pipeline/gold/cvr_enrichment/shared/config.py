@@ -502,6 +502,19 @@ def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
 
     # If running in GitHub Actions, check for local artifacts
     if os.getenv("GITHUB_ACTIONS") == "true":
+        # For address geocoding, we need BOTH company and pnumber artifacts to exist
+        # Otherwise, we should use independent execution to fetch from GCS
+        if any("address_geocoding" in path for path in pipeline_paths):
+            company_artifact_exists = os.path.exists("/tmp/cvr_company_data.parquet")
+            pnumber_artifact_exists = os.path.exists("/tmp/cvr_pnumber_data.parquet")
+            
+            # Only return True if BOTH required artifacts exist
+            if company_artifact_exists and pnumber_artifact_exists:
+                return True
+            else:
+                return False  # Missing artifacts, use independent execution
+        
+        # For other steps, check for any matching artifact
         for pipeline_path in pipeline_paths:
             # Extract the file type from the pipeline path
             for file_type, local_path in local_artifact_patterns.items():
@@ -570,6 +583,7 @@ def _get_traditional_input_paths(
 
     elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
         # Address geocoding depends on both company and P-number data (no batching)
+        # Note: These paths are for pipeline dependencies only - independent execution uses different paths
         return [f"{base_path}/company_fetching.parquet", f"{base_path}/pnumber_fetching.parquet"]
 
     elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
