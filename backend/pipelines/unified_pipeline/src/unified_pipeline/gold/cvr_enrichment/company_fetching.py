@@ -364,6 +364,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 CREATE TABLE {table_name} AS
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    md5(json_extract(json_data, '$.cvr_number')::VARCHAR)::VARCHAR as company_uuid,
                     json_extract(json_data, '$.company_name')::VARCHAR as company_name,
                     json_extract(json_data, '$.company_type_description')::VARCHAR
                         as company_type_description,
@@ -409,6 +410,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.conn.execute(f"""
                 CREATE TABLE {table_name} (
                     cvr_number INTEGER,
+                    company_uuid VARCHAR,
                     company_name VARCHAR,
                     company_type_description VARCHAR,
                     status VARCHAR,
