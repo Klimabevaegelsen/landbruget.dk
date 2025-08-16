@@ -372,12 +372,23 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
                     json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
-                    -- Extract primary address geometry (algorithmically selected by primary_address_selector.py)
+                    -- Extract primary address (algorithmically selected by primary_address_selector.py)
                     -- Priority: 1) Current addresses, 2) Beliggenhedsadresse > Postadresse > Kontaktadresse, 3) Best coordinate quality
-                    TRY_CAST(json_extract(json_data, '$.primary_address_geometry.latitude') AS DOUBLE) as latitude,
-                    TRY_CAST(json_extract(json_data, '$.primary_address_geometry.longitude') AS DOUBLE) as longitude,
-                    json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as coordinate_quality,
-                    json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as coordinate_source,
+                    json_extract(json_data, '$.primary_address.full_address')::VARCHAR as current_full_address,
+                    json_extract(json_data, '$.primary_address.street_name')::VARCHAR as current_street_name,
+                    json_extract(json_data, '$.primary_address.house_number')::VARCHAR as current_house_number,
+                    json_extract(json_data, '$.primary_address.floor')::VARCHAR as current_floor,
+                    json_extract(json_data, '$.primary_address.door')::VARCHAR as current_door,
+                    TRY_CAST(json_extract(json_data, '$.primary_address.postal_code') AS INTEGER) as current_postal_code,
+                    json_extract(json_data, '$.primary_address.city')::VARCHAR as current_city,
+                    TRY_CAST(json_extract(json_data, '$.primary_address.municipality_code') AS INTEGER) as current_municipality_code,
+                    json_extract(json_data, '$.primary_address.municipality_name')::VARCHAR as current_municipality_name,
+                    json_extract(json_data, '$.primary_address.address_type')::VARCHAR as current_address_type,
+                    TRY_CAST(json_extract(json_data, '$.primary_address.latitude') AS DOUBLE) as latitude,
+                    TRY_CAST(json_extract(json_data, '$.primary_address.longitude') AS DOUBLE) as longitude,
+                    json_extract(json_data, '$.primary_address.coordinate_quality')::VARCHAR as coordinate_quality,
+                    json_extract(json_data, '$.primary_address.coordinate_source')::VARCHAR as coordinate_source,
+                    json_extract(json_data, '$.primary_address.dawa_enriched')::BOOLEAN as dawa_enriched,
                     json_data as company_data_json,  -- Keep for pipeline dependencies (artifacts)
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR
                         as processing_timestamp

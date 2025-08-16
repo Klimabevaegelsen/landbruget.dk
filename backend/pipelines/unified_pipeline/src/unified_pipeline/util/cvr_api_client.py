@@ -800,12 +800,16 @@ class CVRAPIClient:
             company_data = company_data.copy()
             company_data["addresses"] = enriched_addresses
 
-            # Add primary address geometry using intelligent selection
+            # Add primary address using intelligent selection (both geometry and full address details)
             from .primary_address_selector import select_primary_address_for_company_table
             
             primary_address = select_primary_address_for_company_table(enriched_addresses)
             
             if primary_address:
+                # Save full primary address details
+                company_data["primary_address"] = primary_address
+                
+                # Also save geometry in legacy format for backward compatibility
                 company_data["primary_address_geometry"] = {
                     "latitude": primary_address.get("latitude"),  # WGS84 latitude
                     "longitude": primary_address.get("longitude"),  # WGS84 longitude
@@ -1935,12 +1939,16 @@ class CVRAPIClient:
             pnumber_data = pnumber_data.copy()
             pnumber_data["addresses"] = enriched_addresses
 
-            # Add primary address geometry using intelligent selection
+            # Add primary address using intelligent selection (both geometry and full address details)
             from .primary_address_selector import select_primary_address_for_company_table
             
             primary_address = select_primary_address_for_company_table(enriched_addresses)
             
             if primary_address:
+                # Save full primary address details
+                pnumber_data["primary_address"] = primary_address
+                
+                # Also save geometry in legacy format for backward compatibility
                 pnumber_data["primary_address_geometry"] = {
                     "latitude": primary_address.get("latitude"),  # WGS84 latitude
                     "longitude": primary_address.get("longitude"),  # WGS84 longitude
