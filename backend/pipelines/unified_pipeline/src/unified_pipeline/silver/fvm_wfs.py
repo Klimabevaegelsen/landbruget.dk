@@ -28,6 +28,19 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+
+# Add CVR collection imports
+try:
+    from unified_pipeline.util.cvr_collection import (
+        extract_cvr_numbers_from_table,
+        save_pipeline_cvr_numbers,
+    )
+    CVR_COLLECTION_AVAILABLE = True
+except ImportError:
+    # Graceful fallback if CVR collection is not available
+    extract_cvr_numbers_from_table = None
+    save_pipeline_cvr_numbers = None
+    CVR_COLLECTION_AVAILABLE = False
 from unified_pipeline.util.timing import AsyncTimer
 
 
@@ -1675,6 +1688,101 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Don't fail the entire pipeline if enrichment fails
             pass
 
+    async def _extract_and_save_cvr_numbers(self) -> None:
+        """
+        Extract CVR numbers from processed marker data and save them to CVR collections.
+        
+        This method extracts unique CVR numbers from all marker tables that have been 
+        processed and saves them using the CVR collection utility for downstream 
+        CVR enrichment processing.
+        """
+        if not CVR_COLLECTION_AVAILABLE or save_pipeline_cvr_numbers is None:
+            self.log.info("ℹ️ CVR collection utility not available - skipping CVR extraction")
+            return
+
+        try:
+            self.log.info("🔍 Extracting CVR numbers from FVM marker data...")
+            
+            all_cvr_numbers = []
+            
+            # Define tables that may contain CVR numbers
+            cvr_tables = []
+            
+            # Add marker tables for each year
+            for year in self.config.marker_years:
+                table_name = f"final_processed_marker_{year}"
+                cvr_tables.append((table_name, "marker", year))
+            
+            # Add smaabiotoper tables for each year (also contain CVR numbers)
+            for year in self.config.smaabiotoper_years:
+                table_name = f"final_processed_smaabiotoper_{year}"
+                cvr_tables.append((table_name, "smaabiotoper", year))
+            
+            # Add organic subsidy tables (also contain CVR numbers)
+            for year in self.config.organic_subsidies_years:
+                table_name = f"final_processed_organicsubsidies_{year}"
+                cvr_tables.append((table_name, "organic_subsidies", year))
+                
+            # Add grassland subsidy tables (also contain CVR numbers)
+            for year in self.config.grassland_subsidies_years:
+                table_name = f"final_processed_grasslandsubsidies_{year}"
+                cvr_tables.append((table_name, "grassland_subsidies", year))
+                
+            # Add environmental subsidy tables (also contain CVR numbers)
+            for year in self.config.environmental_subsidies_years:
+                table_name = f"final_processed_environmentalsubsidies_{year}"
+                cvr_tables.append((table_name, "environmental_subsidies", year))
+            
+            # Extract CVR numbers from each table
+            for table_name, layer_type, year in cvr_tables:
+                try:
+                    # Check if table exists
+                    tables_result = self.conn.execute("SHOW TABLES").fetchall()
+                    existing_tables = [table[0] for table in tables_result]
+                    
+                    if table_name in existing_tables:
+                        cvr_numbers = extract_cvr_numbers_from_table(
+                            table_name=table_name, 
+                            connection=self.conn, 
+                            cvr_column="cvr_number"
+                        )
+                        
+                        if cvr_numbers:
+                            all_cvr_numbers.extend(cvr_numbers)
+                            self.log.info(f"   • {layer_type} {year}: {len(cvr_numbers)} CVR numbers")
+                        else:
+                            self.log.info(f"   • {layer_type} {year}: No CVR numbers found")
+                    else:
+                        self.log.debug(f"   • {layer_type} {year}: Table {table_name} not found, skipping")
+                        
+                except Exception as e:
+                    self.log.warning(f"   • {layer_type} {year}: Error extracting CVR numbers - {e}")
+            
+            # Remove duplicates and sort
+            unique_cvr_numbers = sorted(list(set(all_cvr_numbers)))
+            
+            if unique_cvr_numbers:
+                # Get timestamp for CVR collection
+                timestamp = self.date_pattern
+                
+                # Save CVR numbers using the collection utility
+                cvr_gcs_path = save_pipeline_cvr_numbers(
+                    pipeline_name="fvm_marker",
+                    cvr_numbers=unique_cvr_numbers,
+                    gcs_access=self.gcs_access,
+                    bucket=self.config.bucket,
+                    timestamp=timestamp,
+                )
+                
+                self.log.info(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers from FVM marker data to: {cvr_gcs_path}")
+            else:
+                self.log.warning("⚠️ No CVR numbers found in FVM marker data")
+                
+        except Exception as e:
+            self.log.error(f"❌ Error extracting CVR numbers from FVM marker data: {e}")
+            # Don't fail the entire pipeline if CVR extraction fails
+            pass
+
     async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """
         Execute the silver processing job for all FVM WFS data.
@@ -1768,6 +1876,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Enrich subsidy fields with field UUIDs from matching FVM marker fields
             await self._enrich_subsidies_with_field_uuid()
+
+            # Extract and save CVR numbers from processed marker data
+            await self._extract_and_save_cvr_numbers()
 
             self.log.info("FVM WFS silver job completed for all available data")
 
