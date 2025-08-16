@@ -361,7 +361,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         ) as restriction_date_parsed,
                         -- Additional fields for analysis
                         formulering as formulation,
-                        verwendelse as application_area
+                        anvendelse as application_area
                     FROM read_parquet('{temp_file}')
                     WHERE registrerings_nr IS NOT NULL
                     AND registrerings_nr != ''
