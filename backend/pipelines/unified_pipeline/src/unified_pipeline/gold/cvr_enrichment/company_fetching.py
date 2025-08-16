@@ -493,16 +493,16 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 role_start_date,
                 role_end_date,
                 COALESCE(is_current_role, true) as is_current_role,
-                -- Classify as leadership based on role (strip quotes from role values)
+                -- Classify as leadership based on role (normalize to title case)
                 CASE 
-                    WHEN TRIM(role, '"') IN ('DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM', 'Leder', 'INTERESSENTER') THEN true
-                    WHEN TRIM(role, '"') IN ('Reel ejer', 'REVISION', 'STIFTERE', 'Foreningsrepræsentant', 'LIKVIDATOR') THEN false
+                    WHEN INITCAP(TRIM(role, '"')) IN ('Direktør', 'Adm. Dir.', 'Formand', 'Næstformand', 'Bestyrelsesmedlem', 'Leder', 'Interessenter') THEN true
+                    WHEN INITCAP(TRIM(role, '"')) IN ('Reel Ejer', 'Revision', 'Stiftere', 'Foreningsrepræsentant', 'Likvidator') THEN false
                     ELSE NULL
                 END as is_leadership,
-                -- Classify as owner based on role (strip quotes from role values)
+                -- Classify as owner based on role (normalize to title case)
                 CASE
-                    WHEN TRIM(role, '"') IN ('Reel ejer', 'INTERESSENTER') THEN true
-                    WHEN TRIM(role, '"') IN ('DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM', 'REVISION', 'STIFTERE', 'Foreningsrepræsentant', 'LIKVIDATOR', 'Leder') THEN false
+                    WHEN INITCAP(TRIM(role, '"')) IN ('Reel Ejer', 'Interessenter') THEN true
+                    WHEN INITCAP(TRIM(role, '"')) IN ('Direktør', 'Adm. Dir.', 'Formand', 'Næstformand', 'Bestyrelsesmedlem', 'Revision', 'Stiftere', 'Foreningsrepræsentant', 'Likvidator', 'Leder') THEN false
                     ELSE NULL
                 END as is_owner,
                 processing_timestamp
