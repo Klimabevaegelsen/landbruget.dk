@@ -49,6 +49,8 @@ env:
   PYTHON_VERSION: '3.11'
   # Shared timestamp for all pipeline steps to ensure consistent file paths
   PIPELINE_START_TIME: ${{ github.run_started_at }}
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
 jobs:
   # Step 1: CVR Collection (Sequential - must run first)

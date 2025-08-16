@@ -34,6 +34,8 @@ on:
 env:
   PYTHON_VERSION: '3.11'
   SUPABASE_CLI_VERSION: '1.123.4'
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
 jobs:
   pre_migration_checks:

@@ -26,6 +26,10 @@ on:
         type: boolean
         default: false
 
+env:
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
 jobs:
   discover-years:
     runs-on: ubuntu-latest

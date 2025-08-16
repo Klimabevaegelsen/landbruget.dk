@@ -178,6 +178,9 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Process FVM WFS Layer
+        env:
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/unified_pipeline
           STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
@@ -238,6 +241,9 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Run Field Enrichment for ${{ matrix.year }}
+        env:
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/unified_pipeline
           echo "🌱 Running enrichment for year ${{ matrix.year }}..."
