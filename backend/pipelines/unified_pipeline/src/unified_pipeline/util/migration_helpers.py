@@ -160,8 +160,19 @@ class GCSMigrationHelper:
 
             # Register gcsfs filesystem
             from fsspec import filesystem
+            import os
 
-            fs = filesystem("gs")
+            # Use HMAC authentication if available (same pattern as gcs_access.py)
+            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+            
+            if gcs_access_key and gcs_secret_key:
+                fs = filesystem("gs", 
+                               access_key_id=gcs_access_key,
+                               secret_access_key=gcs_secret_key)
+            else:
+                fs = filesystem("gs")
+            
             conn.register_filesystem(fs)
 
             self.log.info("✅ Unified connection configured successfully")

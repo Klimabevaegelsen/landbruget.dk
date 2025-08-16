@@ -378,12 +378,25 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
     try:
         import duckdb
         import gcsfs
+        import os
 
         # Create a temporary connection for checking file structure
         temp_conn = duckdb.connect()
         temp_conn.install_extension("spatial")
         temp_conn.load_extension("spatial")
-        fs = gcsfs.GCSFileSystem()
+        
+        # Use HMAC authentication if available (same pattern as gcs_access.py)
+        gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+        gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+        
+        if gcs_access_key and gcs_secret_key:
+            fs = gcsfs.GCSFileSystem(
+                access_key_id=gcs_access_key,
+                secret_access_key=gcs_secret_key
+            )
+        else:
+            fs = gcsfs.GCSFileSystem()
+        
         temp_conn.register_filesystem(fs)
 
         columns_result = temp_conn.execute(f"""
