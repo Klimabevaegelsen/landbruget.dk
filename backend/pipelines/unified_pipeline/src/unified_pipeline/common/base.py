@@ -479,7 +479,9 @@ class BaseSource(Generic[T], ABC):
         # Create path with timestamp
         timestamp = self.date_pattern
         if not filename:
-            filename = "data.parquet"  # Default filename
+            # Default to parquet for silver/gold layers (processed data)
+            # Bronze layers should explicitly specify their file format
+            filename = "data.parquet"
         path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
 
         if self.config.save_local:

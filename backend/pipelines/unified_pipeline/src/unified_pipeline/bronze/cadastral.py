@@ -422,8 +422,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
             return None
         self.log.info("Fetched raw data successfully")
 
-        # Save using existing method (already uses timestamped structure)
-        self._save_data(features_data, self.config.dataset, self.config.bucket, "bronze")
+        # Save raw JSON data to bronze layer with explicit JSON filename
+        self._save_data(features_data, self.config.dataset, self.config.bucket, "bronze", filename="data.json")
         self.log.info("Saved raw data successfully")
 
         # Return data for in-memory passing
