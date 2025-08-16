@@ -1475,7 +1475,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             
             # Check if GKEA fertilizer data is available (use direct GCS path)
             gkea_path = "gs://landbrugsdata-raw-data/silver/fertiliser/20250803_205033"
-            if not self.data_access.exists(gkea_path):
+            if not self.gcs_access.exists(gkea_path):
                 self.log.warning(f"GKEA fertilizer data not available at {gkea_path} - skipping CVR identification")
                 return
             
