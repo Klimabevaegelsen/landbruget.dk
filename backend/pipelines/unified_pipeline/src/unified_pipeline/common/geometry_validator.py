@@ -151,8 +151,15 @@ def validate_and_transform_geometries_duckdb(
 
             if is_wgs84_lon_lat:
                 logger.info(
-                    f"{dataset_name}: Data already in WGS84 (correct lon/lat order) - skipping transformation"
+                    f"{dataset_name}: Data in WGS84 lon/lat order - flipping to lat/lon for ST_Area_Spheroid accuracy"
                 )
+                # CRITICAL FIX: ST_Area_Spheroid expects lat/lon order, not lon/lat order
+                # Even if data appears correct, we need to flip for accurate area calculations
+                conn.execute(f"""
+                    UPDATE {table_name} SET
+                        {geometry_column} = ST_FlipCoordinates({geometry_column})
+                    WHERE {geometry_column} IS NOT NULL
+                """)
             elif is_wgs84_lat_lon:
                 logger.info(
                     f"{dataset_name}: Data in WGS84 but lat/lon order - will flip after processing"
@@ -184,30 +191,34 @@ def validate_and_transform_geometries_duckdb(
             """)
 
         # Apply coordinate flipping if needed - check bounds AFTER any transformation
-        post_transform_bounds = conn.execute(f"""
-            SELECT
-                MIN(ST_XMin({geometry_column})) as min_x,
-                MAX(ST_XMax({geometry_column})) as max_x,
-                MIN(ST_YMin({geometry_column})) as min_y,
-                MAX(ST_YMax({geometry_column})) as max_y
-            FROM {table_name}
-            WHERE {geometry_column} IS NOT NULL
-            LIMIT 100
-        """).fetchone()
+        # Skip if we already flipped coordinates for WGS84 lon/lat data
+        already_flipped_for_wgs84 = initial_bounds and (7 <= initial_bounds[0] <= 16 and 7 <= initial_bounds[1] <= 16 and 54 <= initial_bounds[2] <= 58 and 54 <= initial_bounds[3] <= 58)
+        
+        if not already_flipped_for_wgs84:
+            post_transform_bounds = conn.execute(f"""
+                SELECT
+                    MIN(ST_XMin({geometry_column})) as min_x,
+                    MAX(ST_XMax({geometry_column})) as max_x,
+                    MIN(ST_YMin({geometry_column})) as min_y,
+                    MAX(ST_YMax({geometry_column})) as max_y
+                FROM {table_name}
+                WHERE {geometry_column} IS NOT NULL
+                LIMIT 100
+            """).fetchone()
 
-        if post_transform_bounds:
-            min_x, max_x, min_y, max_y = post_transform_bounds
-            is_wgs84_lat_lon_after = (
-                54 <= min_x <= 58 and 54 <= max_x <= 58 and 7 <= min_y <= 16 and 7 <= max_y <= 16
-            )
+            if post_transform_bounds:
+                min_x, max_x, min_y, max_y = post_transform_bounds
+                is_wgs84_lat_lon_after = (
+                    54 <= min_x <= 58 and 54 <= max_x <= 58 and 7 <= min_y <= 16 and 7 <= max_y <= 16
+                )
 
-            if is_wgs84_lat_lon_after:
-                logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix lat/lon order")
-                conn.execute(f"""
-                    UPDATE {table_name} SET
-                        {geometry_column} = ST_FlipCoordinates({geometry_column})
-                    WHERE {geometry_column} IS NOT NULL
-                """)
+                if is_wgs84_lat_lon_after:
+                    logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix lat/lon order")
+                    conn.execute(f"""
+                        UPDATE {table_name} SET
+                            {geometry_column} = ST_FlipCoordinates({geometry_column})
+                        WHERE {geometry_column} IS NOT NULL
+                    """)
 
                 # Verify the flip worked
                 final_bounds = conn.execute(f"""
