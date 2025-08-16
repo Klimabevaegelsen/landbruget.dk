@@ -23,7 +23,7 @@ class CadastralSilverConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()
-    save_local: bool = os.getenv("SAVE_LOCAL", False)
+    save_local: bool = os.getenv("SAVE_LOCAL", "False").lower() == "true"
 
 
 class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):

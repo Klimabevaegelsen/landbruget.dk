@@ -48,7 +48,7 @@ class CadastralBronzeConfig(BaseJobConfig):
     url: str = "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS"
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()
-    save_local: bool = os.getenv("SAVE_LOCAL", False)
+    save_local: bool = os.getenv("SAVE_LOCAL", "False").lower() == "true"
 
 
 class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
