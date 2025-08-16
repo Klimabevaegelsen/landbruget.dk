@@ -372,6 +372,12 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
                     json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
+                    -- Extract primary address geometry (algorithmically selected by primary_address_selector.py)
+                    -- Priority: 1) Current addresses, 2) Beliggenhedsadresse > Postadresse > Kontaktadresse, 3) Best coordinate quality
+                    TRY_CAST(json_extract(json_data, '$.primary_address_geometry.latitude') AS DOUBLE) as latitude,
+                    TRY_CAST(json_extract(json_data, '$.primary_address_geometry.longitude') AS DOUBLE) as longitude,
+                    json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as coordinate_quality,
+                    json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as coordinate_source,
                     json_data as company_data_json,  -- Keep for pipeline dependencies (artifacts)
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR
                         as processing_timestamp
