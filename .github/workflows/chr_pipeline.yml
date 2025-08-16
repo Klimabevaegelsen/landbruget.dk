@@ -66,10 +66,7 @@ on:
           - DEBUG
           - ERROR
         default: 'WARNING'
-      show_progress:
-        description: 'Show progress information'
-        type: boolean
-        default: true
+
       limit_herds_per_species:
         description: 'Limit number of herds processed per species'
         type: string
@@ -78,6 +75,7 @@ on:
         description: 'Maximum number of concurrent matrix jobs'
         type: string
         default: '6'
+
 
 # Environment variables are set in individual jobs as needed
 # Bronze timestamp is generated in the bronze-foundation job and shared via artifacts
@@ -228,7 +226,7 @@ jobs:
           fi
           
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          SHOW_PROGRESS="true"
           
           CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
           if [[ "$SHOW_PROGRESS" == "true" ]]; then
@@ -423,7 +421,7 @@ jobs:
           
           STEP="${{ matrix.data_type }}"
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          SHOW_PROGRESS="true"
           
           # IMPORTANT: Only run the specific step, not its dependencies
           # Dependencies have already been satisfied by previous jobs and context import
@@ -593,9 +591,8 @@ jobs:
           if [[ "${{ inputs.limit_herds_per_species }}" != "" ]]; then
             ARGS="$ARGS --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
           fi
-          if [[ "${{ inputs.show_progress }}" == "true" ]]; then
-            ARGS="$ARGS --progress"
-          fi
+          # Always show progress
+          ARGS="$ARGS --progress"
           
           # MINIMAL FIX: Add month-year suffix to bronze directory to prevent matrix job overwrites
           export BRONZE_MONTH_SUFFIX="_${{ matrix.month }}"
@@ -713,7 +710,7 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          SHOW_PROGRESS="true"
           
           echo "Processing animal movements in traditional mode (not month-based)"
           
@@ -838,7 +835,7 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          SHOW_PROGRESS="true"
           
           # IMPORTANT: Only run the herd_details step, not its dependencies
           # Dependencies have already been satisfied by the foundation job and context import
@@ -1004,7 +1001,7 @@ jobs:
           
           STEP="${{ matrix.data_type }}"
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          SHOW_PROGRESS="true"
           
           # IMPORTANT: Only run the specific step, not its dependencies
           # Dependencies have already been satisfied by previous jobs and context import
@@ -1169,7 +1166,7 @@ jobs:
           fi
           
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          SHOW_PROGRESS="true"
           
           CMD="python -m main --steps $STEP --log-level $LOG_LEVEL"
           if [[ "$SHOW_PROGRESS" == "true" ]]; then
@@ -1454,7 +1451,7 @@ jobs:
         run: |
           STEP="${{ inputs.step }}"
           LOG_LEVEL="${{ inputs.log_level || 'WARNING' }}"
-          SHOW_PROGRESS="${{ inputs.show_progress || 'true' }}"
+          SHOW_PROGRESS="true"
           
           # Set default 3-year date range for animal_movements step
           if [[ "$STEP" == "animal_movements" && -z "${{ inputs.start_date }}" && -z "${{ inputs.end_date }}" ]]; then
