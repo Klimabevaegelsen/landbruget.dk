@@ -41,8 +41,9 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
             self.area_validator = FieldAreaValidator(
                 conn=self.conn, log=self.log, tolerance_pct=config.area_validation_tolerance_pct
             )
+            tolerance = config.area_validation_tolerance_pct
             self.log.info(
-                f"🔍 Area validation ENABLED by default for {stage_name} (tolerance: {config.area_validation_tolerance_pct}%)"
+                f"🔍 Area validation ENABLED by default for {stage_name} (tolerance: {tolerance}%)"
             )
 
         self.validation_config = config
@@ -85,9 +86,8 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
         # Log export statistics
         count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-        self.log.info(
-            f"✅ Exported {count:,} rows to {output_dataset} (year: {CONFIG.agricultural_fields_year})"
-        )
+        year = CONFIG.agricultural_fields_year
+        self.log.info(f"✅ Exported {count:,} rows to {output_dataset} (year: {year})")
 
     def _get_latest_gold_path(self, dataset: str) -> str:
         """Get path to latest gold data file for a given dataset."""
@@ -103,12 +103,16 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
             if files:
                 self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
-                return sorted(files)[-1]  # Latest by timestamp
+                latest_file = sorted(files)[-1]
+                self.log.info(f"Selected latest file: {latest_file}")
+                return latest_file
 
         if not files:
             raise FileNotFoundError(f"No gold data found for {dataset}")
 
-        return sorted(files)[-1]  # Latest by timestamp
+        latest_file = sorted(files)[-1]
+        self.log.info(f"Selected latest file: {latest_file}")
+        return latest_file
 
     def _load_gold_dataset(self, dataset_name: str, table_name: str, where_clause: str = "1=1"):
         """
@@ -165,11 +169,13 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         if self.stage_name.startswith("Stage 0"):
             return False
 
-        # Stage 2: Filtering stages intentionally reduce dataset size (only fields with intersections)
+        # Stage 2: Filtering stages intentionally reduce dataset size
+        # (only fields with intersections)
         if self.stage_name.startswith("Stage 2"):
             return False
 
-        # All other stages should preserve area (Stage 1: enrichment, Stage 3: analysis, Stage 4: consolidation)
+        # All other stages should preserve area
+        # (Stage 1: enrichment, Stage 3: analysis, Stage 4: consolidation)
         return True
 
     def _validate_stage_areas(self) -> None:
@@ -182,9 +188,11 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         output_table = self._get_main_output_table()
 
         if not input_reference or not output_table:
-            self.log.info(
-                f"⚠️ Area validation skipped for {self.stage_name}: missing reference data or output table"
+            msg = (
+                f"⚠️ Area validation skipped for {self.stage_name}: "
+                f"missing reference data or output table"
             )
+            self.log.info(msg)
             return
 
         # Perform validation
@@ -201,9 +209,11 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
                 if self.validation_config.fail_on_validation_error:
                     raise ValidationError(validation_result)
                 else:
-                    self.log.warning(
-                        f"⚠️ Area validation failed but continuing: {validation_result.validation_message}"
+                    msg = (
+                        f"⚠️ Area validation failed but continuing: "
+                        f"{validation_result.validation_message}"
                     )
+                    self.log.warning(msg)
 
         except ValidationError:
             raise  # Re-raise validation exceptions

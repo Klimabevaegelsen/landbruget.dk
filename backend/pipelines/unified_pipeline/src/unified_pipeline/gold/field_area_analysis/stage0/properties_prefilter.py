@@ -64,7 +64,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE properties_filtered AS
             SELECT
-                bestemtFastEjendomBFENr,
+                bfe_number,
                 geometry,
                 ST_Area_Spheroid(geometry) as property_area_m2
             FROM properties_full
@@ -87,11 +87,11 @@ class PropertiesPreFilter(PreFilteringStageBase):
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE properties_chunk AS
                 SELECT
-                    bestemtFastEjendomBFENr,
+                    bfe_number,
                     geometry,
                     ST_Area_Spheroid(geometry) as property_area_m2
                 FROM properties_full
-                ORDER BY bestemtFastEjendomBFENr
+                ORDER BY bfe_number
                 LIMIT {chunk_size} OFFSET {offset}
             """)
 
@@ -104,7 +104,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
             self.conn.execute("""
                 CREATE OR REPLACE TABLE chunk_filtered AS
                 SELECT DISTINCT
-                    p.bestemtFastEjendomBFENr,
+                    p.bfe_number,
                     p.geometry,
                     p.property_area_m2
                 FROM fields_for_filtering f
