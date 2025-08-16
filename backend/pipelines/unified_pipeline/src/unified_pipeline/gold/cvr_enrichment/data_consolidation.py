@@ -41,7 +41,7 @@ class DataConsolidationConfig(BaseJobConfig):
     )
 
     include_raw_json: bool = Field(
-        default=True, description="Whether to include raw JSON data in consolidated tables"
+        default=False, description="Whether to include raw JSON data in consolidated tables"
     )
 
     model_config = {"frozen": True}
@@ -969,6 +969,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 )
             """)
 
+
+
     def _create_main_companies_table(self, companies: Dict[str, Any]) -> str:
         """Create the main companies table."""
         table_name = "cvr_enriched_companies"
@@ -1223,7 +1225,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                    json_data as consolidated_data_json
+                    -- json_data as consolidated_data_json  -- Removed to prevent memory bloat
                 FROM unnest($1) as t(json_data)
             """,
                 [json_strings],
@@ -2231,3 +2233,5 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     # Non-memory error, don't retry
                     self.log.error(f"❌ Non-memory error processing remaining companies: {e}")
                     break
+
+
