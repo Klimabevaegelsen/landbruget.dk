@@ -63,6 +63,7 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInter
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
+from unified_pipeline.gold.pesticide_unit_sanitization import PesticideUnitSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,11 @@ class PesticideComplianceGoldConfig(BaseJobConfig):
     enable_dosage_compliance: bool = Field(
         default=True, description="Enable dosage compliance checking against API limits"
     )
+    
+    # Enable unit sanitization
+    enable_unit_sanitization: bool = Field(
+        default=True, description="Enable statistical unit sanitization to fix unit mismatches"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -283,6 +289,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             await self._load_bmd_data()
             await self._load_pesticide_data()
             await self._load_agricultural_fields_data()
+            
+            # Apply unit sanitization before compliance analysis
+            if self.config.enable_unit_sanitization:
+                await self._sanitize_pesticide_units()
+            
+            # Create registration mismatch detection table
+            await self._create_registration_mismatch_table()
+            
             await self._load_dosage_limits()
 
             # Determine years to analyze
@@ -300,6 +314,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 total_issues += (
                     year_results.get("timing_violations", 0)
                     + year_results.get("withdrawn_product_uses", 0)
+                    + year_results.get("potential_registration_errors", 0)
                     + year_results.get("dosage_violations", 0)
                 )
                 total_companies.update(
@@ -539,6 +554,162 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(
             f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes from FVM marker data"
         )
+    
+    async def _sanitize_pesticide_units(self) -> None:
+        """Apply statistical unit sanitization to fix unit mismatches."""
+        self.logger.info("🧹 Applying statistical unit sanitization to pesticide data")
+        
+        try:
+            # Initialize sanitizer
+            sanitizer = PesticideUnitSanitizer(self.conn)
+            
+            # Apply sanitization
+            sanitized_table, summary = sanitizer.sanitize_pesticide_units(
+                pesticide_table="pesticide_applications",
+                bmd_table="bmd_data"
+            )
+            
+            # Replace original table with sanitized version
+            self.conn.execute(f"""
+                DROP TABLE IF EXISTS pesticide_applications_original;
+                ALTER TABLE pesticide_applications RENAME TO pesticide_applications_original;
+                ALTER TABLE {sanitized_table} RENAME TO pesticide_applications;
+            """)
+            
+            # Log sanitization results
+            self.logger.info("✅ Unit sanitization completed successfully")
+            self.logger.info(f"   📊 Total records: {summary['total_records']:,}")
+            self.logger.info(f"   ⚠️ Unit mismatches detected: {summary['mismatches_detected']:,}")
+            self.logger.info(f"   🔧 Auto-corrected: {summary['auto_corrected']:,} ({summary['correction_rate']:.1f}%)")
+            self.logger.info(f"   🏷️ Manual review required: {summary['manual_review_required']:,} ({summary['manual_review_rate']:.1f}%)")
+            self.logger.info(f"   🧪 Products corrected: {summary['products_corrected']:,}")
+            self.logger.info(f"   ⚠️ Products needing review: {summary['products_needing_review']:,}")
+            
+            # Store sanitization summary for reporting
+            self.sanitization_summary = summary
+            
+        except Exception as e:
+            self.logger.error(f"❌ Unit sanitization failed: {e}")
+            self.logger.warning("⚠️ Continuing with unsanitized data")
+            # Continue without sanitization rather than failing the entire pipeline
+
+    async def _create_registration_mismatch_table(self) -> None:
+        """Create table to detect registration number mismatches for identical products."""
+        self.logger.info("🔍 Creating registration mismatch detection table")
+        
+        try:
+            # Create a table that identifies potential registration mismatches
+            # where farmers used expired registrations but valid alternatives exist
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE registration_mismatch_detection AS
+                WITH expired_products AS (
+                    SELECT 
+                        LOWER(TRIM(produktnavn)) as normalized_name,
+                        LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))) as normalized_ingredients,
+                        COALESCE(TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE), 0.0) as concentration,
+                        COALESCE(enhed_er, '') as concentration_unit,
+                        registrerings_nr as expired_registration,
+                        produktstatus as expired_status,
+                        udløbsdato as expired_expiry,
+                        frist_for_anvendelse_og_besiddelse as expired_restriction
+                    FROM bmd_data
+                    WHERE produktstatus IN ('Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt')
+                    AND produktnavn IS NOT NULL 
+                    AND produktnavn != ''
+                    AND registrerings_nr IS NOT NULL
+                    AND registrerings_nr != ''
+                ),
+                valid_products AS (
+                    SELECT 
+                        LOWER(TRIM(produktnavn)) as normalized_name,
+                        LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))) as normalized_ingredients,
+                        COALESCE(TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE), 0.0) as concentration,
+                        COALESCE(enhed_er, '') as concentration_unit,
+                        registrerings_nr as valid_registration,
+                        produktstatus as valid_status,
+                        udløbsdato as valid_expiry,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY 
+                                LOWER(TRIM(produktnavn)),
+                                LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))),
+                                COALESCE(TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE), 0.0),
+                                COALESCE(enhed_er, '')
+                            ORDER BY 
+                                CASE WHEN produktstatus = 'Produkt godkendt' THEN 1 ELSE 2 END,
+                                registrerings_nr
+                        ) as rank
+                    FROM bmd_data
+                    WHERE produktstatus NOT IN ('Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt')
+                    AND produktnavn IS NOT NULL 
+                    AND produktnavn != ''
+                    AND registrerings_nr IS NOT NULL
+                    AND registrerings_nr != ''
+                )
+                SELECT 
+                    e.normalized_name,
+                    e.normalized_ingredients,
+                    e.concentration,
+                    e.concentration_unit,
+                    e.expired_registration,
+                    e.expired_status,
+                    e.expired_expiry,
+                    e.expired_restriction,
+                    v.valid_registration as suggested_valid_registration,
+                    v.valid_status,
+                    v.valid_expiry
+                FROM expired_products e
+                INNER JOIN valid_products v ON (
+                    e.normalized_name = v.normalized_name
+                    AND e.normalized_ingredients = v.normalized_ingredients
+                    AND e.concentration = v.concentration
+                    AND e.concentration_unit = v.concentration_unit
+                    AND v.rank = 1  -- Get the best valid alternative
+                )
+            """)
+            
+            # Get statistics
+            mismatch_count = self.conn.execute("SELECT COUNT(*) FROM registration_mismatch_detection").fetchone()[0]
+            product_groups = self.conn.execute("SELECT COUNT(DISTINCT normalized_name) FROM registration_mismatch_detection").fetchone()[0]
+            
+            self.logger.info(f"📊 Created registration mismatch detection table:")
+            self.logger.info(f"   - {mismatch_count:,} potential mismatch mappings")
+            self.logger.info(f"   - {product_groups:,} product groups with alternatives")
+            
+            # Log some examples for verification
+            examples = self.conn.execute("""
+                SELECT 
+                    normalized_name,
+                    expired_registration,
+                    suggested_valid_registration,
+                    concentration,
+                    concentration_unit
+                FROM registration_mismatch_detection 
+                ORDER BY normalized_name
+                LIMIT 5
+            """).fetchall()
+            
+            self.logger.info("📋 Example mismatch mappings:")
+            for name, expired, valid, conc, unit in examples:
+                self.logger.info(f"   {name}: {expired} → {valid} ({conc} {unit})")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Failed to create registration mismatch detection table: {e}")
+            # Create empty table to avoid errors downstream
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE registration_mismatch_detection (
+                    normalized_name VARCHAR,
+                    normalized_ingredients VARCHAR,
+                    concentration DOUBLE,
+                    concentration_unit VARCHAR,
+                    expired_registration VARCHAR,
+                    expired_status VARCHAR,
+                    expired_expiry DATE,
+                    expired_restriction DATE,
+                    suggested_valid_registration VARCHAR,
+                    valid_status VARCHAR,
+                    valid_expiry DATE
+                )
+            """)
 
     async def _load_dosage_limits(self) -> None:
         """Load dosage limits from API for compliance checking."""
@@ -757,45 +928,54 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             -- BMD regulatory information
             b.restriction_date_parsed,
             b.product_status,
+            -- Registration mismatch detection
+            rm.suggested_valid_registration,
+            rm.valid_status as suggested_registration_status,
+            rm.valid_expiry as suggested_registration_expiry,
+            CASE 
+                WHEN rm.expired_registration IS NOT NULL THEN TRUE
+                ELSE FALSE
+            END as is_potential_registration_error,
             -- Dosage compliance information
             COALESCE(d.max_dosage_app, NULL) as api_max_dosage_per_ha,
             COALESCE(d.product_unit, NULL) as api_dosage_unit,
             -- Calculate dosage per hectare for comparison
             CASE
-                WHEN a.allocated_area_ha > 0 THEN a.dosage_quantity / a.allocated_area_ha
+                WHEN a.area_ha > 0 THEN a.dosage_quantity / a.area_ha
                 ELSE NULL
             END as actual_dosage_per_ha,
-            -- Dosage compliance status
+            -- Dosage compliance status (using corrected units if available)
             CASE
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
-                WHEN a.dosage_unit != d.product_unit THEN 'UNIT_MISMATCH'
-                WHEN a.allocated_area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
+                WHEN COALESCE(a.corrected_dosage_unit, a.dosage_unit) != d.product_unit THEN 'UNIT_MISMATCH'
+                WHEN a.area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
                 WHEN (
-                    a.dosage_quantity / a.allocated_area_ha
+                    a.dosage_quantity / a.area_ha
                 ) <= d.max_dosage_app THEN 'DOSAGE_COMPLIANT'
                 WHEN (
-                    a.dosage_quantity / a.allocated_area_ha
+                    a.dosage_quantity / a.area_ha
                 ) <= d.max_dosage_app * 2.0 THEN 'MODERATE_OVERDOSE'
                 ELSE 'MAJOR_OVERDOSE'
             END as dosage_compliance_status,
-            -- Dosage ratio (actual / allowed)
+            -- Dosage ratio (actual / allowed) using corrected units
             CASE
                 WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0
-                     AND a.allocated_area_ha > 0
-                     AND a.dosage_unit = d.product_unit THEN
-                    (a.dosage_quantity / a.allocated_area_ha) / d.max_dosage_app
+                     AND a.area_ha > 0
+                     AND COALESCE(a.corrected_dosage_unit, a.dosage_unit) = d.product_unit THEN
+                    (a.dosage_quantity / a.area_ha) / d.max_dosage_app
                 ELSE NULL
             END as dosage_ratio,
-            -- Categorize compliance status
+            -- Categorize compliance status (enhanced with registration mismatch detection)
             CASE
                 WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'TIMING_VIOLATION'
-                WHEN b.product_status = 'Tilbagekaldt'
-                     OR b.product_status = 'Udløbet' THEN 'WITHDRAWN_PRODUCT_USE'
-                WHEN d.max_dosage_app IS NOT NULL AND a.allocated_area_ha > 0
+                WHEN (b.product_status IN ('Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'))
+                     AND rm.expired_registration IS NOT NULL THEN 'POTENTIAL_REGISTRATION_ERROR'
+                WHEN b.product_status IN ('Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt') THEN 'WITHDRAWN_PRODUCT_USE'
+                WHEN d.max_dosage_app IS NOT NULL AND a.area_ha > 0
                      AND a.dosage_quantity IS NOT NULL
-                     AND a.dosage_unit = d.product_unit
+                     AND COALESCE(a.corrected_dosage_unit, a.dosage_unit) = d.product_unit
                      AND (
-                         a.dosage_quantity / a.allocated_area_ha
+                         a.dosage_quantity / a.area_ha
                      ) > d.max_dosage_app THEN 'DOSAGE_VIOLATION'
                 ELSE 'COMPLIANT'
             END as compliance_status,
@@ -808,6 +988,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         LEFT JOIN dosage_limits d ON (
             f.crop_code = d.crop_code
             AND a.pesticide_registration_number = d.registration_number
+        )
+        LEFT JOIN registration_mismatch_detection rm ON (
+            a.pesticide_registration_number = rm.expired_registration
         )
         WHERE a.agricultural_year = '{ag_year}'
         """
@@ -827,6 +1010,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         )
         withdrawn_uses = len(
             compliance_df[compliance_df["compliance_status"] == "WITHDRAWN_PRODUCT_USE"]
+        )
+        potential_registration_errors = len(
+            compliance_df[compliance_df["compliance_status"] == "POTENTIAL_REGISTRATION_ERROR"]
         )
         dosage_violations = len(
             compliance_df[compliance_df["compliance_status"] == "DOSAGE_VIOLATION"]
@@ -868,6 +1054,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "agricultural_year": ag_year,
             "timing_violations": timing_violations,
             "withdrawn_product_uses": withdrawn_uses,
+            "potential_registration_errors": potential_registration_errors,
             "dosage_violations": dosage_violations,
             "compliant_applications": compliant_applications,
             "total_applications": total_applications,
@@ -893,6 +1080,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(
             f"📊 {ag_year}: {total_violations} total violations "
             f"({timing_violations} timing, {withdrawn_uses} withdrawn, {dosage_violations} dosage)"
+        )
+        self.logger.info(
+            f"🔍 {potential_registration_errors} potential registration errors detected "
+            f"(may be input mistakes rather than real violations)"
         )
         self.logger.info(
             f"✅ Compliance rate: {compliance_rate:.1f}% "
@@ -944,7 +1135,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         "fields_affected": set(),
                     }
                 all_companies[cvr]["total_issues"] += 1
-                all_companies[cvr]["total_area_ha"] += issue["allocated_area_ha"]
+                all_companies[cvr]["total_area_ha"] += issue["area_ha"]
                 all_companies[cvr]["products_used"].add(issue["pesticide_registration_number"])
                 all_companies[cvr]["fields_affected"].add(issue["field_uuid"])
 
@@ -1050,6 +1241,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 self.logger.info(
                     f"📈 Dosage ratio column present: {'dosage_ratio' in column_names}"
                 )
+                self.logger.info(
+                    f"🔍 Registration error flag present: {'is_potential_registration_error' in column_names}"
+                )
+                self.logger.info(
+                    f"💡 Suggested valid registration present: {'suggested_valid_registration' in column_names}"
+                )
 
                 if record_count > 0:
                     # 🚀 ENHANCED: Save using native HMAC acceleration for faster uploads
@@ -1131,9 +1328,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
 ## Violation Types
 
-- **CLEAR_VIOLATION**: Pesticide used after official restriction date
-- **USE_IN_RESTRICTION_YEAR**: Pesticide used during the year of restriction
-- **USE_OF_WITHDRAWN_PRODUCT**: Use of products with withdrawn/expired approval
+- **TIMING_VIOLATION**: Pesticide used after official restriction date
+- **DOSAGE_VIOLATION**: Pesticide used in excessive dosage compared to approved limits
+- **WITHDRAWN_PRODUCT_USE**: Use of products with withdrawn/expired approval (confirmed violations)
+- **POTENTIAL_REGISTRATION_ERROR**: Use of expired registration number where valid alternative exists (likely input errors)
 
 ## Data Quality
 
