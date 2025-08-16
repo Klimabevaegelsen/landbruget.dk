@@ -731,6 +731,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 CREATE TABLE {table_name} AS
                 SELECT
                     '{str(uuid.uuid4())}' as address_uuid,
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     CASE 
                         WHEN json_extract(json_data, '$.p_number') IS NOT NULL 
@@ -760,6 +762,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             self.conn.execute(f"""
                 CREATE TABLE {table_name} (
                     address_uuid VARCHAR,
+                    cvr_number INTEGER,
+                    p_number INTEGER,
                     company_uuid VARCHAR,
                     pnumber_uuid VARCHAR,
                     address_type VARCHAR,
@@ -802,8 +806,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         company_table = "cvr_companies_with_geocoding"
         
         # Get the company data path - find most recent company data
-        from unified_pipeline.util.gcs_access import GCSDataAccess
         from unified_pipeline.gold.cvr_enrichment.shared.config import _find_latest_file_with_pattern
+        from unified_pipeline.util.gcs_access import GCSDataAccess
         
         gcs_access = GCSDataAccess()
         company_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/*/data.parquet"
@@ -819,51 +823,58 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Create table from GCS company data
             self.gcs_access.create_table_from_gcs("existing_companies", company_input_path)
             
-            # Create geocoding lookup from processed addresses
-            addresses_data = processed_data["geocoded_addresses"]
-            if addresses_data:
-                # Get primary addresses for companies (first geocoded address per company)
-                json_strings = [json.dumps(addr) for addr in addresses_data]
-                
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE company_geocoding AS
-                    SELECT 
-                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                        json_extract(json_data, '$.latitude')::DOUBLE as latitude,
-                        json_extract(json_data, '$.longitude')::DOUBLE as longitude,
-                        json_extract(json_data, '$.coordinate_quality')::VARCHAR as coordinate_quality,
-                        json_extract(json_data, '$.dawa_enriched')::BOOLEAN as dawa_enriched,
-                        ROW_NUMBER() OVER (PARTITION BY json_extract(json_data, '$.cvr_number')::INTEGER ORDER BY json_extract(json_data, '$.geocoding_timestamp')::VARCHAR DESC) as rn
-                    FROM unnest($1) as t(json_data)
-                    WHERE json_extract(json_data, '$.source_type')::VARCHAR = 'company'
-                      AND json_extract(json_data, '$.latitude') IS NOT NULL
-                """, [json_strings])
-                
-                # Update companies with geocoding data
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {company_table} AS
-                    SELECT 
-                        c.*,
-                        g.latitude,
-                        g.longitude,
-                        g.coordinate_quality,
-                        g.dawa_enriched
-                    FROM existing_companies c
-                    LEFT JOIN (
-                        SELECT * FROM company_geocoding WHERE rn = 1
-                    ) g ON c.cvr_number = g.cvr_number
-                """)
-                
-                # Save updated company table back to GCS
-                self._save_data(
-                    data=company_table,
-                    dataset="cvr_enrichment_companies",
-                    bucket=self.config.bucket,
-                    stage="gold",
-                    filename="data.parquet",
-                )
-                
-                self.log.info("Updated company table with geocoding data")
+            # Create geocoding lookup from address table
+            # Get primary addresses for companies (first geocoded address per company)
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE company_geocoding AS
+                SELECT 
+                    cvr_number,
+                    latitude,
+                    longitude,
+                    coordinate_quality,
+                    dawa_enriched,
+                    ROW_NUMBER() OVER (PARTITION BY cvr_number ORDER BY geocoding_timestamp DESC) as rn
+                FROM cvr_addresses
+                WHERE cvr_number IS NOT NULL
+                  AND p_number IS NULL
+                  AND latitude IS NOT NULL
+                  AND longitude IS NOT NULL
+            """)
+            
+            # Update companies with geocoding data
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {company_table} AS
+                SELECT 
+                    c.cvr_number,
+                    c.company_name,
+                    c.company_type_description,
+                    c.status,
+                    c.founded_date,
+                    c.dissolution_date,
+                    c.advertisement_protection,
+                    c.pnumber_count,
+                    c.company_data_json,
+                    c.processing_timestamp,
+                    COALESCE(g.latitude, c.latitude) as latitude,
+                    COALESCE(g.longitude, c.longitude) as longitude,
+                    COALESCE(g.coordinate_quality, c.coordinate_quality) as coordinate_quality,
+                    COALESCE(g.dawa_enriched, c.dawa_enriched) as dawa_enriched
+                FROM existing_companies c
+                LEFT JOIN (
+                    SELECT * FROM company_geocoding WHERE rn = 1
+                ) g ON c.cvr_number = g.cvr_number
+            """)
+            
+            # Save updated company table back to GCS
+            self._save_data(
+                data=company_table,
+                dataset="cvr_enrichment_companies",
+                bucket=self.config.bucket,
+                stage="gold",
+                filename="data.parquet",
+            )
+            
+            self.log.info("Updated company table with geocoding data")
             
         except Exception as e:
             self.log.error(f"Failed to update company table with geocoding: {e}")
@@ -878,8 +889,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         pnumber_table = "cvr_pnumbers_with_geocoding"
         
         # Get the pnumber data path - find most recent pnumber data
-        from unified_pipeline.util.gcs_access import GCSDataAccess
         from unified_pipeline.gold.cvr_enrichment.shared.config import _find_latest_file_with_pattern
+        from unified_pipeline.util.gcs_access import GCSDataAccess
         
         gcs_access = GCSDataAccess()
         pnumber_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
@@ -895,51 +906,53 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Create table from GCS pnumber data
             self.gcs_access.create_table_from_gcs("existing_pnumbers", pnumber_input_path)
             
-            # Create geocoding lookup from processed addresses
-            addresses_data = processed_data["geocoded_addresses"]
-            if addresses_data:
-                # Get primary addresses for pnumbers (first geocoded address per pnumber)
-                json_strings = [json.dumps(addr) for addr in addresses_data]
-                
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE pnumber_geocoding AS
-                    SELECT 
-                        json_extract(json_data, '$.p_number')::INTEGER as p_number,
-                        json_extract(json_data, '$.latitude')::DOUBLE as latitude,
-                        json_extract(json_data, '$.longitude')::DOUBLE as longitude,
-                        json_extract(json_data, '$.coordinate_quality')::VARCHAR as coordinate_quality,
-                        json_extract(json_data, '$.dawa_enriched')::BOOLEAN as dawa_enriched,
-                        ROW_NUMBER() OVER (PARTITION BY json_extract(json_data, '$.p_number')::INTEGER ORDER BY json_extract(json_data, '$.geocoding_timestamp')::VARCHAR DESC) as rn
-                    FROM unnest($1) as t(json_data)
-                    WHERE json_extract(json_data, '$.source_type')::VARCHAR = 'pnumber'
-                      AND json_extract(json_data, '$.latitude') IS NOT NULL
-                """, [json_strings])
-                
-                # Update pnumbers with geocoding data
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {pnumber_table} AS
-                    SELECT 
-                        p.*,
-                        g.latitude,
-                        g.longitude,
-                        g.coordinate_quality,
-                        g.dawa_enriched
-                    FROM existing_pnumbers p
-                    LEFT JOIN (
-                        SELECT * FROM pnumber_geocoding WHERE rn = 1
-                    ) g ON p.p_number = g.p_number
-                """)
-                
-                # Save updated pnumber table back to GCS
-                self._save_data(
-                    data=pnumber_table,
-                    dataset="cvr_enrichment_pnumbers",
-                    bucket=self.config.bucket,
-                    stage="gold",
-                    filename="data.parquet",
-                )
-                
-                self.log.info("Updated pnumber table with geocoding data")
+            # Create geocoding lookup from address table
+            # Get primary addresses for pnumbers (first geocoded address per pnumber)
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE pnumber_geocoding AS
+                SELECT 
+                    p_number,
+                    latitude,
+                    longitude,
+                    coordinate_quality,
+                    dawa_enriched,
+                    ROW_NUMBER() OVER (PARTITION BY p_number ORDER BY geocoding_timestamp DESC) as rn
+                FROM cvr_addresses
+                WHERE p_number IS NOT NULL
+                  AND latitude IS NOT NULL
+                  AND longitude IS NOT NULL
+            """)
+            
+            # Update pnumbers with geocoding data
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {pnumber_table} AS
+                SELECT 
+                    p.p_number,
+                    p.unit_name,
+                    p.parent_cvr_number,
+                    p.address_count,
+                    p.pnumber_data_json,
+                    p.processing_timestamp,
+                    COALESCE(g.latitude, p.latitude) as latitude,
+                    COALESCE(g.longitude, p.longitude) as longitude,
+                    COALESCE(g.coordinate_quality, p.coordinate_quality) as coordinate_quality,
+                    COALESCE(g.dawa_enriched, p.dawa_enriched) as dawa_enriched
+                FROM existing_pnumbers p
+                LEFT JOIN (
+                    SELECT * FROM pnumber_geocoding WHERE rn = 1
+                ) g ON p.p_number = g.p_number
+            """)
+            
+            # Save updated pnumber table back to GCS
+            self._save_data(
+                data=pnumber_table,
+                dataset="cvr_enrichment_pnumbers",
+                bucket=self.config.bucket,
+                stage="gold",
+                filename="data.parquet",
+            )
+            
+            self.log.info("Updated pnumber table with geocoding data")
             
         except Exception as e:
             self.log.error(f"Failed to update pnumber table with geocoding: {e}")
