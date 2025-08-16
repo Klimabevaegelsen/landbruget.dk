@@ -303,12 +303,14 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             # Check if we have the required data
             if cadastral_path is None:
-                self.log.error("No cadastral data available - cannot proceed with merge")
-                return
+                error_msg = "No cadastral data available - cannot proceed with merge"
+                self.log.error(error_msg)
+                raise ValueError(error_msg)
 
             if property_path is None:
-                self.log.error("No property owners data available - cannot proceed with merge")
-                return
+                error_msg = "No property owners data available - cannot proceed with merge"
+                self.log.error(error_msg)
+                raise ValueError(error_msg)
 
             self.log.info(f"Using property data: {property_path}")
             self.log.info(f"Using cadastral data: {cadastral_path}")
