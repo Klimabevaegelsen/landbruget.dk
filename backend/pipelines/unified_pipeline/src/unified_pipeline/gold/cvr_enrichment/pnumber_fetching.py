@@ -529,7 +529,12 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     idx as employment_idx,
                     'annual' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, (json_array_length(json_extract(json_data, '$.employment_data.annual_employment')) - 1)::BIGINT) as t(idx)
+                CROSS JOIN generate_series(0::BIGINT, 
+                    CASE 
+                        WHEN json_array_length(json_extract(json_data, '$.employment_data.annual_employment')) > 0 
+                        THEN (json_array_length(json_extract(json_data, '$.employment_data.annual_employment')) - 1)::BIGINT
+                        ELSE 0::BIGINT
+                    END) as t(idx)
                 WHERE json_extract(json_data, '$.employment_data.annual_employment') IS NOT NULL
                 AND json_array_length(json_extract(json_data, '$.employment_data.annual_employment')) > 0
                 
@@ -543,7 +548,12 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     idx as employment_idx,
                     'quarterly' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, (json_array_length(json_extract(json_data, '$.employment_data.quarterly_employment')) - 1)::BIGINT) as t(idx)
+                CROSS JOIN generate_series(0::BIGINT, 
+                    CASE 
+                        WHEN json_array_length(json_extract(json_data, '$.employment_data.quarterly_employment')) > 0 
+                        THEN (json_array_length(json_extract(json_data, '$.employment_data.quarterly_employment')) - 1)::BIGINT
+                        ELSE 0::BIGINT
+                    END) as t(idx)
                 WHERE json_extract(json_data, '$.employment_data.quarterly_employment') IS NOT NULL
                 AND json_array_length(json_extract(json_data, '$.employment_data.quarterly_employment')) > 0
                 
@@ -557,7 +567,12 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     idx as employment_idx,
                     'monthly' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, (json_array_length(json_extract(json_data, '$.employment_data.monthly_employment')) - 1)::BIGINT) as t(idx)
+                CROSS JOIN generate_series(0::BIGINT, 
+                    CASE 
+                        WHEN json_array_length(json_extract(json_data, '$.employment_data.monthly_employment')) > 0 
+                        THEN (json_array_length(json_extract(json_data, '$.employment_data.monthly_employment')) - 1)::BIGINT
+                        ELSE 0::BIGINT
+                    END) as t(idx)
                 WHERE json_extract(json_data, '$.employment_data.monthly_employment') IS NOT NULL
                 AND json_array_length(json_extract(json_data, '$.employment_data.monthly_employment')) > 0
                 
