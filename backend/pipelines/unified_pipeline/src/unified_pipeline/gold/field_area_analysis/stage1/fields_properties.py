@@ -65,7 +65,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE properties AS
             SELECT
-                bestemtFastEjendomBFENr,
+                bfe_number,
                 geometry,
                 property_area_m2
             FROM properties_full
@@ -165,11 +165,11 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE properties_chunk AS
                 SELECT
-                    bestemtFastEjendomBFENr,
+                    bfe_number,
                     geometry,
                     property_area_m2
                 FROM properties
-                ORDER BY bestemtFastEjendomBFENr
+                ORDER BY bfe_number
                 LIMIT {chunk_size} OFFSET {offset}
             """)
 
@@ -194,7 +194,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                     f.year,
                     f.field_uuid,
                     f.field_area_m2,
-                    p.bestemtFastEjendomBFENr as bfe_number,
+                    p.bfe_number,
                     p.property_area_m2,
                     f.geometry as field_geometry,
                     p.geometry as property_geometry
