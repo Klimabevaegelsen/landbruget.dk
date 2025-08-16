@@ -380,6 +380,12 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 [json_strings],
             )
 
+            # Create normalized persons table from leadership data
+            self._create_persons_table(json_strings)
+            
+            # Create normalized employment table from employment data
+            self._create_employment_table(json_strings)
+
             self.log.info(f"Created table {table_name} with {len(companies_data)} companies")
         else:
             # Create empty table with schema
@@ -423,6 +429,232 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self._save_summary_data(processed_data["summary"])
 
         return table_name
+
+    def _create_persons_table(self, json_strings: List[str]) -> None:
+        """Create normalized persons table from leadership data."""
+        import uuid
+        
+        self.log.info("Creating normalized persons table from leadership data")
+        
+        # Create persons table
+        persons_table = "cvr_persons"
+        self.conn.execute(f"DROP TABLE IF EXISTS {persons_table}")
+        
+        self.conn.execute(f"""
+            CREATE TABLE {persons_table} AS
+            WITH leadership_flattened AS (
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    unnest(json_extract(json_data, '$.leadership')) as leadership_item
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.leadership') IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.leadership')) > 0
+            ),
+            persons_extracted AS (
+                SELECT
+                    cvr_number,
+                    json_extract(leadership_item, '$.person.unit_number')::BIGINT as unit_number,
+                    json_extract(leadership_item, '$.person.person_type')::VARCHAR as person_type,
+                    -- Get current name
+                    (
+                        SELECT json_extract(name_item, '$.name')::VARCHAR
+                        FROM unnest(json_extract(leadership_item, '$.person.names')) as name_item
+                        WHERE json_extract(name_item, '$.is_current')::BOOLEAN = true
+                        LIMIT 1
+                    ) as current_name,
+                    -- Get current address
+                    (
+                        SELECT json_extract(addr_item, '$.city')::VARCHAR
+                        FROM unnest(json_extract(leadership_item, '$.person.addresses')) as addr_item
+                        WHERE json_extract(addr_item, '$.is_current')::BOOLEAN = true
+                        LIMIT 1
+                    ) as current_city,
+                    (
+                        SELECT json_extract(addr_item, '$.postal_code')::INTEGER
+                        FROM unnest(json_extract(leadership_item, '$.person.addresses')) as addr_item
+                        WHERE json_extract(addr_item, '$.is_current')::BOOLEAN = true
+                        LIMIT 1
+                    ) as current_postal_code,
+                    (
+                        SELECT json_extract(addr_item, '$.municipality_name')::VARCHAR
+                        FROM unnest(json_extract(leadership_item, '$.person.addresses')) as addr_item
+                        WHERE json_extract(addr_item, '$.is_current')::BOOLEAN = true
+                        LIMIT 1
+                    ) as current_municipality,
+                    -- Get role from organization
+                    (
+                        SELECT json_extract(attr_item, '$.vaerdier[0].vaerdi')::VARCHAR
+                        FROM unnest(json_extract(leadership_item, '$.organization.member_data[0].attributter')) as attr_item
+                        WHERE json_extract(attr_item, '$.type')::VARCHAR = 'FUNKTION'
+                        LIMIT 1
+                    ) as role,
+                    (
+                        SELECT json_extract(attr_item, '$.vaerdier[0].periode.gyldigFra')::VARCHAR
+                        FROM unnest(json_extract(leadership_item, '$.organization.member_data[0].attributter')) as attr_item
+                        WHERE json_extract(attr_item, '$.type')::VARCHAR = 'FUNKTION'
+                        LIMIT 1
+                    ) as role_start_date,
+                    (
+                        SELECT json_extract(attr_item, '$.vaerdier[0].periode.gyldigTil')::VARCHAR
+                        FROM unnest(json_extract(leadership_item, '$.organization.member_data[0].attributter')) as attr_item
+                        WHERE json_extract(attr_item, '$.type')::VARCHAR = 'FUNKTION'
+                        LIMIT 1
+                    ) as role_end_date,
+                    json_extract(leadership_item, '$.is_current')::BOOLEAN as is_current_role,
+                    NOW()::VARCHAR as processing_timestamp
+                FROM leadership_flattened
+                WHERE json_extract(leadership_item, '$.person.unit_number') IS NOT NULL
+            )
+            SELECT
+                -- Generate person UUID based on unit_number for consistency
+                md5(unit_number::VARCHAR)::VARCHAR as person_uuid,
+                unit_number,
+                person_type,
+                current_name,
+                current_city,
+                current_postal_code,
+                current_municipality,
+                -- Generate company UUID for consistency with other tables
+                md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                cvr_number,
+                role,
+                role_start_date,
+                role_end_date,
+                COALESCE(is_current_role, true) as is_current_role,
+                -- Classify as leadership based on role
+                CASE 
+                    WHEN role IN ('DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM', 'Leder', 'INTERESSENTER') THEN true
+                    WHEN role IN ('Reel ejer', 'REVISION', 'STIFTERE', 'Foreningsrepræsentant', 'LIKVIDATOR') THEN false
+                    ELSE NULL
+                END as is_leadership,
+                -- Classify as owner based on role  
+                CASE
+                    WHEN role IN ('Reel ejer', 'INTERESSENTER') THEN true
+                    WHEN role IN ('DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM', 'REVISION', 'STIFTERE', 'Foreningsrepræsentant', 'LIKVIDATOR', 'Leder') THEN false
+                    ELSE NULL
+                END as is_owner,
+                processing_timestamp
+            FROM persons_extracted
+            WHERE unit_number IS NOT NULL
+        """, [json_strings])
+        
+        # Get count for logging
+        person_count = self.conn.execute(f"SELECT COUNT(*) FROM {persons_table}").fetchone()[0]
+        unique_persons = self.conn.execute(f"SELECT COUNT(DISTINCT unit_number) FROM {persons_table}").fetchone()[0]
+        
+        self.log.info(f"Created persons table with {person_count} person-company relationships")
+        self.log.info(f"Representing {unique_persons} unique persons")
+        
+        # Save persons table to GCS
+        self._save_data(
+            data=persons_table,
+            dataset="cvr_persons",
+            bucket=self.config.bucket,
+            stage="gold",
+        )
+
+    def _create_employment_table(self, json_strings: List[str]) -> None:
+        """Create normalized employment table from employment data."""
+        self.log.info("Creating normalized employment table from employment data")
+        
+        # Create employment table
+        employment_table = "cvr_employment"
+        self.conn.execute(f"DROP TABLE IF EXISTS {employment_table}")
+        
+        self.conn.execute(f"""
+            CREATE TABLE {employment_table} AS
+            WITH employment_flattened AS (
+                -- Annual employment
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    unnest(json_extract(json_data, '$.employment_data.annual_employment')) as employment_item,
+                    'annual' as employment_type
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.employment_data.annual_employment') IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.employment_data.annual_employment')) > 0
+                
+                UNION ALL
+                
+                -- Quarterly employment  
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    unnest(json_extract(json_data, '$.employment_data.quarterly_employment')) as employment_item,
+                    'quarterly' as employment_type
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.employment_data.quarterly_employment') IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.employment_data.quarterly_employment')) > 0
+                
+                UNION ALL
+                
+                -- Monthly employment
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    unnest(json_extract(json_data, '$.employment_data.monthly_employment')) as employment_item,
+                    'monthly' as employment_type
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.employment_data.monthly_employment') IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.employment_data.monthly_employment')) > 0
+                
+                UNION ALL
+                
+                -- Replacement monthly employment
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    unnest(json_extract(json_data, '$.employment_data.replacement_monthly_employment')) as employment_item,
+                    'replacement_monthly' as employment_type
+                FROM unnest($1) as t(json_data)
+                WHERE json_extract(json_data, '$.employment_data.replacement_monthly_employment') IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.employment_data.replacement_monthly_employment')) > 0
+            )
+            SELECT
+                -- Generate employment UUID for each record
+                md5(CONCAT(cvr_number::VARCHAR, '_', employment_type, '_', 
+                          COALESCE(json_extract(employment_item, '$.year')::VARCHAR, ''), '_',
+                          COALESCE(json_extract(employment_item, '$.quarter')::VARCHAR, ''), '_',
+                          COALESCE(json_extract(employment_item, '$.month')::VARCHAR, '')))::VARCHAR as employment_uuid,
+                -- Generate company UUID for consistency with other tables
+                md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                cvr_number,
+                TRY_CAST(json_extract(employment_item, '$.year') AS INTEGER) as year,
+                TRY_CAST(json_extract(employment_item, '$.quarter') AS INTEGER) as quarter,
+                TRY_CAST(json_extract(employment_item, '$.month') AS INTEGER) as month,
+                TRY_CAST(json_extract(employment_item, '$.total_employees') AS INTEGER) as total_employees,
+                TRY_CAST(json_extract(employment_item, '$.full_time_equivalent') AS DOUBLE) as full_time_equivalent,
+                TRY_CAST(json_extract(employment_item, '$.employees_including_owners') AS INTEGER) as employees_including_owners,
+                json_extract(employment_item, '$.fte_interval_code')::VARCHAR as fte_interval_code,
+                json_extract(employment_item, '$.employees_interval_code')::VARCHAR as employees_interval_code,
+                json_extract(employment_item, '$.owners_interval_code')::VARCHAR as owners_interval_code,
+                json_extract(employment_item, '$.last_updated')::VARCHAR as last_updated,
+                employment_type,
+                NOW()::VARCHAR as processing_timestamp
+            FROM employment_flattened
+        """, [json_strings])
+        
+        # Get count for logging
+        employment_count = self.conn.execute(f"SELECT COUNT(*) FROM {employment_table}").fetchone()[0]
+        unique_companies = self.conn.execute(f"SELECT COUNT(DISTINCT cvr_number) FROM {employment_table}").fetchone()[0]
+        
+        # Get counts by type
+        type_counts = self.conn.execute(f"""
+            SELECT employment_type, COUNT(*) as count
+            FROM {employment_table} 
+            GROUP BY employment_type 
+            ORDER BY count DESC
+        """).fetchall()
+        
+        self.log.info(f"Created employment table with {employment_count} employment records")
+        self.log.info(f"Covering {unique_companies} companies with employment data")
+        
+        for emp_type, count in type_counts:
+            self.log.info(f"  {emp_type}: {count} records")
+        
+        # Save employment table to GCS
+        self._save_data(
+            data=employment_table,
+            dataset="cvr_employment",
+            bucket=self.config.bucket,
+            stage="gold",
+        )
 
     def _save_summary_data(self, summary: Dict[str, Any]) -> None:
         """Save processing summary data."""
