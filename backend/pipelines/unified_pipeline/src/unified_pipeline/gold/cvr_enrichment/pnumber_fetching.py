@@ -472,13 +472,28 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             # Create P-number employment tables
             self._create_pnumber_employment_tables(json_strings, table_name)
         else:
-            # Create empty table with schema
+            # Create empty table with schema matching our full SELECT
             self.conn.execute(f"""
                 CREATE TABLE {table_name} (
                     p_number INTEGER,
                     unit_name VARCHAR,
                     parent_cvr_number INTEGER,
                     address_count INTEGER,
+                    current_full_address VARCHAR,
+                    current_street_name VARCHAR,
+                    current_house_number VARCHAR,
+                    current_floor VARCHAR,
+                    current_door VARCHAR,
+                    current_postal_code INTEGER,
+                    current_city VARCHAR,
+                    current_municipality_code INTEGER,
+                    current_municipality_name VARCHAR,
+                    current_address_type VARCHAR,
+                    latitude DOUBLE,
+                    longitude DOUBLE,
+                    coordinate_quality VARCHAR,
+                    coordinate_source VARCHAR,
+                    dawa_enriched BOOLEAN,
                     pnumber_data_json VARCHAR,
                     processing_timestamp VARCHAR
                 )

@@ -405,7 +405,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
             self.log.info(f"Created table {table_name} with {len(companies_data)} companies")
         else:
-            # Create empty table with schema
+            # Create empty table with schema matching our full SELECT
             self.conn.execute(f"""
                 CREATE TABLE {table_name} (
                     cvr_number INTEGER,
@@ -416,6 +416,21 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     dissolution_date VARCHAR,
                     advertisement_protection BOOLEAN,
                     pnumber_count INTEGER,
+                    current_full_address VARCHAR,
+                    current_street_name VARCHAR,
+                    current_house_number VARCHAR,
+                    current_floor VARCHAR,
+                    current_door VARCHAR,
+                    current_postal_code INTEGER,
+                    current_city VARCHAR,
+                    current_municipality_code INTEGER,
+                    current_municipality_name VARCHAR,
+                    current_address_type VARCHAR,
+                    latitude DOUBLE,
+                    longitude DOUBLE,
+                    coordinate_quality VARCHAR,
+                    coordinate_source VARCHAR,
+                    dawa_enriched BOOLEAN,
                     company_data_json VARCHAR,
                     processing_timestamp VARCHAR
                 )
