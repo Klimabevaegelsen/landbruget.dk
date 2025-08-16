@@ -391,38 +391,32 @@ class CVRSilver(BaseSource[CVRSilverConfig], SilverJobInterface):
                         break
 
                     if org_name == "EJERREGISTER":
-                        # Get validity period
-                        valid_from = None
-                        valid_to = None
-                        for period in org.get("medlemsData", []):
-                            periode = period.get("periode", {})
-                            valid_from = periode.get("gyldigFra")
-                            valid_to = periode.get("gyldigTil")
-                            break
-
-                        # Get ownership percentage
-                        ownership_pct = None
-                        for attr in org.get("attributter", []):
-                            if attr.get("type") == "EJERANDEL_PROCENT":
-                                for value_entry in attr.get("vaerdier", []):
-                                    ownership_pct = value_entry.get("vaerdi")
-                                    break
-
-                        # Insert ownership record
-                        self.conn.execute(
-                            """
-                            INSERT INTO cvr_ownership VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """,
-                            [
-                                int(cvr_number),
-                                owner_name,
-                                "UNKNOWN",  # Would need to determine from data
-                                float(ownership_pct) if ownership_pct else None,
-                                valid_from,
-                                valid_to,
-                                datetime.now().isoformat(),
-                            ],
-                        )
+                        # Get all ownership percentages with their periods from medlemsData
+                        for member in org.get("medlemsData", []):
+                            for attr in member.get("attributter", []):
+                                if attr.get("type") == "EJERANDEL_PROCENT":
+                                    for value_entry in attr.get("vaerdier", []):
+                                        periode = value_entry.get("periode", {})
+                                        ownership_pct = value_entry.get("vaerdi")
+                                        
+                                        # Convert decimal to percentage (1.0 = 100%)
+                                        ownership_percentage = float(ownership_pct) * 100 if ownership_pct else None
+                                        
+                                        # Insert ownership record for each time period
+                                        self.conn.execute(
+                                            """
+                                            INSERT INTO cvr_ownership VALUES (?, ?, ?, ?, ?, ?, ?)
+                                        """,
+                                            [
+                                                int(cvr_number),
+                                                owner_name,
+                                                deltager.get("enhedstype", "UNKNOWN"),
+                                                ownership_percentage,
+                                                periode.get("gyldigFra"),
+                                                periode.get("gyldigTil"),
+                                                datetime.now().isoformat(),
+                                            ],
+                                        )
 
         except Exception as e:
             self.log.error(f"Failed to process ownership data for CVR {cvr_number}: {e}")
