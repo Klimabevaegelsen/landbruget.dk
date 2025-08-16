@@ -1475,6 +1475,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         # Enrich subsidy fields with field UUIDs from matching FVM marker fields
         await self._enrich_subsidies_with_field_uuid()
 
+        # Extract and save CVR numbers from processed marker data
+        await self._extract_and_save_cvr_numbers()
+
         self.log.info("FVM WFS enrichment-only job completed")
 
         return {
@@ -1749,14 +1752,20 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         
                         if cvr_numbers:
                             all_cvr_numbers.extend(cvr_numbers)
-                            self.log.info(f"   • {layer_type} {year}: {len(cvr_numbers)} CVR numbers")
+                            self.log.info(
+                                f"   • {layer_type} {year}: {len(cvr_numbers)} CVR numbers"
+                            )
                         else:
                             self.log.info(f"   • {layer_type} {year}: No CVR numbers found")
                     else:
-                        self.log.debug(f"   • {layer_type} {year}: Table {table_name} not found, skipping")
+                        self.log.debug(
+                            f"   • {layer_type} {year}: Table {table_name} not found, skipping"
+                        )
                         
                 except Exception as e:
-                    self.log.warning(f"   • {layer_type} {year}: Error extracting CVR numbers - {e}")
+                    self.log.warning(
+                        f"   • {layer_type} {year}: Error extracting CVR numbers - {e}"
+                    )
             
             # Remove duplicates and sort
             unique_cvr_numbers = sorted(list(set(all_cvr_numbers)))
@@ -1774,7 +1783,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     timestamp=timestamp,
                 )
                 
-                self.log.info(f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers from FVM marker data to: {cvr_gcs_path}")
+                self.log.info(
+                    f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers "
+                    f"from FVM marker data to: {cvr_gcs_path}"
+                )
             else:
                 self.log.warning("⚠️ No CVR numbers found in FVM marker data")
                 
