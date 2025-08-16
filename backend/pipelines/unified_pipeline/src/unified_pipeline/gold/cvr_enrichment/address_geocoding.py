@@ -730,7 +730,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 f"""
                 CREATE TABLE {table_name} AS
                 SELECT
-                    '{str(uuid.uuid4())}' as address_uuid,
+                    uuid() as address_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
