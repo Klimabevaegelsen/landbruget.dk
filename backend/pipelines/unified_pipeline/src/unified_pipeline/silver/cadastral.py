@@ -41,42 +41,171 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         temp_conn.close()
         return timestamp
 
-    def _validate_and_transform(self, data: Any) -> Any:
+    def _validate_and_transform(self, data: Any) -> str:
         """
-        Validate and transform the data.
+        Validate and transform cadastral JSON features into a DuckDB table.
 
-        This method validates the data and transforms it into a valid format.
-        For now, it passes through the data for processing by DuckDB.
+        This method takes the raw JSON features from bronze layer and transforms them
+        into a structured DuckDB table with proper data types and geometry handling.
 
         Args:
-            data: The data to validate and transform.
+            data: List of cadastral feature dictionaries from bronze layer
 
         Returns:
-            Any: The validated and transformed data.
+            str: Name of the DuckDB table containing the transformed data
         """
-        # For now, pass through the data - silver layer will use ibis/duckdb for processing
-        logger.info(f"{self.config.dataset}: Processing data with DuckDB")
-        return data
+        if not isinstance(data, list):
+            raise ValueError(f"Expected list of features, got {type(data)}")
+            
+        if not data:
+            raise ValueError("No features provided for transformation")
+            
+        self.log.info(f"Transforming {len(data)} cadastral features to DuckDB table")
+        
+        # Create the cadastral features table
+        table_name = "cadastral_features"
+        
+        # Drop table if it exists
+        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        
+        # Create table with proper schema
+        self.conn.execute(f"""
+            CREATE TABLE {table_name} (
+                bfe_number BIGINT,
+                business_event VARCHAR,
+                business_process VARCHAR,
+                latest_case_id VARCHAR,
+                id_local VARCHAR,
+                id_namespace VARCHAR,
+                registration_from TIMESTAMP,
+                effect_from TIMESTAMP,
+                authority VARCHAR,
+                is_worker_housing BOOLEAN,
+                is_common_lot BOOLEAN,
+                has_owner_apartments BOOLEAN,
+                is_separated_road BOOLEAN,
+                agricultural_notation VARCHAR,
+                geometry GEOMETRY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Insert features one by one with proper handling
+        valid_features = 0
+        for feature in data:
+            try:
+                # Extract values with defaults
+                bfe_number = feature.get('bfe_number')
+                if not bfe_number:
+                    continue  # Skip features without BFE number
+                    
+                # Convert geometry from WKT to DuckDB geometry
+                geometry_wkt = feature.get('geometry')
+                if not geometry_wkt:
+                    continue  # Skip features without geometry
+                
+                # Insert the feature
+                self.conn.execute(f"""
+                    INSERT INTO {table_name} (
+                        bfe_number, business_event, business_process, latest_case_id,
+                        id_local, id_namespace, registration_from, effect_from,
+                        authority, is_worker_housing, is_common_lot, has_owner_apartments,
+                        is_separated_road, agricultural_notation, geometry
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_GeomFromText(?))
+                """, [
+                    bfe_number,
+                    feature.get('business_event'),
+                    feature.get('business_process'), 
+                    feature.get('latest_case_id'),
+                    feature.get('id_local'),
+                    feature.get('id_namespace'),
+                    feature.get('registration_from'),
+                    feature.get('effect_from'),
+                    feature.get('authority'),
+                    feature.get('is_worker_housing', False),
+                    feature.get('is_common_lot', False),
+                    feature.get('has_owner_apartments', False),
+                    feature.get('is_separated_road', False),
+                    feature.get('agricultural_notation'),
+                    geometry_wkt
+                ])
+                valid_features += 1
+                
+            except Exception as e:
+                bfe_id = feature.get('bfe_number', 'unknown')
+                self.log.warning(f"Failed to insert feature {bfe_id}: {e}")
+                continue
+        
+        self.log.info(f"Successfully transformed {valid_features} out of {len(data)} features")
+        
+        if valid_features == 0:
+            raise ValueError("No valid features could be transformed")
+            
+        return table_name
 
-    def _create_dissolved_data(self, data: Any) -> Any:
+    def _create_dissolved_data(self, table_name: str) -> str:
         """
-        Create a dissolved version of the data by merging geometries.
+        Create a dissolved version of the cadastral data by merging geometries.
+
+        This creates a simplified version where adjacent cadastral parcels with
+        the same attributes are merged together for analysis purposes.
 
         Args:
-            data: The input data
+            table_name: Name of the source DuckDB table
 
         Returns:
-            Any: Processed data with dissolved geometries
+            str: Name of the DuckDB table containing dissolved data
         """
         try:
-            # For now, return the original data - silver layer will handle dissolving with DuckDB
-            logger.info("Processing data for dissolving")
-            return data
+            dissolved_table_name = "cadastral_dissolved"
+            
+            # Drop table if it exists
+            self.conn.execute(f"DROP TABLE IF EXISTS {dissolved_table_name}")
+            
+            self.log.info("Creating dissolved cadastral data")
+            
+            # Create dissolved data by grouping by key attributes and merging geometries
+            self.conn.execute(f"""
+                CREATE TABLE {dissolved_table_name} AS
+                SELECT 
+                    business_event,
+                    business_process,
+                    authority,
+                    is_worker_housing,
+                    is_common_lot,
+                    has_owner_apartments,
+                    agricultural_notation,
+                    COUNT(*) as parcel_count,
+                    MIN(bfe_number) as min_bfe_number,
+                    MAX(bfe_number) as max_bfe_number,
+                    ST_Union_Agg(geometry) as geometry,
+                    MIN(created_at) as created_at
+                FROM {table_name}
+                WHERE geometry IS NOT NULL
+                GROUP BY 
+                    business_event, business_process, authority,
+                    is_worker_housing, is_common_lot, has_owner_apartments,
+                    agricultural_notation
+                HAVING COUNT(*) >= 1
+            """)
+            
+            # Get count for logging
+            dissolved_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {dissolved_table_name}"
+            ).fetchone()[0]
+            original_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            
+            self.log.info(
+                f"Created dissolved data: {dissolved_count} dissolved features "
+                f"from {original_count} original features"
+            )
+            
+            return dissolved_table_name
 
         except Exception as e:
-            logger.error(f"Error creating dissolved data: {str(e)}")
-            # Return original data if dissolve fails
-            return data
+            self.log.error(f"Error creating dissolved data: {e}")
+            # Return original table name as fallback
+            return table_name
 
     async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
         """
@@ -119,23 +248,23 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
 
         self.log.info("Processing data from bronze layer")
 
-        # Validate and transform the data
-        processed_data = self._validate_and_transform(raw_data)
+        # Validate and transform the data into DuckDB table
+        processed_table = self._validate_and_transform(raw_data)
 
-        if processed_data is None:
+        if processed_table is None:
             self.log.warning("No valid data found after processing")
             return None
 
         # Create dissolved version
-        dissolved_data = self._create_dissolved_data(processed_data)
+        dissolved_table = self._create_dissolved_data(processed_table)
 
-        # Save both versions using new unified method
-        self._save_data(processed_data, self.config.dataset, self.config.bucket, "silver")
+        # Save both versions as parquet files using table names
+        self._save_data(processed_table, self.config.dataset, self.config.bucket, "silver")
         self._save_data(
-            dissolved_data, f"{self.config.dataset}_dissolved", self.config.bucket, "silver"
+            dissolved_table, f"{self.config.dataset}_dissolved", self.config.bucket, "silver"
         )
 
         self.log.info("Cadastral silver job completed successfully")
 
-        # Return processed data for gold layer
-        return processed_data
+        # Return processed table name for gold layer
+        return processed_table
