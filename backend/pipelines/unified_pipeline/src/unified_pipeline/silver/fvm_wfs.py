@@ -1481,14 +1481,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             
             # Load GKEA data (excluding PII patterns) - use correct column mapping from our original script
             self.log.info("📊 Loading GKEA fertilizer data...")
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE gkea_raw AS
+            self.gcs_access.query_parquet_direct(
+                gkea_path,
+                """
                 SELECT 
                     column_1 as cvr_number,
                     gkea2024_markplan_med_goedningsoplysninger as gkea_journal_number,
                     TRY_CAST(column_4 AS DOUBLE) as area_ha,
                     TRY_CAST(column_10 AS INTEGER) as crop_code
-                FROM read_parquet('{gkea_path}')
                 WHERE column_1 IS NOT NULL
                   AND column_4 IS NOT NULL
                   AND TRY_CAST(column_4 AS DOUBLE) > 0
@@ -1497,7 +1497,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                   -- Only valid 8-digit CVR numbers
                   AND LENGTH(TRIM(CAST(column_1 AS VARCHAR))) = 8
                   AND REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]+$')
-            """)
+                """,
+                "gkea_raw"
+            )
             
             # Find existing CVRs in FVM data to exclude from GKEA matching
             existing_cvrs = []
