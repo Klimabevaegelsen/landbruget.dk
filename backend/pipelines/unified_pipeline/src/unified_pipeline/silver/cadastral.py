@@ -252,6 +252,92 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             
         return table_name
 
+    def _validate_and_transform_from_table(self, source_table_name: str) -> str:
+        """
+        Validate and transform cadastral data from an existing DuckDB table using bulk operations.
+
+        This method takes a DuckDB table containing bronze data and transforms it
+        into a structured DuckDB table with proper data types and geometry handling.
+        Uses DuckDB's native bulk operations for optimal performance.
+
+        Args:
+            source_table_name: Name of the DuckDB table containing bronze data
+
+        Returns:
+            str: Name of the DuckDB table containing the transformed data
+        """
+        self.log.info(
+            f"Transforming cadastral data from table {source_table_name} "
+            f"using DuckDB bulk operations"
+        )
+        
+        # Check if source table exists and get row count
+        try:
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {source_table_name}").fetchone()[0]
+            self.log.info(f"Source table {source_table_name} contains {row_count:,} rows")
+        except Exception as e:
+            self.log.error(f"Failed to access source table {source_table_name}: {e}")
+            raise ValueError(f"Source table {source_table_name} is not accessible")
+        
+        if row_count == 0:
+            raise ValueError(f"Source table {source_table_name} is empty")
+        
+        # Create the target cadastral features table
+        target_table_name = "cadastral_features"
+        
+        # Drop table if it exists
+        self.conn.execute(f"DROP TABLE IF EXISTS {target_table_name}")
+        
+        # Create and populate the target table using a single bulk SQL operation
+        self.log.info("Creating target table with bulk transformation...")
+        
+        try:
+            # Use DuckDB's native bulk transformation - much faster than row-by-row processing
+            self.conn.execute(f"""
+                CREATE TABLE {target_table_name} AS
+                SELECT 
+                    CAST(bfe_number AS BIGINT) as bfe_number,
+                    business_event,
+                    business_process,
+                    latest_case_id,
+                    id_local,
+                    id_namespace,
+                    CAST(registration_from AS TIMESTAMP) as registration_from,
+                    CAST(effect_from AS TIMESTAMP) as effect_from,
+                    authority,
+                    COALESCE(is_worker_housing, false) as is_worker_housing,
+                    COALESCE(is_common_lot, false) as is_common_lot,
+                    COALESCE(has_owner_apartments, false) as has_owner_apartments,
+                    COALESCE(is_separated_road, false) as is_separated_road,
+                    agricultural_notation,
+                    ST_GeomFromText(geometry) as geometry,
+                    CURRENT_TIMESTAMP as created_at
+                FROM {source_table_name}
+                WHERE bfe_number IS NOT NULL 
+                  AND geometry IS NOT NULL
+                  AND geometry != ''
+            """)
+            
+            # Get final count for verification
+            final_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {target_table_name}"
+            ).fetchone()[0]
+            skipped_count = row_count - final_count
+            
+            self.log.info("✅ Bulk transformation completed successfully!")
+            self.log.info(
+                f"📊 Processed {final_count:,} valid features (skipped {skipped_count:,} invalid)"
+            )
+            
+            if final_count == 0:
+                raise ValueError("No valid features were processed - all rows were filtered out")
+                
+            return target_table_name
+            
+        except Exception as e:
+            self.log.error(f"Bulk transformation failed: {e}")
+            raise
+
     def _create_dissolved_data(self, table_name: str) -> str:
         """
         Create a dissolved version of the cadastral data by merging geometries.
@@ -357,8 +443,21 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
 
         self.log.info("Processing data from bronze layer")
 
-        # Validate and transform the data into DuckDB table
-        processed_table = self._validate_and_transform(raw_data)
+        # Handle different data formats from bronze layer
+        if isinstance(raw_data, str):
+            # raw_data is a table name from _read_bronze_data_from_storage
+            self.log.info(f"Processing bronze data from DuckDB table: {raw_data}")
+            processed_table = self._validate_and_transform_from_table(raw_data)
+        elif isinstance(raw_data, list):
+            # raw_data is a list of features from in-memory passing
+            self.log.info("Processing bronze data from in-memory list")
+            processed_table = self._validate_and_transform(raw_data)
+        else:
+            self.log.error(
+                f"Unexpected raw_data type: {type(raw_data)}. "
+                f"Expected str (table name) or list (features)"
+            )
+            return None
 
         if processed_table is None:
             self.log.warning("No valid data found after processing")
