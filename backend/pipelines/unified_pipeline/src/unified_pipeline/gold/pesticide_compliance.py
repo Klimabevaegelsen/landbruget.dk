@@ -635,9 +635,37 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         # Store dosage limits in DuckDB table
         if dosage_data:
-            self.conn.execute(
-                "CREATE OR REPLACE TABLE dosage_limits AS SELECT * FROM ?", [dosage_data]
-            )
+            # Create table schema first
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE dosage_limits (
+                    crop_code VARCHAR,
+                    api_crop_id INTEGER,
+                    api_crop_name VARCHAR,
+                    registration_number VARCHAR,
+                    product_name VARCHAR,
+                    max_dosage_app DOUBLE,
+                    product_unit VARCHAR,
+                    max_applications INTEGER
+                )
+            """)
+            
+            # Insert data using prepared statement
+            insert_sql = """
+                INSERT INTO dosage_limits VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            
+            for item in dosage_data:
+                self.conn.execute(insert_sql, [
+                    item.get("crop_code"),
+                    item.get("api_crop_id"),
+                    item.get("api_crop_name"),
+                    item.get("registration_number"),
+                    item.get("product_name"),
+                    item.get("max_dosage_app"),
+                    item.get("product_unit"),
+                    item.get("max_applications")
+                ])
+            
             limit_count = len(dosage_data)
             self.logger.info(f"📊 Loaded {limit_count} dosage limits from API")
         else:
