@@ -1788,6 +1788,11 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 fvm_journal = fvm_ops_df.iloc[fvm_idx]['fvm_journal_number']
                 identified_cvr = gkea_ops_df.iloc[gkea_idx]['cvr_number']
                 
+                # Skip if either value is None or empty
+                if fvm_journal is None or identified_cvr is None or str(fvm_journal).strip() == '' or str(identified_cvr).strip() == '':
+                    self.log.warning(f"Skipping match due to missing data: journal={fvm_journal}, cvr={identified_cvr}")
+                    continue
+                
                 update_cases.append(f"WHEN journal_number = '{fvm_journal}' THEN '{identified_cvr}'")
             
             if not update_cases:
