@@ -490,19 +490,31 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
                 cvr_number,
                 role,
+                -- Create a formatted role for display using DuckDB title case function (handle mixed content)
+                list_aggr(
+                    transform(
+                        string_split(TRIM(role, '"'), ' '),
+                        x -> CASE 
+                            WHEN regexp_matches(x, '^[A-Za-zÀ-ÿ.]+$') 
+                            THEN upper(left(x, 1)) || lower(substring(x, 2))
+                            ELSE x  -- Keep as-is if contains digits or other special chars
+                        END
+                    ),
+                    ' '
+                ) as role_formatted,
                 role_start_date,
                 role_end_date,
                 COALESCE(is_current_role, true) as is_current_role,
-                -- Classify as leadership based on role (normalize to title case)
+                -- Classify as leadership based on role (case-insensitive matching)
                 CASE 
-                    WHEN INITCAP(TRIM(role, '"')) IN ('Direktør', 'Adm. Dir.', 'Formand', 'Næstformand', 'Bestyrelsesmedlem', 'Leder', 'Interessenter') THEN true
-                    WHEN INITCAP(TRIM(role, '"')) IN ('Reel Ejer', 'Revision', 'Stiftere', 'Foreningsrepræsentant', 'Likvidator') THEN false
+                    WHEN UPPER(TRIM(role, '"')) IN ('DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM', 'LEDER', 'INTERESSENTER') THEN true
+                    WHEN UPPER(TRIM(role, '"')) IN ('REEL EJER', 'REVISION', 'STIFTERE', 'FORENINGSREPRÆSENTANT', 'LIKVIDATOR') THEN false
                     ELSE NULL
                 END as is_leadership,
-                -- Classify as owner based on role (normalize to title case)
+                -- Classify as owner based on role (case-insensitive matching)
                 CASE
-                    WHEN INITCAP(TRIM(role, '"')) IN ('Reel Ejer', 'Interessenter') THEN true
-                    WHEN INITCAP(TRIM(role, '"')) IN ('Direktør', 'Adm. Dir.', 'Formand', 'Næstformand', 'Bestyrelsesmedlem', 'Revision', 'Stiftere', 'Foreningsrepræsentant', 'Likvidator', 'Leder') THEN false
+                    WHEN UPPER(TRIM(role, '"')) IN ('REEL EJER', 'INTERESSENTER') THEN true
+                    WHEN UPPER(TRIM(role, '"')) IN ('DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM', 'REVISION', 'STIFTERE', 'FORENINGSREPRÆSENTANT', 'LIKVIDATOR', 'LEDER') THEN false
                     ELSE NULL
                 END as is_owner,
                 processing_timestamp
