@@ -445,65 +445,32 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             WITH leadership_flattened AS (
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    unnest(json_transform(json_extract(json_data, '$.leadership'), '[]')) as leadership_item
+                    idx as leadership_idx
                 FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT, (json_array_length(json_extract(json_data, '$.leadership')) - 1)::BIGINT) as t(idx)
                 WHERE json_extract(json_data, '$.leadership') IS NOT NULL
                 AND json_array_length(json_extract(json_data, '$.leadership')) > 0
             ),
             persons_extracted AS (
                 SELECT
-                    cvr_number,
-                    json_extract(leadership_item, '$.person.unit_number')::BIGINT as unit_number,
-                    json_extract(leadership_item, '$.person.person_type')::VARCHAR as person_type,
-                    -- Get current name
-                    (
-                        SELECT json_extract(name_item, '$.name')::VARCHAR
-                        FROM unnest(json_extract(leadership_item, '$.person.names')) as name_item
-                        WHERE json_extract(name_item, '$.is_current')::BOOLEAN = true
-                        LIMIT 1
-                    ) as current_name,
-                    -- Get current address
-                    (
-                        SELECT json_extract(addr_item, '$.city')::VARCHAR
-                        FROM unnest(json_extract(leadership_item, '$.person.addresses')) as addr_item
-                        WHERE json_extract(addr_item, '$.is_current')::BOOLEAN = true
-                        LIMIT 1
-                    ) as current_city,
-                    (
-                        SELECT json_extract(addr_item, '$.postal_code')::INTEGER
-                        FROM unnest(json_extract(leadership_item, '$.person.addresses')) as addr_item
-                        WHERE json_extract(addr_item, '$.is_current')::BOOLEAN = true
-                        LIMIT 1
-                    ) as current_postal_code,
-                    (
-                        SELECT json_extract(addr_item, '$.municipality_name')::VARCHAR
-                        FROM unnest(json_extract(leadership_item, '$.person.addresses')) as addr_item
-                        WHERE json_extract(addr_item, '$.is_current')::BOOLEAN = true
-                        LIMIT 1
-                    ) as current_municipality,
+                    lf.cvr_number,
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].person.unit_number')::BIGINT as unit_number,
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].person.person_type')::VARCHAR as person_type,
+                    -- Get current name (first name marked as current, or first name if none marked)
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].person.names[0].name')::VARCHAR as current_name,
+                    -- Get current address (first address marked as current, or first address if none marked)
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].person.addresses[0].city')::VARCHAR as current_city,
+                    TRY_CAST(json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].person.addresses[0].postal_code') AS INTEGER) as current_postal_code,
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].person.addresses[0].municipality_name')::VARCHAR as current_municipality,
                     -- Get role from organization
-                    (
-                        SELECT json_extract(attr_item, '$.vaerdier[0].vaerdi')::VARCHAR
-                        FROM unnest(json_extract(leadership_item, '$.organization.member_data[0].attributter')) as attr_item
-                        WHERE json_extract(attr_item, '$.type')::VARCHAR = 'FUNKTION'
-                        LIMIT 1
-                    ) as role,
-                    (
-                        SELECT json_extract(attr_item, '$.vaerdier[0].periode.gyldigFra')::VARCHAR
-                        FROM unnest(json_extract(leadership_item, '$.organization.member_data[0].attributter')) as attr_item
-                        WHERE json_extract(attr_item, '$.type')::VARCHAR = 'FUNKTION'
-                        LIMIT 1
-                    ) as role_start_date,
-                    (
-                        SELECT json_extract(attr_item, '$.vaerdier[0].periode.gyldigTil')::VARCHAR
-                        FROM unnest(json_extract(leadership_item, '$.organization.member_data[0].attributter')) as attr_item
-                        WHERE json_extract(attr_item, '$.type')::VARCHAR = 'FUNKTION'
-                        LIMIT 1
-                    ) as role_end_date,
-                    json_extract(leadership_item, '$.is_current')::BOOLEAN as is_current_role,
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].organization.member_data[0].attributter[0].vaerdier[0].vaerdi')::VARCHAR as role,
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigFra')::VARCHAR as role_start_date,
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigTil')::VARCHAR as role_end_date,
+                    json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].is_current')::BOOLEAN as is_current_role,
                     NOW()::VARCHAR as processing_timestamp
-                FROM leadership_flattened
-                WHERE json_extract(leadership_item, '$.person.unit_number') IS NOT NULL
+                FROM leadership_flattened lf
+                JOIN unnest($1) as t(json_data) ON json_extract(t.json_data, '$.cvr_number')::INTEGER = lf.cvr_number
+                WHERE json_extract(t.json_data, '$.leadership[' || lf.leadership_idx || '].person.unit_number') IS NOT NULL
             )
             SELECT
                 -- Generate person UUID based on unit_number for consistency
