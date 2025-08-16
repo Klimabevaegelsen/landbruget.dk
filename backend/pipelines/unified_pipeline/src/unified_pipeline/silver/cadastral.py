@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
+from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 
 logger = logging.getLogger(__name__)
 
@@ -391,7 +392,11 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             
             # Prepare conditions (avoid backslashes in f-strings)
             bfe_condition = 'bfe_number IS NOT NULL' if 'bfe_number' in column_names else 'TRUE'
-            geometry_condition = "geometry IS NOT NULL AND geometry != ''" if 'geometry' in column_names else 'FALSE'
+            geometry_condition = (
+                "geometry IS NOT NULL AND geometry != ''" 
+                if 'geometry' in column_names 
+                else 'FALSE'
+            )
             
             self.conn.execute(f"""
                 CREATE TABLE {target_table_name} AS
@@ -546,6 +551,16 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         if processed_table is None:
             self.log.warning("No valid data found after processing")
             return None
+
+        # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
+        # This converts UTM coordinates to WGS84 to match agricultural fields
+        self.log.info("Applying geometry validation and coordinate transformation...")
+        validate_and_transform_geometries_duckdb(
+            self.conn,
+            processed_table,
+            self.config.dataset,
+            geometry_column="geometry",
+        )
 
         # Create dissolved version
         dissolved_table = self._create_dissolved_data(processed_table)
