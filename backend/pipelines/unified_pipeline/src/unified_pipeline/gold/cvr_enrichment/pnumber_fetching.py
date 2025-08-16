@@ -442,6 +442,12 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
                     json_array_length(json_extract(json_data, '$.addresses')) as address_count,
+                    -- Extract primary address geometry (algorithmically selected by primary_address_selector.py)
+                    -- Priority: 1) Current addresses, 2) Beliggenhedsadresse > Postadresse > Kontaktadresse, 3) Best coordinate quality
+                    TRY_CAST(json_extract(json_data, '$.primary_address_geometry.latitude') AS DOUBLE) as latitude,
+                    TRY_CAST(json_extract(json_data, '$.primary_address_geometry.longitude') AS DOUBLE) as longitude,
+                    json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as coordinate_quality,
+                    json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as coordinate_source,
                     json_data as pnumber_data_json,  -- Kept for dependencies
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR
                         as processing_timestamp
@@ -681,9 +687,9 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             self.log.info(f"  {emp_type}: {count} records")
         
         # Save P-number employment table to GCS
-        self._save_data(
+                self._save_data(
             data=employment_table,
             dataset="cvr_pnumber_employment",
-            bucket=self.config.bucket,
-            stage="gold",
+                    bucket=self.config.bucket,
+                    stage="gold",
         )
