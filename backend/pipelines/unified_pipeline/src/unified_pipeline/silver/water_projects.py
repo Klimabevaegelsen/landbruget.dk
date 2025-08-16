@@ -892,6 +892,28 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 self.log.error("Failed to process raw data")
                 return None
             self.log.info("Processed raw data successfully")
+            
+            # ✅ COORDINATE FIX: Apply geometry validation to main table
+            spatial_geom_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {table_name} WHERE geometry_spatial IS NOT NULL"
+            ).fetchone()[0]
+            
+            if spatial_geom_count > 0:
+                self.log.info(f"Applying geometry validation to {spatial_geom_count:,} water project geometries...")
+                validate_and_transform_geometries_duckdb(
+                    self.conn,
+                    table_name,
+                    self.config.dataset,
+                    geometry_column="geometry_spatial",
+                )
+                
+                # ✅ UPDATE: Replace original geometry column with transformed WKT
+                self.conn.execute(f"""
+                    UPDATE {table_name} SET
+                        geometry = ST_AsText(geometry_spatial)
+                    WHERE geometry_spatial IS NOT NULL
+                """)
+            
             dissolved_table_name = self._create_dissolved_df(table_name, self.config.dataset)
 
             # ✅ MIGRATION: Save DuckDB tables using standard _save_data method like other pipelines

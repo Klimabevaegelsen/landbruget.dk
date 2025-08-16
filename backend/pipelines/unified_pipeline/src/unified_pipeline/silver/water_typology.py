@@ -733,6 +733,13 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                         self.config.dataset,
                         geometry_column="geometry_spatial",
                     )
+                    
+                    # ✅ UPDATE: Replace original geometry column with transformed WKT
+                    self.conn.execute(f"""
+                        UPDATE {table_name} SET
+                            geometry = ST_AsText(geometry_spatial)
+                        WHERE geometry_spatial IS NOT NULL
+                    """)
                 else:
                     self.log.warning(
                         "⚠️ No spatial geometries found after XML conversion - skipping validation"
