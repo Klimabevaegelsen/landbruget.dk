@@ -439,6 +439,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                 CREATE TABLE {table_name} AS
                 SELECT
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
+                    md5(json_extract(json_data, '$.p_number')::VARCHAR)::VARCHAR as pnumber_uuid,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
                     json_array_length(json_extract(json_data, '$.addresses')) as address_count,
@@ -476,6 +477,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             self.conn.execute(f"""
                 CREATE TABLE {table_name} (
                     p_number INTEGER,
+                    pnumber_uuid VARCHAR,
                     unit_name VARCHAR,
                     parent_cvr_number INTEGER,
                     address_count INTEGER,
@@ -718,4 +720,5 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             dataset="cvr_pnumber_employment",
             bucket=self.config.bucket,
             stage="gold",
+            filename="data.parquet",
         )
