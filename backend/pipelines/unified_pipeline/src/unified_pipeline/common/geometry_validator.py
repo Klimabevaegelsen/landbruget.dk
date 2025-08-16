@@ -213,7 +213,7 @@ def validate_and_transform_geometries_duckdb(
                 )
 
                 if is_wgs84_lat_lon_after:
-                    logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix lat/lon order")
+                    logger.info(f"{dataset_name}: Detected LAT/LON order - flipping to LON/LAT order for ST_Area_Spheroid accuracy")
                     conn.execute(f"""
                         UPDATE {table_name} SET
                             {geometry_column} = ST_FlipCoordinates({geometry_column})
