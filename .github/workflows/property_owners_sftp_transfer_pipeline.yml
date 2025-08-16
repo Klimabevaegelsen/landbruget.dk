@@ -7,6 +7,10 @@ on:
   workflow_dispatch:
     # Allow manual triggering for testing
 
+env:
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
 jobs:
   transfer-and-process:
     name: Transfer and Process Property Owners Data
