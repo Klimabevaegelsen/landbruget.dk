@@ -506,8 +506,6 @@ def execute(cli_config: cli.CliConfig) -> int:
                 (WorkPermitsGold, WorkPermitsGoldConfig),
             ],
         },
-
-
     }
 
     # Retrieve jobs for given source and stage
