@@ -23,6 +23,11 @@ The module consists of two main components:
 import asyncio
 import json
 from typing import Any, Dict, List, Optional
+import numpy as np
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy.optimize import linear_sum_assignment
 
 from pydantic import ConfigDict
 
@@ -1457,6 +1462,339 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Don't fail the entire pipeline if enrichment fails
             pass
 
+    async def _identify_missing_cvrs_with_gkea(self) -> None:
+        """
+        Identify missing CVRs in FVM marker data using GKEA agricultural pattern matching.
+        
+        This method uses machine learning pattern matching to identify CVR numbers for 
+        FVM fields that have missing or empty CVRs by matching agricultural operations 
+        to GKEA fertilizer data.
+        """
+        try:
+            self.log.info("🧠 Starting agricultural CVR identification using GKEA pattern matching...")
+            
+            # Check if GKEA fertilizer data is available (use direct GCS path)
+            gkea_path = "gs://landbrugsdata-raw-data/silver/fertiliser/20250803_205033"
+            if not self.data_access.exists(gkea_path):
+                self.log.warning(f"GKEA fertilizer data not available at {gkea_path} - skipping CVR identification")
+                return
+            
+            # Load GKEA data (excluding PII patterns) - use correct column mapping from our original script
+            self.log.info("📊 Loading GKEA fertilizer data...")
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE gkea_raw AS
+                SELECT 
+                    column_1 as cvr_number,
+                    gkea2024_markplan_med_goedningsoplysninger as gkea_journal_number,
+                    TRY_CAST(column_4 AS DOUBLE) as area_ha,
+                    TRY_CAST(column_10 AS INTEGER) as crop_code
+                FROM read_parquet('{gkea_path}')
+                WHERE column_1 IS NOT NULL
+                  AND column_4 IS NOT NULL
+                  AND TRY_CAST(column_4 AS DOUBLE) > 0
+                  -- PII FILTERING: Exclude DDMMYY-XXXX patterns
+                  AND NOT REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]{{6}}-[0-9X]{{4}}$')
+                  -- Only valid 8-digit CVR numbers
+                  AND LENGTH(TRIM(CAST(column_1 AS VARCHAR))) = 8
+                  AND REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]+$')
+            """)
+            
+            # Find existing CVRs in FVM data to exclude from GKEA matching
+            existing_cvrs = []
+            for year in self.config.marker_years:
+                marker_table = f"final_processed_marker_{year}"
+                try:
+                    year_cvrs = self.conn.execute(f"""
+                        SELECT DISTINCT cvr_number 
+                        FROM {marker_table} 
+                        WHERE cvr_number IS NOT NULL 
+                          AND cvr_number != '' 
+                          AND cvr_number != '0'
+                          AND LENGTH(TRIM(cvr_number)) = 8
+                    """).df()['cvr_number'].tolist()
+                    existing_cvrs.extend(year_cvrs)
+                except Exception as e:
+                    self.log.debug(f"Could not extract CVRs from {marker_table}: {e}")
+                    continue
+            
+            existing_cvrs = list(set(existing_cvrs))  # Remove duplicates
+            self.log.info(f"   Found {len(existing_cvrs):,} existing CVRs in FVM data")
+            
+            if not existing_cvrs:
+                self.log.warning("No existing CVRs found in FVM data - skipping pattern matching")
+                return
+            
+            # Filter GKEA to only CVRs that are NOT in FVM (the missing ones)
+            cvr_filter = "', '".join(map(str, existing_cvrs))
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE gkea_missing_cvrs AS
+                SELECT * FROM gkea_raw
+                WHERE cvr_number NOT IN ('{cvr_filter}')
+            """)
+            
+            # Create GKEA operations (CVR + journal_number) - ONLY multi-field operations
+            self.log.info("🌾 Creating GKEA operations (multi-field only, missing CVRs only)...")
+            gkea_ops_df = self.conn.execute("""
+                SELECT 
+                    cvr_number,
+                    gkea_journal_number,
+                    COUNT(*) as field_count,
+                    SUM(area_ha) as total_area,
+                    AVG(area_ha) as avg_field_size,
+                    COUNT(DISTINCT crop_code) as crop_diversity,
+                    STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
+                FROM gkea_missing_cvrs
+                GROUP BY cvr_number, gkea_journal_number
+                HAVING COUNT(*) > 1  -- Only multi-field operations
+                   AND SUM(area_ha) > 0
+                ORDER BY cvr_number, gkea_journal_number
+            """).df()
+            
+            if len(gkea_ops_df) == 0:
+                self.log.warning("No GKEA multi-field operations with missing CVRs found")
+                return
+            
+            # Process each marker year for CVR identification
+            total_fields_updated = 0
+            
+            for year in self.config.marker_years:
+                marker_table = f"final_processed_marker_{year}"
+                
+                try:
+                    # Check if table exists
+                    self.conn.execute(f"SELECT COUNT(*) FROM {marker_table}").fetchone()
+                except Exception:
+                    self.log.debug(f"Table {marker_table} not found - skipping year {year}")
+                    continue
+                
+                self.log.info(f"🔍 Processing CVR identification for marker year {year}...")
+                
+                # Create FVM operations for this year (journal_number) - ONLY multi-field operations with missing CVRs
+                fvm_ops_df = self.conn.execute(f"""
+                    SELECT 
+                        journal_number as fvm_journal_number,
+                        COUNT(*) as field_count,
+                        SUM(area_ha) as total_area,
+                        AVG(area_ha) as avg_field_size,
+                        COUNT(DISTINCT crop_code) as crop_diversity,
+                        STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
+                    FROM {marker_table}
+                    WHERE (cvr_number IS NULL OR cvr_number = '' OR cvr_number = '0')
+                      AND journal_number IS NOT NULL
+                      AND area_ha > 0
+                      AND crop_code IS NOT NULL
+                    GROUP BY journal_number
+                    HAVING COUNT(*) > 1  -- Only multi-field operations
+                       AND SUM(area_ha) > 0
+                    ORDER BY journal_number
+                """).df()
+                
+                if len(fvm_ops_df) == 0:
+                    self.log.info(f"   No FVM operations with missing CVRs found for year {year}")
+                    continue
+                
+                self.log.info(f"   Found {len(fvm_ops_df):,} FVM operations and {len(gkea_ops_df):,} GKEA operations")
+                
+                # Calculate similarity matrices using the exact same approach as our standalone script
+                similarity_matrix, crop_similarity_matrix = self._calculate_similarity_matrix(fvm_ops_df, gkea_ops_df)
+                
+                # Find optimal matches using Hungarian algorithm (exact same as standalone)
+                matches = self._find_optimal_matches(similarity_matrix, crop_similarity_matrix)
+                
+                if not matches:
+                    self.log.info(f"   No high-quality matches found for year {year}")
+                    continue
+                
+                self.log.info(f"   Found {len(matches):,} high-quality CVR matches for year {year}")
+                
+                # Apply CVR updates to the marker table
+                fields_updated = self._apply_cvr_updates(marker_table, matches, fvm_ops_df, gkea_ops_df)
+                total_fields_updated += fields_updated
+                
+                self.log.info(f"   Updated {fields_updated:,} fields with identified CVRs for year {year}")
+            
+            self.log.info(f"🎯 Agricultural CVR identification completed - updated {total_fields_updated:,} total fields")
+            
+        except Exception as e:
+            self.log.error(f"Error during agricultural CVR identification: {e}")
+            # Don't fail the entire pipeline if CVR identification fails
+            pass
+
+    def _calculate_similarity_matrix(self, fvm_ops: pd.DataFrame, gkea_ops: pd.DataFrame):
+        """
+        Calculate similarity matrix between FVM and GKEA operations using scikit-learn.
+        Exact same implementation as our standalone script.
+        """
+        self.log.info("🔢 Creating feature matrices...")
+        
+        # Create feature matrices
+        fvm_features = self._create_feature_matrix(fvm_ops)
+        gkea_features = self._create_feature_matrix(gkea_ops)
+        
+        # Calculate cosine similarity for numerical features
+        self.log.info("📊 Calculating numerical feature similarities...")
+        numerical_similarity = cosine_similarity(fvm_features, gkea_features)
+        
+        # Calculate crop composition similarities
+        self.log.info("🌾 Calculating crop composition similarities...")
+        crop_similarities = np.zeros((len(fvm_ops), len(gkea_ops)))
+        
+        for i, fvm_row in fvm_ops.iterrows():
+            for j, gkea_row in gkea_ops.iterrows():
+                crop_sim = self._calculate_crop_jaccard_similarity(
+                    fvm_row['crop_composition'], 
+                    gkea_row['crop_composition']
+                )
+                crop_similarities[i, j] = crop_sim
+        
+        # Combine similarities with weights
+        # Weights: area(0.3) + field_count(0.2) + avg_size(0.2) + crop_diversity(0.15) + crop_composition(0.15)
+        # Since numerical features are combined via cosine similarity, we weight that vs crop composition
+        combined_similarity = (0.85 * numerical_similarity) + (0.15 * crop_similarities)
+        
+        return combined_similarity, crop_similarities
+
+    def _calculate_crop_jaccard_similarity(self, crop_list_1: str, crop_list_2: str) -> float:
+        """Calculate true Jaccard similarity between crop compositions"""
+        if not crop_list_1 or not crop_list_2:
+            return 0.0
+            
+        # Convert comma-separated strings to sets
+        crops_1 = set(crop_list_1.split(','))
+        crops_2 = set(crop_list_2.split(','))
+        
+        # Calculate Jaccard similarity
+        intersection = len(crops_1.intersection(crops_2))
+        union = len(crops_1.union(crops_2))
+        
+        return intersection / union if union > 0 else 0.0
+
+    def _create_feature_matrix(self, operations_df: pd.DataFrame) -> np.ndarray:
+        """
+        Create feature matrix for agricultural operations.
+        Exact same implementation as our standalone script.
+        """
+        # Extract numerical features
+        features = []
+        
+        for _, row in operations_df.iterrows():
+            feature_vector = [
+                row['total_area'],
+                row['field_count'], 
+                row['avg_field_size'],
+                row['crop_diversity']
+            ]
+            features.append(feature_vector)
+        
+        features_matrix = np.array(features)
+        
+        # Normalize features
+        scaler = StandardScaler()
+        normalized_features = scaler.fit_transform(features_matrix)
+        
+        return normalized_features
+
+    def _find_optimal_matches(self, similarity_matrix: np.ndarray, crop_similarity_matrix: np.ndarray, 
+                            min_pattern_score: float = 0.9, min_crop_similarity: float = 0.5) -> List:
+        """
+        Find optimal 1-to-1 matches using Hungarian algorithm with constraints.
+        Exact same implementation as our standalone script.
+        """
+        self.log.info("🎯 Finding optimal matches with constraints...")
+        
+        # Create constraint mask - only consider pairs above thresholds
+        constraint_mask = (similarity_matrix >= min_pattern_score) & (crop_similarity_matrix >= min_crop_similarity)
+        
+        if not np.any(constraint_mask):
+            self.log.info("   No matches found above thresholds")
+            return []
+        
+        # Create cost matrix for Hungarian algorithm (convert similarity to cost)
+        # Hungarian algorithm minimizes, so we use (1 - similarity) as cost
+        cost_matrix = np.where(constraint_mask, 1.0 - similarity_matrix, np.inf)
+        
+        # Apply Hungarian algorithm
+        fvm_indices, gkea_indices = linear_sum_assignment(cost_matrix)
+        
+        # Extract valid matches (finite cost = above threshold)
+        matches = []
+        for fvm_idx, gkea_idx in zip(fvm_indices, gkea_indices):
+            if cost_matrix[fvm_idx, gkea_idx] < np.inf:
+                combined_sim = similarity_matrix[fvm_idx, gkea_idx]
+                crop_sim = crop_similarity_matrix[fvm_idx, gkea_idx]
+                matches.append((fvm_idx, gkea_idx, combined_sim, crop_sim))
+        
+        self.log.info(f"   Found {len(matches):,} optimal 1-to-1 matches")
+        return matches
+
+    def _apply_cvr_updates(self, marker_table: str, matches: List, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame) -> int:
+        """Apply CVR updates to the marker table and save back to GCS"""
+        fields_updated = 0
+        
+        try:
+            # Create a temporary table for updates
+            temp_table = f"temp_cvr_updates_{marker_table}"
+            
+            # Build the update cases for each match
+            update_cases = []
+            for fvm_idx, gkea_idx, combined_sim, crop_sim in matches:
+                fvm_journal = fvm_ops_df.iloc[fvm_idx]['fvm_journal_number']
+                identified_cvr = gkea_ops_df.iloc[gkea_idx]['cvr_number']
+                
+                update_cases.append(f"WHEN journal_number = '{fvm_journal}' THEN '{identified_cvr}'")
+            
+            if not update_cases:
+                return 0
+            
+            # Apply the CVR updates
+            update_sql = f"""
+                CREATE OR REPLACE TABLE {temp_table} AS
+                SELECT *,
+                    CASE {' '.join(update_cases)}
+                         ELSE cvr_number
+                    END as updated_cvr_number
+                FROM {marker_table}
+            """
+            
+            self.conn.execute(update_sql)
+            
+            # Count how many fields were updated
+            fields_updated = self.conn.execute(f"""
+                SELECT COUNT(*) as count 
+                FROM {temp_table} 
+                WHERE updated_cvr_number != cvr_number 
+                   OR (cvr_number IS NULL AND updated_cvr_number IS NOT NULL)
+                   OR (cvr_number = '' AND updated_cvr_number != '')
+                   OR (cvr_number = '0' AND updated_cvr_number != '0')
+            """).fetchone()[0]
+            
+            if fields_updated > 0:
+                # Replace the original table with updated data
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {marker_table} AS
+                    SELECT * EXCLUDE updated_cvr_number,
+                           updated_cvr_number as cvr_number
+                    FROM {temp_table}
+                """)
+                
+                # Save the updated data back to GCS
+                dataset_name = marker_table.replace('final_processed_', '')
+                self._save_data(
+                    marker_table,
+                    dataset_name,
+                    self.config.bucket,
+                    "silver",
+                    conn=self.conn,
+                )
+            
+            # Clean up temporary table
+            self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+            
+        except Exception as e:
+            self.log.error(f"Error applying CVR updates to {marker_table}: {e}")
+        
+        return fields_updated
+
     async def run_enrichment_only(self) -> Optional[Dict[str, Any]]:
         """
         Run only the enrichment functions without processing bronze/silver data.
@@ -1885,6 +2223,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             # Enrich marker fields with organic information
             await self._enrich_marker_with_organic_data()
+            
+            # Identify missing CVRs using GKEA agricultural pattern matching
+            await self._identify_missing_cvrs_with_gkea()
 
             # Enrich subsidy fields with field UUIDs from matching FVM marker fields
             await self._enrich_subsidies_with_field_uuid()
