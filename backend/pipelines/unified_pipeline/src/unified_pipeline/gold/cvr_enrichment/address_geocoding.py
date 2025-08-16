@@ -855,10 +855,10 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     c.pnumber_count,
                     c.company_data_json,
                     c.processing_timestamp,
-                    COALESCE(g.latitude, c.latitude) as latitude,
-                    COALESCE(g.longitude, c.longitude) as longitude,
-                    COALESCE(g.coordinate_quality, c.coordinate_quality) as coordinate_quality,
-                    COALESCE(g.dawa_enriched, c.dawa_enriched) as dawa_enriched
+                    g.latitude,
+                    g.longitude,
+                    g.coordinate_quality,
+                    g.dawa_enriched
                 FROM existing_companies c
                 LEFT JOIN (
                     SELECT * FROM company_geocoding WHERE rn = 1
@@ -933,10 +933,10 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     p.address_count,
                     p.pnumber_data_json,
                     p.processing_timestamp,
-                    COALESCE(g.latitude, p.latitude) as latitude,
-                    COALESCE(g.longitude, p.longitude) as longitude,
-                    COALESCE(g.coordinate_quality, p.coordinate_quality) as coordinate_quality,
-                    COALESCE(g.dawa_enriched, p.dawa_enriched) as dawa_enriched
+                    g.latitude,
+                    g.longitude,
+                    g.coordinate_quality,
+                    g.dawa_enriched
                 FROM existing_pnumbers p
                 LEFT JOIN (
                     SELECT * FROM pnumber_geocoding WHERE rn = 1
