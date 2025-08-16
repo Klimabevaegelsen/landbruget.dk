@@ -43,10 +43,11 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
 
     def _validate_and_transform(self, data: Any) -> str:
         """
-        Validate and transform cadastral JSON features into a DuckDB table.
+        Validate and transform cadastral JSON features into a DuckDB table using bulk insert.
 
         This method takes the raw JSON features from bronze layer and transforms them
         into a structured DuckDB table with proper data types and geometry handling.
+        Uses DuckDB's bulk insert capabilities for optimal performance with large datasets.
 
         Args:
             data: List of cadastral feature dictionaries from bronze layer
@@ -60,7 +61,9 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         if not data:
             raise ValueError("No features provided for transformation")
             
-        self.log.info(f"Transforming {len(data)} cadastral features to DuckDB table")
+        self.log.info(
+            f"Transforming {len(data)} cadastral features to DuckDB table using bulk insert"
+        )
         
         # Create the cadastral features table
         table_name = "cadastral_features"
@@ -90,29 +93,26 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             )
         """)
         
-        # Insert features one by one with proper handling
-        valid_features = 0
+        # Prepare data for bulk insert - filter and validate first
+        valid_rows = []
+        skipped_count = 0
+        
         for feature in data:
             try:
-                # Extract values with defaults
+                # Extract values with validation
                 bfe_number = feature.get('bfe_number')
                 if not bfe_number:
+                    skipped_count += 1
                     continue  # Skip features without BFE number
                     
                 # Convert geometry from WKT to DuckDB geometry
                 geometry_wkt = feature.get('geometry')
                 if not geometry_wkt:
+                    skipped_count += 1
                     continue  # Skip features without geometry
                 
-                # Insert the feature
-                self.conn.execute(f"""
-                    INSERT INTO {table_name} (
-                        bfe_number, business_event, business_process, latest_case_id,
-                        id_local, id_namespace, registration_from, effect_from,
-                        authority, is_worker_housing, is_common_lot, has_owner_apartments,
-                        is_separated_road, agricultural_notation, geometry
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_GeomFromText(?))
-                """, [
+                # Prepare row data
+                row = [
                     bfe_number,
                     feature.get('business_event'),
                     feature.get('business_process'), 
@@ -128,18 +128,127 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
                     feature.get('is_separated_road', False),
                     feature.get('agricultural_notation'),
                     geometry_wkt
-                ])
-                valid_features += 1
+                ]
+                valid_rows.append(row)
                 
             except Exception as e:
                 bfe_id = feature.get('bfe_number', 'unknown')
-                self.log.warning(f"Failed to insert feature {bfe_id}: {e}")
+                self.log.warning(f"Failed to prepare feature {bfe_id}: {e}")
+                skipped_count += 1
                 continue
         
-        self.log.info(f"Successfully transformed {valid_features} out of {len(data)} features")
+        if not valid_rows:
+            raise ValueError("No valid features could be prepared for transformation")
+            
+        self.log.info(
+            f"Prepared {len(valid_rows)} valid rows for bulk insert (skipped {skipped_count})"
+        )
         
-        if valid_features == 0:
-            raise ValueError("No valid features could be transformed")
+        # Use DuckDB's ultra-fast bulk insert with VALUES clause
+        try:
+            self.log.info("Using DuckDB bulk insert with VALUES clause for maximum performance...")
+            
+            # Process in large batches to maximize DuckDB's performance
+            batch_size = 10000  # Larger batches for better performance
+            inserted_count = 0
+            
+            for i in range(0, len(valid_rows), batch_size):
+                batch = valid_rows[i:i + batch_size]
+                
+                # Create VALUES clause with placeholders
+                values_placeholders = ",".join([
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_GeomFromText(?))"
+                ] * len(batch))
+                
+                # Flatten the batch data for the query
+                flattened_params = []
+                for row in batch:
+                    flattened_params.extend(row)
+                
+                # Execute bulk insert
+                self.conn.execute(f"""
+                    INSERT INTO {table_name} (
+                        bfe_number, business_event, business_process, latest_case_id,
+                        id_local, id_namespace, registration_from, effect_from,
+                        authority, is_worker_housing, is_common_lot, has_owner_apartments,
+                        is_separated_road, agricultural_notation, geometry
+                    ) VALUES {values_placeholders}
+                """, flattened_params)
+                
+                inserted_count += len(batch)
+                
+                # Log progress every 50k records
+                if inserted_count % 50000 == 0 or i + batch_size >= len(valid_rows):
+                    progress_pct = inserted_count / len(valid_rows) * 100
+                    self.log.info(
+                        f"Bulk insert progress: {inserted_count:,}/{len(valid_rows):,} "
+                        f"features ({progress_pct:.1f}%)"
+                    )
+            
+            self.log.info(
+                f"Successfully bulk inserted {inserted_count:,} features using VALUES clause"
+            )
+            
+        except Exception as e:
+            self.log.error(f"Bulk VALUES insert failed: {e}")
+            # Fallback to executemany if VALUES fails
+            self.log.info("Attempting executemany as fallback...")
+            
+            try:
+                self.conn.executemany(f"""
+                    INSERT INTO {table_name} (
+                        bfe_number, business_event, business_process, latest_case_id,
+                        id_local, id_namespace, registration_from, effect_from,
+                        authority, is_worker_housing, is_common_lot, has_owner_apartments,
+                        is_separated_road, agricultural_notation, geometry
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_GeomFromText(?))
+                """, valid_rows)
+                
+                self.log.info(
+                    f"Successfully inserted {len(valid_rows):,} features using executemany fallback"
+                )
+                
+            except Exception as fallback_e:
+                self.log.error(f"Executemany fallback also failed: {fallback_e}")
+                # Final fallback to smaller batches
+                self.log.info("Attempting small batch insert as final fallback...")
+                
+                batch_size = 1000
+                inserted_count = 0
+                
+                for i in range(0, len(valid_rows), batch_size):
+                    batch = valid_rows[i:i + batch_size]
+                    try:
+                        self.conn.executemany(f"""
+                            INSERT INTO {table_name} (
+                                bfe_number, business_event, business_process, latest_case_id,
+                                id_local, id_namespace, registration_from, effect_from,
+                                authority, is_worker_housing, is_common_lot, has_owner_apartments,
+                                is_separated_road, agricultural_notation, geometry
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ST_GeomFromText(?))
+                        """, batch)
+                        inserted_count += len(batch)
+                        
+                        if i % (batch_size * 10) == 0:  # Log every 10k records
+                            self.log.info(
+                                f"Small batch insert progress: {inserted_count:,}/"
+                                f"{len(valid_rows):,} features"
+                            )
+                            
+                    except Exception as batch_e:
+                        self.log.error(f"Small batch insert failed at batch {i}: {batch_e}")
+                        continue
+                
+                self.log.info(
+                    f"Small batch insert completed: {inserted_count:,}/{len(valid_rows):,} features"
+                )
+        
+        # Verify final count
+        final_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        self.log.info(f"Final table contains {final_count} features")
+        
+        if final_count == 0:
+            raise ValueError("No features were successfully inserted")
             
         return table_name
 

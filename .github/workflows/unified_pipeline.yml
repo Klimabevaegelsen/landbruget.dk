@@ -36,6 +36,16 @@ on:
           - dst
           - dmi
           - cvr_enrichment
+      stage:
+        description: 'Pipeline stage to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - bronze
+          - silver
+          - gold
       agricultural_fields_year:
         description: 'Agricultural fields year (for field_area_analysis only)'
         required: false
@@ -194,8 +204,8 @@ jobs:
             echo "Main pipeline job skipped for pesticide_disaggregation (matrix jobs handle this)"
           else
             # Regular source job
-            echo "Running regular pipeline job: ${{ matrix.source }}"
-            python -m unified_pipeline -s ${{ matrix.source }} -j all
+            echo "Running regular pipeline job: ${{ matrix.source }} with stage: ${{ github.event.inputs.stage || 'all' }}"
+            python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
           fi
 
           # Stop resource monitoring
