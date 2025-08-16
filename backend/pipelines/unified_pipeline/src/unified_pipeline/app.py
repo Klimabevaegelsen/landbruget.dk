@@ -413,7 +413,7 @@ def execute(cli_config: cli.CliConfig) -> int:
         cli.Source.field_production: {
             cli.Stage.gold: [(FieldProductionGold, FieldProductionGoldConfig)],
             cli.Stage.all: [
-                # Note: This requires agricultural_fields and dst_zone_mapping silver data to be available
+                # Note: This requires fvm_marker and dst_zone_mapping silver data to be available
                 # These should be run separately first or through dependent pipelines
                 (FieldProductionGold, FieldProductionGoldConfig),
             ],
@@ -422,7 +422,7 @@ def execute(cli_config: cli.CliConfig) -> int:
             cli.Stage.gold: [(FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig)],
             cli.Stage.all: [
                 # Note: This requires multiple silver datasets to be available:
-                # agricultural_fields, property_cadastral_merged, soil_types, bnbo_status_dissolved,
+                # fvm_marker, property_cadastral_merged, soil_types, bnbo_status_dissolved,
                 # wetlands_dissolved, water_projects_dissolved
                 (FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig),
             ],
@@ -431,7 +431,7 @@ def execute(cli_config: cli.CliConfig) -> int:
             cli.Stage.gold: [(PesticideDisaggregationGold, PesticideDisaggregationGoldConfig)],
             cli.Stage.all: [
                 # Note: This requires silver datasets to be available:
-                # agricultural_fields, pesticides
+                # fvm_marker, pesticides
                 (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
             ],
         },
