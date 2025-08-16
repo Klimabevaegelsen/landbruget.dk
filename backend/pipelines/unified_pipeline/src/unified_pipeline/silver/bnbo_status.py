@@ -387,8 +387,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT
                 *,
-                ST_GeomFromText(geometry) as geometry_spatial,
-                geometry as geometry_wgs84
+                ST_GeomFromText(geometry) as geometry_spatial
             FROM bnbo_features_raw
             WHERE geometry IS NOT NULL
         """)
@@ -397,6 +396,13 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         validate_and_transform_geometries_duckdb(
             self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
         )
+        
+        # ✅ UPDATE: Replace original geometry column with transformed WKT
+        self.conn.execute(f"""
+            UPDATE {table_name} SET
+                geometry = ST_AsText(geometry_spatial)
+            WHERE geometry_spatial IS NOT NULL
+        """)
 
         feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.log.info(f"Created DuckDB table '{table_name}' with {feature_count:,} features")
