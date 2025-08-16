@@ -389,14 +389,17 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             # Build the final query
             select_clause = ",\n                    ".join(select_clauses)
             
+            # Prepare conditions (avoid backslashes in f-strings)
+            bfe_condition = 'bfe_number IS NOT NULL' if 'bfe_number' in column_names else 'TRUE'
+            geometry_condition = "geometry IS NOT NULL AND geometry != ''" if 'geometry' in column_names else 'FALSE'
+            
             self.conn.execute(f"""
                 CREATE TABLE {target_table_name} AS
                 SELECT 
                     {select_clause}
                 FROM {source_table_name}
-                WHERE ({('bfe_number IS NOT NULL' if 'bfe_number' in column_names else 'TRUE')})
-                  AND ({('geometry IS NOT NULL AND geometry != \'\'' 
-                        if 'geometry' in column_names else 'FALSE')})
+                WHERE ({bfe_condition})
+                  AND ({geometry_condition})
             """)
             
             # Get final count for verification
