@@ -291,31 +291,112 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         # Create and populate the target table using a single bulk SQL operation
         self.log.info("Creating target table with bulk transformation...")
         
+        # First, inspect the source table structure to understand available columns
+        try:
+            columns_info = self.conn.execute(f"DESCRIBE {source_table_name}").fetchall()
+            column_names = [col[0] for col in columns_info]
+            self.log.info(f"Available columns in {source_table_name}: {column_names}")
+        except Exception as e:
+            self.log.warning(f"Could not describe source table: {e}")
+            column_names = []
+        
         try:
             # Use DuckDB's native bulk transformation - much faster than row-by-row processing
+            # Build SELECT clause dynamically based on available columns
+            select_clauses = []
+            
+            # Handle each expected column with fallbacks
+            if 'bfe_number' in column_names:
+                select_clauses.append("CAST(bfe_number AS BIGINT) as bfe_number")
+            else:
+                select_clauses.append("NULL as bfe_number")
+                
+            if 'business_event' in column_names:
+                select_clauses.append("business_event")
+            else:
+                select_clauses.append("NULL as business_event")
+                
+            if 'business_process' in column_names:
+                select_clauses.append("business_process")
+            else:
+                select_clauses.append("NULL as business_process")
+                
+            if 'latest_case_id' in column_names:
+                select_clauses.append("latest_case_id")
+            else:
+                select_clauses.append("NULL as latest_case_id")
+                
+            if 'id_local' in column_names:
+                select_clauses.append("id_local")
+            else:
+                select_clauses.append("NULL as id_local")
+                
+            if 'id_namespace' in column_names:
+                select_clauses.append("id_namespace")
+            else:
+                select_clauses.append("NULL as id_namespace")
+                
+            if 'registration_from' in column_names:
+                select_clauses.append("CAST(registration_from AS TIMESTAMP) as registration_from")
+            else:
+                select_clauses.append("NULL as registration_from")
+                
+            if 'effect_from' in column_names:
+                select_clauses.append("CAST(effect_from AS TIMESTAMP) as effect_from")
+            else:
+                select_clauses.append("NULL as effect_from")
+                
+            if 'authority' in column_names:
+                select_clauses.append("authority")
+            else:
+                select_clauses.append("NULL as authority")
+                
+            if 'is_worker_housing' in column_names:
+                select_clauses.append("COALESCE(is_worker_housing, false) as is_worker_housing")
+            else:
+                select_clauses.append("false as is_worker_housing")
+                
+            if 'is_common_lot' in column_names:
+                select_clauses.append("COALESCE(is_common_lot, false) as is_common_lot")
+            else:
+                select_clauses.append("false as is_common_lot")
+                
+            if 'has_owner_apartments' in column_names:
+                select_clauses.append(
+                    "COALESCE(has_owner_apartments, false) as has_owner_apartments"
+                )
+            else:
+                select_clauses.append("false as has_owner_apartments")
+                
+            if 'is_separated_road' in column_names:
+                select_clauses.append("COALESCE(is_separated_road, false) as is_separated_road")
+            else:
+                select_clauses.append("false as is_separated_road")
+                
+            if 'agricultural_notation' in column_names:
+                select_clauses.append("agricultural_notation")
+            else:
+                select_clauses.append("NULL as agricultural_notation")
+                
+            if 'geometry' in column_names:
+                select_clauses.append("ST_GeomFromText(geometry) as geometry")
+            else:
+                self.log.error("No geometry column found - cannot proceed")
+                raise ValueError("Geometry column is required but not found")
+                
+            select_clauses.append("CURRENT_TIMESTAMP as created_at")
+            
+            # Build the final query
+            select_clause = ",\n                    ".join(select_clauses)
+            
             self.conn.execute(f"""
                 CREATE TABLE {target_table_name} AS
                 SELECT 
-                    CAST(bfe_number AS BIGINT) as bfe_number,
-                    business_event,
-                    business_process,
-                    latest_case_id,
-                    id_local,
-                    id_namespace,
-                    CAST(registration_from AS TIMESTAMP) as registration_from,
-                    CAST(effect_from AS TIMESTAMP) as effect_from,
-                    authority,
-                    COALESCE(is_worker_housing, false) as is_worker_housing,
-                    COALESCE(is_common_lot, false) as is_common_lot,
-                    COALESCE(has_owner_apartments, false) as has_owner_apartments,
-                    COALESCE(is_separated_road, false) as is_separated_road,
-                    agricultural_notation,
-                    ST_GeomFromText(geometry) as geometry,
-                    CURRENT_TIMESTAMP as created_at
+                    {select_clause}
                 FROM {source_table_name}
-                WHERE bfe_number IS NOT NULL 
-                  AND geometry IS NOT NULL
-                  AND geometry != ''
+                WHERE ({('bfe_number IS NOT NULL' if 'bfe_number' in column_names else 'TRUE')})
+                  AND ({('geometry IS NOT NULL AND geometry != \'\'' 
+                        if 'geometry' in column_names else 'FALSE')})
             """)
             
             # Get final count for verification
