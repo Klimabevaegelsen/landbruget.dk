@@ -445,7 +445,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             WITH leadership_flattened AS (
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    unnest(json_extract(json_data, '$.leadership')) as leadership_item
+                    unnest(json_transform(json_extract(json_data, '$.leadership'), '[]')) as leadership_item
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.leadership') IS NOT NULL
                 AND json_array_length(json_extract(json_data, '$.leadership')) > 0
@@ -567,7 +567,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 -- Annual employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    unnest(json_extract(json_data, '$.employment_data.annual_employment')) as employment_item,
+                    unnest(json_transform(json_extract(json_data, '$.employment_data.annual_employment'), '[]')) as employment_item,
                     'annual' as employment_type
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.annual_employment') IS NOT NULL
@@ -578,7 +578,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 -- Quarterly employment  
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    unnest(json_extract(json_data, '$.employment_data.quarterly_employment')) as employment_item,
+                    unnest(json_transform(json_extract(json_data, '$.employment_data.quarterly_employment'), '[]')) as employment_item,
                     'quarterly' as employment_type
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.quarterly_employment') IS NOT NULL
@@ -589,7 +589,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 -- Monthly employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    unnest(json_extract(json_data, '$.employment_data.monthly_employment')) as employment_item,
+                    unnest(json_transform(json_extract(json_data, '$.employment_data.monthly_employment'), '[]')) as employment_item,
                     'monthly' as employment_type
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.monthly_employment') IS NOT NULL
@@ -600,7 +600,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 -- Replacement monthly employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    unnest(json_extract(json_data, '$.employment_data.replacement_monthly_employment')) as employment_item,
+                    unnest(json_transform(json_extract(json_data, '$.employment_data.replacement_monthly_employment'), '[]')) as employment_item,
                     'replacement_monthly' as employment_type
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.replacement_monthly_employment') IS NOT NULL
