@@ -1533,14 +1533,23 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 )
                 
                 # Union with previous years' data
-                if not all_gkea_data_loaded:
-                    # First year - rename to main table
-                    self.conn.execute(f"CREATE OR REPLACE TABLE gkea_raw AS SELECT * FROM {table_name}")
-                    all_gkea_data_loaded = True
-                else:
-                    # Subsequent years - union with existing data
-                    self.conn.execute("INSERT INTO gkea_raw SELECT * FROM gkea_raw_temp")
-                    self.conn.execute("DROP TABLE gkea_raw_temp")
+                try:
+                    if not all_gkea_data_loaded:
+                        # First year - rename to main table
+                        self.log.debug(f"Creating initial gkea_raw table from {table_name}")
+                        self.conn.execute(f"CREATE OR REPLACE TABLE gkea_raw AS SELECT * FROM {table_name}")
+                        all_gkea_data_loaded = True
+                    else:
+                        # Subsequent years - union with existing data
+                        self.log.debug(f"Appending data from {table_name} to gkea_raw")
+                        self.conn.execute(f"INSERT INTO gkea_raw SELECT * FROM {table_name}")
+                    
+                    # Clean up the temporary table
+                    self.log.debug(f"Dropping temporary table {table_name}")
+                    self.conn.execute(f"DROP TABLE {table_name}")
+                except Exception as e:
+                    self.log.error(f"Error in GKEA data union for {table_name}: {e}")
+                    raise
             
             if not all_gkea_data_loaded:
                 self.log.warning("No GKEA fertilizer data found for any field years - skipping CVR identification")
@@ -1548,20 +1557,25 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             
             # Find existing CVRs in FVM data to exclude from GKEA matching
             existing_cvrs = []
+            self.log.info("🔍 Finding existing CVRs in FVM data...")
             for year in self.config.marker_years:
                 marker_table = f"final_processed_marker_{year}"
                 try:
-                    year_cvrs = self.conn.execute(f"""
+                    cvr_query = f"""
                         SELECT DISTINCT cvr_number 
                         FROM {marker_table} 
                         WHERE cvr_number IS NOT NULL 
                           AND cvr_number != '' 
                           AND cvr_number != '0'
                           AND LENGTH(TRIM(cvr_number)) = 8
-                    """).df()['cvr_number'].tolist()
+                    """
+                    self.log.debug(f"Executing CVR extraction query for {marker_table}")
+                    year_cvrs = self.conn.execute(cvr_query).df()['cvr_number'].tolist()
                     existing_cvrs.extend(year_cvrs)
+                    self.log.debug(f"Found {len(year_cvrs)} CVRs in {marker_table}")
                 except Exception as e:
-                    self.log.debug(f"Could not extract CVRs from {marker_table}: {e}")
+                    self.log.error(f"Error extracting CVRs from {marker_table}: {e}")
+                    self.log.error(f"CVR query was: {cvr_query}")
                     continue
             
             existing_cvrs = list(set(existing_cvrs))  # Remove duplicates
@@ -1583,7 +1597,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     WHERE cvr_number NOT IN ({cvr_filter})
                 """
                 self.log.debug(f"Executing CVR filter query with {len(escaped_cvrs)} CVRs")
-                self.conn.execute(sql_query)
+                self.log.debug(f"CVR filter query: {sql_query[:200]}...")  # Log first 200 chars
+                try:
+                    self.conn.execute(sql_query)
+                    self.log.debug("CVR filter query executed successfully")
+                except Exception as e:
+                    self.log.error(f"Error in CVR filter query: {e}")
+                    self.log.error(f"Full CVR filter query: {sql_query}")
+                    raise
             else:
                 self.log.warning("No existing CVRs found in FVM data - including all GKEA data for pattern matching")
                 # No existing CVRs, so include all GKEA data
@@ -1685,6 +1706,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             
         except Exception as e:
             self.log.error(f"Error during agricultural CVR identification: {e}")
+            self.log.error(f"Exception type: {type(e).__name__}")
+            self.log.error(f"Exception details: {str(e)}")
+            import traceback
+            self.log.error(f"Full traceback: {traceback.format_exc()}")
             # Don't fail the entire pipeline if CVR identification fails
             pass
 
