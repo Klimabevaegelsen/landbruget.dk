@@ -823,6 +823,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Create table from GCS company data
             self.gcs_access.create_table_from_gcs("existing_companies", company_input_path)
             
+            # 🐛 DEBUG: Check what columns we loaded
+            columns_loaded = self.conn.execute("DESCRIBE existing_companies").fetchall()
+            self.log.info(f"🔍 DEBUG: Loaded {len(columns_loaded)} columns from existing companies table:")
+            for i, (col_name, col_type, _) in enumerate(columns_loaded[:10], 1):  # Show first 10
+                self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
+            if len(columns_loaded) > 10:
+                self.log.info(f"🔍 DEBUG:   ... and {len(columns_loaded) - 10} more columns")
+            
             # Create geocoding lookup from address table
             # Get primary addresses for companies (first geocoded address per company)
             self.conn.execute("""
@@ -841,29 +849,44 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                   AND longitude IS NOT NULL
             """)
             
-            # Update companies with geocoding data
+            # 🔧 FIX: Preserve all existing columns and only update geocoding fields
+            # Get all column names from existing companies table
+            existing_columns = [row[0] for row in self.conn.execute("DESCRIBE existing_companies").fetchall()]
+            
+            # Build SELECT clause that preserves all existing columns
+            select_clauses = []
+            geocoding_fields = {'latitude', 'longitude', 'coordinate_quality', 'dawa_enriched'}
+            
+            for col in existing_columns:
+                if col in geocoding_fields:
+                    # Use geocoding data if available, otherwise keep existing value
+                    select_clauses.append(f"COALESCE(g.{col}, c.{col}) as {col}")
+                else:
+                    # Keep existing column as-is
+                    select_clauses.append(f"c.{col}")
+            
+            select_clause = ",\n                    ".join(select_clauses)
+            
+            self.log.info(f"🔍 DEBUG: Creating table with {len(existing_columns)} columns (preserving all existing schema)")
+            
+            # Update companies with geocoding data while preserving all existing columns
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {company_table} AS
                 SELECT 
-                    c.cvr_number,
-                    c.company_name,
-                    c.company_type_description,
-                    c.status,
-                    c.founded_date,
-                    c.dissolution_date,
-                    c.advertisement_protection,
-                    c.pnumber_count,
-                    c.company_data_json,
-                    c.processing_timestamp,
-                    g.latitude,
-                    g.longitude,
-                    g.coordinate_quality,
-                    g.dawa_enriched
+                    {select_clause}
                 FROM existing_companies c
                 LEFT JOIN (
                     SELECT * FROM company_geocoding WHERE rn = 1
                 ) g ON c.cvr_number = g.cvr_number
             """)
+            
+            # 🐛 DEBUG: Check what columns we're saving
+            columns_saving = self.conn.execute(f"DESCRIBE {company_table}").fetchall()
+            self.log.info(f"🔍 DEBUG: Saving {len(columns_saving)} columns to companies table:")
+            for i, (col_name, col_type, _) in enumerate(columns_saving[:10], 1):  # Show first 10
+                self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
+            if len(columns_saving) > 10:
+                self.log.info(f"🔍 DEBUG:   ... and {len(columns_saving) - 10} more columns")
             
             # Save updated company table back to GCS
             self._save_data(
@@ -906,6 +929,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Create table from GCS pnumber data
             self.gcs_access.create_table_from_gcs("existing_pnumbers", pnumber_input_path)
             
+            # 🐛 DEBUG: Check what columns we loaded
+            columns_loaded = self.conn.execute("DESCRIBE existing_pnumbers").fetchall()
+            self.log.info(f"🔍 DEBUG: Loaded {len(columns_loaded)} columns from existing P-numbers table:")
+            for i, (col_name, col_type, _) in enumerate(columns_loaded[:10], 1):  # Show first 10
+                self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
+            if len(columns_loaded) > 10:
+                self.log.info(f"🔍 DEBUG:   ... and {len(columns_loaded) - 10} more columns")
+            
             # Create geocoding lookup from address table
             # Get primary addresses for pnumbers (first geocoded address per pnumber)
             self.conn.execute("""
@@ -923,25 +954,44 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                   AND longitude IS NOT NULL
             """)
             
-            # Update pnumbers with geocoding data
+            # 🔧 FIX: Preserve all existing columns and only update geocoding fields
+            # Get all column names from existing P-numbers table
+            existing_columns = [row[0] for row in self.conn.execute("DESCRIBE existing_pnumbers").fetchall()]
+            
+            # Build SELECT clause that preserves all existing columns
+            select_clauses = []
+            geocoding_fields = {'latitude', 'longitude', 'coordinate_quality', 'dawa_enriched'}
+            
+            for col in existing_columns:
+                if col in geocoding_fields:
+                    # Use geocoding data if available, otherwise keep existing value
+                    select_clauses.append(f"COALESCE(g.{col}, p.{col}) as {col}")
+                else:
+                    # Keep existing column as-is
+                    select_clauses.append(f"p.{col}")
+            
+            select_clause = ",\n                    ".join(select_clauses)
+            
+            self.log.info(f"🔍 DEBUG: Creating P-number table with {len(existing_columns)} columns (preserving all existing schema)")
+            
+            # Update pnumbers with geocoding data while preserving all existing columns
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {pnumber_table} AS
                 SELECT 
-                    p.p_number,
-                    p.unit_name,
-                    p.parent_cvr_number,
-                    p.address_count,
-                    p.pnumber_data_json,
-                    p.processing_timestamp,
-                    g.latitude,
-                    g.longitude,
-                    g.coordinate_quality,
-                    g.dawa_enriched
+                    {select_clause}
                 FROM existing_pnumbers p
                 LEFT JOIN (
                     SELECT * FROM pnumber_geocoding WHERE rn = 1
                 ) g ON p.p_number = g.p_number
             """)
+            
+            # 🐛 DEBUG: Check what columns we're saving
+            columns_saving = self.conn.execute(f"DESCRIBE {pnumber_table}").fetchall()
+            self.log.info(f"🔍 DEBUG: Saving {len(columns_saving)} columns to P-numbers table:")
+            for i, (col_name, col_type, _) in enumerate(columns_saving[:10], 1):  # Show first 10
+                self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
+            if len(columns_saving) > 10:
+                self.log.info(f"🔍 DEBUG:   ... and {len(columns_saving) - 10} more columns")
             
             # Save updated pnumber table back to GCS
             self._save_data(
