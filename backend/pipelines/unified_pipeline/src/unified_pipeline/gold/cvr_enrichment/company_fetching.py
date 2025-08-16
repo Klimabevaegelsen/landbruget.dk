@@ -490,18 +490,22 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
                 cvr_number,
                 role,
-                -- Create a formatted role for display using DuckDB title case function (handle mixed content)
-                list_aggr(
-                    transform(
-                        string_split(TRIM(role, '"'), ' '),
-                        x -> CASE 
-                            WHEN regexp_matches(x, '^[A-Za-zÀ-ÿ.]+$') 
-                            THEN upper(left(x, 1)) || lower(substring(x, 2))
-                            ELSE x  -- Keep as-is if contains digits or other special chars
-                        END
-                    ),
-                    ' '
-                ) as role_formatted,
+                -- Create a formatted role for display (simple title case for common roles)
+                CASE 
+                    WHEN UPPER(TRIM(role, '"')) = 'DIREKTØR' THEN 'Direktør'
+                    WHEN UPPER(TRIM(role, '"')) = 'ADM. DIR.' THEN 'Adm. Dir.'
+                    WHEN UPPER(TRIM(role, '"')) = 'FORMAND' THEN 'Formand'
+                    WHEN UPPER(TRIM(role, '"')) = 'NÆSTFORMAND' THEN 'Næstformand'
+                    WHEN UPPER(TRIM(role, '"')) = 'BESTYRELSESMEDLEM' THEN 'Bestyrelsesmedlem'
+                    WHEN UPPER(TRIM(role, '"')) = 'LEDER' THEN 'Leder'
+                    WHEN UPPER(TRIM(role, '"')) = 'INTERESSENTER' THEN 'Interessenter'
+                    WHEN UPPER(TRIM(role, '"')) = 'REEL EJER' THEN 'Reel Ejer'
+                    WHEN UPPER(TRIM(role, '"')) = 'REVISION' THEN 'Revision'
+                    WHEN UPPER(TRIM(role, '"')) = 'STIFTERE' THEN 'Stiftere'
+                    WHEN UPPER(TRIM(role, '"')) = 'FORENINGSREPRÆSENTANT' THEN 'Foreningsrepræsentant'
+                    WHEN UPPER(TRIM(role, '"')) = 'LIKVIDATOR' THEN 'Likvidator'
+                    ELSE TRIM(role, '"')  -- Keep original for unknown/mixed content roles
+                END as role_formatted,
                 role_start_date,
                 role_end_date,
                 COALESCE(is_current_role, true) as is_current_role,
