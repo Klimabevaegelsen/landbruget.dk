@@ -2159,9 +2159,16 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 # Get timestamp for CVR collection
                 timestamp = self.date_pattern
                 
-                # Save CVR numbers using the collection utility
+                # Create unique pipeline name to prevent matrix job overrides
+                # Use a combination of timestamp and process ID to ensure uniqueness across matrix jobs
+                import os
+                process_id = os.getpid()
+                unique_suffix = f"{timestamp}_{process_id}"
+                unique_pipeline_name = f"fvm_marker_{unique_suffix}"
+                
+                # Save CVR numbers using the collection utility with unique pipeline name
                 cvr_gcs_path = save_pipeline_cvr_numbers(
-                    pipeline_name="fvm_marker",
+                    pipeline_name=unique_pipeline_name,
                     cvr_numbers=unique_cvr_numbers,
                     gcs_access=self.gcs_access,
                     bucket=self.config.bucket,
@@ -2170,7 +2177,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 
                 self.log.info(
                     f"✅ Saved {len(unique_cvr_numbers)} unique CVR numbers "
-                    f"from FVM marker data to: {cvr_gcs_path}"
+                    f"from FVM marker data to: {cvr_gcs_path} (pipeline: {unique_pipeline_name})"
                 )
             else:
                 self.log.warning("⚠️ No CVR numbers found in FVM marker data")
