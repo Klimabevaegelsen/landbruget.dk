@@ -41,8 +41,15 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             CREATE OR REPLACE TABLE water_projects_full AS
             SELECT
                 project_id,
-                UNNEST(ST_Dump(geometry)).geom as geometry
+                UNNEST(ST_Dump(
+                    CASE 
+                        WHEN geometry IS NOT NULL AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        ELSE NULL
+                    END
+                )).geom as geometry
             FROM water_projects_raw
+            WHERE geometry IS NOT NULL AND geometry != ''
         """)
 
         # Log dataset sizes

@@ -39,8 +39,15 @@ class BNBOPreFilter(PreFilteringStageBase):
             CREATE OR REPLACE TABLE bnbo_status_full AS
             SELECT
                 status_category,
-                UNNEST(ST_Dump(geometry)).geom as geometry
+                UNNEST(ST_Dump(
+                    CASE 
+                        WHEN geometry IS NOT NULL AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        ELSE NULL
+                    END
+                )).geom as geometry
             FROM bnbo_status_raw
+            WHERE geometry IS NOT NULL AND geometry != ''
         """)
 
         # Log dataset sizes

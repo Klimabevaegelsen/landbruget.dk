@@ -193,7 +193,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                     f.cvr_number,
                     f.year,
                     f.field_uuid,
-                    f.field_area_m2,
+                    ST_Area_Spheroid(f.geometry) as field_area_m2,
                     p.bfe_number,
                     p.property_area_m2,
                     f.geometry as field_geometry,

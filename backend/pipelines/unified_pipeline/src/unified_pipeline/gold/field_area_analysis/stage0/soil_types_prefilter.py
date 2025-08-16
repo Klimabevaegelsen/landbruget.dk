@@ -42,8 +42,15 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             SELECT
                 soil_code,
                 soil_description,  -- Only meaningful soil data (8 Danish soil types)
-                UNNEST(ST_Dump(geometry)).geom as geometry
+                UNNEST(ST_Dump(
+                    CASE 
+                        WHEN geometry IS NOT NULL AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        ELSE NULL
+                    END
+                )).geom as geometry
             FROM soil_types_raw
+            WHERE geometry IS NOT NULL AND geometry != ''
         """)
 
         # Log dataset sizes
