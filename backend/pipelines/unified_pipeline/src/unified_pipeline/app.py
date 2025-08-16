@@ -33,6 +33,8 @@ from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterPro
 from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
+
+
 from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
     ArbjdstilsynetInspectionsGoldConfig,
@@ -504,6 +506,8 @@ def execute(cli_config: cli.CliConfig) -> int:
                 (WorkPermitsGold, WorkPermitsGoldConfig),
             ],
         },
+
+
     }
 
     # Retrieve jobs for given source and stage
