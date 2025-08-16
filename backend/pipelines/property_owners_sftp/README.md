@@ -104,8 +104,11 @@ gs://landbrugsdata-raw-data/
 ├── bronze/property_owners/
 │   └── YYYYMMDD_HHMMSS_original.zip
 └── silver/property_owners/
-    └── YYYYMMDD_HHMMSS_property_owners_processed.parquet
+    └── YYYYMMDD_HHMMSS/
+        └── data.parquet
 ```
+
+**Note**: Uses unified pipeline naming convention with timestamped directories containing `data.parquet` files for compatibility with the main pipeline framework.
 
 ## Performance
 
