@@ -40,52 +40,73 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         
         # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
         self.log.info("🌍 Validating soil types coordinate bounds and order...")
-        coord_validation = self.conn.execute("""
-            SELECT 
-                MIN(ST_XMin(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as min_x,
-                MAX(ST_XMax(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as max_x,
-                MIN(ST_YMin(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as min_y,
-                MAX(ST_YMax(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as max_y
-            FROM soil_types_raw 
-            WHERE geometry IS NOT NULL 
-            LIMIT 1000
-        """).fetchone()
+        
+        # First check geometry types to determine validation approach
+        try:
+            geom_types = self.conn.execute("""
+                SELECT DISTINCT typeof(geometry) as geom_type
+                FROM soil_types_raw 
+                WHERE geometry IS NOT NULL 
+                LIMIT 5
+            """).fetchall()
+            
+            geom_type_list = [row[0] for row in geom_types]
+            self.log.info(f"🔍 Soil types geometry types: {geom_type_list}")
+            
+            # Try coordinate validation with error handling
+            coord_validation = self.conn.execute("""
+                SELECT 
+                    MIN(ST_XMin(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                            ELSE 
+                                TRY_CAST(geometry AS GEOMETRY)
+                        END
+                    )) as min_x,
+                    MAX(ST_XMax(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                            ELSE 
+                                TRY_CAST(geometry AS GEOMETRY)
+                        END
+                    )) as max_x,
+                    MIN(ST_YMin(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                            ELSE 
+                                TRY_CAST(geometry AS GEOMETRY)
+                        END
+                    )) as min_y,
+                    MAX(ST_YMax(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                            ELSE 
+                                TRY_CAST(geometry AS GEOMETRY)
+                        END
+                    )) as max_y
+                FROM soil_types_raw 
+                WHERE geometry IS NOT NULL 
+                LIMIT 1000
+            """).fetchone()
+        except Exception as e:
+            self.log.warning(f"⚠️ Coordinate validation failed: {e}")
+            coord_validation = None
         
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
