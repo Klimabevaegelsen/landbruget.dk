@@ -106,7 +106,13 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         
         # Check for ST_Area_Spheroid calls without ST_FlipCoordinates
-        UNPROTECTED_SPHEROID=$(grep -r "ST_Area_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ | grep -v "ST_FlipCoordinates" | wc -l || echo "0")
+        # Use a more robust approach to avoid broken pipe errors
+        SPHEROID_RESULTS=$(grep -r "ST_Area_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null || true)
+        if [ -n "$SPHEROID_RESULTS" ]; then
+          UNPROTECTED_SPHEROID=$(echo "$SPHEROID_RESULTS" | grep -v "ST_FlipCoordinates" | wc -l || echo "0")
+        else
+          UNPROTECTED_SPHEROID="0"
+        fi
         echo "- ST_Area_Spheroid calls without ST_FlipCoordinates: **$UNPROTECTED_SPHEROID**" >> $GITHUB_STEP_SUMMARY
         
         if [ "$UNPROTECTED_SPHEROID" -gt "0" ]; then
@@ -114,7 +120,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "  **Unprotected calls found:**" >> $GITHUB_STEP_SUMMARY
           echo '  ```' >> $GITHUB_STEP_SUMMARY
-          grep -r "ST_Area_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ | grep -v "ST_FlipCoordinates" | head -10 >> $GITHUB_STEP_SUMMARY || true
+          echo "$SPHEROID_RESULTS" | grep -v "ST_FlipCoordinates" | head -10 >> $GITHUB_STEP_SUMMARY || true
           echo '  ```' >> $GITHUB_STEP_SUMMARY
         else
           echo "  ✅ All ST_Area_Spheroid calls are properly wrapped with ST_FlipCoordinates" >> $GITHUB_STEP_SUMMARY
@@ -123,13 +129,18 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         
         # Check for other spheroid functions
-        OTHER_SPHEROID=$(grep -r "ST_.*_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ | grep -v "ST_Area_Spheroid" | wc -l || echo "0")
+        OTHER_SPHEROID_RESULTS=$(grep -r "ST_.*_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null | grep -v "ST_Area_Spheroid" || true)
+        if [ -n "$OTHER_SPHEROID_RESULTS" ]; then
+          OTHER_SPHEROID=$(echo "$OTHER_SPHEROID_RESULTS" | wc -l)
+        else
+          OTHER_SPHEROID="0"
+        fi
         echo "- Other _Spheroid function calls: **$OTHER_SPHEROID**" >> $GITHUB_STEP_SUMMARY
         
         if [ "$OTHER_SPHEROID" -gt "0" ]; then
           echo "  ℹ️ Found other spheroid functions - verify they handle coordinate order correctly" >> $GITHUB_STEP_SUMMARY
           echo '  ```' >> $GITHUB_STEP_SUMMARY
-          grep -r "ST_.*_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ | grep -v "ST_Area_Spheroid" | head -5 >> $GITHUB_STEP_SUMMARY || true
+          echo "$OTHER_SPHEROID_RESULTS" | head -5 >> $GITHUB_STEP_SUMMARY || true
           echo '  ```' >> $GITHUB_STEP_SUMMARY
         else
           echo "  ✅ No other spheroid functions found" >> $GITHUB_STEP_SUMMARY
@@ -138,7 +149,12 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         
         # Check for coordinate verification logging
-        COORD_VERIFICATION=$(grep -r "COORDINATE ORDER VERIFICATION" --include="*.py" backend/pipelines/unified_pipeline/ | wc -l || echo "0")
+        COORD_VERIFICATION_RESULTS=$(grep -r "COORDINATE ORDER VERIFICATION" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null || true)
+        if [ -n "$COORD_VERIFICATION_RESULTS" ]; then
+          COORD_VERIFICATION=$(echo "$COORD_VERIFICATION_RESULTS" | wc -l)
+        else
+          COORD_VERIFICATION="0"
+        fi
         echo "- Files with coordinate order verification: **$COORD_VERIFICATION**" >> $GITHUB_STEP_SUMMARY
         
         if [ "$COORD_VERIFICATION" -gt "0" ]; then
