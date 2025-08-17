@@ -64,44 +64,44 @@ class WetlandsPreFilter(PreFilteringStageBase):
                         CASE 
                             WHEN geometry IS NULL THEN NULL
                             WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                                ST_GeomFromText(geometry)
                             WHEN typeof(geometry) = 'BLOB' THEN
-                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                                ST_GeomFromWKB(geometry)
                             ELSE 
-                                TRY_CAST(geometry AS GEOMETRY)
+                                geometry
                         END
                     )) as min_x,
                     MAX(ST_XMax(
                         CASE 
                             WHEN geometry IS NULL THEN NULL
                             WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                                ST_GeomFromText(geometry)
                             WHEN typeof(geometry) = 'BLOB' THEN
-                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                                ST_GeomFromWKB(geometry)
                             ELSE 
-                                TRY_CAST(geometry AS GEOMETRY)
+                                geometry
                         END
                     )) as max_x,
                     MIN(ST_YMin(
                         CASE 
                             WHEN geometry IS NULL THEN NULL
                             WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                                ST_GeomFromText(geometry)
                             WHEN typeof(geometry) = 'BLOB' THEN
-                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                                ST_GeomFromWKB(geometry)
                             ELSE 
-                                TRY_CAST(geometry AS GEOMETRY)
+                                geometry
                         END
                     )) as min_y,
                     MAX(ST_YMax(
                         CASE 
                             WHEN geometry IS NULL THEN NULL
                             WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                                ST_GeomFromText(geometry)
                             WHEN typeof(geometry) = 'BLOB' THEN
-                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                                ST_GeomFromWKB(geometry)
                             ELSE 
-                                TRY_CAST(geometry AS GEOMETRY)
+                                geometry
                         END
                     )) as max_y
                 FROM wetlands_raw 
