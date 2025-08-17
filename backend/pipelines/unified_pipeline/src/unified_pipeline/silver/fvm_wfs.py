@@ -1603,8 +1603,8 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     COUNT(*) as field_count,
                     SUM(area_ha) as total_area,
                     AVG(area_ha) as avg_field_size,
-                    COUNT(DISTINCT crop_code) as crop_diversity,
-                    STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
+                    COUNT(DISTINCT hovedafgroede) as crop_diversity,
+                    STRING_AGG(CAST(hovedafgroede AS VARCHAR), ',' ORDER BY hovedafgroede) as crop_composition
                 FROM gkea_missing_cvrs
                 GROUP BY cvr_number, gkea_journal_number
                 HAVING COUNT(*) > 1  -- Only multi-field operations
