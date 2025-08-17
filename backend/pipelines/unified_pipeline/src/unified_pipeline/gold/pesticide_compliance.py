@@ -564,10 +564,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             sanitizer = PesticideUnitSanitizer(self.conn)
             
             # Apply sanitization
-            sanitized_table, summary = sanitizer.sanitize_pesticide_units(
+            sanitized_table = sanitizer.sanitize_pesticide_units(
                 pesticide_table="pesticide_applications",
                 bmd_table="bmd_data"
             )
+            
+            # Get sanitization summary
+            summary = sanitizer.get_sanitization_summary(sanitized_table)
             
             # Replace original table with sanitized version
             self.conn.execute(f"""
