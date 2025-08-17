@@ -1322,8 +1322,35 @@ def _upload_silver_data_to_gcs(
         gcs_access = GCSDataAccess()
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
-        # Upload all files in silver output directory
+        # Upload processed files (with coordinate fixes) if available
+        processed_dir = silver_output_dir / "processed"
+
+        if processed_dir.exists() and any(processed_dir.glob("*.parquet")):
+            # Upload processed files (with coordinate fixes applied)
+            logger.info("📤 Uploading processed files with coordinate fixes...")
+            for file_path in processed_dir.glob("*.parquet"):
+                # Map processed file names to expected names for compatibility
+                if file_path.name == "buildings_processed.geoparquet":
+                    target_name = "joined_buildings.parquet"
+                else:
+                    target_name = file_path.name
+
+                gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{target_name}"
+
+                with open(file_path, "rb") as src:
+                    with gcs_access.fs.open(gcs_path, "wb") as dst:
+                        import shutil
+
+                        shutil.copyfileobj(src, dst)
+
+                logger.info(f"✅ Uploaded {file_path.name} -> {target_name} to {gcs_path}")
+
+        # Also upload any remaining files from main directory (like inspire_attributes.parquet)
         for file_path in silver_output_dir.glob("*.parquet"):
+            # Skip if we already uploaded a processed version
+            if processed_dir.exists() and file_path.name == "joined_buildings.parquet":
+                continue
+
             gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{file_path.name}"
 
             with open(file_path, "rb") as src:
