@@ -180,7 +180,7 @@ jobs:
     name: Data Migration
     runs-on: ubuntu-latest
     needs: [pre_migration_checks, schema_migration]
-    if: !cancelled() && (needs.schema_migration.result == 'success' || needs.schema_migration.result == 'skipped')
+    if: ${{ !cancelled() && (needs.schema_migration.result == 'success' || needs.schema_migration.result == 'skipped') }}
     
     strategy:
       matrix:
@@ -273,7 +273,7 @@ jobs:
     name: Generate Computed Data
     runs-on: ubuntu-latest
     needs: [pre_migration_checks, data_migration]
-    if: !cancelled() && needs.data_migration.result == 'success' && contains(github.event.inputs.phases, 'computed')
+    if: ${{ !cancelled() && needs.data_migration.result == 'success' && contains(github.event.inputs.phases, 'computed') }}
     
     steps:
     - name: Checkout code
@@ -321,7 +321,7 @@ jobs:
     name: Migration Validation
     runs-on: ubuntu-latest
     needs: [pre_migration_checks, data_migration, computed_data]
-    if: !cancelled() && github.event.inputs.skip_validation != 'true' && (needs.data_migration.result == 'success' || needs.computed_data.result == 'success')
+    if: ${{ !cancelled() && github.event.inputs.skip_validation != 'true' && (needs.data_migration.result == 'success' || needs.computed_data.result == 'success') }}
     
     steps:
     - name: Checkout code
