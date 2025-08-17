@@ -933,6 +933,26 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             return None
         return our_dosage / api_max if api_max > 0 else None
 
+    def _check_corrected_dosage_unit_exists(self) -> bool:
+        """
+        Check if the corrected_dosage_unit column exists in the pesticide_applications table.
+        This column is added by the unit sanitization process.
+        
+        Returns:
+            True if the column exists, False otherwise
+        """
+        try:
+            # Try to query the column to see if it exists
+            self.conn.execute("""
+                SELECT corrected_dosage_unit 
+                FROM pesticide_applications 
+                LIMIT 1
+            """)
+            return True
+        except Exception:
+            # Column doesn't exist
+            return False
+
     def _get_years_to_analyze(self) -> List[str]:
         """Determine which agricultural years to analyze."""
         if self.config.pesticide_year is not None:
@@ -964,6 +984,17 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(f"🔍 Analyzing compliance issues for {ag_year}")
 
         year_info = self.agricultural_years[ag_year]
+
+        # Check if corrected_dosage_unit column exists (from unit sanitization)
+        has_corrected_units = self._check_corrected_dosage_unit_exists()
+        
+        # Determine the dosage unit expression based on whether unit sanitization was applied
+        if has_corrected_units:
+            dosage_unit_expr = "COALESCE(a.corrected_dosage_unit, a.dosage_unit)"
+            self.logger.debug("Using corrected dosage units from sanitization process")
+        else:
+            dosage_unit_expr = "a.dosage_unit"
+            self.logger.debug("Using original dosage units (no sanitization applied)")
 
         # Detect potential compliance issues by comparing restriction dates with
         # agricultural year period
@@ -1007,7 +1038,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             -- Dosage compliance status (using corrected units if available)
             CASE
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
-                WHEN COALESCE(a.corrected_dosage_unit, a.dosage_unit) != d.product_unit 
+                WHEN {dosage_unit_expr} != d.product_unit 
                     THEN 'UNIT_MISMATCH'
                 WHEN a.area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
                 WHEN (
@@ -1022,7 +1053,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             CASE
                 WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0
                      AND a.area_ha > 0
-                     AND COALESCE(a.corrected_dosage_unit, a.dosage_unit) = d.product_unit THEN
+                     AND {dosage_unit_expr} = d.product_unit THEN
                     (a.dosage_quantity / a.area_ha) / d.max_dosage_app
                 ELSE NULL
             END as dosage_ratio,
@@ -1038,7 +1069,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         ) THEN 'WITHDRAWN_PRODUCT_USE'
                 WHEN d.max_dosage_app IS NOT NULL AND a.area_ha > 0
                      AND a.dosage_quantity IS NOT NULL
-                     AND COALESCE(a.corrected_dosage_unit, a.dosage_unit) = d.product_unit
+                     AND {dosage_unit_expr} = d.product_unit
                      AND (
                          a.dosage_quantity / a.area_ha
                      ) > d.max_dosage_app THEN 'DOSAGE_VIOLATION'
