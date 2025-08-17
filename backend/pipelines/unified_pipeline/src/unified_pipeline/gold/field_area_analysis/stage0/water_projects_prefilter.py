@@ -132,32 +132,38 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             self.log.warning("⚠️ Could not validate water projects coordinate bounds")
         
         # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
-        self.conn.execute("""
-            CREATE OR REPLACE TABLE water_projects_full AS
-            SELECT
-                project_id,
-                UNNEST(ST_Dump(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            -- Handle WKT string format
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            -- Handle WKB binary format
-                            ST_GeomFromWKB(geometry)
-                        ELSE
-                            -- Assume it's already a geometry object
-                            geometry
-                    END
-                )).geom as geometry
-            FROM water_projects_raw
-            WHERE geometry IS NOT NULL 
-              AND (
-                  (typeof(geometry) = 'VARCHAR' AND geometry != '') OR
-                  (typeof(geometry) = 'BLOB') OR
-                  (typeof(geometry) NOT IN ('VARCHAR', 'BLOB'))
-              )
-        """)
+        # Use simpler approach: since we know geometry is GEOMETRY type, use it directly
+        try:
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE water_projects_full AS
+                SELECT
+                    project_id,
+                    UNNEST(ST_Dump(geometry)).geom as geometry
+                FROM water_projects_raw
+                WHERE geometry IS NOT NULL 
+            """)
+        except Exception as e:
+            self.log.warning(f"⚠️ Failed with direct geometry approach: {e}")
+            self.log.info("🔄 Trying with type-safe CASE statement...")
+            
+            # Fallback: Use type-safe approach with explicit type checking
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE water_projects_full AS
+                SELECT
+                    project_id,
+                    UNNEST(ST_Dump(
+                        CASE 
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                ST_GeomFromText(geometry)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                ST_GeomFromWKB(geometry)
+                            ELSE
+                                geometry
+                        END
+                    )).geom as geometry
+                FROM water_projects_raw
+                WHERE geometry IS NOT NULL 
+            """)
 
         # Log dataset sizes
         raw_count = self.conn.execute("SELECT COUNT(*) FROM water_projects_raw").fetchone()[0]
