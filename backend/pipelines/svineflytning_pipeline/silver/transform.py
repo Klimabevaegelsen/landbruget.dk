@@ -266,7 +266,11 @@ class SvineflytningSilverProcessor:
 
                 self.conn.execute(
                     """
-                    INSERT INTO raw_movements VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO raw_movements VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+                        ?, ?, ?, ?, ?, ?, ?
+                    )
                 """,
                     [
                         movement.get("Id"),
@@ -430,7 +434,8 @@ class SvineflytningSilverProcessor:
         ).fetchone()[0]
 
         logger.info(
-            f"Movements table created: {total_count} total, {deleted_count} deleted, {invalid_count} invalid, {missing_animals} missing animal counts"
+            f"Movements table created: {total_count} total, {deleted_count} deleted, "
+            f"{invalid_count} invalid, {missing_animals} missing animal counts"
         )
 
     def _create_properties_table(self, export_timestamp: str):
@@ -520,7 +525,8 @@ class SvineflytningSilverProcessor:
                 MAX(FlytteTidspunkt_SvineflytDato) as last_movement_date
             FROM raw_movements
             WHERE Koeretoej_Forvogn_RegNr IS NOT NULL
-            GROUP BY Koeretoej_Forvogn_RegNr, Koeretoej_Forvogn_Landekode, Koeretoej_Haenger_RegNr, Koeretoej_Haenger_Landekode
+            GROUP BY Koeretoej_Forvogn_RegNr, Koeretoej_Forvogn_Landekode, 
+                     Koeretoej_Haenger_RegNr, Koeretoej_Haenger_Landekode
         """)
 
         vehicle_count = self.conn.execute("SELECT COUNT(*) FROM silver_vehicles").fetchone()[0]

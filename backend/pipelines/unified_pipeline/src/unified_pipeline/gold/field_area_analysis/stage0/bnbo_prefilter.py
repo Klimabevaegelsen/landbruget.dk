@@ -134,9 +134,11 @@ class BNBOPreFilter(PreFilteringStageBase):
                 )
             else:
                 self.log.warning("⚠️ BNBO coordinates outside expected Denmark bounds!")
-                self.log.warning(f"   WGS84 expected: X(8-16), Y(54-58)")
-                self.log.warning(f"   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
-                self.log.warning(f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})")
+                self.log.warning("   WGS84 expected: X(8-16), Y(54-58)")
+                self.log.warning("   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
+                self.log.warning(
+                    f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
+                )
         
         # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs to verify actual order
         try:
@@ -159,7 +161,7 @@ class BNBOPreFilter(PreFilteringStageBase):
                             first_val, second_val = map(float, coords_str.split())
                             coord_pairs.append((first_val, second_val))
                             self.log.info(f"   BNBO {i+1}: POINT({first_val:.6f} {second_val:.6f})")
-                        except:
+                        except Exception:
                             continue
                 
                 if coord_pairs:
@@ -169,12 +171,30 @@ class BNBOPreFilter(PreFilteringStageBase):
                     first_range = (min(first_vals), max(first_vals))
                     second_range = (min(second_vals), max(second_vals))
                     
-                    if 8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58:
-                        self.log.info(f"✅ BNBO CONFIRMED: Data stored as (LON, LAT) - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
-                    elif 54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15:
-                        self.log.warning(f"⚠️ BNBO ALERT: Data stored as (LAT, LON) - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
+                    if (
+                        8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and
+                        54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58
+                    ):
+                        self.log.info(
+                            f"✅ BNBO CONFIRMED: Data stored as (LON, LAT) - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
+                    elif (
+                        54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and
+                        8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15
+                    ):
+                        self.log.warning(
+                            f"⚠️ BNBO ALERT: Data stored as (LAT, LON) - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
                     else:
-                        self.log.warning(f"❓ BNBO UNCLEAR: Coordinate order unclear - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
+                        self.log.warning(
+                            f"❓ BNBO UNCLEAR: Coordinate order unclear - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
         except Exception as e:
             self.log.warning(f"⚠️ Could not verify BNBO coordinate order: {e}")
         

@@ -551,7 +551,9 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             self.conn.execute("""
                 CREATE OR REPLACE TABLE water_features AS
                 SELECT
-                    ST_Transform(ST_GeomFromText(geometry), 'EPSG:4326', 'EPSG:25832') as water_geom_utm
+                    ST_Transform(
+                        ST_GeomFromText(geometry), 'EPSG:4326', 'EPSG:25832'
+                    ) as water_geom_utm
                 FROM data_water_typology_silver
                 WHERE geometry IS NOT NULL AND geometry != ''
             """)

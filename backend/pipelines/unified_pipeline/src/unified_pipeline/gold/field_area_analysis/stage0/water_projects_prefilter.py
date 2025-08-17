@@ -33,7 +33,8 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         self.log.info("Loading full water projects dataset...")
         self._load_silver_dataset(CONFIG.water_projects_dataset, "water_projects_raw")
 
-        # CRITICAL: Decompose water projects with ST_Dump BEFORE spatial join to prevent memory issues
+        # CRITICAL: Decompose water projects with ST_Dump BEFORE spatial join 
+        # to prevent memory issues
         self.log.info(
             "Decomposing water project MultiPolygons with ST_Dump to prevent memory overflow..."
         )
@@ -122,7 +123,8 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
             self.log.info(
-                f"📍 Water projects bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})"
+                f"📍 Water projects bounds: X({min_x:.2f}, {max_x:.2f}), "
+                f"Y({min_y:.2f}, {max_y:.2f})"
             )
             
             # Check if coordinates are in expected ranges for Denmark
@@ -162,7 +164,9 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
                         try:
                             first_val, second_val = map(float, coords_str.split())
                             coord_pairs.append((first_val, second_val))
-                            self.log.info(f"   Water Project {i+1}: POINT({first_val:.6f} {second_val:.6f})")
+                            self.log.info(
+                                f"   Water Project {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                            )
                         except Exception:
                             continue
                 
@@ -230,7 +234,8 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             0
         ]
         self.log.info(
-            f"📊 Input: {raw_count:,} water project MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+            f"📊 Input: {raw_count:,} water project MultiPolygons → "
+            f"{decomposed_count:,} individual polygons after ST_Dump"
         )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
@@ -288,7 +293,8 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         reduction_pct = (1 - intersecting_count / total_projects) * 100
 
         self.log.info(
-            f"🎯 WATER PROJECTS REDUCTION: {total_projects:,} → {intersecting_count:,} projects ({reduction_pct:.1f}% reduction)"
+            f"🎯 WATER PROJECTS REDUCTION: {total_projects:,} → {intersecting_count:,} "
+            f"projects ({reduction_pct:.1f}% reduction)"
         )
         self.log.info(
             f"📐 After ST_Dump: {total_filtered:,} water project pieces for downstream processing"
@@ -306,7 +312,9 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             "reduction_percentage": reduction_pct,
             "processing_time_seconds": processing_time,
             "output_path": output_path,
-            "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 1 water project processing",
+            "performance_improvement": (
+                f"{reduction_pct:.1f}% reduction in Stage 1 water project processing"
+            ),
         }
 
     def _save_output_data(self, result: Dict[str, Any]):

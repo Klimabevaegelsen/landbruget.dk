@@ -5,9 +5,9 @@ This module provides improved algorithms for selecting the most appropriate
 primary address when a company has multiple addresses.
 """
 
-from typing import List, Dict, Any, Optional
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class AddressSelectionStrategy(Enum):
@@ -129,7 +129,9 @@ class EnhancedAddressSelector:
         ]
         return candidates[0] if candidates else None
     
-    def _select_by_business_priority(self, addresses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _select_by_business_priority(
+        self, addresses: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
         """
         Select address based on business logic priority.
         
@@ -254,14 +256,22 @@ class EnhancedAddressSelector:
             
             # Completeness score (higher is better, so negate for sorting)
             completeness = 0
-            if addr.get('street_name'): completeness += 1
-            if addr.get('house_number'): completeness += 1
-            if addr.get('postal_code'): completeness += 1
-            if addr.get('city'): completeness += 1
-            if addr.get('municipality_code'): completeness += 1
-            if addr.get('floor'): completeness += 1
-            if addr.get('door'): completeness += 1
-            if addr.get('latitude') and addr.get('longitude'): completeness += 2
+            if addr.get('street_name'):
+                completeness += 1
+            if addr.get('house_number'):
+                completeness += 1
+            if addr.get('postal_code'):
+                completeness += 1
+            if addr.get('city'):
+                completeness += 1
+            if addr.get('municipality_code'):
+                completeness += 1
+            if addr.get('floor'):
+                completeness += 1
+            if addr.get('door'):
+                completeness += 1
+            if addr.get('latitude') and addr.get('longitude'):
+                completeness += 2
             
             # Prefer more recent addresses (if period_start is available)
             recency_score = 0
@@ -269,7 +279,7 @@ class EnhancedAddressSelector:
                 try:
                     # Simple heuristic: longer period_start string suggests more recent
                     recency_score = -len(addr['period_start'])
-                except:
+                except Exception:
                     recency_score = 0
             
             return (

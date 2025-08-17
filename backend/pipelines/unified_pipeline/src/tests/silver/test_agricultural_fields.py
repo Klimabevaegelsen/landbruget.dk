@@ -146,7 +146,8 @@ async def test_run_read_bronze_data_failure(silver_source: AgriculturalFieldsSil
 
     # Expects 11 calls (will fail on first one, but continues to others)
     assert silver_source._read_bronze_data.call_count == 11
-    silver_source._process_payloads_with_duckdb.assert_not_called()  # Should not be called after failure
+    # Should not be called after failure
+    silver_source._process_payloads_with_duckdb.assert_not_called()
     silver_source._save_data.assert_not_called()  # Should not be called after failure
 
 

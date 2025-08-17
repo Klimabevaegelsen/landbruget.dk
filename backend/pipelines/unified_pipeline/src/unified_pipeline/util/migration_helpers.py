@@ -159,8 +159,9 @@ class GCSMigrationHelper:
             conn.execute("INSTALL spatial; LOAD spatial;")
 
             # Register gcsfs filesystem
-            from fsspec import filesystem
             import os
+
+            from fsspec import filesystem
 
             # Use HMAC authentication if available (same pattern as gcs_access.py)
             gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")

@@ -10,7 +10,11 @@ from pathlib import Path
 # Add the src directory to Python path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from unified_pipeline.gold.cvr_enrichment.shared.config import get_step_input_paths, CVREnrichmentStep
+from unified_pipeline.gold.cvr_enrichment.shared.config import (
+    CVREnrichmentStep,
+    get_step_input_paths,
+)
+
 
 def main():
     """Test the path resolution fix."""

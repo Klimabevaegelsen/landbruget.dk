@@ -193,7 +193,8 @@ class DAGIBronze(BaseSource[DAGIBronzeConfig], BronzeJobInterface):
                     try:
                         dataset_name = f"{self.config.dataset}_{layer_name}"
 
-                        # For DAGI, raw_data is a JSON string, so we need to save it directly as JSON
+                        # For DAGI, raw_data is a JSON string, so we need to save it directly
+                        # as JSON
                         # Create the GCS path following the unified pattern
                         timestamp = self.date_pattern
                         filename = f"{dataset_name}.json"
