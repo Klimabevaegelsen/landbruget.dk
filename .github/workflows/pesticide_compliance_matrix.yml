@@ -186,6 +186,10 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Run Pesticide Compliance Analysis for Year ${{ matrix.year }}
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
+          PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
         run: |
           cd backend/pipelines/unified_pipeline
 
