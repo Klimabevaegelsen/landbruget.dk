@@ -37,19 +37,113 @@ class WetlandsPreFilter(PreFilteringStageBase):
         self.log.info(
             "Decomposing wetland MultiPolygons with ST_Dump to prevent memory overflow..."
         )
+        
+        # First check the geometry column format to handle different data types properly
+        geometry_type_check = self.conn.execute("""
+            SELECT 
+                typeof(geometry) as geom_type,
+                COUNT(*) as count
+            FROM wetlands_raw 
+            WHERE geometry IS NOT NULL 
+            LIMIT 10
+        """).fetchall()
+        
+        if geometry_type_check:
+            geom_type = geometry_type_check[0][0]
+            self.log.info(f"🔍 Geometry column type detected: {geom_type}")
+        
+        # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
+        self.log.info("🌍 Validating coordinate bounds and order...")
+        coord_validation = self.conn.execute("""
+            SELECT 
+                MIN(ST_XMin(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as min_x,
+                MAX(ST_XMax(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as max_x,
+                MIN(ST_YMin(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as min_y,
+                MAX(ST_YMax(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as max_y
+            FROM wetlands_raw 
+            WHERE geometry IS NOT NULL 
+            LIMIT 1000
+        """).fetchone()
+        
+        if coord_validation:
+            min_x, max_x, min_y, max_y = coord_validation
+            self.log.info(f"📍 Coordinate bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})")
+            
+            # Check if coordinates are in expected ranges for Denmark
+            if min_x >= 8 and max_x <= 15 and min_y >= 54 and max_y <= 58:
+                self.log.info("✅ Coordinates appear to be in WGS84 (EPSG:4326) - Denmark bounds OK")
+            elif min_x >= 440000 and max_x <= 900000 and min_y >= 6040000 and max_y <= 6420000:
+                self.log.info("✅ Coordinates appear to be in UTM Zone 32N (EPSG:25832) - Denmark bounds OK")
+            else:
+                self.log.warning(f"⚠️ Coordinates outside expected Denmark bounds!")
+                self.log.warning(f"   WGS84 expected: X(8-15), Y(54-58)")
+                self.log.warning(f"   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
+                self.log.warning(f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})")
+        else:
+            self.log.warning("⚠️ Could not validate coordinate bounds")
+        
+        # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands_full AS
             SELECT
                 toerv_pct,
                 UNNEST(ST_Dump(
                     CASE 
-                        WHEN geometry IS NOT NULL AND geometry != '' THEN
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            -- Handle WKT string format
                             ST_GeomFromText(geometry)
-                        ELSE NULL
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            -- Handle WKB binary format
+                            ST_GeomFromWKB(geometry)
+                        ELSE
+                            -- Assume it's already a geometry object
+                            geometry
                     END
                 )).geom as geometry
             FROM wetlands_raw
-            WHERE geometry IS NOT NULL AND geometry != ''
+            WHERE geometry IS NOT NULL 
+              AND (
+                  (typeof(geometry) = 'VARCHAR' AND geometry != '') OR
+                  (typeof(geometry) = 'BLOB') OR
+                  (typeof(geometry) NOT IN ('VARCHAR', 'BLOB'))
+              )
         """)
 
         # Log dataset sizes

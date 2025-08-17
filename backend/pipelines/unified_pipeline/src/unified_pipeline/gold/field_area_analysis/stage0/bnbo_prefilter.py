@@ -35,26 +35,111 @@ class BNBOPreFilter(PreFilteringStageBase):
 
         # CRITICAL: Decompose BNBO with ST_Dump BEFORE spatial join to prevent memory issues
         self.log.info("Decomposing BNBO MultiPolygons with ST_Dump to prevent memory overflow...")
+        
+        # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
+        self.log.info("🌍 Validating BNBO coordinate bounds and order...")
+        coord_validation = self.conn.execute("""
+            SELECT 
+                MIN(ST_XMin(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as min_x,
+                MAX(ST_XMax(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as max_x,
+                MIN(ST_YMin(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as min_y,
+                MAX(ST_YMax(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as max_y
+            FROM bnbo_status_raw 
+            WHERE geometry IS NOT NULL 
+            LIMIT 1000
+        """).fetchone()
+        
+        if coord_validation:
+            min_x, max_x, min_y, max_y = coord_validation
+            self.log.info(
+                f"📍 BNBO bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})"
+            )
+            
+            # Check if coordinates are in expected ranges for Denmark
+            if min_x >= 8 and max_x <= 15 and min_y >= 54 and max_y <= 58:
+                self.log.info(
+                    "✅ BNBO coordinates in WGS84 (EPSG:4326) - Denmark bounds OK"
+                )
+            elif min_x >= 440000 and max_x <= 900000 and min_y >= 6040000 and max_y <= 6420000:
+                self.log.info(
+                    "✅ BNBO coordinates in UTM Zone 32N (EPSG:25832) - Denmark bounds OK"
+                )
+            else:
+                self.log.warning("⚠️ BNBO coordinates outside expected Denmark bounds!")
+                self.log.warning(
+                    f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
+                )
+        
+        # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_status_full AS
             SELECT
                 status_category,
                 UNNEST(ST_Dump(
                     CASE 
-                        WHEN geometry IS NOT NULL AND geometry != '' THEN
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            -- Handle WKT string format
                             ST_GeomFromText(geometry)
-                        ELSE NULL
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            -- Handle WKB binary format
+                            ST_GeomFromWKB(geometry)
+                        ELSE
+                            -- Assume it's already a geometry object
+                            geometry
                     END
                 )).geom as geometry
             FROM bnbo_status_raw
-            WHERE geometry IS NOT NULL AND geometry != ''
+            WHERE geometry IS NOT NULL 
+              AND (
+                  (typeof(geometry) = 'VARCHAR' AND geometry != '') OR
+                  (typeof(geometry) = 'BLOB') OR
+                  (typeof(geometry) NOT IN ('VARCHAR', 'BLOB'))
+              )
         """)
 
         # Log dataset sizes
         raw_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_status_raw").fetchone()[0]
         decomposed_count = self.conn.execute("SELECT COUNT(*) FROM bnbo_status_full").fetchone()[0]
         self.log.info(
-            f"📊 Input: {raw_count:,} BNBO MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+            f"📊 Input: {raw_count:,} BNBO MultiPolygons → "
+            f"{decomposed_count:,} individual polygons after ST_Dump"
         )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
@@ -94,7 +179,11 @@ class BNBOPreFilter(PreFilteringStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_filtered AS
             SELECT
-                ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as bnbo_id,
+                ROW_NUMBER() OVER (
+                    ORDER BY status_category, 
+                             ST_X(ST_Centroid(geometry)), 
+                             ST_Y(ST_Centroid(geometry))
+                ) as bnbo_id,
                 status_category,
                 geometry,
                 ST_Area_Spheroid(geometry) as bnbo_area_m2
@@ -108,7 +197,8 @@ class BNBOPreFilter(PreFilteringStageBase):
         reduction_pct = (1 - intersecting_count / total_bnbo) * 100
 
         self.log.info(
-            f"🎯 BNBO REDUCTION: {total_bnbo:,} → {intersecting_count:,} polygons ({reduction_pct:.1f}% reduction)"
+            f"🎯 BNBO REDUCTION: {total_bnbo:,} → {intersecting_count:,} polygons "
+            f"({reduction_pct:.1f}% reduction)"
         )
         self.log.info(f"📐 After ST_Dump: {total_filtered:,} BNBO pieces for downstream processing")
 
