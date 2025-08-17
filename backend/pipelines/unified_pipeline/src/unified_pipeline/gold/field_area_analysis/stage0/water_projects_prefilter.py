@@ -128,7 +128,8 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             )
 
             # Check if coordinates are in expected ranges for Denmark
-            if min_x >= 8 and max_x <= 15 and min_y >= 54 and max_y <= 58:
+            # WGS84 standard: X=latitude, Y=longitude
+            if min_x >= 54 and max_x <= 58 and min_y >= 8 and max_y <= 15:
                 self.log.info(
                     "✅ Water projects coordinates in WGS84 (EPSG:4326) - Denmark bounds OK"
                 )

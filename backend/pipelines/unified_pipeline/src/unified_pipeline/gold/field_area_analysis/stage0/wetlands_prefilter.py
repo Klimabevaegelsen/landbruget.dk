@@ -127,7 +127,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
             )
 
             # Check if coordinates are in expected ranges for Denmark
-            if min_x >= 8 and max_x <= 16 and min_y >= 54 and max_y <= 58:
+            # WGS84 standard: X=latitude, Y=longitude
+            if min_x >= 54 and max_x <= 58 and min_y >= 8 and max_y <= 16:
                 self.log.info(
                     "✅ Coordinates appear to be in WGS84 (EPSG:4326) - Denmark bounds OK"
                 )
@@ -138,7 +139,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 )
             else:
                 self.log.warning("⚠️ Coordinates outside expected Denmark bounds!")
-                self.log.warning("   WGS84 expected: X(8-16), Y(54-58)")
+                self.log.warning("   WGS84 expected: X(54-58 LAT), Y(8-16 LON)")
                 self.log.warning("   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
                 self.log.warning(
                     f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
