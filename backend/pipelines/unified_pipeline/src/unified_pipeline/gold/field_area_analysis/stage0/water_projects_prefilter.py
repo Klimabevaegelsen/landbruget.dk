@@ -227,7 +227,7 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             SELECT
                 project_id,
                 geometry,
-                ST_Area_Spheroid(geometry) as project_area_m2
+                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as project_area_m2
             FROM water_projects_intersecting
         """)
 
