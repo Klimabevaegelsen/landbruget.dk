@@ -55,56 +55,67 @@ class BNBOPreFilter(PreFilteringStageBase):
         self.log.info("🌍 Validating BNBO coordinate bounds and order...")
         
         # Try coordinate validation with error handling
+        # Since we know geometry is GEOMETRY type, use direct approach first
         try:
             coord_validation = self.conn.execute("""
                 SELECT 
-                    MIN(ST_XMin(
-                        CASE 
-                            WHEN geometry IS NULL THEN NULL
-                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                ST_GeomFromText(geometry)
-                            WHEN typeof(geometry) = 'BLOB' THEN
-                                ST_GeomFromWKB(geometry)
-                            ELSE geometry
-                        END
-                    )) as min_x,
-                    MAX(ST_XMax(
-                        CASE 
-                            WHEN geometry IS NULL THEN NULL
-                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                ST_GeomFromText(geometry)
-                            WHEN typeof(geometry) = 'BLOB' THEN
-                                ST_GeomFromWKB(geometry)
-                            ELSE geometry
-                        END
-                    )) as max_x,
-                    MIN(ST_YMin(
-                        CASE 
-                            WHEN geometry IS NULL THEN NULL
-                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                ST_GeomFromText(geometry)
-                            WHEN typeof(geometry) = 'BLOB' THEN
-                                ST_GeomFromWKB(geometry)
-                            ELSE geometry
-                        END
-                    )) as min_y,
-                    MAX(ST_YMax(
-                        CASE 
-                            WHEN geometry IS NULL THEN NULL
-                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                                ST_GeomFromText(geometry)
-                            WHEN typeof(geometry) = 'BLOB' THEN
-                                ST_GeomFromWKB(geometry)
-                            ELSE geometry
-                        END
-                    )) as max_y
+                    MIN(ST_XMin(geometry)) as min_x,
+                    MAX(ST_XMax(geometry)) as max_x,
+                    MIN(ST_YMin(geometry)) as min_y,
+                    MAX(ST_YMax(geometry)) as max_y
                 FROM bnbo_status_raw 
                 WHERE geometry IS NOT NULL 
                 LIMIT 1000
             """).fetchone()
         except Exception as e:
-            self.log.warning(f"⚠️ Coordinate validation failed: {e}")
-            coord_validation = None
+            self.log.warning(f"⚠️ Direct coordinate validation failed: {e}")
+            self.log.info("🔄 Trying with type-safe CASE statement...")
+            try:
+                coord_validation = self.conn.execute("""
+                    SELECT 
+                        MIN(ST_XMin(
+                            CASE 
+                                WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                    ST_GeomFromText(geometry)
+                                WHEN typeof(geometry) = 'BLOB' THEN
+                                    ST_GeomFromWKB(geometry)
+                                ELSE geometry
+                            END
+                        )) as min_x,
+                        MAX(ST_XMax(
+                            CASE 
+                                WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                    ST_GeomFromText(geometry)
+                                WHEN typeof(geometry) = 'BLOB' THEN
+                                    ST_GeomFromWKB(geometry)
+                                ELSE geometry
+                            END
+                        )) as max_x,
+                        MIN(ST_YMin(
+                            CASE 
+                                WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                    ST_GeomFromText(geometry)
+                                WHEN typeof(geometry) = 'BLOB' THEN
+                                    ST_GeomFromWKB(geometry)
+                                ELSE geometry
+                            END
+                        )) as min_y,
+                        MAX(ST_YMax(
+                            CASE 
+                                WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                    ST_GeomFromText(geometry)
+                                WHEN typeof(geometry) = 'BLOB' THEN
+                                    ST_GeomFromWKB(geometry)
+                                ELSE geometry
+                            END
+                        )) as max_y
+                    FROM bnbo_status_raw 
+                    WHERE geometry IS NOT NULL 
+                    LIMIT 1000
+                """).fetchone()
+            except Exception as e2:
+                self.log.warning(f"⚠️ Fallback coordinate validation also failed: {e2}")
+                coord_validation = None
         
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
