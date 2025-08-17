@@ -7,7 +7,18 @@ from typing import Any
 
 import duckdb
 
-from ..config.settings import Settings
+# Robust import handling for Settings
+try:
+    from ..config.settings import Settings
+except ImportError:
+    # Fallback for when module is imported directly
+    try:
+        from config.settings import Settings
+    except ImportError:
+        # Last resort - create a minimal settings class
+        class Settings:
+            def __init__(self) -> None:
+                pass
 
 
 # Try to import comprehensive geo validator
