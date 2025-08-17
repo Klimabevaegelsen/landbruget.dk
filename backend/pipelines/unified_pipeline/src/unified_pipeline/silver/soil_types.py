@@ -389,11 +389,18 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 )
 
                 # Check if coordinates are reasonable for Denmark in WGS84
-                if not (7.0 <= min_x <= 16.0 and 54.0 <= min_y <= 58.0):
+                # X appears to be latitude (54-58° N), Y appears to be longitude (7-16° E)
+                lat_valid = 54.0 <= min_x <= 58.0 and 54.0 <= max_x <= 58.0
+                lon_valid = 7.0 <= min_y <= 16.0 and 7.0 <= max_y <= 16.0
+
+                if not (lat_valid and lon_valid):
                     self.log.warning(
-                        "Coordinates appear to be outside Denmark bounds "
+                        f"Coordinates appear to be outside Denmark bounds: "
+                        f"lat_valid={lat_valid}, lon_valid={lon_valid} "
                         "(may indicate CRS detection or transformation issue)"
                     )
+                else:
+                    self.log.info("Coordinate bounds are within expected Denmark ranges")
 
             # Check attribute distributions
             soil_type_count = self.conn.execute(f"""
@@ -408,7 +415,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             self.log.error(f"Quality check failed: {str(e)}")
             raise
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
         """
         Run the soil types data processing pipeline using DuckDB-spatial.
 
@@ -420,7 +427,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                         should contain WFS metadata including the URL.
 
         Returns:
-            None
+            Optional[str]: Name of the processed DuckDB table, or None if processing fails
 
         Raises:
             Exception: If any step in the pipeline fails
@@ -438,7 +445,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                     self.log.error(
                         f"Expected dict with wfs_url from bronze stage, got {type(bronze_data)}"
                     )
-                    return
+                    return None
             else:
                 # Fallback to reading from storage
                 self.log.info("Reading bronze data from storage (fallback)")
@@ -447,14 +454,14 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 )
                 if bronze_metadata is None:
                     self.log.error("Failed to read bronze metadata from storage")
-                    return
+                    return None
 
                 # Extract WFS URL from stored metadata
                 if isinstance(bronze_metadata, dict) and "wfs_url" in bronze_metadata:
                     wfs_url = bronze_metadata["wfs_url"]
                 else:
                     self.log.error("Bronze metadata does not contain wfs_url")
-                    return
+                    return None
 
             # ✅ MIGRATION: Process data using DuckDB-spatial
             processed_table = await self._validate_and_transform_with_duckdb(wfs_url)
@@ -472,6 +479,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             )
 
             self.log.info("Soil types silver layer processing completed successfully")
+            return processed_table
 
         except Exception as e:
             self.log.error(f"Failed to process soil types silver layer: {e}")
