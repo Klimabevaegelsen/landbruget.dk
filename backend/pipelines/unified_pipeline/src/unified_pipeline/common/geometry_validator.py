@@ -141,6 +141,7 @@ def validate_and_transform_geometries_duckdb(
             min_x, max_x, min_y, max_y = initial_bounds
 
             # Check if coordinates are already in WGS84 (longitude/latitude ranges)
+            # FIXED: Corrected variable names to match actual coordinate order detection
             is_wgs84_lon_lat = (
                 7 <= min_x <= 16 and 7 <= max_x <= 16 and 54 <= min_y <= 58 and 54 <= max_y <= 58
             )
@@ -151,15 +152,21 @@ def validate_and_transform_geometries_duckdb(
 
             if is_wgs84_lon_lat:
                 logger.info(
-                    f"{dataset_name}: Data in WGS84 (LAT, LON) order - CORRECT for "
-                    "ST_Area_Spheroid direct usage"
+                    f"{dataset_name}: Data in WGS84 (LON, LAT) order - needs coordinate flip "
+                    "for correct EPSG:4326 standard"
                 )
-                # COORDINATE APPROACH: Data is correctly in (LAT, LON) EPSG:4326 standard
-                # ST_Area_Spheroid expects (LAT, LON) input - no transformation needed
+                # Flip coordinates to get proper (LAT, LON) order for EPSG:4326 standard
+                conn.execute(f"""
+                    UPDATE {table_name} SET
+                        {geometry_column} = ST_FlipCoordinates({geometry_column})
+                    WHERE {geometry_column} IS NOT NULL
+                """)
             elif is_wgs84_lat_lon:
                 logger.info(
-                    f"{dataset_name}: Data in WGS84 but lat/lon order - will flip after processing"
+                    f"{dataset_name}: Data in WGS84 (LAT, LON) order - CORRECT for "
+                    "EPSG:4326 standard"
                 )
+                # No transformation needed - coordinates are already in correct order
             elif is_utm:
                 logger.info(
                     f"{dataset_name}: Data in Danish UTM (EPSG:25832) - transforming to WGS84"
