@@ -246,7 +246,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.dosage_cache = {}  # Cache API dosage data to avoid repeated requests
 
         # Agricultural year mappings (August 1 - July 31)
+        # Includes years where we have pesticide application data available
         self.agricultural_years = {
+            "2015_2016": {"start": "2015-08-01", "end": "2016-07-31", "year": 2015},
+            "2016_2017": {"start": "2016-08-01", "end": "2017-07-31", "year": 2016},
+            "2017_2018": {"start": "2017-08-01", "end": "2018-07-31", "year": 2017},
+            "2018_2019": {"start": "2018-08-01", "end": "2019-07-31", "year": 2018},
+            "2019_2020": {"start": "2019-08-01", "end": "2020-07-31", "year": 2019},
             "2020_2021": {"start": "2020-08-01", "end": "2021-07-31", "year": 2020},
             "2021_2022": {"start": "2021-08-01", "end": "2022-07-31", "year": 2021},
             "2022_2023": {"start": "2022-08-01", "end": "2023-07-31", "year": 2022},
@@ -962,22 +968,46 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             return False
 
     def _get_years_to_analyze(self) -> List[str]:
-        """Determine which agricultural years to analyze."""
+        """Determine which agricultural years to analyze based on available pesticide data."""
         if self.config.pesticide_year is not None:
-            # Analyze specific year
+            # Matrix job mode: analyze specific year
             target_year = f"{self.config.pesticide_year}_{self.config.pesticide_year + 1}"
-            if target_year in self.agricultural_years:
+            self.logger.info(f"🎯 Matrix job mode: analyzing specific year {target_year}")
+
+            # Check if the year exists in the pesticide applications data
+            year_exists = (
+                self.conn.execute(
+                    "SELECT COUNT(*) FROM pesticide_applications WHERE agricultural_year = ?",
+                    [target_year],
+                ).fetchone()[0]
+                > 0
+            )
+
+            if year_exists:
+                self.logger.info(f"✅ Found pesticide data for {target_year}")
                 return [target_year]
             else:
-                self.logger.warning(f"Specified year {self.config.pesticide_year} not available")
+                self.logger.warning(f"❌ No pesticide data found for {target_year}")
                 return []
         else:
-            # Analyze all available years
+            # Single job mode: analyze all available years (mainly for testing/development)
+            self.logger.info("📊 Single job mode: discovering all available years")
             available_years = self.conn.execute(
                 "SELECT DISTINCT agricultural_year FROM pesticide_applications "
                 "WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
             ).fetchall()
-            return [year[0] for year in available_years if year[0] in self.agricultural_years]
+
+            available_years_list = [year[0] for year in available_years]
+            self.logger.info(
+                f"📅 Agricultural years found in pesticide data: {available_years_list}"
+            )
+
+            if available_years_list:
+                self.logger.info(f"✅ Will analyze all available years: {available_years_list}")
+                return available_years_list
+            else:
+                self.logger.warning("❌ No agricultural years found in pesticide data")
+                return []
 
     async def _analyze_agricultural_year(self, ag_year: str) -> Dict[str, Any]:
         """

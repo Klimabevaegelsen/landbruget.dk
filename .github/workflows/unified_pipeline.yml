@@ -4,14 +4,14 @@ name: Unified Pipeline
 
 on:
   schedule:
-    - cron: '0 0 * * 0'  # every Sunday at midnight UTC (Note: agricultural_fields processes multi-year data 2020-2025)
+    - cron: "0 0 * * 0" # every Sunday at midnight UTC (Note: agricultural_fields processes multi-year data 2020-2025)
   workflow_dispatch:
     # Allow manual triggering
     inputs:
       source:
-        description: 'Source to run the pipeline for'
+        description: "Source to run the pipeline for"
         required: true
-        default: 'cadastral'
+        default: "cadastral"
         type: choice
         options:
           - all
@@ -37,9 +37,9 @@ on:
           - dmi
           - cvr_enrichment
       stage:
-        description: 'Pipeline stage to run'
+        description: "Pipeline stage to run"
         required: false
-        default: 'all'
+        default: "all"
         type: choice
         options:
           - all
@@ -47,23 +47,23 @@ on:
           - silver
           - gold
       agricultural_fields_year:
-        description: 'Agricultural fields year (for field_area_analysis only)'
+        description: "Agricultural fields year (for field_area_analysis only)"
         required: false
         type: choice
         options:
-          - '2024'
-          - '2025'
-          - 'both'
-        default: 'both'
+          - "2024"
+          - "2025"
+          - "both"
+        default: "both"
 
 jobs:
   run-unified-pipeline:
     name: Run Unified Pipeline
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      id-token: 'write'
-      actions: 'write'  # Required to trigger other workflows via API
+      contents: "read"
+      id-token: "write"
+      actions: "write" # Required to trigger other workflows via API
     strategy:
       matrix:
         include: >-
@@ -82,7 +82,7 @@ jobs:
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
-      max-parallel: 10  # GitHub will auto-queue within 20 job limit, this helps with server load
+      max-parallel: 10 # GitHub will auto-queue within 20 job limit, this helps with server load
     env:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
@@ -133,8 +133,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -202,6 +202,10 @@ jobs:
             # Pesticide disaggregation uses dedicated matrix jobs - skip main pipeline
             echo "Pesticide disaggregation detected - using dedicated matrix jobs instead"
             echo "Main pipeline job skipped for pesticide_disaggregation (matrix jobs handle this)"
+          elif [ "${{ matrix.source }}" = "pesticide_compliance" ]; then
+            # Pesticide compliance uses dedicated matrix jobs - skip main pipeline
+            echo "Pesticide compliance detected - using dedicated matrix jobs instead"
+            echo "Main pipeline job skipped for pesticide_compliance (matrix jobs handle this)"
           else
             # Regular source job
             echo "Running regular pipeline job: ${{ matrix.source }} with stage: ${{ github.event.inputs.stage || 'all' }}"
@@ -241,8 +245,8 @@ jobs:
     if: ${{ contains(fromJson('["all", "pesticide_disaggregation"]'), github.event.inputs.source) || (github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
     strategy:
       fail-fast: false
       matrix:
@@ -294,8 +298,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -313,26 +317,26 @@ jobs:
           cd backend/pipelines/unified_pipeline
           echo "🧪 Processing pesticide disaggregation + proximity for year: ${{ matrix.year }}"
           echo "📅 Pesticide year ${{ matrix.year }} uses field data from year $((${{ matrix.year }} + 1))"
-          
+
           # Start resource monitoring
           (while true; do
             sleep 60
             echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
             echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
-            
+
             MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
             DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-            
+
             if [ $MEMORY_USED_PCT -gt 90 ]; then
               echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
             fi
-            
+
             if [ $DISK_USED_PCT -gt 85 ]; then
               echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
             fi
           done) &
           MONITOR_PID=$!
-          
+
           # Step 1: Run disaggregation
           echo "🧪 Step 1: Running pesticide disaggregation for year ${{ matrix.year }}"
           echo "🚨 WORKFLOW: About to execute Python command for disaggregation"
@@ -345,7 +349,7 @@ jobs:
             echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
             exit 1
           fi
-          
+
           # Step 2: Run proximity analysis (uses fresh disaggregation data)
           echo "🌍 Step 2: Running proximity analysis for year ${{ matrix.year }}"
           echo "🏠 Analyzing building proximity (100m radius)"
@@ -360,7 +364,7 @@ jobs:
             echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
             exit 1
           fi
-          
+
           # Stop monitoring
           kill $MONITOR_PID 2>/dev/null || true
           echo "✅ Complete pesticide processing finished for year ${{ matrix.year }}"
@@ -375,5 +379,3 @@ jobs:
           find /tmp -type f -size +100M -delete 2>/dev/null || true
           find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
           find . -type f -name "*.pyc" -delete 2>/dev/null || true
-
-
