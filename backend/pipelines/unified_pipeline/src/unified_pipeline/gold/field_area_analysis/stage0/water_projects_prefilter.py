@@ -38,54 +38,75 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
             "Decomposing water project MultiPolygons with ST_Dump to prevent memory overflow..."
         )
         
-        # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
-        self.log.info("🌍 Validating water projects coordinate bounds and order...")
-        coord_validation = self.conn.execute("""
+        # First check the geometry column format to handle different data types properly
+        geometry_type_check = self.conn.execute("""
             SELECT 
-                MIN(ST_XMin(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as min_x,
-                MAX(ST_XMax(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as max_x,
-                MIN(ST_YMin(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as min_y,
-                MAX(ST_YMax(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as max_y
+                typeof(geometry) as geom_type,
+                COUNT(*) as count
             FROM water_projects_raw 
             WHERE geometry IS NOT NULL 
-            LIMIT 1000
-        """).fetchone()
+            GROUP BY typeof(geometry)
+            LIMIT 10
+        """).fetchall()
+        
+        if geometry_type_check:
+            geom_types = [(row[0], row[1]) for row in geometry_type_check]
+            self.log.info(f"🔍 Water projects geometry column types detected: {geom_types}")
+        
+        # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
+        self.log.info("🌍 Validating water projects coordinate bounds and order...")
+        
+        # Try coordinate validation with error handling
+        try:
+            coord_validation = self.conn.execute("""
+                SELECT 
+                    MIN(ST_XMin(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                ST_GeomFromText(geometry)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                ST_GeomFromWKB(geometry)
+                            ELSE geometry
+                        END
+                    )) as min_x,
+                    MAX(ST_XMax(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                ST_GeomFromText(geometry)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                ST_GeomFromWKB(geometry)
+                            ELSE geometry
+                        END
+                    )) as max_x,
+                    MIN(ST_YMin(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                ST_GeomFromText(geometry)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                ST_GeomFromWKB(geometry)
+                            ELSE geometry
+                        END
+                    )) as min_y,
+                    MAX(ST_YMax(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                ST_GeomFromText(geometry)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                ST_GeomFromWKB(geometry)
+                            ELSE geometry
+                        END
+                    )) as max_y
+                FROM water_projects_raw 
+                WHERE geometry IS NOT NULL 
+                LIMIT 1000
+            """).fetchone()
+        except Exception as e:
+            self.log.warning(f"⚠️ Coordinate validation failed: {e}")
+            coord_validation = None
         
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
