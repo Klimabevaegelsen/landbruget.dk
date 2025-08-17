@@ -483,39 +483,28 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 json_extract(json_data, '$.status')::VARCHAR as status,
                 json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                 json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                json_extract(json_data, '$.advertisement_protection')::BOOLEAN 
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN
                     as advertisement_protection,
                 json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
-                -- Note: primary_address will be NULL since geocoding is disabled
-                json_extract(json_data, '$.primary_address.full_address')::VARCHAR 
-                    as current_full_address,
-                json_extract(json_data, '$.primary_address.street_name')::VARCHAR 
-                    as current_street_name,
-                json_extract(json_data, '$.primary_address.house_number')::VARCHAR 
-                    as current_house_number,
-                json_extract(json_data, '$.primary_address.floor')::VARCHAR as current_floor,
-                json_extract(json_data, '$.primary_address.door')::VARCHAR as current_door,
-                TRY_CAST(json_extract(json_data, '$.primary_address.postal_code') AS INTEGER) 
-                    as current_postal_code,
-                json_extract(json_data, '$.primary_address.city')::VARCHAR as current_city,
-                TRY_CAST(json_extract(json_data, '$.primary_address.municipality_code') AS INTEGER) 
-                    as current_municipality_code,
-                json_extract(json_data, '$.primary_address.municipality_name')::VARCHAR 
-                    as current_municipality_name,
-                json_extract(json_data, '$.primary_address.address_type')::VARCHAR 
-                    as current_address_type,
-                TRY_CAST(json_extract(json_data, '$.primary_address.latitude') AS DOUBLE) 
-                    as latitude,
-                TRY_CAST(json_extract(json_data, '$.primary_address.longitude') AS DOUBLE) 
-                    as longitude,
-                json_extract(json_data, '$.primary_address.coordinate_quality')::VARCHAR 
-                    as coordinate_quality,
-                json_extract(json_data, '$.primary_address.coordinate_source')::VARCHAR 
-                    as coordinate_source,
-                json_extract(json_data, '$.primary_address.dawa_enriched')::BOOLEAN 
-                    as dawa_enriched,
+                -- Note: Structured address fields will be populated in Address Geocoding step
+                -- These fields will be NULL initially and filled by primary address selection
+                NULL::VARCHAR as current_full_address,
+                NULL::VARCHAR as current_street_name,
+                NULL::VARCHAR as current_house_number,
+                NULL::VARCHAR as current_floor,
+                NULL::VARCHAR as current_door,
+                NULL::INTEGER as current_postal_code,
+                NULL::VARCHAR as current_city,
+                NULL::INTEGER as current_municipality_code,
+                NULL::VARCHAR as current_municipality_name,
+                NULL::VARCHAR as current_address_type,
+                NULL::DOUBLE as latitude,
+                NULL::DOUBLE as longitude,
+                NULL::VARCHAR as coordinate_quality,
+                NULL::VARCHAR as coordinate_source,
+                NULL::BOOLEAN as dawa_enriched,
                 json_data as company_data_json,
-                json_extract(json_data, '$.processing_timestamp')::VARCHAR 
+                json_extract(json_data, '$.processing_timestamp')::VARCHAR
                     as processing_timestamp
             FROM unnest($1) as t(json_data)
         """,
@@ -600,9 +589,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     idx as leadership_idx
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
-                        WHEN json_array_length(json_extract(json_data, '$.leadership')) > 0 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
+                        WHEN json_array_length(json_extract(json_data, '$.leadership')) > 0
                         THEN (
                             json_array_length(json_extract(json_data, '$.leadership')) - 1
                         )::BIGINT
@@ -615,50 +604,50 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 SELECT
                     lf.cvr_number,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.unit_number'
                     )::BIGINT as unit_number,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.person_type'
                     )::VARCHAR as person_type,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.names[0].name'
                     )::VARCHAR as current_name,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.addresses[0].city'
                     )::VARCHAR as current_city,
                     TRY_CAST(
                         json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.leadership[' || lf.leadership_idx ||
                             '].person.addresses[0].postal_code'
                         ) AS INTEGER
                     ) as current_postal_code,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].person.addresses[0].municipality_name'
                     )::VARCHAR as current_municipality,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].vaerdi'
                     )::VARCHAR as role,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigFra'
                     )::VARCHAR as role_start_date,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigTil'
                     )::VARCHAR as role_end_date,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].is_current'
                     )::BOOLEAN as is_current_role,
                     NOW()::VARCHAR as processing_timestamp
@@ -681,7 +670,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
                 cvr_number,
                 role,
-                CASE 
+                CASE
                     WHEN UPPER(TRIM(role, '"')) = 'DIREKTØR' THEN 'Direktør'
                     WHEN UPPER(TRIM(role, '"')) = 'ADM. DIR.' THEN 'Adm. Dir.'
                     WHEN UPPER(TRIM(role, '"')) = 'FORMAND' THEN 'Formand'
@@ -692,7 +681,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     WHEN UPPER(TRIM(role, '"')) = 'REEL EJER' THEN 'Reel Ejer'
                     WHEN UPPER(TRIM(role, '"')) = 'REVISION' THEN 'Revision'
                     WHEN UPPER(TRIM(role, '"')) = 'STIFTERE' THEN 'Stiftere'
-                    WHEN UPPER(TRIM(role, '"')) = 'FORENINGSREPRÆSENTANT' 
+                    WHEN UPPER(TRIM(role, '"')) = 'FORENINGSREPRÆSENTANT'
                         THEN 'Foreningsrepræsentant'
                     WHEN UPPER(TRIM(role, '"')) = 'LIKVIDATOR' THEN 'Likvidator'
                     ELSE TRIM(role, '"')
@@ -700,9 +689,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 role_start_date,
                 role_end_date,
                 COALESCE(is_current_role, true) as is_current_role,
-                CASE 
+                CASE
                     WHEN UPPER(TRIM(role, '"')) IN (
-                        'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 
+                        'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND',
                         'BESTYRELSESMEDLEM', 'LEDER', 'INTERESSENTER'
                     ) THEN true
                     WHEN UPPER(TRIM(role, '"')) IN (
@@ -713,7 +702,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 CASE
                     WHEN UPPER(TRIM(role, '"')) IN ('REEL EJER', 'INTERESSENTER') THEN true
                     WHEN UPPER(TRIM(role, '"')) IN (
-                        'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM', 
+                        'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM',
                         'REVISION', 'STIFTERE', 'FORENINGSREPRÆSENTANT', 'LIKVIDATOR', 'LEDER'
                     ) THEN false
                     ELSE NULL
@@ -737,11 +726,11 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     idx as employment_idx,
                     'annual' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
                         WHEN json_array_length(
                             json_extract(json_data, '$.employment_data.annual_employment')
-                        ) > 0 
+                        ) > 0
                         THEN (
                             json_array_length(
                                 json_extract(json_data, '$.employment_data.annual_employment')
@@ -753,20 +742,20 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 AND json_array_length(
                     json_extract(json_data, '$.employment_data.annual_employment')
                 ) > 0
-                
+
                 UNION ALL
-                
-                -- Quarterly employment  
+
+                -- Quarterly employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     idx as employment_idx,
                     'quarterly' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
                         WHEN json_array_length(
                             json_extract(json_data, '$.employment_data.quarterly_employment')
-                        ) > 0 
+                        ) > 0
                         THEN (
                             json_array_length(
                                 json_extract(json_data, '$.employment_data.quarterly_employment')
@@ -778,20 +767,20 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 AND json_array_length(
                     json_extract(json_data, '$.employment_data.quarterly_employment')
                 ) > 0
-                
+
                 UNION ALL
-                
+
                 -- Monthly employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     idx as employment_idx,
                     'monthly' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
                         WHEN json_array_length(
                             json_extract(json_data, '$.employment_data.monthly_employment')
-                        ) > 0 
+                        ) > 0
                         THEN (
                             json_array_length(
                                 json_extract(json_data, '$.employment_data.monthly_employment')
@@ -803,21 +792,21 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 AND json_array_length(
                     json_extract(json_data, '$.employment_data.monthly_employment')
                 ) > 0
-                
+
                 UNION ALL
-                
+
                 -- Replacement monthly employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     idx as employment_idx,
                     'replacement_monthly' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
                         WHEN json_array_length(
                             json_extract(json_data,
                                 '$.employment_data.replacement_monthly_employment')
-                        ) > 0 
+                        ) > 0
                         THEN (
                             json_array_length(
                                 json_extract(json_data,
@@ -834,26 +823,26 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 ) > 0
             )
             SELECT
-                md5(CONCAT(ef.cvr_number::VARCHAR, '_', ef.employment_type, '_', 
+                md5(CONCAT(ef.cvr_number::VARCHAR, '_', ef.employment_type, '_',
                           COALESCE(
                             CASE ef.employment_type
                                 WHEN 'annual' THEN json_extract(
-                                    t.json_data, 
+                                    t.json_data,
                                     '$.employment_data.annual_employment[' ||
                                     ef.employment_idx || '].year'
                                 )::VARCHAR
                                 WHEN 'quarterly' THEN json_extract(
-                                    t.json_data, 
+                                    t.json_data,
                                     '$.employment_data.quarterly_employment[' ||
                                     ef.employment_idx || '].year'
                                 )::VARCHAR
                                 WHEN 'monthly' THEN json_extract(
-                                    t.json_data, 
+                                    t.json_data,
                                     '$.employment_data.monthly_employment[' ||
                                     ef.employment_idx || '].year'
                                 )::VARCHAR
                                 WHEN 'replacement_monthly' THEN json_extract(
-                                    t.json_data, 
+                                    t.json_data,
                                     '$.employment_data.replacement_monthly_employment[' ||
                                     ef.employment_idx || '].year'
                                 )::VARCHAR
@@ -875,7 +864,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                             ef.employment_idx || '].month'
                         )::VARCHAR
                                 WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                                 '$.employment_data.replacement_monthly_employment[' ||
                                     ef.employment_idx || '].month'
                         )::VARCHAR
@@ -901,7 +890,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                                 ef.employment_idx || '].year'
                         )
                         WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.replacement_monthly_employment[' ||
                                 ef.employment_idx || '].year'
                         )
@@ -923,7 +912,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                             ef.employment_idx || '].month'
                         )
                         WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                                 '$.employment_data.replacement_monthly_employment[' ||
                                     ef.employment_idx || '].month'
                         )
@@ -932,22 +921,22 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 TRY_CAST(
                     CASE ef.employment_type
                         WHEN 'annual' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.annual_employment[' ||
                                 ef.employment_idx || '].total_employees'
                         )
                         WHEN 'quarterly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.quarterly_employment[' ||
                                 ef.employment_idx || '].total_employees'
                         )
                         WHEN 'monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.monthly_employment[' ||
                                 ef.employment_idx || '].total_employees'
                         )
                         WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.replacement_monthly_employment[' ||
                                 ef.employment_idx || '].total_employees'
                         )
@@ -955,22 +944,22 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 TRY_CAST(
                     CASE ef.employment_type
                         WHEN 'annual' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.annual_employment[' ||
                                 ef.employment_idx || '].full_time_equivalent'
                         )
                         WHEN 'quarterly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.quarterly_employment[' ||
                                 ef.employment_idx || '].full_time_equivalent'
                         )
                         WHEN 'monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.monthly_employment[' ||
                                 ef.employment_idx || '].full_time_equivalent'
                         )
                         WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.replacement_monthly_employment[' ||
                                 ef.employment_idx || '].full_time_equivalent'
                         )
@@ -978,7 +967,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 TRY_CAST(
                     CASE ef.employment_type
                         WHEN 'annual' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.annual_employment[' ||
                                 ef.employment_idx || '].employees_including_owners'
                         )
@@ -986,51 +975,51 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     END AS INTEGER) as employees_including_owners,
                 CASE ef.employment_type
                     WHEN 'annual' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.annual_employment[' ||
                             ef.employment_idx || '].fte_interval_code'
                     )::VARCHAR
                     WHEN 'quarterly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.quarterly_employment[' ||
                             ef.employment_idx || '].fte_interval_code'
                     )::VARCHAR
                     WHEN 'monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.monthly_employment[' ||
                             ef.employment_idx || '].fte_interval_code'
                     )::VARCHAR
                     WHEN 'replacement_monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.replacement_monthly_employment[' ||
                             ef.employment_idx || '].fte_interval_code'
                     )::VARCHAR
                 END as fte_interval_code,
                 CASE ef.employment_type
                     WHEN 'annual' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.annual_employment[' ||
                             ef.employment_idx || '].employees_interval_code'
                     )::VARCHAR
                     WHEN 'quarterly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.quarterly_employment[' ||
                             ef.employment_idx || '].employees_interval_code'
                     )::VARCHAR
                     WHEN 'monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.monthly_employment[' ||
                             ef.employment_idx || '].employees_interval_code'
                     )::VARCHAR
                     WHEN 'replacement_monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.replacement_monthly_employment[' ||
                             ef.employment_idx || '].employees_interval_code'
                     )::VARCHAR
                 END as employees_interval_code,
                 CASE ef.employment_type
                     WHEN 'annual' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.annual_employment[' ||
                             ef.employment_idx || '].owners_interval_code'
                     )::VARCHAR
@@ -1038,22 +1027,22 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 END as owners_interval_code,
                 CASE ef.employment_type
                     WHEN 'annual' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.annual_employment[' ||
                             ef.employment_idx || '].last_updated'
                     )::VARCHAR
                     WHEN 'quarterly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.quarterly_employment[' ||
                             ef.employment_idx || '].last_updated'
                     )::VARCHAR
                     WHEN 'monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.monthly_employment[' ||
                             ef.employment_idx || '].last_updated'
                     )::VARCHAR
                     WHEN 'replacement_monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.replacement_monthly_employment[' ||
                             ef.employment_idx || '].last_updated'
                     )::VARCHAR
@@ -1224,7 +1213,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.status')::VARCHAR as status,
                     json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                     json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                    json_extract(json_data, '$.advertisement_protection')::BOOLEAN 
+                    json_extract(json_data, '$.advertisement_protection')::BOOLEAN
                     as advertisement_protection,
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
                     -- Extract primary address (algorithmically selected by
@@ -1232,33 +1221,33 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     -- Priority: 1) Current addresses,
                     -- 2) Beliggenhedsadresse > Postadresse > Kontaktadresse,
                     -- 3) Best coordinate quality
-                    json_extract(json_data, '$.primary_address.full_address')::VARCHAR 
+                    json_extract(json_data, '$.primary_address.full_address')::VARCHAR
                     as current_full_address,
-                    json_extract(json_data, '$.primary_address.street_name')::VARCHAR 
+                    json_extract(json_data, '$.primary_address.street_name')::VARCHAR
                     as current_street_name,
-                    json_extract(json_data, '$.primary_address.house_number')::VARCHAR 
+                    json_extract(json_data, '$.primary_address.house_number')::VARCHAR
                     as current_house_number,
                     json_extract(json_data, '$.primary_address.floor')::VARCHAR as current_floor,
                     json_extract(json_data, '$.primary_address.door')::VARCHAR as current_door,
-                    TRY_CAST(json_extract(json_data, '$.primary_address.postal_code') AS INTEGER) 
+                    TRY_CAST(json_extract(json_data, '$.primary_address.postal_code') AS INTEGER)
                     as current_postal_code,
                     json_extract(json_data, '$.primary_address.city')::VARCHAR as current_city,
                     TRY_CAST(json_extract(json_data,
-                        '$.primary_address.municipality_code') AS INTEGER) 
+                        '$.primary_address.municipality_code') AS INTEGER)
                     as current_municipality_code,
-                    json_extract(json_data, '$.primary_address.municipality_name')::VARCHAR 
+                    json_extract(json_data, '$.primary_address.municipality_name')::VARCHAR
                     as current_municipality_name,
-                    json_extract(json_data, '$.primary_address.address_type')::VARCHAR 
+                    json_extract(json_data, '$.primary_address.address_type')::VARCHAR
                     as current_address_type,
-                    TRY_CAST(json_extract(json_data, '$.primary_address.latitude') AS DOUBLE) 
+                    TRY_CAST(json_extract(json_data, '$.primary_address.latitude') AS DOUBLE)
                     as latitude,
-                    TRY_CAST(json_extract(json_data, '$.primary_address.longitude') AS DOUBLE) 
+                    TRY_CAST(json_extract(json_data, '$.primary_address.longitude') AS DOUBLE)
                     as longitude,
-                    json_extract(json_data, '$.primary_address.coordinate_quality')::VARCHAR 
+                    json_extract(json_data, '$.primary_address.coordinate_quality')::VARCHAR
                     as coordinate_quality,
-                    json_extract(json_data, '$.primary_address.coordinate_source')::VARCHAR 
+                    json_extract(json_data, '$.primary_address.coordinate_source')::VARCHAR
                     as coordinate_source,
-                    json_extract(json_data, '$.primary_address.dawa_enriched')::BOOLEAN 
+                    json_extract(json_data, '$.primary_address.dawa_enriched')::BOOLEAN
                     as dawa_enriched,
                     json_data as company_data_json,  -- Keep for pipeline dependencies (artifacts)
                     json_extract(json_data, '$.processing_timestamp')::VARCHAR
@@ -1351,9 +1340,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     idx as leadership_idx
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
-                        WHEN json_array_length(json_extract(json_data, '$.leadership')) > 0 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
+                        WHEN json_array_length(json_extract(json_data, '$.leadership')) > 0
                         THEN (
                             json_array_length(json_extract(json_data, '$.leadership')) - 1
                         )::BIGINT
@@ -1366,54 +1355,54 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 SELECT
                     lf.cvr_number,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.unit_number'
                     )::BIGINT as unit_number,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.person_type'
                     )::VARCHAR as person_type,
                     -- Get current name (first name marked as current, or first name if none marked)
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.names[0].name'
                     )::VARCHAR as current_name,
                     -- Get current address (first address marked as current,
                     -- or first address if none marked)
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.addresses[0].city'
                     )::VARCHAR as current_city,
                     TRY_CAST(
                         json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.leadership[' || lf.leadership_idx ||
                             '].person.addresses[0].postal_code'
                         ) AS INTEGER
                     ) as current_postal_code,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].person.addresses[0].municipality_name'
                     )::VARCHAR as current_municipality,
                     -- Get role from organization
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].vaerdi'
                     )::VARCHAR as role,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigFra'
                     )::VARCHAR as role_start_date,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigTil'
                     )::VARCHAR as role_end_date,
                     json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].is_current'
                     )::BOOLEAN as is_current_role,
                     NOW()::VARCHAR as processing_timestamp
@@ -1439,7 +1428,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 cvr_number,
                 role,
                 -- Create a formatted role for display (simple title case for common roles)
-                CASE 
+                CASE
                     WHEN UPPER(TRIM(role, '"')) = 'DIREKTØR' THEN 'Direktør'
                     WHEN UPPER(TRIM(role, '"')) = 'ADM. DIR.' THEN 'Adm. Dir.'
                     WHEN UPPER(TRIM(role, '"')) = 'FORMAND' THEN 'Formand'
@@ -1450,7 +1439,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     WHEN UPPER(TRIM(role, '"')) = 'REEL EJER' THEN 'Reel Ejer'
                     WHEN UPPER(TRIM(role, '"')) = 'REVISION' THEN 'Revision'
                     WHEN UPPER(TRIM(role, '"')) = 'STIFTERE' THEN 'Stiftere'
-                    WHEN UPPER(TRIM(role, '"')) = 'FORENINGSREPRÆSENTANT' 
+                    WHEN UPPER(TRIM(role, '"')) = 'FORENINGSREPRÆSENTANT'
                         THEN 'Foreningsrepræsentant'
                     WHEN UPPER(TRIM(role, '"')) = 'LIKVIDATOR' THEN 'Likvidator'
                     ELSE TRIM(role, '"')  -- Keep original for unknown/mixed content roles
@@ -1459,9 +1448,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 role_end_date,
                 COALESCE(is_current_role, true) as is_current_role,
                 -- Classify as leadership based on role (case-insensitive matching)
-                CASE 
+                CASE
                     WHEN UPPER(TRIM(role, '"')) IN (
-                        'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 
+                        'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND',
                         'BESTYRELSESMEDLEM', 'LEDER', 'INTERESSENTER'
                     ) THEN true
                     WHEN UPPER(TRIM(role, '"')) IN (
@@ -1473,7 +1462,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 CASE
                     WHEN UPPER(TRIM(role, '"')) IN ('REEL EJER', 'INTERESSENTER') THEN true
                     WHEN UPPER(TRIM(role, '"')) IN (
-                        'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM', 
+                        'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM',
                         'REVISION', 'STIFTERE', 'FORENINGSREPRÆSENTANT', 'LIKVIDATOR', 'LEDER'
                     ) THEN false
                     ELSE NULL
@@ -1520,11 +1509,11 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     idx as employment_idx,
                     'annual' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
                         WHEN json_array_length(
                             json_extract(json_data, '$.employment_data.annual_employment')
-                        ) > 0 
+                        ) > 0
                         THEN (
                             json_array_length(
                                 json_extract(json_data, '$.employment_data.annual_employment')
@@ -1536,20 +1525,20 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 AND json_array_length(
                     json_extract(json_data, '$.employment_data.annual_employment')
                 ) > 0
-                
+
                 UNION ALL
-                
-                -- Quarterly employment  
+
+                -- Quarterly employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     idx as employment_idx,
                     'quarterly' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
                         WHEN json_array_length(
                             json_extract(json_data, '$.employment_data.quarterly_employment')
-                        ) > 0 
+                        ) > 0
                         THEN (
                             json_array_length(
                                 json_extract(json_data, '$.employment_data.quarterly_employment')
@@ -1561,20 +1550,20 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 AND json_array_length(
                     json_extract(json_data, '$.employment_data.quarterly_employment')
                 ) > 0
-                
+
                 UNION ALL
-                
+
                 -- Monthly employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     idx as employment_idx,
                     'monthly' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
                         WHEN json_array_length(
                             json_extract(json_data, '$.employment_data.monthly_employment')
-                        ) > 0 
+                        ) > 0
                         THEN (
                             json_array_length(
                                 json_extract(json_data, '$.employment_data.monthly_employment')
@@ -1586,21 +1575,21 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 AND json_array_length(
                     json_extract(json_data, '$.employment_data.monthly_employment')
                 ) > 0
-                
+
                 UNION ALL
-                
+
                 -- Replacement monthly employment
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     idx as employment_idx,
                     'replacement_monthly' as employment_type
                 FROM unnest($1) as t(json_data)
-                CROSS JOIN generate_series(0::BIGINT, 
-                    CASE 
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
                         WHEN json_array_length(
                             json_extract(json_data,
                                 '$.employment_data.replacement_monthly_employment')
-                        ) > 0 
+                        ) > 0
                         THEN (
                             json_array_length(
                                 json_extract(json_data,
@@ -1618,26 +1607,26 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             )
             SELECT
                 -- Generate employment UUID for each record
-                md5(CONCAT(ef.cvr_number::VARCHAR, '_', ef.employment_type, '_', 
+                md5(CONCAT(ef.cvr_number::VARCHAR, '_', ef.employment_type, '_',
                           COALESCE(
                             CASE ef.employment_type
                                 WHEN 'annual' THEN json_extract(
-                                    t.json_data, 
+                                    t.json_data,
                                     '$.employment_data.annual_employment[' ||
                                     ef.employment_idx || '].year'
                                 )::VARCHAR
                                 WHEN 'quarterly' THEN json_extract(
-                                    t.json_data, 
+                                    t.json_data,
                                     '$.employment_data.quarterly_employment[' ||
                                     ef.employment_idx || '].year'
                                 )::VARCHAR
                                 WHEN 'monthly' THEN json_extract(
-                                    t.json_data, 
+                                    t.json_data,
                                     '$.employment_data.monthly_employment[' ||
                                     ef.employment_idx || '].year'
                                 )::VARCHAR
                                 WHEN 'replacement_monthly' THEN json_extract(
-                                    t.json_data, 
+                                    t.json_data,
                                     '$.employment_data.replacement_monthly_employment[' ||
                                     ef.employment_idx || '].year'
                                 )::VARCHAR
@@ -1659,7 +1648,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                             ef.employment_idx || '].month'
                         )::VARCHAR
                                 WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                                 '$.employment_data.replacement_monthly_employment[' ||
                                     ef.employment_idx || '].month'
                         )::VARCHAR
@@ -1686,7 +1675,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                                 ef.employment_idx || '].year'
                         )
                         WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.replacement_monthly_employment[' ||
                                 ef.employment_idx || '].year'
                         )
@@ -1708,7 +1697,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                             ef.employment_idx || '].month'
                         )
                         WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                                 '$.employment_data.replacement_monthly_employment[' ||
                                     ef.employment_idx || '].month'
                         )
@@ -1717,22 +1706,22 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 TRY_CAST(
                     CASE ef.employment_type
                         WHEN 'annual' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.annual_employment[' ||
                                 ef.employment_idx || '].total_employees'
                         )
                         WHEN 'quarterly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.quarterly_employment[' ||
                                 ef.employment_idx || '].total_employees'
                         )
                         WHEN 'monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.monthly_employment[' ||
                                 ef.employment_idx || '].total_employees'
                         )
                         WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.replacement_monthly_employment[' ||
                                 ef.employment_idx || '].total_employees'
                         )
@@ -1740,22 +1729,22 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 TRY_CAST(
                     CASE ef.employment_type
                         WHEN 'annual' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.annual_employment[' ||
                                 ef.employment_idx || '].full_time_equivalent'
                         )
                         WHEN 'quarterly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.quarterly_employment[' ||
                                 ef.employment_idx || '].full_time_equivalent'
                         )
                         WHEN 'monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.monthly_employment[' ||
                                 ef.employment_idx || '].full_time_equivalent'
                         )
                         WHEN 'replacement_monthly' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.replacement_monthly_employment[' ||
                                 ef.employment_idx || '].full_time_equivalent'
                         )
@@ -1763,7 +1752,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 TRY_CAST(
                     CASE ef.employment_type
                         WHEN 'annual' THEN json_extract(
-                            t.json_data, 
+                            t.json_data,
                             '$.employment_data.annual_employment[' ||
                                 ef.employment_idx || '].employees_including_owners'
                         )
@@ -1771,51 +1760,51 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     END AS INTEGER) as employees_including_owners,
                 CASE ef.employment_type
                     WHEN 'annual' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.annual_employment[' ||
                             ef.employment_idx || '].fte_interval_code'
                     )::VARCHAR
                     WHEN 'quarterly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.quarterly_employment[' ||
                             ef.employment_idx || '].fte_interval_code'
                     )::VARCHAR
                     WHEN 'monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.monthly_employment[' ||
                             ef.employment_idx || '].fte_interval_code'
                     )::VARCHAR
                     WHEN 'replacement_monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.replacement_monthly_employment[' ||
                             ef.employment_idx || '].fte_interval_code'
                     )::VARCHAR
                 END as fte_interval_code,
                 CASE ef.employment_type
                     WHEN 'annual' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.annual_employment[' ||
                             ef.employment_idx || '].employees_interval_code'
                     )::VARCHAR
                     WHEN 'quarterly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.quarterly_employment[' ||
                             ef.employment_idx || '].employees_interval_code'
                     )::VARCHAR
                     WHEN 'monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.monthly_employment[' ||
                             ef.employment_idx || '].employees_interval_code'
                     )::VARCHAR
                     WHEN 'replacement_monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.replacement_monthly_employment[' ||
                             ef.employment_idx || '].employees_interval_code'
                     )::VARCHAR
                 END as employees_interval_code,
                 CASE ef.employment_type
                     WHEN 'annual' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.annual_employment[' ||
                             ef.employment_idx || '].owners_interval_code'
                     )::VARCHAR
@@ -1823,22 +1812,22 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 END as owners_interval_code,
                 CASE ef.employment_type
                     WHEN 'annual' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.annual_employment[' ||
                             ef.employment_idx || '].last_updated'
                     )::VARCHAR
                     WHEN 'quarterly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.quarterly_employment[' ||
                             ef.employment_idx || '].last_updated'
                     )::VARCHAR
                     WHEN 'monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.monthly_employment[' ||
                             ef.employment_idx || '].last_updated'
                     )::VARCHAR
                     WHEN 'replacement_monthly' THEN json_extract(
-                        t.json_data, 
+                        t.json_data,
                         '$.employment_data.replacement_monthly_employment[' ||
                             ef.employment_idx || '].last_updated'
                     )::VARCHAR
@@ -1863,8 +1852,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Get counts by type
         type_counts = self.conn.execute(f"""
             SELECT employment_type, COUNT(*) as count
-            FROM {employment_table} 
-            GROUP BY employment_type 
+            FROM {employment_table}
+            GROUP BY employment_type
             ORDER BY count DESC
         """).fetchall()
 
