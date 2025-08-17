@@ -97,7 +97,7 @@ class PlanteITAPI:
         """Get all pesticide products approved for a specific crop."""
         try:
             response = self.session.get(f"{self.base_url}/Products?CropId={crop_id}", timeout=30)
-            
+
             # Check for authentication issues
             if response.status_code == 401:
                 raise ValueError(
@@ -109,10 +109,10 @@ class PlanteITAPI:
                     f"Access forbidden for Plante IT API. "
                     f"Please check permissions. Status: {response.status_code}"
                 )
-            
+
             response.raise_for_status()
             result = response.json()
-            
+
             # Validate response structure
             if not isinstance(result, list):
                 logger.warning(
@@ -120,7 +120,7 @@ class PlanteITAPI:
                     f"expected list, got {type(result)}"
                 )
                 logger.warning(f"Response content: {result}")
-            
+
             return result
         except ValueError:
             # Re-raise authentication/permission errors
@@ -135,7 +135,7 @@ class PlanteITAPI:
             response = self.session.get(
                 f"{self.base_url}/Products/{product_id}?CropId={crop_id}", timeout=30
             )
-            
+
             # Check for authentication issues
             if response.status_code == 401:
                 raise ValueError(
@@ -147,10 +147,10 @@ class PlanteITAPI:
                     f"Access forbidden for Plante IT API. "
                     f"Please check permissions. Status: {response.status_code}"
                 )
-            
+
             response.raise_for_status()
             result = response.json()
-            
+
             # Validate response structure for product details
             if result and not isinstance(result, dict):
                 logger.warning(
@@ -158,7 +158,7 @@ class PlanteITAPI:
                     f"expected dict, got {type(result)}"
                 )
                 logger.warning(f"Response content: {result}")
-            
+
             return result
         except ValueError:
             # Re-raise authentication/permission errors
@@ -208,7 +208,7 @@ class PesticideComplianceGoldConfig(BaseJobConfig):
     enable_dosage_compliance: bool = Field(
         default=True, description="Enable dosage compliance checking against API limits"
     )
-    
+
     # Enable unit sanitization
     enable_unit_sanitization: bool = Field(
         default=True, description="Enable statistical unit sanitization to fix unit mismatches"
@@ -307,14 +307,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             await self._load_bmd_data()
             await self._load_pesticide_data()
             await self._load_agricultural_fields_data()
-            
+
             # Apply unit sanitization before compliance analysis
             if self.config.enable_unit_sanitization:
                 await self._sanitize_pesticide_units()
-            
+
             # Create registration mismatch detection table
             await self._create_registration_mismatch_table()
-            
+
             await self._load_dosage_limits()
 
             # Determine years to analyze
@@ -534,9 +534,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         files = self.gcs_access.list_files_with_timestamps(pattern)
 
         if not files:
-            self.logger.warning(
-                "⚠️ FVM marker data not found - crop mapping will be limited"
-            )
+            self.logger.warning("⚠️ FVM marker data not found - crop mapping will be limited")
             return
 
         # Sort by timestamp to get the most recent file
@@ -573,31 +571,30 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes "
             f"from FVM marker data"
         )
-    
+
     async def _sanitize_pesticide_units(self) -> None:
         """Apply statistical unit sanitization to fix unit mismatches."""
         self.logger.info("🧹 Applying statistical unit sanitization to pesticide data")
-        
+
         try:
             # Initialize sanitizer
             sanitizer = PesticideUnitSanitizer(self.conn)
-            
+
             # Apply sanitization
             sanitized_table = sanitizer.sanitize_pesticide_units(
-                pesticide_table="pesticide_applications",
-                bmd_table="bmd_data"
+                pesticide_table="pesticide_applications", bmd_table="bmd_data"
             )
-            
+
             # Get sanitization summary
             summary = sanitizer.get_sanitization_summary(sanitized_table)
-            
+
             # Replace original table with sanitized version
             self.conn.execute(f"""
                 DROP TABLE IF EXISTS pesticide_applications_original;
                 ALTER TABLE pesticide_applications RENAME TO pesticide_applications_original;
                 ALTER TABLE {sanitized_table} RENAME TO pesticide_applications;
             """)
-            
+
             # Log sanitization results
             self.logger.info("✅ Unit sanitization completed successfully")
             self.logger.info(f"   📊 Total records: {summary['total_records']:,}")
@@ -614,10 +611,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             self.logger.info(
                 f"   ⚠️ Products needing review: {summary['products_needing_review']:,}"
             )
-            
+
             # Store sanitization summary for reporting
             self.sanitization_summary = summary
-            
+
         except Exception as e:
             self.logger.error(f"❌ Unit sanitization failed: {e}")
             self.logger.warning("⚠️ Continuing with unsanitized data")
@@ -626,14 +623,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
     async def _create_registration_mismatch_table(self) -> None:
         """Create table to detect registration number mismatches for identical products."""
         self.logger.info("🔍 Creating registration mismatch detection table")
-        
+
         try:
             # Create a table that identifies potential registration mismatches
             # where farmers used expired registrations but valid alternatives exist
             self.conn.execute("""
                 CREATE OR REPLACE TABLE registration_mismatch_detection AS
                 WITH expired_products AS (
-                    SELECT 
+                    SELECT
                         LOWER(TRIM(produktnavn)) as normalized_name,
                         LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))) as normalized_ingredients,
                         COALESCE(
@@ -649,13 +646,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     WHERE produktstatus IN (
                         'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
                     )
-                    AND produktnavn IS NOT NULL 
+                    AND produktnavn IS NOT NULL
                     AND produktnavn != ''
                     AND registrerings_nr IS NOT NULL
                     AND registrerings_nr != ''
                 ),
                 valid_products AS (
-                    SELECT 
+                    SELECT
                         LOWER(TRIM(produktnavn)) as normalized_name,
                         LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))) as normalized_ingredients,
                         COALESCE(
@@ -667,7 +664,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         produktstatus as valid_status,
                         udløbsdato as valid_expiry,
                         ROW_NUMBER() OVER (
-                            PARTITION BY 
+                            PARTITION BY
                                 LOWER(TRIM(produktnavn)),
                                 LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))),
                                 COALESCE(
@@ -677,7 +674,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                                     0.0
                                 ),
                                 COALESCE(enhed_er, '')
-                            ORDER BY 
+                            ORDER BY
                                 CASE WHEN produktstatus = 'Produkt godkendt' THEN 1 ELSE 2 END,
                                 registrerings_nr
                         ) as rank
@@ -685,12 +682,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     WHERE produktstatus NOT IN (
                         'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
                     )
-                    AND produktnavn IS NOT NULL 
+                    AND produktnavn IS NOT NULL
                     AND produktnavn != ''
                     AND registrerings_nr IS NOT NULL
                     AND registrerings_nr != ''
                 )
-                SELECT 
+                SELECT
                     e.normalized_name,
                     e.normalized_ingredients,
                     e.concentration,
@@ -711,36 +708,36 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     AND v.rank = 1  -- Get the best valid alternative
                 )
             """)
-            
+
             # Get statistics
             mismatch_count = self.conn.execute(
-            "SELECT COUNT(*) FROM registration_mismatch_detection"
-        ).fetchone()[0]
+                "SELECT COUNT(*) FROM registration_mismatch_detection"
+            ).fetchone()[0]
             product_groups = self.conn.execute(
-            "SELECT COUNT(DISTINCT normalized_name) FROM registration_mismatch_detection"
-        ).fetchone()[0]
-            
+                "SELECT COUNT(DISTINCT normalized_name) FROM registration_mismatch_detection"
+            ).fetchone()[0]
+
             self.logger.info("📊 Created registration mismatch detection table:")
             self.logger.info(f"   - {mismatch_count:,} potential mismatch mappings")
             self.logger.info(f"   - {product_groups:,} product groups with alternatives")
-            
+
             # Log some examples for verification
             examples = self.conn.execute("""
-                SELECT 
+                SELECT
                     normalized_name,
                     expired_registration,
                     suggested_valid_registration,
                     concentration,
                     concentration_unit
-                FROM registration_mismatch_detection 
+                FROM registration_mismatch_detection
                 ORDER BY normalized_name
                 LIMIT 5
             """).fetchall()
-            
+
             self.logger.info("📋 Example mismatch mappings:")
             for name, expired, valid, conc, unit in examples:
                 self.logger.info(f"   {name}: {expired} → {valid} ({conc} {unit})")
-                
+
         except Exception as e:
             self.logger.error(f"❌ Failed to create registration mismatch detection table: {e}")
             # Create empty table to avoid errors downstream
@@ -821,7 +818,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
             # Fetch from API
             products = self.api_client.get_products_for_crop(api_crop_id)
-            
+
             # Check if we're getting empty responses (could indicate auth issues)
             if processed == 1 and not products:
                 self.logger.warning(
@@ -837,8 +834,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 if str(product.get("RegNumber", "")).strip() == str(reg_number).strip():
                     # Get product ID - try different possible field names
                     product_id = (
-                        product.get("Id") or product.get("id") or 
-                        product.get("ID") or product.get("ProductId")
+                        product.get("Id")
+                        or product.get("id")
+                        or product.get("ID")
+                        or product.get("ProductId")
                     )
                     if not product_id:
                         self.logger.warning(
@@ -846,7 +845,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                             f"Available fields: {list(product.keys())}"
                         )
                         continue
-                    
+
                     # Get detailed product info
                     detail = self.api_client.get_product_detail(product_id, api_crop_id)
                     if detail:
@@ -879,24 +878,27 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     max_applications INTEGER
                 )
             """)
-            
+
             # Insert data using prepared statement
             insert_sql = """
                 INSERT INTO dosage_limits VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """
-            
+
             for item in dosage_data:
-                self.conn.execute(insert_sql, [
-                    item.get("crop_code"),
-                    item.get("api_crop_id"),
-                    item.get("api_crop_name"),
-                    item.get("registration_number"),
-                    item.get("product_name"),
-                    item.get("max_dosage_app"),
-                    item.get("product_unit"),
-                    item.get("max_applications")
-                ])
-            
+                self.conn.execute(
+                    insert_sql,
+                    [
+                        item.get("crop_code"),
+                        item.get("api_crop_id"),
+                        item.get("api_crop_name"),
+                        item.get("registration_number"),
+                        item.get("product_name"),
+                        item.get("max_dosage_app"),
+                        item.get("product_unit"),
+                        item.get("max_applications"),
+                    ],
+                )
+
             limit_count = len(dosage_data)
             self.logger.info(f"📊 Loaded {limit_count} dosage limits from API")
         else:
@@ -937,15 +939,15 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         """
         Check if the corrected_dosage_unit column exists in the pesticide_applications table.
         This column is added by the unit sanitization process.
-        
+
         Returns:
             True if the column exists, False otherwise
         """
         try:
             # Try to query the column to see if it exists
             self.conn.execute("""
-                SELECT corrected_dosage_unit 
-                FROM pesticide_applications 
+                SELECT corrected_dosage_unit
+                FROM pesticide_applications
                 LIMIT 1
             """)
             return True
@@ -987,7 +989,11 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         # Check if corrected_dosage_unit column exists (from unit sanitization)
         has_corrected_units = self._check_corrected_dosage_unit_exists()
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> a4ddf35 (Fix missing corrected_dosage_unit column error in pesticide compliance)
         # Determine the dosage unit expression based on whether unit sanitization was applied
         if has_corrected_units:
             dosage_unit_expr = "COALESCE(a.corrected_dosage_unit, a.dosage_unit)"
@@ -1023,7 +1029,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             rm.suggested_valid_registration,
             rm.valid_status as suggested_registration_status,
             rm.valid_expiry as suggested_registration_expiry,
-            CASE 
+            CASE
                 WHEN rm.expired_registration IS NOT NULL THEN TRUE
                 ELSE FALSE
             END as is_potential_registration_error,
@@ -1038,7 +1044,11 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             -- Dosage compliance status (using corrected units if available)
             CASE
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
+<<<<<<< HEAD
                 WHEN {dosage_unit_expr} != d.product_unit 
+=======
+                WHEN {dosage_unit_expr} != d.product_unit
+>>>>>>> a4ddf35 (Fix missing corrected_dosage_unit column error in pesticide compliance)
                     THEN 'UNIT_MISMATCH'
                 WHEN a.area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
                 WHEN (
