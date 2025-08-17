@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      enrichment_years: ${{ steps.set-matrix.outputs.enrichment_years }}
     steps:
       - name: Generate matrix
         id: set-matrix
@@ -41,6 +42,7 @@ jobs:
           
           # Generate matrix based on layer types and years
           matrix_items=()
+          enrichment_years_set=()
           
           for layer_type in $(echo $layer_types | tr ',' ' '); do
             case $layer_type in
@@ -96,41 +98,61 @@ jobs:
             esac
             
             for year in $years; do
-              # Validate year ranges
+              # Validate year ranges and collect enrichment years
               case $layer_type in
                 "markblokke")
                   if [ $year -ge 2005 ] && [ $year -le 2026 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Markblokke contributes to enrichment for years 2012-2024
+                    if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
+                      enrichment_years_set+=("$year")
+                    fi
                   fi
                   ;;
                 "marker")
                   if [ $year -ge 2008 ] && [ $year -le 2025 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Marker contributes to enrichment for years 2012-2024
+                    if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
+                      enrichment_years_set+=("$year")
+                    fi
                   fi
                   ;;
                 "smaabiotoper")
                   if [ $year -ge 2023 ] && [ $year -le 2025 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Smaabiotoper contributes to enrichment for years 2023-2024
+                    if [ $year -ge 2023 ] && [ $year -le 2024 ]; then
+                      enrichment_years_set+=("$year")
+                    fi
                   fi
                   ;;
                 "organic_areas")
                   if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Organic areas contributes to enrichment for all its years
+                    enrichment_years_set+=("$year")
                   fi
                   ;;
                 "organic_subsidies")
                   if [ $year -ge 2019 ] && [ $year -le 2024 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Organic subsidies contributes to enrichment for all its years
+                    enrichment_years_set+=("$year")
                   fi
                   ;;
                 "grassland_subsidies")
                   if [ $year -ge 2019 ] && [ $year -le 2024 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Grassland subsidies contributes to enrichment for all its years
+                    enrichment_years_set+=("$year")
                   fi
                   ;;
                 "environmental_subsidies")
                   if [ $year -ge 2019 ] && [ $year -le 2023 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Environmental subsidies contributes to enrichment for all its years
+                    enrichment_years_set+=("$year")
                   fi
                   ;;
               esac
@@ -142,6 +164,13 @@ jobs:
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
           echo "Generated matrix with ${#matrix_items[@]} jobs:"
           echo "$matrix_json" | jq '.'
+          
+          # Generate unique enrichment years and output as JSON array
+          unique_years=($(printf '%s\n' "${enrichment_years_set[@]}" | sort -nu))
+          enrichment_json="[$(IFS=','; echo "${unique_years[*]}")]"
+          echo "enrichment_years=$enrichment_json" >> $GITHUB_OUTPUT
+          echo "Generated enrichment years: ${unique_years[*]}"
+          echo "Enrichment matrix will run for ${#unique_years[@]} years instead of all 13 years"
 
   process:
     needs: generate-matrix
@@ -220,7 +249,7 @@ jobs:
           exit 1
 
   enrichment-matrix:
-    needs: process
+    needs: [generate-matrix, process]
     runs-on: ubuntu-latest
     if: ${{ (github.event.inputs.stage == 'silver' || github.event.inputs.stage == 'all') && success() }}
     
@@ -232,7 +261,7 @@ jobs:
       fail-fast: false
       max-parallel: 5  # Limit concurrent enrichment jobs
       matrix:
-        year: [2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+        year: ${{ fromJson(needs.generate-matrix.outputs.enrichment_years) }}
     
     name: Enrich Fields ${{ matrix.year }}
     
@@ -297,21 +326,24 @@ jobs:
       - name: Processing Summary
         run: |
           STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
+          ENRICHMENT_YEARS="${{ needs.generate-matrix.outputs.enrichment_years }}"
+          ENRICHMENT_COUNT=$(echo "$ENRICHMENT_YEARS" | jq 'length')
+          
           echo "## FVM WFS Processing Summary" >> $GITHUB_STEP_SUMMARY
           echo "| Layer Type | Years | Stage | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------------|-------|-------|--------|" >> $GITHUB_STEP_SUMMARY
           
           # This would need to be enhanced to show actual results
           # For now, just show that the workflow completed
-          echo "| All layers | As requested | $STAGE | Completed |" >> $GITHUB_STEP_SUMMARY
+          echo "| As requested | ${{ github.event.inputs.years || 'all' }} | $STAGE | Completed |" >> $GITHUB_STEP_SUMMARY
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Performance Notes" >> $GITHUB_STEP_SUMMARY
-          echo "- Processing: 73 layer/year matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
+          echo "- Processing: Matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
           echo "- Each layer processes ~400k-600k features in 60-120 seconds" >> $GITHUB_STEP_SUMMARY
-          echo "- Total processing time for all 73 layers: ~25-30 minutes (vs 70+ minutes sequential)" >> $GITHUB_STEP_SUMMARY
-          echo "- Enrichment: 13 year matrix jobs run in parallel (max 5 concurrent)" >> $GITHUB_STEP_SUMMARY  
-          echo "- Each enrichment job processes only its specific year (2012-2024)" >> $GITHUB_STEP_SUMMARY
+          echo "- Enrichment: $ENRICHMENT_COUNT year matrix jobs run in parallel (max 5 concurrent)" >> $GITHUB_STEP_SUMMARY  
+          echo "- Enrichment years: $(echo "$ENRICHMENT_YEARS" | jq -r 'join(", ")')" >> $GITHUB_STEP_SUMMARY
+          echo "- Each enrichment job processes only its specific year" >> $GITHUB_STEP_SUMMARY
           echo "- Organic enrichment adds ~92% organic field coverage to marker data" >> $GITHUB_STEP_SUMMARY
           echo "- Subsidy UUID enrichment enables direct field linkage for analysis" >> $GITHUB_STEP_SUMMARY
           echo "- Data stored in: \`gs://landbrugsdata-raw-data/$STAGE/fvm_*\`" >> $GITHUB_STEP_SUMMARY 
