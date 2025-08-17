@@ -1040,11 +1040,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             -- Dosage compliance status (using corrected units if available)
             CASE
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
-<<<<<<< HEAD
                 WHEN {dosage_unit_expr} != d.product_unit
-=======
-                WHEN {dosage_unit_expr} != d.product_unit
->>>>>>> a4ddf35 (Fix missing corrected_dosage_unit column error in pesticide compliance)
                     THEN 'UNIT_MISMATCH'
                 WHEN a.area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
                 WHEN (
