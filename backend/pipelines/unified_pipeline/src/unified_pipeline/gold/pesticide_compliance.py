@@ -1366,10 +1366,6 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}"
                     )
                     self.logger.info(f"📁 Compliance GCS Path: {compliance_path}")
-                    print(
-                        f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}"
-                    )
-                    print(f"📁 Compliance GCS Path: {compliance_path}")
                 else:
                     self.logger.info(f"ℹ️ No compliance issues found for {ag_year}")
 
