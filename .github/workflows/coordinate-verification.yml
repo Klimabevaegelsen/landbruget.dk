@@ -6,17 +6,17 @@ name: Coordinate Verification
 
 on:
   pull_request:
-    branches: [ main, develop ]
-    paths: 
-      - 'backend/pipelines/unified_pipeline/src/unified_pipeline/common/geometry_validator.py'
-      - 'backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_area_analysis/**/*.py'
-      - 'backend/pipelines/unified_pipeline/src/tests/common/test_coordinate_verification.py'
-      - '.github/workflows/coordinate-verification.yml'
-  push:
-    branches: [ main ]
+    branches: [main, develop]
     paths:
-      - 'backend/pipelines/unified_pipeline/src/unified_pipeline/common/geometry_validator.py'
-      - 'backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_area_analysis/**/*.py'
+      - "backend/pipelines/unified_pipeline/src/unified_pipeline/common/geometry_validator.py"
+      - "backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_area_analysis/**/*.py"
+      - "backend/pipelines/unified_pipeline/src/tests/common/test_coordinate_verification.py"
+      - ".github/workflows/coordinate-verification.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/pipelines/unified_pipeline/src/unified_pipeline/common/geometry_validator.py"
+      - "backend/pipelines/unified_pipeline/src/unified_pipeline/gold/field_area_analysis/**/*.py"
 
   # Allow manual triggering for testing
   workflow_dispatch:
@@ -25,148 +25,148 @@ jobs:
   static-analysis:
     name: Coordinate Code Analysis
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Analyze coordinate handling in changed files
-      run: |
-        echo "## 🔍 Coordinate Code Analysis" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Analyzing coordinate-related code changes in this PR..." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Get list of changed Python files
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- "*.py" | grep -E "(geometry|spatial|coordinate)" || echo "")
-        else
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- "*.py" | grep -E "(geometry|spatial|coordinate)" || echo "")
-        fi
-        
-        if [ -z "$CHANGED_FILES" ]; then
-          echo "ℹ️ No coordinate-related files changed in this PR" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "📁 **Changed coordinate-related files:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "$CHANGED_FILES" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Analyze each changed file
-          for file in $CHANGED_FILES; do
-            if [ -f "$file" ]; then
-              echo "### 📄 Analysis of \`$file\`" >> $GITHUB_STEP_SUMMARY
-              
-              # Check for coordinate verification logging
-              if grep -q "COORDINATE ORDER VERIFICATION" "$file"; then
-                echo "✅ Contains coordinate order verification logging" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "ℹ️ No coordinate verification logging found" >> $GITHUB_STEP_SUMMARY
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Analyze coordinate handling in changed files
+        run: |
+          echo "## 🔍 Coordinate Code Analysis" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Analyzing coordinate-related code changes in this PR..." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Get list of changed Python files
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- "*.py" | grep -E "(geometry|spatial|coordinate)" || echo "")
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD -- "*.py" | grep -E "(geometry|spatial|coordinate)" || echo "")
+          fi
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "ℹ️ No coordinate-related files changed in this PR" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "📁 **Changed coordinate-related files:**" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$CHANGED_FILES" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+
+            # Analyze each changed file
+            for file in $CHANGED_FILES; do
+              if [ -f "$file" ]; then
+                echo "### 📄 Analysis of \`$file\`" >> "$GITHUB_STEP_SUMMARY"
+
+                # Check for coordinate verification logging
+                if grep -q "COORDINATE ORDER VERIFICATION" "$file"; then
+                  echo "✅ Contains coordinate order verification logging" >> "$GITHUB_STEP_SUMMARY"
+                else
+                  echo "ℹ️ No coordinate verification logging found" >> "$GITHUB_STEP_SUMMARY"
+                fi
+
+                # Check for ST_FlipCoordinates usage
+                FLIP_COUNT=$(grep -c "ST_FlipCoordinates" "$file" || echo "0")
+                echo "🔄 ST_FlipCoordinates calls: $FLIP_COUNT" >> "$GITHUB_STEP_SUMMARY"
+
+                # Check for unprotected ST_Area_Spheroid
+                UNPROTECTED=$(grep "ST_Area_Spheroid(" "$file" | grep -v "ST_FlipCoordinates" || echo "")
+                if [ -n "$UNPROTECTED" ]; then
+                  echo "❌ **UNPROTECTED ST_Area_Spheroid calls found:**" >> "$GITHUB_STEP_SUMMARY"
+                  echo '```' >> "$GITHUB_STEP_SUMMARY"
+                  echo "$UNPROTECTED" >> "$GITHUB_STEP_SUMMARY"
+                  echo '```' >> "$GITHUB_STEP_SUMMARY"
+                else
+                  echo "✅ All ST_Area_Spheroid calls are properly protected" >> "$GITHUB_STEP_SUMMARY"
+                fi
+                echo "" >> "$GITHUB_STEP_SUMMARY"
               fi
-              
-              # Check for ST_FlipCoordinates usage
-              FLIP_COUNT=$(grep -c "ST_FlipCoordinates" "$file" || echo "0")
-              echo "🔄 ST_FlipCoordinates calls: $FLIP_COUNT" >> $GITHUB_STEP_SUMMARY
-              
-              # Check for unprotected ST_Area_Spheroid
-              UNPROTECTED=$(grep "ST_Area_Spheroid(" "$file" | grep -v "ST_FlipCoordinates" || echo "")
-              if [ -n "$UNPROTECTED" ]; then
-                echo "❌ **UNPROTECTED ST_Area_Spheroid calls found:**" >> $GITHUB_STEP_SUMMARY
-                echo '```' >> $GITHUB_STEP_SUMMARY
-                echo "$UNPROTECTED" >> $GITHUB_STEP_SUMMARY
-                echo '```' >> $GITHUB_STEP_SUMMARY
-              else
-                echo "✅ All ST_Area_Spheroid calls are properly protected" >> $GITHUB_STEP_SUMMARY
-              fi
-              echo "" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
-        fi
-        
+            done
+          fi
+
   code-quality:
     name: Coordinate Code Quality
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: Install ruff
-      run: pip install ruff==0.8.0
-        
-    - name: Check for coordinate-related code issues
-      run: |
-        echo "## 🔍 Coordinate-Related Code Quality Checks" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Check for ST_Area_Spheroid calls without ST_FlipCoordinates
-        # Use a more robust approach to avoid broken pipe errors
-        SPHEROID_RESULTS=$(grep -r "ST_Area_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null || true)
-        if [ -n "$SPHEROID_RESULTS" ]; then
-          UNPROTECTED_SPHEROID=$(echo "$SPHEROID_RESULTS" | grep -v "ST_FlipCoordinates" | wc -l || echo "0")
-        else
-          UNPROTECTED_SPHEROID="0"
-        fi
-        echo "- ST_Area_Spheroid calls without ST_FlipCoordinates: **$UNPROTECTED_SPHEROID**" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "$UNPROTECTED_SPHEROID" -gt "0" ]; then
-          echo "  ⚠️ Found unprotected ST_Area_Spheroid calls - these may produce incorrect areas!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "  **Unprotected calls found:**" >> $GITHUB_STEP_SUMMARY
-          echo '  ```' >> $GITHUB_STEP_SUMMARY
-          echo "$SPHEROID_RESULTS" | grep -v "ST_FlipCoordinates" | head -10 >> $GITHUB_STEP_SUMMARY || true
-          echo '  ```' >> $GITHUB_STEP_SUMMARY
-        else
-          echo "  ✅ All ST_Area_Spheroid calls are properly wrapped with ST_FlipCoordinates" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Check for other spheroid functions
-        OTHER_SPHEROID_RESULTS=$(grep -r "ST_.*_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null | grep -v "ST_Area_Spheroid" || true)
-        if [ -n "$OTHER_SPHEROID_RESULTS" ]; then
-          OTHER_SPHEROID=$(echo "$OTHER_SPHEROID_RESULTS" | wc -l)
-        else
-          OTHER_SPHEROID="0"
-        fi
-        echo "- Other _Spheroid function calls: **$OTHER_SPHEROID**" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "$OTHER_SPHEROID" -gt "0" ]; then
-          echo "  ℹ️ Found other spheroid functions - verify they handle coordinate order correctly" >> $GITHUB_STEP_SUMMARY
-          echo '  ```' >> $GITHUB_STEP_SUMMARY
-          echo "$OTHER_SPHEROID_RESULTS" | head -5 >> $GITHUB_STEP_SUMMARY || true
-          echo '  ```' >> $GITHUB_STEP_SUMMARY
-        else
-          echo "  ✅ No other spheroid functions found" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        # Check for coordinate verification logging
-        COORD_VERIFICATION_RESULTS=$(grep -r "COORDINATE ORDER VERIFICATION" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null || true)
-        if [ -n "$COORD_VERIFICATION_RESULTS" ]; then
-          COORD_VERIFICATION=$(echo "$COORD_VERIFICATION_RESULTS" | wc -l)
-        else
-          COORD_VERIFICATION="0"
-        fi
-        echo "- Files with coordinate order verification: **$COORD_VERIFICATION**" >> $GITHUB_STEP_SUMMARY
-        
-        if [ "$COORD_VERIFICATION" -gt "0" ]; then
-          echo "  ✅ Coordinate verification logging is in place" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "  ⚠️ No coordinate verification logging found" >> $GITHUB_STEP_SUMMARY
-        fi
-        
-        # Fail the job if unprotected ST_Area_Spheroid calls are found
-        if [ "$UNPROTECTED_SPHEROID" -gt "0" ]; then
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "❌ **FAILING BUILD**: Found $UNPROTECTED_SPHEROID unprotected ST_Area_Spheroid calls" >> $GITHUB_STEP_SUMMARY
-          echo "All ST_Area_Spheroid calls must be wrapped with ST_FlipCoordinates for accurate area calculations." >> $GITHUB_STEP_SUMMARY
-          exit 1
-        fi
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff==0.8.0
+
+      - name: Check for coordinate-related code issues
+        run: |
+          echo "## 🔍 Coordinate-Related Code Quality Checks" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Check for ST_Area_Spheroid calls without ST_FlipCoordinates
+          # Use a more robust approach to avoid broken pipe errors
+          SPHEROID_RESULTS=$(grep -r "ST_Area_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null || true)
+          if [ -n "$SPHEROID_RESULTS" ]; then
+            UNPROTECTED_SPHEROID=$(echo "$SPHEROID_RESULTS" | grep -v "ST_FlipCoordinates" | wc -l || echo "0")
+          else
+            UNPROTECTED_SPHEROID="0"
+          fi
+          echo "- ST_Area_Spheroid calls without ST_FlipCoordinates: **$UNPROTECTED_SPHEROID**" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$UNPROTECTED_SPHEROID" -gt "0" ]; then
+            echo "  ⚠️ Found unprotected ST_Area_Spheroid calls - these may produce incorrect areas!" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "  **Unprotected calls found:**" >> "$GITHUB_STEP_SUMMARY"
+            echo '  ```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$SPHEROID_RESULTS" | grep -v "ST_FlipCoordinates" | head -10 >> "$GITHUB_STEP_SUMMARY" || true
+            echo '  ```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "  ✅ All ST_Area_Spheroid calls are properly wrapped with ST_FlipCoordinates" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Check for other spheroid functions
+          OTHER_SPHEROID_RESULTS=$(grep -r "ST_.*_Spheroid(" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null | grep -v "ST_Area_Spheroid" || true)
+          if [ -n "$OTHER_SPHEROID_RESULTS" ]; then
+            OTHER_SPHEROID=$(echo "$OTHER_SPHEROID_RESULTS" | wc -l)
+          else
+            OTHER_SPHEROID="0"
+          fi
+          echo "- Other _Spheroid function calls: **$OTHER_SPHEROID**" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$OTHER_SPHEROID" -gt "0" ]; then
+            echo "  ℹ️ Found other spheroid functions - verify they handle coordinate order correctly" >> "$GITHUB_STEP_SUMMARY"
+            echo '  ```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$OTHER_SPHEROID_RESULTS" | head -5 >> "$GITHUB_STEP_SUMMARY" || true
+            echo '  ```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "  ✅ No other spheroid functions found" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # Check for coordinate verification logging
+          COORD_VERIFICATION_RESULTS=$(grep -r "COORDINATE ORDER VERIFICATION" --include="*.py" backend/pipelines/unified_pipeline/ 2>/dev/null || true)
+          if [ -n "$COORD_VERIFICATION_RESULTS" ]; then
+            COORD_VERIFICATION=$(echo "$COORD_VERIFICATION_RESULTS" | wc -l)
+          else
+            COORD_VERIFICATION="0"
+          fi
+          echo "- Files with coordinate order verification: **$COORD_VERIFICATION**" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$COORD_VERIFICATION" -gt "0" ]; then
+            echo "  ✅ Coordinate verification logging is in place" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "  ⚠️ No coordinate verification logging found" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Fail the job if unprotected ST_Area_Spheroid calls are found
+          if [ "$UNPROTECTED_SPHEROID" -gt "0" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ **FAILING BUILD**: Found $UNPROTECTED_SPHEROID unprotected ST_Area_Spheroid calls" >> "$GITHUB_STEP_SUMMARY"
+            echo "All ST_Area_Spheroid calls must be wrapped with ST_FlipCoordinates for accurate area calculations." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
