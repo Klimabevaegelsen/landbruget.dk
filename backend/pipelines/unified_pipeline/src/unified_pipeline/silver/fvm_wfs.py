@@ -1760,7 +1760,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                             min_pattern_score: float = 0.9, min_crop_similarity: float = 0.5) -> List:
         """
         Find optimal 1-to-1 matches using Hungarian algorithm with constraints.
-        Exact same implementation as our standalone script.
+        Provides detailed diagnostics when the cost matrix is infeasible.
         """
         self.log.info("🎯 Finding optimal matches with constraints...")
         
@@ -1771,12 +1771,54 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.log.info("   No matches found above thresholds")
             return []
         
+        # Comprehensive diagnostics about the matching problem
+        total_valid_pairs = np.sum(constraint_mask)
+        matrix_shape = similarity_matrix.shape
+        valid_per_row = np.sum(constraint_mask, axis=1)
+        valid_per_col = np.sum(constraint_mask, axis=0)
+        rows_with_valid = np.sum(valid_per_row > 0)
+        cols_with_valid = np.sum(valid_per_col > 0)
+        min_dimension = min(matrix_shape)
+        
+        self.log.info(f"   📊 Matching problem diagnostics:")
+        self.log.info(f"      Matrix shape: {matrix_shape[0]} FVM × {matrix_shape[1]} GKEA operations")
+        self.log.info(f"      Valid pairs above thresholds: {total_valid_pairs:,}")
+        self.log.info(f"      Rows with ≥1 valid match: {rows_with_valid}/{matrix_shape[0]} ({rows_with_valid/matrix_shape[0]*100:.1f}%)")
+        self.log.info(f"      Cols with ≥1 valid match: {cols_with_valid}/{matrix_shape[1]} ({cols_with_valid/matrix_shape[1]*100:.1f}%)")
+        self.log.info(f"      Min dimension for complete assignment: {min_dimension}")
+        
+        # Detailed threshold analysis
+        pattern_above_threshold = np.sum(similarity_matrix >= min_pattern_score)
+        crop_above_threshold = np.sum(crop_similarity_matrix >= min_crop_similarity)
+        self.log.info(f"      Pattern similarity ≥{min_pattern_score}: {pattern_above_threshold:,} pairs")
+        self.log.info(f"      Crop similarity ≥{min_crop_similarity}: {crop_above_threshold:,} pairs")
+        
         # Create cost matrix for Hungarian algorithm (convert similarity to cost)
         # Hungarian algorithm minimizes, so we use (1 - similarity) as cost
         cost_matrix = np.where(constraint_mask, 1.0 - similarity_matrix, np.inf)
         
+        # Check feasibility and provide clear error message if infeasible
+        if rows_with_valid < min_dimension or cols_with_valid < min_dimension:
+            error_msg = (
+                f"Cost matrix is infeasible for Hungarian algorithm. "
+                f"Need {min_dimension} rows and columns with valid entries, "
+                f"but only have {rows_with_valid} rows and {cols_with_valid} columns with valid matches. "
+                f"Consider lowering thresholds: min_pattern_score={min_pattern_score}, min_crop_similarity={min_crop_similarity}"
+            )
+            self.log.error(f"   ❌ {error_msg}")
+            raise ValueError(error_msg)
+        
         # Apply Hungarian algorithm
-        fvm_indices, gkea_indices = linear_sum_assignment(cost_matrix)
+        try:
+            fvm_indices, gkea_indices = linear_sum_assignment(cost_matrix)
+        except Exception as e:
+            error_msg = (
+                f"Hungarian algorithm failed unexpectedly: {e}. "
+                f"Matrix shape: {matrix_shape}, valid entries: {total_valid_pairs}, "
+                f"feasible rows: {rows_with_valid}, feasible cols: {cols_with_valid}"
+            )
+            self.log.error(f"   ❌ {error_msg}")
+            raise ValueError(error_msg) from e
         
         # Extract valid matches (finite cost = above threshold)
         matches = []
@@ -1786,7 +1828,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 crop_sim = crop_similarity_matrix[fvm_idx, gkea_idx]
                 matches.append((fvm_idx, gkea_idx, combined_sim, crop_sim))
         
-        self.log.info(f"   Found {len(matches):,} optimal 1-to-1 matches")
+        self.log.info(f"   ✅ Found {len(matches):,} optimal 1-to-1 matches")
         return matches
 
     def _apply_cvr_updates(self, marker_table: str, matches: List, fvm_ops_df: pd.DataFrame, gkea_ops_df: pd.DataFrame) -> int:
