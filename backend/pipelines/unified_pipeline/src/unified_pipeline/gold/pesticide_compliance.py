@@ -459,14 +459,33 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         """Load pesticide disaggregation data from latest gold layer."""
         self.logger.info("📥 Loading pesticide disaggregation data (field-level allocations)")
 
-        # Find latest pesticide disaggregation gold data with year-specific pattern
-        pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
+        # Determine which year's data to load
+        if self.config.pesticide_year is not None:
+            # Matrix job mode: load specific year's data
+            target_agricultural_year = (
+                f"{self.config.pesticide_year}_{self.config.pesticide_year + 1}"
+            )
+            pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{target_agricultural_year}/*/pesticide_disaggregation_{target_agricultural_year}.parquet"
+            self.logger.info(
+                f"🎯 Matrix job mode: Loading data for agricultural year {target_agricultural_year}"
+            )
+        else:
+            # Single job mode: load most recent data
+            pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
+            self.logger.info("📊 Single job mode: Loading most recent pesticide data")
+
         files = self.gcs_access.list_files_with_timestamps(pattern)
 
         if not files:
-            raise Exception("Pesticide disaggregation data not found in gold layer")
+            if self.config.pesticide_year is not None:
+                raise Exception(
+                    f"Pesticide disaggregation data not found for agricultural year "
+                    f"{target_agricultural_year}"
+                )
+            else:
+                raise Exception("Pesticide disaggregation data not found in gold layer")
 
-        # Sort by timestamp to get the most recent file
+        # Sort by timestamp to get the most recent file for the target year
         files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
         latest_path, timestamp = files_sorted[0]
 
@@ -487,6 +506,19 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             f"📅 Agricultural year from path: {agricultural_year_from_path} "
             f"(application year: {application_year})"
         )
+
+        # Verify we loaded the expected year in matrix job mode
+        if self.config.pesticide_year is not None:
+            expected_ag_year = f"{self.config.pesticide_year}_{self.config.pesticide_year + 1}"
+            if agricultural_year_from_path != expected_ag_year:
+                self.logger.warning(
+                    f"⚠️ Expected agricultural year {expected_ag_year} "
+                    f"but loaded {agricultural_year_from_path}"
+                )
+            else:
+                self.logger.info(
+                    f"✅ Successfully loaded expected agricultural year {expected_ag_year}"
+                )
 
         # Load disaggregated pesticide data using proper GCS access pattern
         with self.gcs_access._temp_download(latest_path) as temp_file:
