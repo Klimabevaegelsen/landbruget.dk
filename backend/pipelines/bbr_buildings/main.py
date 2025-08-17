@@ -135,10 +135,10 @@ def perform_uuid_join_optimized(
                 BBRUUID,
                 bygningstype,
                 geometri as geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(geometri)) as building_area_m2
+                ST_Area_Spheroid(geometri) as building_area_m2
             FROM geodanmark_buildings_raw
             WHERE ST_IsValid(geometri)
-            AND ST_Area_Spheroid(ST_FlipCoordinates(geometri)) > 5  -- Basic size filter
+            AND ST_Area_Spheroid(geometri) > 5  -- Basic size filter
         """)
 
         # Drop the raw table to save memory
@@ -396,12 +396,12 @@ def perform_true_spatial_join_example(
             b.geometry as building_geometry,
             f.field_id,
             f.geometry as field_geometry,
-            ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(b.geometry, f.geometry))) as intersection_area_m2
+            ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) as intersection_area_m2
         FROM {buildings_table} b
         INNER JOIN {spatial_features_table} f ON ST_Intersects(b.geometry, f.geometry)
         WHERE ST_IsValid(b.geometry)
         AND ST_IsValid(f.geometry)
-        AND ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(b.geometry, f.geometry))) > 10
+        AND ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) > 10
         -- Minimum 10m² intersection
         """
 
@@ -495,11 +495,11 @@ def perform_chunked_spatial_join(
             BBRUUID,
             bygningstype,
             ST_Union_Agg(geometri) as geometry,
-            ST_Area_Spheroid(ST_FlipCoordinates(ST_Union_Agg(geometri))) as building_area_m2
+            ST_Area_Spheroid(ST_Union_Agg(geometri)) as building_area_m2
         FROM geodanmark_buildings_filtered
         WHERE ST_IsValid(geometri)
         GROUP BY BBRUUID, bygningstype
-        HAVING ST_Area_Spheroid(ST_FlipCoordinates(ST_Union_Agg(geometri))) > 1  -- Minimum 1m² building area
+        HAVING ST_Area_Spheroid(ST_Union_Agg(geometri)) > 1  -- Minimum 1m² building area
     """)
 
     # Get optimized building count

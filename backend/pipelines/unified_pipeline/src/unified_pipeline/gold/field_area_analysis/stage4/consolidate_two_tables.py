@@ -143,15 +143,15 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE bnbo_field_aggregates AS
             SELECT
                 field_uuid,
-                SUM(ST_Area_Spheroid(ST_FlipCoordinates(field_bnbo_geometry))) as field_bnbo_total_m2,
+                SUM(ST_Area_Spheroid(field_bnbo_geometry)) as field_bnbo_total_m2,
                 COUNT(DISTINCT status_category) as bnbo_status_count,
                 STRING_AGG(DISTINCT status_category, ', ' ORDER BY status_category)
                     as bnbo_status_categories,
                 SUM(CASE WHEN status_category = 'Action Required'
-                    THEN ST_Area_Spheroid(ST_FlipCoordinates(field_bnbo_geometry)) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(field_bnbo_geometry) ELSE 0 END) / 10000.0
                     as bnbo_action_required_hectares,
                 SUM(CASE WHEN status_category = 'Completed'
-                    THEN ST_Area_Spheroid(ST_FlipCoordinates(field_bnbo_geometry)) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(field_bnbo_geometry) ELSE 0 END) / 10000.0
                     as bnbo_completed_hectares
             FROM field_bnbo_intersections
             GROUP BY field_uuid
@@ -162,13 +162,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE bnbo_water_field_aggregates AS
             SELECT
                 field_uuid,
-                SUM(ST_Area_Spheroid(ST_FlipCoordinates(field_bnbo_water_geometry)))
+                SUM(ST_Area_Spheroid(field_bnbo_water_geometry))
                     as field_bnbo_water_covered_m2,
                 SUM(CASE WHEN status_category = 'Action Required'
-                    THEN ST_Area_Spheroid(ST_FlipCoordinates(field_bnbo_water_geometry)) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(field_bnbo_water_geometry) ELSE 0 END) / 10000.0
                     as bnbo_action_required_water_covered_hectares,
                 SUM(CASE WHEN status_category = 'Completed'
-                    THEN ST_Area_Spheroid(ST_FlipCoordinates(field_bnbo_water_geometry)) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(field_bnbo_water_geometry) ELSE 0 END) / 10000.0
                     as bnbo_completed_water_covered_hectares
             FROM field_bnbo_water_intersections
             GROUP BY field_uuid
@@ -181,7 +181,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             SELECT
                 field_uuid,
                 -- Simple area sum - overlaps already resolved in wetlands_dissolved silver layer
-                SUM(ST_Area_Spheroid(ST_FlipCoordinates(field_wetland_geometry))) as field_wetland_total_m2
+                SUM(ST_Area_Spheroid(field_wetland_geometry)) as field_wetland_total_m2
             FROM field_wetland_intersections
             GROUP BY field_uuid
         """)
@@ -192,7 +192,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE wetland_water_field_aggregates AS
             SELECT
                 field_uuid,
-                SUM(ST_Area_Spheroid(ST_FlipCoordinates(field_wetland_water_geometry)))
+                SUM(ST_Area_Spheroid(field_wetland_water_geometry))
                     as field_wetland_water_covered_m2
             FROM field_wetland_water_intersections
             GROUP BY field_uuid
@@ -236,7 +236,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 f.block_id,
                 f.cvr_number,
                 f.year,
-                ST_Area_Spheroid(ST_FlipCoordinates(f.geometry)) as field_area_m2,
+                ST_Area_Spheroid(f.geometry) as field_area_m2,
                 
                 -- BNBO Analysis (using pre-aggregated data)
                 COALESCE(ba.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
@@ -248,11 +248,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                         LEAST(
                             COALESCE(ba.field_bnbo_total_m2, 0),
                             CASE
-                                WHEN COALESCE(ba.field_bnbo_total_m2, 0) - ST_Area_Spheroid(ST_FlipCoordinates(f.geometry)) <= 0.1
-                                THEN ST_Area_Spheroid(ST_FlipCoordinates(f.geometry))
+                                WHEN COALESCE(ba.field_bnbo_total_m2, 0) - ST_Area_Spheroid(f.geometry) <= 0.1
+                                THEN ST_Area_Spheroid(f.geometry)
                                 ELSE COALESCE(ba.field_bnbo_total_m2, 0)
                             END
-                        ) / ST_Area_Spheroid(ST_FlipCoordinates(f.geometry))
+                        ) / ST_Area_Spheroid(f.geometry)
                     ) * 100.0
                     ELSE 0
                 END as field_bnbo_coverage_pct,
@@ -290,11 +290,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                         LEAST(
                             COALESCE(wa.field_wetland_total_m2, 0),
                             CASE
-                                WHEN COALESCE(wa.field_wetland_total_m2, 0) - ST_Area_Spheroid(ST_FlipCoordinates(f.geometry)) <= 0.1
-                                THEN ST_Area_Spheroid(ST_FlipCoordinates(f.geometry))
+                                WHEN COALESCE(wa.field_wetland_total_m2, 0) - ST_Area_Spheroid(f.geometry) <= 0.1
+                                THEN ST_Area_Spheroid(f.geometry)
                                 ELSE COALESCE(wa.field_wetland_total_m2, 0)
                             END
-                        ) / ST_Area_Spheroid(ST_FlipCoordinates(f.geometry))
+                        ) / ST_Area_Spheroid(f.geometry)
                     ) * 100.0
                     ELSE 0
                 END as field_wetland_coverage_pct,
@@ -320,7 +320,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 CASE
                     WHEN COALESCE(sa.field_soil_total_m2, 0) > 0
                     THEN (COALESCE(sa.field_soil_total_m2, 0) /
-                          ST_Area_Spheroid(ST_FlipCoordinates(f.geometry))) * 100.0
+                          ST_Area_Spheroid(f.geometry)) * 100.0
                     ELSE 0
                 END as field_soil_coverage_pct,
                 COALESCE(sa.soil_type_count, 0) as soil_type_count,
@@ -355,15 +355,15 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             SELECT
                 field_uuid,
                 bfe_number,
-                SUM(ST_Area_Spheroid(ST_FlipCoordinates(property_bnbo_geometry))) as property_bnbo_total_m2,
+                SUM(ST_Area_Spheroid(property_bnbo_geometry)) as property_bnbo_total_m2,
                 COUNT(DISTINCT status_category) as property_bnbo_status_count,
                 STRING_AGG(DISTINCT status_category, ', ' ORDER BY status_category)
                     as property_bnbo_status_categories,
                 SUM(CASE WHEN status_category = 'Action Required'
-                    THEN ST_Area_Spheroid(ST_FlipCoordinates(property_bnbo_geometry)) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(property_bnbo_geometry) ELSE 0 END) / 10000.0
                     as property_bnbo_action_required_hectares,
                 SUM(CASE WHEN status_category = 'Completed'
-                    THEN ST_Area_Spheroid(ST_FlipCoordinates(property_bnbo_geometry)) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(property_bnbo_geometry) ELSE 0 END) / 10000.0
                     as property_bnbo_completed_hectares
             FROM property_bnbo_intersections
             GROUP BY field_uuid, bfe_number
@@ -375,13 +375,13 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             SELECT
                 field_uuid,
                 bfe_number,
-                SUM(ST_Area_Spheroid(ST_FlipCoordinates(property_bnbo_water_geometry)))
+                SUM(ST_Area_Spheroid(property_bnbo_water_geometry))
                     as property_bnbo_water_covered_m2,
                 SUM(CASE WHEN status_category = 'Action Required'
-                    THEN ST_Area_Spheroid(ST_FlipCoordinates(property_bnbo_water_geometry)) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(property_bnbo_water_geometry) ELSE 0 END) / 10000.0
                     as property_bnbo_action_required_water_covered_hectares,
                 SUM(CASE WHEN status_category = 'Completed'
-                    THEN ST_Area_Spheroid(ST_FlipCoordinates(property_bnbo_water_geometry)) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(property_bnbo_water_geometry) ELSE 0 END) / 10000.0
                     as property_bnbo_completed_water_covered_hectares
             FROM property_bnbo_water_intersections
             GROUP BY field_uuid, bfe_number
@@ -393,7 +393,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             SELECT
                 field_uuid,
                 bfe_number,
-                SUM(ST_Area_Spheroid(ST_FlipCoordinates(property_wetland_geometry))) as property_wetland_total_m2
+                SUM(ST_Area_Spheroid(property_wetland_geometry)) as property_wetland_total_m2
             FROM property_wetland_intersections
             GROUP BY field_uuid, bfe_number
         """)
@@ -404,7 +404,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             SELECT
                 field_uuid,
                 bfe_number,
-                SUM(ST_Area_Spheroid(ST_FlipCoordinates(property_wetland_water_geometry)))
+                SUM(ST_Area_Spheroid(property_wetland_water_geometry))
                     as property_wetland_water_covered_m2
             FROM property_wetland_water_intersections
             GROUP BY field_uuid, bfe_number
@@ -422,7 +422,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 fp.block_id,
                 fp.cvr_number,
                 fp.year,
-                ST_Area_Spheroid(ST_FlipCoordinates(fp.intersection_geometry)) as property_intersection_area_m2,
+                ST_Area_Spheroid(fp.intersection_geometry) as property_intersection_area_m2,
                 
                 -- Environmental data from pre-aggregated tables
                 COALESCE(pba.property_bnbo_total_m2, 0) as property_bnbo_total_m2,

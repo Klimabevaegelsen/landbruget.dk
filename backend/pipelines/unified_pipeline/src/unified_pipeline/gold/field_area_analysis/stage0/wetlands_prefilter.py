@@ -328,7 +328,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 ) AS wetland_id,
                 toerv_pct,
                 geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as wetland_area_m2
+                ST_Area_Spheroid(geometry) as wetland_area_m2
             FROM wetlands_intersecting
         """)
         # DIAGNOSTIC: Assert wetland_key exists immediately; fail fast to expose root cause

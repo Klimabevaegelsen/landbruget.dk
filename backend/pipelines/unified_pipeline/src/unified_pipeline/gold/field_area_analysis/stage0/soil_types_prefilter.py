@@ -276,7 +276,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                 soil_code,
                 soil_description,  -- Only meaningful Danish soil types
                 geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as soil_area_m2
+                ST_Area_Spheroid(geometry) as soil_area_m2
             FROM soil_types_intersecting
         """)
 

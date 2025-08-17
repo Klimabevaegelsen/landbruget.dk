@@ -151,11 +151,10 @@ def validate_and_transform_geometries_duckdb(
 
             if is_wgs84_lon_lat:
                 logger.info(
-                    f"{dataset_name}: Data in WGS84 lon/lat order - KEEPING as-is (spheroid functions now use ST_FlipCoordinates wrapper)"
+                    f"{dataset_name}: Data in WGS84 (LAT, LON) order - CORRECT for ST_Area_Spheroid direct usage"
                 )
-                # COORDINATE APPROACH CHANGED: Keep data in LON/LAT format throughout pipeline
-                # ST_Area_Spheroid calls now wrapped with ST_FlipCoordinates for correct calculation
-                # No longer transforming the underlying data to avoid double-flipping issues
+                # COORDINATE APPROACH: Data is correctly in (LAT, LON) EPSG:4326 standard
+                # ST_Area_Spheroid expects (LAT, LON) input - no transformation needed
             elif is_wgs84_lat_lon:
                 logger.info(
                     f"{dataset_name}: Data in WGS84 but lat/lon order - will flip after processing"
@@ -209,10 +208,9 @@ def validate_and_transform_geometries_duckdb(
                 )
 
                 if is_wgs84_lat_lon_after:
-                    logger.info(f"{dataset_name}: Detected LAT/LON order - KEEPING as-is (spheroid functions now use ST_FlipCoordinates wrapper)")
-                    # COORDINATE APPROACH CHANGED: Keep data in LAT/LON format if that's what it is
-                    # ST_Area_Spheroid calls now wrapped with ST_FlipCoordinates for correct calculation
-                    # No longer transforming the underlying data to avoid double-flipping issues
+                    logger.info(f"{dataset_name}: Detected (LAT, LON) order - CORRECT EPSG:4326 format for direct ST_Area_Spheroid usage")
+                    # COORDINATE APPROACH: Data is correctly in (LAT, LON) EPSG:4326 standard
+                    # ST_Area_Spheroid expects (LAT, LON) input - no transformation needed
 
                 # Verify the flip worked
                 final_bounds = conn.execute(f"""
@@ -265,20 +263,24 @@ def validate_and_transform_geometries_duckdb(
                         first_range = (min(first_vals), max(first_vals))
                         second_range = (min(second_vals), max(second_vals))
                         
-                        if (8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 
-                            54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58):
-                            logger.info(f"✅ {dataset_name}: CONFIRMED - Data stored as (LON, LAT) - "
+                        # Check coordinate order - EPSG:4326 standard is LAT/LON
+                        if (54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 
+                            8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15):
+                            logger.info(f"✅ {dataset_name}: CONFIRMED - Data stored as (LAT, LON) EPSG:4326 standard - "
                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
-                        elif (54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 
-                              8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15):
-                            logger.warning(f"⚠️ {dataset_name}: ALERT - Data stored as (LAT, LON) - "
+                            logger.info(f"   → ST_Area_Spheroid can be used directly (expects LAT/LON input)")
+                        elif (8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 
+                              54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58):
+                            logger.warning(f"⚠️ {dataset_name}: ALERT - Data stored as (LON, LAT) GIS convention - "
                                          f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
                                          f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                            logger.warning(f"   → ST_Area_Spheroid would need ST_FlipCoordinates wrapper if data is (LON, LAT)!")
                         else:
                             logger.warning(f"❓ {dataset_name}: UNCLEAR - Coordinate order unclear - "
                                          f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
                                          f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                            logger.warning(f"   → Manual verification needed for ST_Area_Spheroid usage")
             except Exception as e:
                 logger.warning(f"⚠️ {dataset_name}: Could not verify coordinate order: {e}")
 

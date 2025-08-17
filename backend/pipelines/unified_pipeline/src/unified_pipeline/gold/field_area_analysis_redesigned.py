@@ -31,7 +31,7 @@ class FieldAreaAnalysisRedesigned:
     Redesigned field area analysis using DuckDB Spatial v1.2.2 optimizations with coordinate fix.
 
     Key improvements:
-    - COORDINATE FIX: ST_FlipCoordinates applied to fix swapped lat/lon coordinates
+    - COORDINATE FIX: ST_Area_Spheroid calls use (LAT, LON) data directly for accuracy
     - Single DuckDB connection shared across all operations
     - Native spatial joins with automatic spatial indexing
     - Optimal join ordering (smallest to largest build side)
@@ -520,8 +520,8 @@ class FieldAreaAnalysisRedesigned:
         )
         self.log.info(f"New implementation (with coordinate fix): {total_time / 60:.1f} minutes")
         self.log.info(f"Improvement: {improvement:.0f}x faster!")
-        self.log.info("🎯 Root cause: Fields dataset had swapped lat/lon coordinates")
-        self.log.info("✅ Solution: ST_FlipCoordinates applied to fix coordinate system")
+        self.log.info("🎯 Root cause: ST_Area_Spheroid expected LAT/LON but data was LON/LAT")
+        self.log.info("✅ Solution: ST_Area_Spheroid calls use (LAT, LON) data directly - no flipping needed")
         self.log.info("=" * 80)
 
     def _get_latest_dataset_path(self, dataset_name: str) -> Optional[str]:

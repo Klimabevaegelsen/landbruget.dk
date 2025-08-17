@@ -224,21 +224,21 @@ class SpatialJoiner:
         SELECT
             *,
             -- Calculate intersection area (coordinates now fixed in silver layer)
-            ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(
+            ST_Area_Spheroid(ST_Intersection(
                 geometry,
                 h3_geometry
             ))) / 10000.0 as intersection_area_ha,
             -- Calculate coverage ratio
             CASE
-                WHEN ST_Area_Spheroid(ST_FlipCoordinates(h3_geometry)) > 0 THEN
-                    LEAST(1.0, ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(
+                WHEN ST_Area_Spheroid(h3_geometry) > 0 THEN
+                    LEAST(1.0, ST_Area_Spheroid(ST_Intersection(
                         geometry,
                         h3_geometry
-                    ))) / ST_Area_Spheroid(ST_FlipCoordinates(h3_geometry)))
+                    )) / ST_Area_Spheroid(h3_geometry))
                 ELSE 0.0
             END as coverage_ratio
         FROM {intersections_table}
-        WHERE ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(
+        WHERE ST_Area_Spheroid(ST_Intersection(
             geometry,
             h3_geometry
         ))) > 0
@@ -400,14 +400,14 @@ class SpatialJoiner:
                 r.center_lat,
                 r.center_lon,
                 -- Calculate union of all field geometries intersecting this H3 cell (coordinates now fixed in silver layer)
-                ST_Area_Spheroid(ST_FlipCoordinates(
+                ST_Area_Spheroid(
                     ST_Intersection(
                         ST_Union_Agg(r.geometry),
                         r.h3_geometry
                     )
                 )) / 10000.0 as actual_intersection_area_ha,
                 -- Calculate H3 cell area for validation
-                ST_Area_Spheroid(ST_FlipCoordinates(r.h3_geometry)) / 10000.0 as h3_area_ha
+                ST_Area_Spheroid(r.h3_geometry) / 10000.0 as h3_area_ha
             FROM {raw_intersections_table} r
             WHERE r.h3_cell IS NOT NULL
             GROUP BY r.h3_cell, r.center_lat, r.center_lon, r.h3_geometry

@@ -145,7 +145,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
             SELECT
                 bfe_number,
                 geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as property_area_m2
+                ST_Area_Spheroid(geometry) as property_area_m2
             FROM properties_full
             WHERE FALSE  -- Empty table with correct schema
         """)
@@ -168,7 +168,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
                 SELECT
                     bfe_number,
                     geometry,
-                    ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as property_area_m2
+                    ST_Area_Spheroid(geometry) as property_area_m2
                 FROM properties_full
                 ORDER BY bfe_number
                 LIMIT {chunk_size} OFFSET {offset}

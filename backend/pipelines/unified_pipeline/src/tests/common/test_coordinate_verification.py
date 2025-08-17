@@ -2,7 +2,7 @@
 Coordinate Order Verification Tests
 
 These tests ensure that all geometries in the pipeline maintain consistent
-coordinate order (LON, LAT) as expected by our ST_FlipCoordinates wrappers
+coordinate order verification for EPSG:4326 (LAT, LON) standard
 around ST_Area_Spheroid functions.
 
 This is critical for accurate area calculations and spatial operations.
@@ -241,7 +241,7 @@ class TestPipelineCoordinateConsistency:
         assert 54 <= lat <= 58, f"Transformed latitude {lat} should be in Denmark range"
     
     def test_st_area_spheroid_with_flip_coordinates(self, sample_geometry_data):
-        """Test that ST_Area_Spheroid with ST_FlipCoordinates produces reasonable results."""
+        """Test that ST_Area_Spheroid produces reasonable results with (LAT, LON) data."""
         # Create a small polygon for area testing
         sample_geometry_data.execute("""
             CREATE TABLE test_polygon AS
@@ -249,23 +249,24 @@ class TestPipelineCoordinateConsistency:
                 ST_GeomFromText('POLYGON((12.5 55.6, 12.6 55.6, 12.6 55.7, 12.5 55.7, 12.5 55.6))') as geometry
         """)
         
-        # Test area calculation with and without flip
+        # Test area calculation: direct (correct) vs flipped (incorrect for our LAT/LON data)
         result = sample_geometry_data.execute("""
             SELECT 
-                ST_Area_Spheroid(geometry) as area_direct,
-                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as area_flipped
+                ST_Area_Spheroid(geometry) as area_correct_lat_lon,
+                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as area_incorrect_flipped
             FROM test_polygon
         """).fetchone()
         
-        area_direct, area_flipped = result
+        area_correct, area_incorrect = result
         
-        # The flipped version should give a reasonable area for a small polygon in Denmark
+        # The correct (LAT, LON) version should give a reasonable area for a small polygon in Denmark
         # (approximately 0.1° x 0.1° should be roughly 100-200 km²)
-        assert area_flipped > 0, "Area should be positive"
-        assert 50_000_000 < area_flipped < 500_000_000, f"Area {area_flipped} m² should be reasonable for small Denmark polygon"
+        assert area_correct > 0, "Area should be positive"
+        assert 50_000_000 < area_correct < 500_000_000, f"Area {area_correct} m² should be reasonable for small Denmark polygon"
         
-        # The direct calculation (without flip) might be incorrect due to coordinate order
-        # We don't assert specific values here since the behavior depends on DuckDB version
+        # The flipped calculation should be different (and incorrect for our LAT/LON data)
+        assert area_incorrect > 0, "Flipped area should still be positive"
+        assert area_correct != area_incorrect, "Direct and flipped calculations should differ"
 
 
 @pytest.mark.integration
