@@ -45,61 +45,72 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 COUNT(*) as count
             FROM wetlands_raw 
             WHERE geometry IS NOT NULL 
+            GROUP BY typeof(geometry)
             LIMIT 10
         """).fetchall()
         
         if geometry_type_check:
-            geom_type = geometry_type_check[0][0]
-            self.log.info(f"🔍 Geometry column type detected: {geom_type}")
+            geom_types = [(row[0], row[1]) for row in geometry_type_check]
+            self.log.info(f"🔍 Geometry column types detected: {geom_types}")
         
         # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
         self.log.info("🌍 Validating coordinate bounds and order...")
-        coord_validation = self.conn.execute("""
-            SELECT 
-                MIN(ST_XMin(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as min_x,
-                MAX(ST_XMax(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as max_x,
-                MIN(ST_YMin(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as min_y,
-                MAX(ST_YMax(
-                    CASE 
-                        WHEN geometry IS NULL THEN NULL
-                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
-                            ST_GeomFromText(geometry)
-                        WHEN typeof(geometry) = 'BLOB' THEN
-                            ST_GeomFromWKB(geometry)
-                        ELSE geometry
-                    END
-                )) as max_y
-            FROM wetlands_raw 
-            WHERE geometry IS NOT NULL 
-            LIMIT 1000
-        """).fetchone()
+        
+        # Try coordinate validation with error handling
+        try:
+            coord_validation = self.conn.execute("""
+                SELECT 
+                    MIN(ST_XMin(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                            ELSE 
+                                TRY_CAST(geometry AS GEOMETRY)
+                        END
+                    )) as min_x,
+                    MAX(ST_XMax(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                            ELSE 
+                                TRY_CAST(geometry AS GEOMETRY)
+                        END
+                    )) as max_x,
+                    MIN(ST_YMin(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                            ELSE 
+                                TRY_CAST(geometry AS GEOMETRY)
+                        END
+                    )) as min_y,
+                    MAX(ST_YMax(
+                        CASE 
+                            WHEN geometry IS NULL THEN NULL
+                            WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                                TRY_CAST(ST_GeomFromText(geometry) AS GEOMETRY)
+                            WHEN typeof(geometry) = 'BLOB' THEN
+                                TRY_CAST(ST_GeomFromWKB(geometry) AS GEOMETRY)
+                            ELSE 
+                                TRY_CAST(geometry AS GEOMETRY)
+                        END
+                    )) as max_y
+                FROM wetlands_raw 
+                WHERE geometry IS NOT NULL 
+                LIMIT 1000
+            """).fetchone()
+        except Exception as e:
+            self.log.warning(f"⚠️ Coordinate validation failed: {e}")
+            coord_validation = None
         
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
