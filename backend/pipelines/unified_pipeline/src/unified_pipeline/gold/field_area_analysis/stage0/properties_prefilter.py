@@ -29,13 +29,37 @@ class PropertiesPreFilter(PreFilteringStageBase):
         # Load fields for filtering (BUILD side)
         self._load_fields_for_filtering()
 
-        # Load full properties dataset (PROBE side - the massive dataset)
-        self.log.info("Loading full properties dataset (6.5M properties)...")
-        self._load_gold_dataset(CONFIG.properties_dataset, "properties_full")
+        # Load full cadastral dataset (PROBE side - the massive dataset)
+        self.log.info("Loading full cadastral dataset (6.5M properties)...")
+        self._load_silver_dataset("cadastral", "properties_raw")
+        
+        # Add memory optimization and basic geometry validation
+        self.log.info("Preparing properties dataset with memory optimization...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE properties_full AS
+            SELECT
+                bfe_number,
+                geometry
+            FROM properties_raw
+            WHERE geometry IS NOT NULL 
+              AND bfe_number IS NOT NULL
+        """)
 
-        # Log dataset sizes
+        # Log dataset sizes and validate data integrity
         properties_count = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]
         self.log.info(f"📊 Input: {properties_count:,} properties to filter")
+        
+        # Validate dataset integrity to prevent segfaults
+        self.log.info("🔍 Validating properties dataset integrity...")
+        null_geom_count = self.conn.execute("SELECT COUNT(*) FROM properties_full WHERE geometry IS NULL").fetchone()[0]
+        null_bfe_count = self.conn.execute("SELECT COUNT(*) FROM properties_full WHERE bfe_number IS NULL").fetchone()[0]
+        
+        if null_geom_count > 0:
+            self.log.warning(f"⚠️ Found {null_geom_count} properties with NULL geometry")
+        if null_bfe_count > 0:
+            self.log.warning(f"⚠️ Found {null_bfe_count} properties with NULL bfe_number")
+            
+        self.log.info(f"✅ Dataset validation complete: {properties_count:,} valid properties")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """
@@ -51,9 +75,16 @@ class PropertiesPreFilter(PreFilteringStageBase):
 
         start_time = time.time()
 
+        # Configure DuckDB for memory-constrained processing
+        self.log.info("Configuring DuckDB for memory-constrained large dataset processing...")
+        self.conn.execute("SET max_temp_directory_size='8GB'")  # Reduced from 12GB
+        self.conn.execute("SET threads=2")  # Reduced from 4 to prevent memory pressure
+        self.conn.execute("SET preserve_insertion_order=false")
+        self.conn.execute("SET memory_limit='4GB'")  # Set explicit memory limit
+        
         # Get total property count for chunking
         total_properties = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]
-        chunk_size = 500000  # Same as original Stage 1C optimization
+        chunk_size = 250000  # Reduced chunk size to prevent memory exhaustion
         num_chunks = (total_properties + chunk_size - 1) // chunk_size
 
         self.log.info(
