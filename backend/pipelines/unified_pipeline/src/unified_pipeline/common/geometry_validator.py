@@ -156,11 +156,13 @@ def validate_and_transform_geometries_duckdb(
                     "for correct EPSG:4326 standard"
                 )
                 # Flip coordinates to get proper (LAT, LON) order for EPSG:4326 standard
+                logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix coordinate order")
                 conn.execute(f"""
                     UPDATE {table_name} SET
                         {geometry_column} = ST_FlipCoordinates({geometry_column})
                     WHERE {geometry_column} IS NOT NULL
                 """)
+                logger.info(f"{dataset_name}: ✅ Coordinate flip completed")
             elif is_wgs84_lat_lon:
                 logger.info(
                     f"{dataset_name}: Data in WGS84 (LAT, LON) order - CORRECT for "
