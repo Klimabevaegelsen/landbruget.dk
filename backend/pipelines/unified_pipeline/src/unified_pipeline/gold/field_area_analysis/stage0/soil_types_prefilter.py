@@ -37,6 +37,80 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.log.info(
             "Decomposing soil types MultiPolygons with ST_Dump to prevent memory overflow..."
         )
+        
+        # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
+        self.log.info("🌍 Validating soil types coordinate bounds and order...")
+        coord_validation = self.conn.execute("""
+            SELECT 
+                MIN(ST_XMin(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as min_x,
+                MAX(ST_XMax(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as max_x,
+                MIN(ST_YMin(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as min_y,
+                MAX(ST_YMax(
+                    CASE 
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            ST_GeomFromText(geometry)
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            ST_GeomFromWKB(geometry)
+                        ELSE geometry
+                    END
+                )) as max_y
+            FROM soil_types_raw 
+            WHERE geometry IS NOT NULL 
+            LIMIT 1000
+        """).fetchone()
+        
+        if coord_validation:
+            min_x, max_x, min_y, max_y = coord_validation
+            self.log.info(
+                f"📍 Soil types bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})"
+            )
+            
+            # Check if coordinates are in expected ranges for Denmark
+            if min_x >= 8 and max_x <= 15 and min_y >= 54 and max_y <= 58:
+                self.log.info(
+                    "✅ Soil types coordinates in WGS84 (EPSG:4326) - Denmark bounds OK"
+                )
+            elif min_x >= 440000 and max_x <= 900000 and min_y >= 6040000 and max_y <= 6420000:
+                self.log.info(
+                    "✅ Soil types coordinates in UTM Zone 32N (EPSG:25832) - Denmark bounds OK"
+                )
+            else:
+                self.log.warning("⚠️ Soil types coordinates outside expected Denmark bounds!")
+                self.log.warning(
+                    f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
+                )
+        else:
+            self.log.warning("⚠️ Could not validate soil types coordinate bounds")
+        
+        # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types_full AS
             SELECT
@@ -44,13 +118,25 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                 soil_description,  -- Only meaningful soil data (8 Danish soil types)
                 UNNEST(ST_Dump(
                     CASE 
-                        WHEN geometry IS NOT NULL AND geometry != '' THEN
+                        WHEN geometry IS NULL THEN NULL
+                        WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
+                            -- Handle WKT string format
                             ST_GeomFromText(geometry)
-                        ELSE NULL
+                        WHEN typeof(geometry) = 'BLOB' THEN
+                            -- Handle WKB binary format
+                            ST_GeomFromWKB(geometry)
+                        ELSE
+                            -- Assume it's already a geometry object
+                            geometry
                     END
                 )).geom as geometry
             FROM soil_types_raw
-            WHERE geometry IS NOT NULL AND geometry != ''
+            WHERE geometry IS NOT NULL 
+              AND (
+                  (typeof(geometry) = 'VARCHAR' AND geometry != '') OR
+                  (typeof(geometry) = 'BLOB') OR
+                  (typeof(geometry) NOT IN ('VARCHAR', 'BLOB'))
+              )
         """)
 
         # Log dataset sizes
