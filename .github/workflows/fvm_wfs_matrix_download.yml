@@ -222,7 +222,7 @@ jobs:
   enrichment-matrix:
     needs: process
     runs-on: ubuntu-latest
-    if: ${{ (github.event.inputs.stage == 'silver' || github.event.inputs.stage == 'all') && always() && !failure() }}
+    if: ${{ (github.event.inputs.stage == 'silver' || github.event.inputs.stage == 'all') && success() }}
     
     permissions:
       contents: 'read'
