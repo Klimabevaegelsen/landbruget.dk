@@ -1,12 +1,31 @@
 """BBR Building processor for silver layer processing."""
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import duckdb
 
 from ..config.settings import Settings
+
+
+# Try to import comprehensive geo validator
+def _get_geo_validator() -> Callable | None:
+    """Get comprehensive geo validator with robust import handling."""
+    try:
+        from unified_pipeline.common.geometry_validator import (
+            validate_and_transform_geometries_duckdb,
+        )
+
+        logging.info("✅ Successfully imported comprehensive geo validator for BBR buildings")
+        return validate_and_transform_geometries_duckdb
+    except ImportError as e:
+        logging.warning(f"⚠️ Could not import comprehensive geo validator: {e}")
+        return None
+
+
+ComprehensiveGeoValidator = _get_geo_validator()
 
 
 # Try to import optimized GCS access with fallback
@@ -119,6 +138,38 @@ class BuildingProcessor:
             self.logger.warning("INSPIRE attributes file not found, processing without enrichment")
             processing_table = "joined_buildings"
 
+        # Apply comprehensive geo validation before transformations
+        self.logger.info("Applying comprehensive geo validation...")
+
+        if ComprehensiveGeoValidator:
+            try:
+                # Apply comprehensive geo validation to the processing table
+                ComprehensiveGeoValidator(
+                    conn=conn,
+                    table_name=processing_table,
+                    dataset_name="BBR Buildings",
+                    geometry_column="geometry",
+                )
+                self.logger.info("✅ Comprehensive geo validation completed successfully")
+            except Exception as e:
+                self.logger.warning(
+                    f"⚠️ Comprehensive geo validation failed, using basic validation: {e}"
+                )
+                # Fallback to basic validation
+                conn.execute(f"""
+                    DELETE FROM {processing_table}
+                    WHERE geometry IS NULL OR NOT ST_IsValid(geometry)
+                """)
+        else:
+            self.logger.warning(
+                "⚠️ Comprehensive geo validator not available, using basic validation"
+            )
+            # Fallback to basic validation
+            conn.execute(f"""
+                DELETE FROM {processing_table}
+                WHERE geometry IS NULL OR NOT ST_IsValid(geometry)
+            """)
+
         # Apply silver layer transformations
         self.logger.info("Applying silver layer transformations...")
 
@@ -136,7 +187,7 @@ class BuildingProcessor:
                         'individualResidence', 'collectiveResidence', 'twoDwellings'
                     ) THEN 'residential'
                     WHEN current_use = 'agriculture' THEN 'agricultural'
-                    WHEN current_use = 'publicServices' THEN 'educational'
+                    WHEN current_use = 'publicServices' THEN 'publicServices'
                     ELSE 'other'
                 END as building_usage_category,
                 current_use as inspire_current_use,
@@ -146,8 +197,17 @@ class BuildingProcessor:
                 floors as inspire_floors,
                 dwellings as inspire_dwellings,
                 address as address_full,
-                -- Pesticide proximity pipeline compatibility
-                address as inspire_address,
+                -- Pesticide proximity pipeline compatibility columns
+                address,
+                geometry,
+                CASE
+                    WHEN current_use IN (
+                        'individualResidence', 'collectiveResidence', 'twoDwellings'
+                    ) THEN 'residential'
+                    WHEN current_use = 'agriculture' THEN 'agricultural'
+                    WHEN current_use = 'publicServices' THEN 'publicServices'
+                    ELSE 'other'
+                END as category_group,
                 bbr_usage_code,
                 category_group as inspire_category_group,
                 CURRENT_DATE as last_updated
