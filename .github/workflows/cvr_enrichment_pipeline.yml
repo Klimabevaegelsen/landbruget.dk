@@ -123,7 +123,7 @@ jobs:
     name: "Company Fetching"
     runs-on: ubuntu-latest
     needs: cvr_collection
-    if: ${{ always() && ((github.event.inputs.run_only_step == 'none' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
     
     steps:
       - name: Checkout code
@@ -228,7 +228,7 @@ jobs:
     name: "P-Number Fetching"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching]
-    if: ${{ always() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching')) || github.event.inputs.run_only_step == 'pnumber_fetching') }}
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching')) || github.event.inputs.run_only_step == 'pnumber_fetching') }}
     
     steps:
       - name: Checkout code
@@ -324,7 +324,7 @@ jobs:
     name: "Financial Documents"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching]
-    if: ${{ always() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'financial_documents')) || github.event.inputs.run_only_step == 'financial_documents') }}
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'financial_documents')) || github.event.inputs.run_only_step == 'financial_documents') }}
     
     steps:
       - name: Checkout code
@@ -416,7 +416,7 @@ jobs:
     name: "Address Geocoding"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching, pnumber_fetching]
-    if: ${{ always() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'address_geocoding')) || github.event.inputs.run_only_step == 'address_geocoding') }}
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'address_geocoding')) || github.event.inputs.run_only_step == 'address_geocoding') }}
     
     steps:
       - name: Checkout code
