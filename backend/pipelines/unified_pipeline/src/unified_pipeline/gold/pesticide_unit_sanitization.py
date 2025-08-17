@@ -157,8 +157,7 @@ class PesticideUnitSanitizer:
 
             FROM {pesticide_table} p
             LEFT JOIN {bmd_table} b ON p.pesticide_registration_number = b.registrerings_nr
-            WHERE b.enhed_er IS NOT NULL
-              AND p.area_ha > 0
+            WHERE p.area_ha > 0
               AND p.dosage_quantity > 0
         """)
 
