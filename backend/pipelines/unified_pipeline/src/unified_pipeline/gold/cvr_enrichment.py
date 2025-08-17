@@ -383,8 +383,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         if invalid_cvrs:
             self.log.warning(
-                f"⚠️ Found {len(invalid_cvrs)} invalid CVR numbers (will skip): " +
-                f"{invalid_cvrs[:5]}{'...' if len(invalid_cvrs) > 5 else ''}"
+                f"⚠️ Found {len(invalid_cvrs)} invalid CVR numbers (will skip): "
+                + f"{invalid_cvrs[:5]}{'...' if len(invalid_cvrs) > 5 else ''}"
             )
 
         self.log.info(
@@ -564,13 +564,14 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
                     # Immediate cleanup after each chunk (following CHR streaming pattern)
                     self._cleanup_memory_after_chunk()
-                    
+
                     # Aggressive cleanup every 10 chunks (following H3 PFAS pattern)
                     if (chunk_idx + 1) % 10 == 0:
                         self.log.info(f"🧹 Deep cleanup after {chunk_idx + 1} chunks")
                         self.conn.execute("CHECKPOINT")
                         self.conn.execute("PRAGMA optimize")
                         import gc
+
                         collected = gc.collect()
                         self.log.debug(f"Collected {collected} objects during deep cleanup")
 
@@ -586,23 +587,23 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                             original_chunk_size = chunk_size
                             chunk_size = max(10, chunk_size // 2)  # Reduce by half, min 10
                             self.log.warning(
-                            f"Reducing chunk size: {original_chunk_size} → {chunk_size}"
-                        )
+                                f"Reducing chunk size: {original_chunk_size} → {chunk_size}"
+                            )
                             # Recalculate remaining chunks with smaller size
                             remaining_companies = total_companies - end_idx
                             num_remaining_chunks = (
-                            remaining_companies + chunk_size - 1
-                        ) // chunk_size
+                                remaining_companies + chunk_size - 1
+                            ) // chunk_size
                             self.log.info(
-                            f"Will process remaining {remaining_companies} companies "
-                            f"in {num_remaining_chunks} smaller chunks"
-                        )
+                                f"Will process remaining {remaining_companies} companies "
+                                f"in {num_remaining_chunks} smaller chunks"
+                            )
                         continue  # Try to continue with next chunk
                     raise
 
             # Process employment data separately to avoid memory exhaustion during chunk processing
             self._process_all_employment_data_memory_efficient(companies_data, table_name)
-            
+
             # Log final table sizes
             self._log_final_table_sizes(table_name)
         else:
@@ -910,15 +911,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     "ShorttermPartOfLongtermLiabilitiesOtherThanProvisions"
                 ),
                 "other_payables_including_tax": (
-                    "OtherPayablesIncludingTaxPayables"
-                    "LiabilitiesOtherThanProvisionsShortterm"
+                    "OtherPayablesIncludingTaxPayables" "LiabilitiesOtherThanProvisionsShortterm"
                 ),
                 "provisions": "Provisions",
                 "provisions_for_deferred_tax": "ProvisionsForDeferredTax",
                 "property_plant_equipment": "PropertyPlantAndEquipment",
-                "longterm_debt_to_credit_institutions": (
-                    "LongtermDebtToOtherCreditInstitutions"
-                ),
+                "longterm_debt_to_credit_institutions": ("LongtermDebtToOtherCreditInstitutions"),
             }
 
             # Extract period information for the data
@@ -1056,6 +1054,15 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             )
         """)
 
+        # Ownership table
+        self.conn.execute(f"""
+            CREATE TABLE {table_name}_ownership (
+                company_uuid VARCHAR,
+                cvr_number INTEGER,
+                ownership_data JSON
+            )
+        """)
+
         # Financial table
         self.conn.execute(f"""
             CREATE TABLE {table_name}_financial (
@@ -1174,6 +1181,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
         # Process leadership for this chunk
         self._process_leadership_chunk(json_strings, table_name)
+        self._process_ownership_chunk(json_strings, table_name)
 
         # Process financial documents for this chunk
         self._process_financial_chunk(json_strings, table_name)
@@ -1316,6 +1324,51 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     [json_strings, leadership_schema[0]],
                 )
 
+    def _process_ownership_chunk(self, json_strings: list, table_name: str) -> None:
+        """Process ownership data for a chunk of companies."""
+        ownership_check = self.conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM unnest($1) as t(json_data)
+            WHERE json_extract(json_data, '$.ownership') IS NOT NULL
+            AND json_array_length(json_extract(json_data, '$.ownership')) > 0
+        """,
+            [json_strings],
+        ).fetchone()[0]
+
+        if ownership_check > 0:
+            ownership_schema = self.conn.execute(
+                """
+                WITH ownership_sample AS (
+                    SELECT json_extract(json_data, '$.ownership') as ownership_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.ownership') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.ownership')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(ownership_json) FROM ownership_sample
+            """,
+                [json_strings],
+            ).fetchone()
+
+            if ownership_schema and ownership_schema[0]:
+                self.conn.execute(
+                    f"""
+                    INSERT INTO {table_name}_ownership
+                    SELECT
+                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER)
+                            as company_uuid,
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(json_transform(
+                            json_extract(json_data, '$.ownership'), $2
+                        )) as ownership_data
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.ownership') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.ownership')) > 0
+                """,
+                    [json_strings, ownership_schema[0]],
+                )
+
     def _process_financial_chunk(self, json_strings: list, table_name: str) -> None:
         """Process financial documents for a chunk of companies."""
         financial_check = self.conn.execute(
@@ -1383,10 +1436,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 # Check which fields exist in the schema
                 available_fields = set()
                 for field, fallback in possible_fields.items():
-                    if (
-                        f"financial_metrics.{field}" in schema_str
-                        or f'"{field}"' in schema_str
-                    ):
+                    if f"financial_metrics.{field}" in schema_str or f'"{field}"' in schema_str:
                         financial_metrics_fields.append(
                             f"TRY(financial_parsed.financial_metrics.{field}) as {field}"
                         )
@@ -1591,7 +1641,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
     ) -> None:
         """
         Process employment data for all companies using a memory-efficient approach.
-        
+
         This method processes employment data one type at a time across all companies,
         instead of processing all employment types for each chunk. This prevents the
         memory buildup that was causing the 7.4GB memory exhaustion at chunk 97.
@@ -1599,38 +1649,38 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         if not companies_data:
             self.log.info("⏭️ No company data to process employment for")
             return
-            
+
         employment_types = [
             ("annual_employment", "annual"),
             ("quarterly_employment", "quarterly"),
             ("monthly_employment", "monthly"),
             ("replacement_monthly_employment", "replacement_monthly"),
         ]
-        
+
         self.log.info("🔧 Processing employment data memory-efficiently - one type at a time")
-        
+
         # Process each employment type separately across all companies
         for employment_field, table_suffix in employment_types:
             self.log.info(
                 f"📊 Processing {employment_field} for all {len(companies_data):,} companies"
             )
-            
+
             # Process in smaller batches to manage memory
             batch_size = 500  # Smaller batches for employment processing
             total_batches = (len(companies_data) + batch_size - 1) // batch_size
-            
+
             for batch_idx in range(total_batches):
                 start_idx = batch_idx * batch_size
                 end_idx = min(start_idx + batch_size, len(companies_data))
                 batch_companies = companies_data[start_idx:end_idx]
-                
+
                 self.log.info(
                     f"  📦 Processing {employment_field} batch {batch_idx + 1}/{total_batches} "
                     f"(companies {start_idx}-{end_idx - 1})"
                 )
-                
+
                 json_strings = [json.dumps(company) for company in batch_companies]
-                
+
                 # Check if this batch has employment data for this type
                 employment_check = self.conn.execute(
                     """
@@ -1643,15 +1693,15 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 """,
                     [json_strings, employment_field],
                 ).fetchone()[0]
-                
+
                 if employment_check == 0:
                     continue  # Skip this batch for this employment type
-                
+
                 # Get schema for this employment type
                 employment_schema = self.conn.execute(
                     """
                     WITH employment_sample AS (
-                        SELECT json_extract(json_data, '$.employment_data.' || $2) 
+                        SELECT json_extract(json_data, '$.employment_data.' || $2)
                             as employment_json
                         FROM unnest($1) as t(json_data)
                         WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
@@ -1664,14 +1714,14 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 """,
                     [json_strings, employment_field],
                 ).fetchone()
-                
+
                 if employment_schema and employment_schema[0]:
                     try:
                         self.conn.execute(
                             f"""
                             INSERT INTO {table_name}_employment_{table_suffix}
                             SELECT
-                                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) 
+                                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER)
                                     as company_uuid,
                                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                                 unnest(json_transform(
@@ -1689,12 +1739,13 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         """,
                             [json_strings, employment_schema[0]],
                         )
-                        
+
                         # Immediate cleanup after each batch
                         self.conn.execute("CHECKPOINT")
                         import gc
+
                         gc.collect()
-                        
+
                     except Exception as e:
                         self.log.error(
                             f"❌ Error processing {employment_field} batch {batch_idx + 1}: "
@@ -1702,20 +1753,22 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         )
                         # Continue with next batch
                         continue
-                
+
                 # Clean up batch data
                 del json_strings
                 import gc
+
                 gc.collect()
-            
+
             self.log.info(f"✅ Completed processing {employment_field} for all companies")
-            
+
             # Deep cleanup after each employment type
             self.conn.execute("CHECKPOINT")
             self.conn.execute("PRAGMA optimize")
             import gc
+
             gc.collect()
-        
+
         self.log.info("🎉 Successfully completed memory-efficient employment data processing")
 
     def _cleanup_memory_after_chunk(self) -> None:
@@ -1754,32 +1807,33 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
     def _emergency_memory_cleanup(self) -> None:
         """
         Emergency memory cleanup when memory exhaustion is detected.
-        
+
         Based on patterns from Field Production and H3 PFAS pipelines.
         """
         try:
             self.log.warning("🚨 Performing emergency memory cleanup")
-            
+
             # Aggressive DuckDB cleanup
             self.conn.execute("CHECKPOINT")
             self.conn.execute("PRAGMA optimize")
-            
+
             # Clear all caches
             self.conn.execute("PRAGMA cache_size = 0")
             self.conn.execute("PRAGMA temp_store = memory")
-            
+
             # Force aggressive garbage collection
             import gc
+
             collected_before = gc.collect()
             collected_after = gc.collect()  # Run twice for better cleanup
-            
+
             # Reset cache to minimal size
             self.conn.execute("PRAGMA cache_size = -1000")  # Minimal cache
-            
+
             self.log.warning(
                 f"Emergency cleanup: collected {collected_before + collected_after} objects"
             )
-            
+
         except Exception as e:
             self.log.error(f"Emergency cleanup failed: {e}")
 
@@ -1811,8 +1865,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
             # Geocoded addresses count
             geocoded_count = self.conn.execute(
-                f"SELECT COUNT(*) FROM {table_name}_addresses "
-                f"WHERE dawa_enriched = true"
+                f"SELECT COUNT(*) FROM {table_name}_addresses " f"WHERE dawa_enriched = true"
             ).fetchone()[0]
 
             # Sample results
@@ -1827,15 +1880,11 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.info(f"   📋 Companies: {main_count}")
             self.log.info(f"   👥 Leadership entries: {leadership_count}")
             self.log.info(f"   💰 Financial documents: {financial_count}")
-            self.log.info(
-                f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)"
-            )
+            self.log.info(f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)")
             self.log.info(f"   🏭 Industry entries: {industries_count}")
             self.log.info("   👷 Employment data:")
             for table_suffix, count in employment_counts.items():
-                self.log.info(
-                    f"      📈 {table_suffix.replace('_', ' ').title()}: {count} records"
-                )
+                self.log.info(f"      📈 {table_suffix.replace('_', ' ').title()}: {count} records")
 
             for row in sample_results:
                 self.log.info(

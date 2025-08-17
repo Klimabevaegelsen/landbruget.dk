@@ -815,11 +815,12 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         # Log final table sizes
         self._log_final_table_sizes(table_name)
 
-        # List of all tables created (9 tables total like the original)
+        # List of all tables created (10 tables total including ownership)
         table_names = [
             table_name,
             f"{table_name}_addresses",
             f"{table_name}_leadership",
+            f"{table_name}_ownership",
             f"{table_name}_financial",
             f"{table_name}_industries",
             f"{table_name}_employment_annual",
@@ -917,6 +918,15 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 company_uuid VARCHAR,
                 cvr_number INTEGER,
                 leadership_data JSON
+            )
+        """)
+
+        # Ownership table
+        self.conn.execute(f"""
+            CREATE TABLE {table_name}_ownership (
+                company_uuid VARCHAR,
+                cvr_number INTEGER,
+                ownership_data JSON
             )
         """)
 
@@ -1399,6 +1409,10 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         self._process_leadership_chunk(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after leadership
 
+        # Process ownership data in chunks
+        self._process_ownership_chunk(json_strings, table_name)
+        self.conn.execute("CHECKPOINT")  # Immediate checkpoint after ownership
+
         self._process_financial_chunk(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after financial
 
@@ -1470,7 +1484,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
                 # Clear any temporary tables that might exist
                 temp_tables = self.conn.execute("""
-                    SELECT table_name FROM information_schema.tables 
+                    SELECT table_name FROM information_schema.tables
                     WHERE table_name LIKE '%_temp_%' OR table_name LIKE 'temp_%'
                 """).fetchall()
 
@@ -1829,6 +1843,51 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     AND json_array_length(json_extract(json_data, '$.leadership')) > 0
                 """,
                     [json_strings, leadership_schema[0]],
+                )
+
+    def _process_ownership_chunk(self, json_strings: list, table_name: str) -> None:
+        """Process ownership data for a chunk of companies."""
+        ownership_check = self.conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM unnest($1) as t(json_data)
+            WHERE json_extract(json_data, '$.ownership') IS NOT NULL
+            AND json_array_length(json_extract(json_data, '$.ownership')) > 0
+        """,
+            [json_strings],
+        ).fetchone()[0]
+
+        if ownership_check > 0:
+            ownership_schema = self.conn.execute(
+                """
+                WITH ownership_sample AS (
+                    SELECT json_extract(json_data, '$.ownership') as ownership_json
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.ownership') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.ownership')) > 0
+                    LIMIT 1
+                )
+                SELECT json_structure(ownership_json) FROM ownership_sample
+            """,
+                [json_strings],
+            ).fetchone()
+
+            if ownership_schema and ownership_schema[0]:
+                self.conn.execute(
+                    f"""
+                    INSERT INTO {table_name}_ownership
+                    SELECT
+                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER)
+                            as company_uuid,
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        unnest(json_transform(
+                            json_extract(json_data, '$.ownership'), $2
+                        )) as ownership_data
+                    FROM unnest($1) as t(json_data)
+                    WHERE json_extract(json_data, '$.ownership') IS NOT NULL
+                    AND json_array_length(json_extract(json_data, '$.ownership')) > 0
+                """,
+                    [json_strings, ownership_schema[0]],
                 )
 
     def _get_available_financial_fields(self, json_strings: list) -> set:

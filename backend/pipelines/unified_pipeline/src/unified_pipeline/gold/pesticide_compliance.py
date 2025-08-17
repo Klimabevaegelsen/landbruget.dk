@@ -1176,6 +1176,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "analysis_date": datetime.now().isoformat(),
         }
 
+        # Note: Table cleanup moved to _save_results to avoid dropping before export
+
         total_violations = timing_violations + withdrawn_uses + dosage_violations
         compliance_rate = (
             (compliant_applications / total_applications * 100) if total_applications > 0 else 0
@@ -1375,9 +1377,6 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 else:
                     self.logger.info(f"ℹ️ No compliance issues found for {ag_year}")
 
-                # Clean up temporary table
-                self.conn.execute(f"DROP TABLE IF EXISTS {compliance_table_name}")
-
             # Save year summary
             year_summary_path = f"gs://{self.config.bucket}/{base_path}/summary_{ag_year}.json"
             year_summary = {k: v for k, v in year_results.items() if k != "issues_data"}
@@ -1389,6 +1388,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # Upload text content using gcsfs filesystem
         with self.gcs_access.fs.open(report_path, "w", encoding="utf-8") as f:
             f.write(report_content)
+
+        # Clean up temporary tables after all exports are complete
+        for ag_year, year_results in all_results.items():
+            if year_results.get("compliance_table_name"):
+                compliance_table_name = year_results["compliance_table_name"]
+                self.conn.execute(f"DROP TABLE IF EXISTS {compliance_table_name}")
+                self.logger.debug(f"🧹 Cleaned up temporary table: {compliance_table_name}")
 
         self.logger.info(f"✅ Results saved to GCS: {base_path}")
 
