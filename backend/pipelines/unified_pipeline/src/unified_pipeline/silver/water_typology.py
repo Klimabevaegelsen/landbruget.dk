@@ -116,7 +116,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
         Example:
             >>> namespace = get_first_namespace(root)
-            >>> print(namespace)
+            >>> namespace  # Output: 'https://wfs2-miljoegis.mim.dk/vp3endelig2022'
             'https://wfs2-miljoegis.mim.dk/vp3endelig2022'
         """
         for elem in root.iter():
@@ -495,6 +495,12 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                 ADD COLUMN geometry_spatial GEOMETRY
             """)
 
+            # Also add the geometry column for WKT text (needed by downstream consumers)
+            self.conn.execute(f"""
+                ALTER TABLE {combined_table}
+                ADD COLUMN geometry TEXT
+            """)
+
             # Convert GML geometries to WKT using Python-based parser
             # DuckDB doesn't have ST_GeomFromGML, so we need to parse coordinates manually
             total_feature_count = self.conn.execute(
@@ -733,7 +739,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                         self.config.dataset,
                         geometry_column="geometry_spatial",
                     )
-                    
+
                     # ✅ UPDATE: Replace original geometry column with transformed WKT
                     self.conn.execute(f"""
                         UPDATE {table_name} SET
@@ -761,4 +767,4 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
             except Exception as e:
                 self.log.error(f"Error in Water Typology silver processing: {e}")
-                return None
+                raise  # Re-raise the exception to ensure pipeline fails

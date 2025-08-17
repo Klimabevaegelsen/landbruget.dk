@@ -91,8 +91,6 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log = logger
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
-        print("🚨 PESTICIDE PROXIMITY RUN METHOD: Starting execution")
-        print(f"🚨 CONFIG: pesticide_year = {self.config.pesticide_year}")
         """Main execution method for pesticide proximity analysis."""
 
         # Initialize DuckDB spatial extension
@@ -107,7 +105,6 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Matrix job mode: process only specified year
             years = [self.config.pesticide_year]
             self.log.info(f"🎯 Matrix job mode: Processing only year {self.config.pesticide_year}")
-            print(f"🎯 PROXIMITY MATRIX JOB: Processing only year {self.config.pesticide_year}")
         else:
             # Regular mode: process all available years
             years = await self._get_available_years(datasets["disaggregation"])
@@ -133,7 +130,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
             except Exception as e:
                 self.log.error(f"❌ Year {year} failed: {e}")
-                continue
+                raise  # Re-raise the exception to ensure pipeline fails
 
         self.log.info("🏁 Pesticide proximity analysis completed successfully!")
 
@@ -604,7 +601,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             SELECT DISTINCT
                 cd.*,
                 COALESCE(rp.residential_buildings_formatted, '') as residential_buildings_formatted,
-                COALESCE(ep.educational_facilities_formatted, '') 
+                COALESCE(ep.educational_facilities_formatted, '')
                     as educational_facilities_formatted,
                 COALESCE(wp.water_distance_formatted, '') as water_distance_formatted
             FROM current_disaggregation cd
@@ -660,8 +657,6 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         self.log.info(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
         self.log.info(f"📁 Proximity GCS Path: {output_path}")
-        print(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
-        print(f"📁 Proximity GCS Path: {output_path}")
 
     def get_schema_info(self) -> Dict[str, Any]:
         """Return schema information for the proximity analysis output."""
