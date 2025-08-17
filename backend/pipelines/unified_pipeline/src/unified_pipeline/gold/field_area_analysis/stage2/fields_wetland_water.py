@@ -151,7 +151,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 ON w.wetland_key = wpwi.wetland_key
                 AND ST_Intersects(f.geometry, wpwi.intersection_geometry)
                 -- Field must intersect water-covered part
-            WHERE ST_Area_Spheroid(
+            WHERE ST_Area_Spheroid(ST_FlipCoordinates(
                 ST_Intersection(
                     ST_Intersection(f.geometry, w.geometry), 
                     wpwi.intersection_geometry

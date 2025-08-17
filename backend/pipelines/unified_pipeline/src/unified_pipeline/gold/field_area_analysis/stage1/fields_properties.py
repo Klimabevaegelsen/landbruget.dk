@@ -57,7 +57,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 year,
                 geometry,
                 field_uuid,
-                ST_Area_Spheroid(geometry) as field_area_m2
+                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as field_area_m2
             FROM agricultural_fields_full
         """)
 
@@ -193,7 +193,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                     f.cvr_number,
                     f.year,
                     f.field_uuid,
-                    ST_Area_Spheroid(f.geometry) as field_area_m2,
+                    ST_Area_Spheroid(ST_FlipCoordinates(f.geometry)) as field_area_m2,
                     p.bfe_number,
                     p.property_area_m2,
                     f.geometry as field_geometry,
@@ -228,9 +228,9 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         ST_Area_Spheroid(
                             ST_Intersection(field_geometry, property_geometry)
                         ) as intersection_area_m2,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                        (ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(field_geometry, property_geometry))) /
                          field_area_m2) * 100 as field_area_share_pct,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                        (ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(field_geometry, property_geometry))) /
                          property_area_m2) * 100 as property_area_share_pct,
                         
                         -- STREAM intersection geometries for downstream spatial analysis
@@ -241,9 +241,9 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                     FROM chunk_raw_intersections
                     WHERE
                         -- Filter out tiny intersections (< 1% of field area or < 100 m²)
-                        ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) > 100
+                        ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(field_geometry, property_geometry))) > 100
                         AND (
-                            ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                            ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(field_geometry, property_geometry))) /
                             field_area_m2
                         ) > 0.01
                 """)
