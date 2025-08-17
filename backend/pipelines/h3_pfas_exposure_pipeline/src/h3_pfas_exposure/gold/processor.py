@@ -299,13 +299,16 @@ class H3PFASProcessorRefactored:
         """)
 
         # Add geometry and area calculations using proper H3 functions
+        # FIX: H3 generates geometries in lon/lat order, but field geometries are in lat/lon order
+        # Flip H3 coordinates to match field coordinate system for spherical calculations
         self.conn.execute("""
             CREATE OR REPLACE TABLE h3_grid_with_geom AS
             SELECT
                 h3_index as h3_cell,
                 lat as center_lat,
                 lon as center_lon,
-                ST_GeomFromText(h3_boundary) as h3_geometry,
+                -- Flip H3 geometry coordinates from lon/lat to lat/lon to match field geometries
+                ST_FlipCoordinates(ST_GeomFromText(h3_boundary)) as h3_geometry,
                 h3_cell_area(h3_index, 'm^2') / 10000.0 as h3_area_ha
             FROM h3_grid
         """)
