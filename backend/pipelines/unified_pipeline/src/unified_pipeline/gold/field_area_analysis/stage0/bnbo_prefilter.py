@@ -35,36 +35,36 @@ class BNBOPreFilter(PreFilteringStageBase):
 
         # CRITICAL: Decompose BNBO with ST_Dump BEFORE spatial join to prevent memory issues
         self.log.info("Decomposing BNBO MultiPolygons with ST_Dump to prevent memory overflow...")
-        
+
         # First check the geometry column format to handle different data types properly
         geometry_type_check = self.conn.execute("""
-            SELECT 
+            SELECT
                 typeof(geometry) as geom_type,
                 COUNT(*) as count
-            FROM bnbo_status_raw 
-            WHERE geometry IS NOT NULL 
+            FROM bnbo_status_raw
+            WHERE geometry IS NOT NULL
             GROUP BY typeof(geometry)
             LIMIT 10
         """).fetchall()
-        
+
         if geometry_type_check:
             geom_types = [(row[0], row[1]) for row in geometry_type_check]
             self.log.info(f"🔍 BNBO geometry column types detected: {geom_types}")
-        
+
         # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
         self.log.info("🌍 Validating BNBO coordinate bounds and order...")
-        
+
         # Try coordinate validation with error handling
         # Since we know geometry is GEOMETRY type, use direct approach first
         try:
             coord_validation = self.conn.execute("""
-                SELECT 
+                SELECT
                     MIN(ST_XMin(geometry)) as min_x,
                     MAX(ST_XMax(geometry)) as max_x,
                     MIN(ST_YMin(geometry)) as min_y,
                     MAX(ST_YMax(geometry)) as max_y
-                FROM bnbo_status_raw 
-                WHERE geometry IS NOT NULL 
+                FROM bnbo_status_raw
+                WHERE geometry IS NOT NULL
                 LIMIT 1000
             """).fetchone()
         except Exception as e:
@@ -72,9 +72,9 @@ class BNBOPreFilter(PreFilteringStageBase):
             self.log.info("🔄 Trying with type-safe CASE statement...")
             try:
                 coord_validation = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         MIN(ST_XMin(
-                            CASE 
+                            CASE
                                 WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                     ST_GeomFromText(geometry)
                                 WHEN typeof(geometry) = 'BLOB' THEN
@@ -83,7 +83,7 @@ class BNBOPreFilter(PreFilteringStageBase):
                             END
                         )) as min_x,
                         MAX(ST_XMax(
-                            CASE 
+                            CASE
                                 WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                     ST_GeomFromText(geometry)
                                 WHEN typeof(geometry) = 'BLOB' THEN
@@ -92,7 +92,7 @@ class BNBOPreFilter(PreFilteringStageBase):
                             END
                         )) as max_x,
                         MIN(ST_YMin(
-                            CASE 
+                            CASE
                                 WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                     ST_GeomFromText(geometry)
                                 WHEN typeof(geometry) = 'BLOB' THEN
@@ -101,7 +101,7 @@ class BNBOPreFilter(PreFilteringStageBase):
                             END
                         )) as min_y,
                         MAX(ST_YMax(
-                            CASE 
+                            CASE
                                 WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                     ST_GeomFromText(geometry)
                                 WHEN typeof(geometry) = 'BLOB' THEN
@@ -109,25 +109,23 @@ class BNBOPreFilter(PreFilteringStageBase):
                                 ELSE geometry
                             END
                         )) as max_y
-                    FROM bnbo_status_raw 
-                    WHERE geometry IS NOT NULL 
+                    FROM bnbo_status_raw
+                    WHERE geometry IS NOT NULL
                     LIMIT 1000
                 """).fetchone()
             except Exception as e2:
                 self.log.warning(f"⚠️ Fallback coordinate validation also failed: {e2}")
                 coord_validation = None
-        
+
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
             self.log.info(
                 f"📍 BNBO bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})"
             )
-            
+
             # Check if coordinates are in expected ranges for Denmark
             if min_x >= 8 and max_x <= 16 and min_y >= 54 and max_y <= 58:
-                self.log.info(
-                    "✅ BNBO coordinates in WGS84 (EPSG:4326) - Denmark bounds OK"
-                )
+                self.log.info("✅ BNBO coordinates in WGS84 (EPSG:4326) - Denmark bounds OK")
             elif min_x >= 440000 and max_x <= 900000 and min_y >= 6040000 and max_y <= 6420000:
                 self.log.info(
                     "✅ BNBO coordinates in UTM Zone 32N (EPSG:25832) - Denmark bounds OK"
@@ -139,41 +137,69 @@ class BNBOPreFilter(PreFilteringStageBase):
                 self.log.warning(
                     f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
                 )
-        
+
         # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs to verify actual order
         try:
+            self.log.info("🧭 BNBO COORDINATE ORDER CHECK - Fetching sample centroids...")
             sample_wkt = self.conn.execute("""
-                SELECT 
+                SELECT
                     ST_AsText(ST_Centroid(geometry)) as wkt_centroid
-                FROM bnbo_status_raw 
-                WHERE geometry IS NOT NULL 
+                FROM bnbo_status_raw
+                WHERE geometry IS NOT NULL
                 LIMIT 5
             """).fetchall()
-            
+
             if sample_wkt:
-                self.log.info("🧭 BNBO COORDINATE ORDER CHECK - Raw WKT centroids:")
+                self.log.info(
+                    f"🧭 BNBO COORDINATE ORDER CHECK - Found {len(sample_wkt)} sample centroids:"
+                )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
+                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
-                    if wkt and 'POINT(' in wkt:
-                        coords_str = wkt.replace('POINT(', '').replace(')', '')
+                    if wkt and "POINT(" in wkt:
+                        coords_str = wkt.replace("POINT(", "").replace(")", "")
                         try:
-                            first_val, second_val = map(float, coords_str.split())
-                            coord_pairs.append((first_val, second_val))
-                            self.log.info(f"   BNBO {i+1}: POINT({first_val:.6f} {second_val:.6f})")
-                        except Exception:
+                            coord_parts = coords_str.split()
+                            if len(coord_parts) >= 2:
+                                first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
+                                coord_pairs.append((first_val, second_val))
+                                self.log.info(
+                                    f"   BNBO {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                )
+                            else:
+                                self.log.warning(
+                                    f"   BNBO {i+1}: Invalid coordinate format: {coords_str}"
+                                )
+                        except Exception as parse_e:
+                            self.log.warning(f"   BNBO {i+1}: Parse error: {parse_e}")
                             continue
-                
+                    else:
+                        self.log.warning(f"   BNBO {i+1}: Not a POINT geometry: {wkt}")
+
                 if coord_pairs:
+                    self.log.info(
+                        f"🧭 BNBO: Successfully parsed {len(coord_pairs)} coordinate pairs"
+                    )
                     # Analyze the pattern - first value in coordinate pair
                     first_vals = [pair[0] for pair in coord_pairs]
                     second_vals = [pair[1] for pair in coord_pairs]
                     first_range = (min(first_vals), max(first_vals))
                     second_range = (min(second_vals), max(second_vals))
-                    
+
+                    self.log.info(
+                        f"🧭 BNBO: First values range: {first_range[0]:.2f} to {first_range[1]:.2f}"
+                    )
+                    self.log.info(
+                        f"🧭 BNBO: Second values range: "
+                        f"{second_range[0]:.2f} to {second_range[1]:.2f}"
+                    )
+
                     if (
-                        8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and
-                        54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58
+                        8 <= first_range[0] <= 15
+                        and 8 <= first_range[1] <= 15
+                        and 54 <= second_range[0] <= 58
+                        and 54 <= second_range[1] <= 58
                     ):
                         self.log.info(
                             f"✅ BNBO CONFIRMED: Data stored as (LON, LAT) - "
@@ -181,8 +207,10 @@ class BNBOPreFilter(PreFilteringStageBase):
                             f"{second_range[0]:.2f}-{second_range[1]:.2f})"
                         )
                     elif (
-                        54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and
-                        8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15
+                        54 <= first_range[0] <= 58
+                        and 54 <= first_range[1] <= 58
+                        and 8 <= second_range[0] <= 15
+                        and 8 <= second_range[1] <= 15
                     ):
                         self.log.warning(
                             f"⚠️ BNBO ALERT: Data stored as (LAT, LON) - "
@@ -195,9 +223,17 @@ class BNBOPreFilter(PreFilteringStageBase):
                             f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
                             f"{second_range[0]:.2f}-{second_range[1]:.2f})"
                         )
+                else:
+                    self.log.warning("🧭 BNBO: No valid coordinate pairs extracted from centroids")
+            else:
+                self.log.warning("🧭 BNBO: No sample WKT centroids returned from query")
         except Exception as e:
             self.log.warning(f"⚠️ Could not verify BNBO coordinate order: {e}")
-        
+            self.log.warning(f"   Exception type: {type(e).__name__}")
+            import traceback
+
+            self.log.warning(f"   Traceback: {traceback.format_exc()}")
+
         # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
         # Use simpler approach: since we know geometry is GEOMETRY type, use it directly
         try:
@@ -207,19 +243,19 @@ class BNBOPreFilter(PreFilteringStageBase):
                     status_category,
                     UNNEST(ST_Dump(geometry)).geom as geometry
                 FROM bnbo_status_raw
-                WHERE geometry IS NOT NULL 
+                WHERE geometry IS NOT NULL
             """)
         except Exception as e:
             self.log.warning(f"⚠️ Failed with direct geometry approach: {e}")
             self.log.info("🔄 Trying with type-safe CASE statement...")
-            
+
             # Fallback: Use type-safe approach with explicit type checking
             self.conn.execute("""
                 CREATE OR REPLACE TABLE bnbo_status_full AS
                 SELECT
                     status_category,
                     UNNEST(ST_Dump(
-                        CASE 
+                        CASE
                             WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                 ST_GeomFromText(geometry)
                             WHEN typeof(geometry) = 'BLOB' THEN
@@ -229,7 +265,7 @@ class BNBOPreFilter(PreFilteringStageBase):
                         END
                     )).geom as geometry
                 FROM bnbo_status_raw
-                WHERE geometry IS NOT NULL 
+                WHERE geometry IS NOT NULL
             """)
 
         # Log dataset sizes
@@ -278,8 +314,8 @@ class BNBOPreFilter(PreFilteringStageBase):
             CREATE OR REPLACE TABLE bnbo_filtered AS
             SELECT
                 ROW_NUMBER() OVER (
-                    ORDER BY status_category, 
-                             ST_X(ST_Centroid(geometry)), 
+                    ORDER BY status_category,
+                             ST_X(ST_Centroid(geometry)),
                              ST_Y(ST_Centroid(geometry))
                 ) as bnbo_id,
                 status_category,

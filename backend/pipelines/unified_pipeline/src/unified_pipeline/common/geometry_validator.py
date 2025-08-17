@@ -194,13 +194,13 @@ def validate_and_transform_geometries_duckdb(
         # Apply coordinate flipping if needed - check bounds AFTER any transformation
         # Skip if we already flipped coordinates for WGS84 lon/lat data
         already_flipped_for_wgs84 = (
-            initial_bounds and
-            7 <= initial_bounds[0] <= 16 and
-            7 <= initial_bounds[1] <= 16 and
-            54 <= initial_bounds[2] <= 58 and
-            54 <= initial_bounds[3] <= 58
+            initial_bounds
+            and 7 <= initial_bounds[0] <= 16
+            and 7 <= initial_bounds[1] <= 16
+            and 54 <= initial_bounds[2] <= 58
+            and 54 <= initial_bounds[3] <= 58
         )
-        
+
         if not already_flipped_for_wgs84:
             post_transform_bounds = conn.execute(f"""
                 SELECT
@@ -216,8 +216,10 @@ def validate_and_transform_geometries_duckdb(
             if post_transform_bounds:
                 min_x, max_x, min_y, max_y = post_transform_bounds
                 is_wgs84_lat_lon_after = (
-                    54 <= min_x <= 58 and 54 <= max_x <= 58 and
-                    7 <= min_y <= 16 and 7 <= max_y <= 16
+                    54 <= min_x <= 58
+                    and 54 <= max_x <= 58
+                    and 7 <= min_y <= 16
+                    and 7 <= max_y <= 16
                 )
 
                 if is_wgs84_lat_lon_after:
@@ -249,48 +251,76 @@ def validate_and_transform_geometries_duckdb(
                     )
             else:
                 logger.info(f"{dataset_name}: Coordinates are in correct order")
-            
+
             # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs
             # to verify actual storage order
             try:
                 sample_wkt = conn.execute(f"""
-                    SELECT 
+                    SELECT
                         ST_AsText(ST_Centroid({geometry_column})) as wkt_centroid
-                    FROM {table_name} 
-                    WHERE {geometry_column} IS NOT NULL 
+                    FROM {table_name}
+                    WHERE {geometry_column} IS NOT NULL
                     LIMIT 5
                 """).fetchall()
-                
+
                 if sample_wkt:
                     logger.info(
                         f"🧭 {dataset_name}: COORDINATE ORDER VERIFICATION - "
-                        "Raw WKT centroids:"
+                        f"Found {len(sample_wkt)} sample centroids:"
                     )
                     coord_pairs = []
                     for i, (wkt,) in enumerate(sample_wkt[:3]):
+                        logger.info(f"   Raw WKT {i+1}: {wkt}")
                         # Extract coordinates from "POINT(x y)" format
-                        if wkt and 'POINT(' in wkt:
-                            coords_str = wkt.replace('POINT(', '').replace(')', '')
+                        if wkt and "POINT(" in wkt:
+                            coords_str = wkt.replace("POINT(", "").replace(")", "")
                             try:
-                                first_val, second_val = map(float, coords_str.split())
-                                coord_pairs.append((first_val, second_val))
-                                logger.info(
-                                    f"   Sample {i+1}: POINT({first_val:.6f} {second_val:.6f})"
-                                )
-                            except Exception:
+                                coord_parts = coords_str.split()
+                                if len(coord_parts) >= 2:
+                                    first_val, second_val = (
+                                        float(coord_parts[0]),
+                                        float(coord_parts[1]),
+                                    )
+                                    coord_pairs.append((first_val, second_val))
+                                    logger.info(
+                                        f"   Sample {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"   Sample {i+1}: Invalid coordinate format: {coords_str}"
+                                    )
+                            except Exception as parse_e:
+                                logger.warning(f"   Sample {i+1}: Parse error: {parse_e}")
                                 continue
-                    
+                        else:
+                            logger.warning(f"   Sample {i+1}: Not a POINT geometry: {wkt}")
+
                     if coord_pairs:
+                        logger.info(
+                            f"🧭 {dataset_name}: Successfully parsed "
+                            f"{len(coord_pairs)} coordinate pairs"
+                        )
                         # Analyze the pattern - first value in coordinate pair
                         first_vals = [pair[0] for pair in coord_pairs]
                         second_vals = [pair[1] for pair in coord_pairs]
                         first_range = (min(first_vals), max(first_vals))
                         second_range = (min(second_vals), max(second_vals))
-                        
+
+                        logger.info(
+                            f"🧭 {dataset_name}: First values range: "
+                            f"{first_range[0]:.2f} to {first_range[1]:.2f}"
+                        )
+                        logger.info(
+                            f"🧭 {dataset_name}: Second values range: "
+                            f"{second_range[0]:.2f} to {second_range[1]:.2f}"
+                        )
+
                         # Check coordinate order - EPSG:4326 standard is LAT/LON
                         if (
-                            54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and
-                            8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15
+                            54 <= first_range[0] <= 58
+                            and 54 <= first_range[1] <= 58
+                            and 8 <= second_range[0] <= 15
+                            and 8 <= second_range[1] <= 15
                         ):
                             logger.info(
                                 f"✅ {dataset_name}: CONFIRMED - Data stored as "
@@ -303,8 +333,10 @@ def validate_and_transform_geometries_duckdb(
                                 "(expects LAT/LON input)"
                             )
                         elif (
-                            8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and
-                            54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58
+                            8 <= first_range[0] <= 15
+                            and 8 <= first_range[1] <= 15
+                            and 54 <= second_range[0] <= 58
+                            and 54 <= second_range[1] <= 58
                         ):
                             logger.warning(
                                 f"⚠️ {dataset_name}: ALERT - Data stored as "
@@ -325,8 +357,20 @@ def validate_and_transform_geometries_duckdb(
                             logger.warning(
                                 "   → Manual verification needed for ST_Area_Spheroid usage"
                             )
+                    else:
+                        logger.warning(
+                            f"🧭 {dataset_name}: No valid coordinate pairs extracted from centroids"
+                        )
+                else:
+                    logger.warning(
+                        f"🧭 {dataset_name}: No sample WKT centroids returned from query"
+                    )
             except Exception as e:
                 logger.warning(f"⚠️ {dataset_name}: Could not verify coordinate order: {e}")
+                logger.warning(f"   Exception type: {type(e).__name__}")
+                import traceback
+
+                logger.warning(f"   Traceback: {traceback.format_exc()}")
 
         # Final validation in WGS84
         invalid_wgs84 = conn.execute(f"""

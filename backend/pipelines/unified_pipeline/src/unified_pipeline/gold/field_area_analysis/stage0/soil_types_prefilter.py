@@ -37,33 +37,33 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.log.info(
             "Decomposing soil types MultiPolygons with ST_Dump to prevent memory overflow..."
         )
-        
+
         # COORDINATE VALIDATION: Check coordinate bounds to ensure proper lon/lat order
         self.log.info("🌍 Validating soil types coordinate bounds and order...")
-        
+
         # First check geometry types to determine validation approach
         try:
             geom_types = self.conn.execute("""
                 SELECT DISTINCT typeof(geometry) as geom_type
-                FROM soil_types_raw 
-                WHERE geometry IS NOT NULL 
+                FROM soil_types_raw
+                WHERE geometry IS NOT NULL
                 LIMIT 5
             """).fetchall()
-            
+
             geom_type_list = [row[0] for row in geom_types]
             self.log.info(f"🔍 Soil types geometry types: {geom_type_list}")
-            
+
             # Try coordinate validation with error handling
             # Since we know geometry is GEOMETRY type, use direct approach first
             try:
                 coord_validation = self.conn.execute("""
-                    SELECT 
+                    SELECT
                         MIN(ST_XMin(geometry)) as min_x,
                         MAX(ST_XMax(geometry)) as max_x,
                         MIN(ST_YMin(geometry)) as min_y,
                         MAX(ST_YMax(geometry)) as max_y
-                    FROM soil_types_raw 
-                    WHERE geometry IS NOT NULL 
+                    FROM soil_types_raw
+                    WHERE geometry IS NOT NULL
                     LIMIT 1000
                 """).fetchone()
             except Exception as e:
@@ -71,9 +71,9 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                 self.log.info("🔄 Trying with type-safe CASE statement...")
                 try:
                     coord_validation = self.conn.execute("""
-                        SELECT 
+                        SELECT
                             MIN(ST_XMin(
-                                CASE 
+                                CASE
                                     WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                         ST_GeomFromText(geometry)
                                     WHEN typeof(geometry) = 'BLOB' THEN
@@ -82,7 +82,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                                 END
                             )) as min_x,
                             MAX(ST_XMax(
-                                CASE 
+                                CASE
                                     WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                         ST_GeomFromText(geometry)
                                     WHEN typeof(geometry) = 'BLOB' THEN
@@ -91,7 +91,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                                 END
                             )) as max_x,
                             MIN(ST_YMin(
-                                CASE 
+                                CASE
                                     WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                         ST_GeomFromText(geometry)
                                     WHEN typeof(geometry) = 'BLOB' THEN
@@ -100,7 +100,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                                 END
                             )) as min_y,
                             MAX(ST_YMax(
-                                CASE 
+                                CASE
                                     WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                         ST_GeomFromText(geometry)
                                     WHEN typeof(geometry) = 'BLOB' THEN
@@ -108,8 +108,8 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                                     ELSE geometry
                                 END
                             )) as max_y
-                        FROM soil_types_raw 
-                        WHERE geometry IS NOT NULL 
+                        FROM soil_types_raw
+                        WHERE geometry IS NOT NULL
                         LIMIT 1000
                     """).fetchone()
                 except Exception as e2:
@@ -118,17 +118,19 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         except Exception as e:
             self.log.warning(f"⚠️ Coordinate validation failed: {e}")
             coord_validation = None
-        
+
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
             self.log.info(
                 f"📍 Soil types bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})"
             )
-            
+
             # Check if coordinates are in expected ranges for Denmark
-            if min_x >= 8 and max_x <= 16 and min_y >= 54 and max_y <= 58:
+            # Note: EPSG:4326 data is stored as (LAT, LON) so X=LAT, Y=LON
+            if min_x >= 54 and max_x <= 58 and min_y >= 8 and max_y <= 16:
                 self.log.info(
-                    "✅ Soil types coordinates in WGS84 (EPSG:4326) - Denmark bounds OK"
+                    "✅ Soil types coordinates in WGS84 (EPSG:4326) - "
+                    "Denmark bounds OK (LAT, LON order)"
                 )
             elif min_x >= 440000 and max_x <= 900000 and min_y >= 6040000 and max_y <= 6420000:
                 self.log.info(
@@ -136,62 +138,116 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                 )
             else:
                 self.log.warning("⚠️ Soil types coordinates outside expected Denmark bounds!")
-                self.log.warning("   WGS84 expected: X(8-16), Y(54-58)")
+                self.log.warning("   WGS84 expected: X(54-58 LAT), Y(8-16 LON)")
                 self.log.warning("   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
                 self.log.warning(
                     f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
                 )
         else:
             self.log.warning("⚠️ Could not validate soil types coordinate bounds")
-        
+
         # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs to verify actual order
         try:
+            self.log.info("🧭 SOIL TYPES COORDINATE ORDER CHECK - Fetching sample centroids...")
             sample_wkt = self.conn.execute("""
-                SELECT 
+                SELECT
                     ST_AsText(ST_Centroid(geometry)) as wkt_centroid
-                FROM soil_types_raw 
-                WHERE geometry IS NOT NULL 
+                FROM soil_types_raw
+                WHERE geometry IS NOT NULL
                 LIMIT 5
             """).fetchall()
-            
+
             if sample_wkt:
-                self.log.info("🧭 SOIL TYPES COORDINATE ORDER CHECK - Raw WKT centroids:")
+                self.log.info(
+                    f"🧭 SOIL TYPES COORDINATE ORDER CHECK - "
+                    f"Found {len(sample_wkt)} sample centroids:"
+                )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
+                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
-                    if wkt and 'POINT(' in wkt:
-                        coords_str = wkt.replace('POINT(', '').replace(')', '')
+                    if wkt and "POINT(" in wkt:
+                        coords_str = wkt.replace("POINT(", "").replace(")", "")
                         try:
-                            first_val, second_val = map(float, coords_str.split())
-                            coord_pairs.append((first_val, second_val))
-                            self.log.info(f"   Soil {i+1}: POINT({first_val:.6f} {second_val:.6f})")
-                        except Exception:
+                            coord_parts = coords_str.split()
+                            if len(coord_parts) >= 2:
+                                first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
+                                coord_pairs.append((first_val, second_val))
+                                self.log.info(
+                                    f"   Soil {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                )
+                            else:
+                                self.log.warning(
+                                    f"   Soil {i+1}: Invalid coordinate format: {coords_str}"
+                                )
+                        except Exception as parse_e:
+                            self.log.warning(f"   Soil {i+1}: Parse error: {parse_e}")
                             continue
-                
+                    else:
+                        self.log.warning(f"   Soil {i+1}: Not a POINT geometry: {wkt}")
+
                 if coord_pairs:
+                    self.log.info(
+                        f"🧭 SOIL TYPES: Successfully parsed {len(coord_pairs)} coordinate pairs"
+                    )
                     # Analyze the pattern - first value in coordinate pair
                     first_vals = [pair[0] for pair in coord_pairs]
                     second_vals = [pair[1] for pair in coord_pairs]
                     first_range = (min(first_vals), max(first_vals))
                     second_range = (min(second_vals), max(second_vals))
-                    
-                    if (8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 
-                        54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58):
-                        self.log.info(f"✅ SOIL TYPES CONFIRMED: Data stored as (LON, LAT) - "
-                                    f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
-                                    f"{second_range[0]:.2f}-{second_range[1]:.2f})")
-                    elif (54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 
-                          8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15):
-                        self.log.warning(f"⚠️ SOIL TYPES ALERT: Data stored as (LAT, LON) - "
-                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
-                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+
+                    self.log.info(
+                        f"🧭 SOIL TYPES: First values range: "
+                        f"{first_range[0]:.2f} to {first_range[1]:.2f}"
+                    )
+                    self.log.info(
+                        f"🧭 SOIL TYPES: Second values range: "
+                        f"{second_range[0]:.2f} to {second_range[1]:.2f}"
+                    )
+
+                    if (
+                        54 <= first_range[0] <= 58
+                        and 54 <= first_range[1] <= 58
+                        and 8 <= second_range[0] <= 15
+                        and 8 <= second_range[1] <= 15
+                    ):
+                        self.log.info(
+                            f"✅ SOIL TYPES CONFIRMED: Data stored as (LAT, LON) - "
+                            f"CORRECT EPSG:4326 format - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
+                    elif (
+                        8 <= first_range[0] <= 15
+                        and 8 <= first_range[1] <= 15
+                        and 54 <= second_range[0] <= 58
+                        and 54 <= second_range[1] <= 58
+                    ):
+                        self.log.warning(
+                            f"⚠️ SOIL TYPES ALERT: Data stored as (LON, LAT) - "
+                            f"Non-standard format - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
                     else:
-                        self.log.warning(f"❓ SOIL TYPES UNCLEAR: Coordinate order unclear - "
-                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
-                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                        self.log.warning(
+                            f"❓ SOIL TYPES UNCLEAR: Coordinate order unclear - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
+                else:
+                    self.log.warning(
+                        "🧭 SOIL TYPES: No valid coordinate pairs extracted from centroids"
+                    )
+            else:
+                self.log.warning("🧭 SOIL TYPES: No sample WKT centroids returned from query")
         except Exception as e:
             self.log.warning(f"⚠️ Could not verify soil types coordinate order: {e}")
-        
+            self.log.warning(f"   Exception type: {type(e).__name__}")
+            import traceback
+
+            self.log.warning(f"   Traceback: {traceback.format_exc()}")
+
         # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
         # Use simpler approach: since we know geometry is GEOMETRY type, use it directly
         try:
@@ -202,12 +258,12 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                     soil_description,  -- Only meaningful soil data (8 Danish soil types)
                     UNNEST(ST_Dump(geometry)).geom as geometry
                 FROM soil_types_raw
-                WHERE geometry IS NOT NULL 
+                WHERE geometry IS NOT NULL
             """)
         except Exception as e:
             self.log.warning(f"⚠️ Failed with direct geometry approach: {e}")
             self.log.info("🔄 Trying with type-safe CASE statement...")
-            
+
             # Fallback: Use type-safe approach with explicit type checking
             self.conn.execute("""
                 CREATE OR REPLACE TABLE soil_types_full AS
@@ -215,7 +271,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                     soil_code,
                     soil_description,  -- Only meaningful soil data (8 Danish soil types)
                     UNNEST(ST_Dump(
-                        CASE 
+                        CASE
                             WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                 ST_GeomFromText(geometry)
                             WHEN typeof(geometry) = 'BLOB' THEN
@@ -225,7 +281,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                         END
                     )).geom as geometry
                 FROM soil_types_raw
-                WHERE geometry IS NOT NULL 
+                WHERE geometry IS NOT NULL
             """)
 
         # Log dataset sizes
@@ -275,7 +331,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             CREATE OR REPLACE TABLE soil_types_filtered AS
             SELECT
                 ROW_NUMBER() OVER (
-                    ORDER BY soil_description, soil_code, 
+                    ORDER BY soil_description, soil_code,
                              ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
                 ) as soil_id,
                 soil_code,
