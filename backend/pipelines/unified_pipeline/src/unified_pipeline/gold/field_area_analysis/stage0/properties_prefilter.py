@@ -31,7 +31,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
         # Load full cadastral dataset (PROBE side - the massive dataset)
         self.log.info("Loading full cadastral dataset (6.5M properties)...")
         self._load_silver_dataset("cadastral", "properties_raw")
-        
+
         # Add memory optimization and basic geometry validation
         self.log.info("Preparing properties dataset with memory optimization...")
         self.conn.execute("""
@@ -40,64 +40,114 @@ class PropertiesPreFilter(PreFilteringStageBase):
                 bfe_number,
                 geometry
             FROM properties_raw
-            WHERE geometry IS NOT NULL 
+            WHERE geometry IS NOT NULL
               AND bfe_number IS NOT NULL
         """)
 
         # Log dataset sizes and validate data integrity
         properties_count = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]
-        
+
         # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs to verify actual order
         try:
+            self.log.info("🧭 PROPERTIES COORDINATE ORDER CHECK - Fetching sample centroids...")
             sample_wkt = self.conn.execute("""
-                SELECT 
+                SELECT
                     ST_AsText(ST_Centroid(geometry)) as wkt_centroid
-                FROM properties_full 
-                WHERE geometry IS NOT NULL 
+                FROM properties_full
+                WHERE geometry IS NOT NULL
                 LIMIT 5
             """).fetchall()
-            
+
             if sample_wkt:
-                self.log.info("🧭 PROPERTIES COORDINATE ORDER CHECK - Raw WKT centroids:")
+                self.log.info(
+                    f"🧭 PROPERTIES COORDINATE ORDER CHECK - "
+                    f"Found {len(sample_wkt)} sample centroids:"
+                )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
+                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
-                    if wkt and 'POINT(' in wkt:
-                        coords_str = wkt.replace('POINT(', '').replace(')', '')
+                    if wkt and "POINT(" in wkt:
+                        coords_str = wkt.replace("POINT(", "").replace(")", "")
                         try:
-                            first_val, second_val = map(float, coords_str.split())
-                            coord_pairs.append((first_val, second_val))
-                            self.log.info(
-                                f"   Property {i+1}: POINT({first_val:.6f} {second_val:.6f})"
-                            )
-                        except Exception:
+                            coord_parts = coords_str.split()
+                            if len(coord_parts) >= 2:
+                                first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
+                                coord_pairs.append((first_val, second_val))
+                                self.log.info(
+                                    f"   Property {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                )
+                            else:
+                                self.log.warning(
+                                    f"   Property {i+1}: Invalid coordinate format: {coords_str}"
+                                )
+                        except Exception as parse_e:
+                            self.log.warning(f"   Property {i+1}: Parse error: {parse_e}")
                             continue
-                
+                    else:
+                        self.log.warning(f"   Property {i+1}: Not a POINT geometry: {wkt}")
+
                 if coord_pairs:
+                    self.log.info(
+                        f"🧭 PROPERTIES: Successfully parsed {len(coord_pairs)} coordinate pairs"
+                    )
                     # Analyze the pattern - first value in coordinate pair
                     first_vals = [pair[0] for pair in coord_pairs]
                     second_vals = [pair[1] for pair in coord_pairs]
                     first_range = (min(first_vals), max(first_vals))
                     second_range = (min(second_vals), max(second_vals))
-                    
-                    if (8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 
-                        54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58):
-                        self.log.info(f"✅ PROPERTIES CONFIRMED: Data stored as (LON, LAT) - "
-                                    f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
-                                    f"{second_range[0]:.2f}-{second_range[1]:.2f})")
-                    elif (54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 
-                          8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15):
-                        self.log.warning(f"⚠️ PROPERTIES ALERT: Data stored as (LAT, LON) - "
-                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
-                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+
+                    self.log.info(
+                        f"🧭 PROPERTIES: First values range: "
+                        f"{first_range[0]:.2f} to {first_range[1]:.2f}"
+                    )
+                    self.log.info(
+                        f"🧭 PROPERTIES: Second values range: "
+                        f"{second_range[0]:.2f} to {second_range[1]:.2f}"
+                    )
+
+                    if (
+                        8 <= first_range[0] <= 15
+                        and 8 <= first_range[1] <= 15
+                        and 54 <= second_range[0] <= 58
+                        and 54 <= second_range[1] <= 58
+                    ):
+                        self.log.info(
+                            f"✅ PROPERTIES CONFIRMED: Data stored as (LON, LAT) - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
+                    elif (
+                        54 <= first_range[0] <= 58
+                        and 54 <= first_range[1] <= 58
+                        and 8 <= second_range[0] <= 15
+                        and 8 <= second_range[1] <= 15
+                    ):
+                        self.log.warning(
+                            f"⚠️ PROPERTIES ALERT: Data stored as (LAT, LON) - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
                     else:
-                        self.log.warning(f"❓ PROPERTIES UNCLEAR: Coordinate order unclear - "
-                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
-                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                        self.log.warning(
+                            f"❓ PROPERTIES UNCLEAR: Coordinate order unclear - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
+                else:
+                    self.log.warning(
+                        "🧭 PROPERTIES: No valid coordinate pairs extracted from centroids"
+                    )
+            else:
+                self.log.warning("🧭 PROPERTIES: No sample WKT centroids returned from query")
         except Exception as e:
             self.log.warning(f"⚠️ Could not verify properties coordinate order: {e}")
+            self.log.warning(f"   Exception type: {type(e).__name__}")
+            import traceback
+
+            self.log.warning(f"   Traceback: {traceback.format_exc()}")
         self.log.info(f"📊 Input: {properties_count:,} properties to filter")
-        
+
         # Validate dataset integrity to prevent segfaults
         self.log.info("🔍 Validating properties dataset integrity...")
         null_geom_count = self.conn.execute(
@@ -106,12 +156,12 @@ class PropertiesPreFilter(PreFilteringStageBase):
         null_bfe_count = self.conn.execute(
             "SELECT COUNT(*) FROM properties_full WHERE bfe_number IS NULL"
         ).fetchone()[0]
-        
+
         if null_geom_count > 0:
             self.log.warning(f"⚠️ Found {null_geom_count} properties with NULL geometry")
         if null_bfe_count > 0:
             self.log.warning(f"⚠️ Found {null_bfe_count} properties with NULL bfe_number")
-            
+
         self.log.info(f"✅ Dataset validation complete: {properties_count:,} valid properties")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
@@ -134,7 +184,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
         self.conn.execute("SET threads=2")  # Reduced from 4 to prevent memory pressure
         self.conn.execute("SET preserve_insertion_order=false")
         self.conn.execute("SET memory_limit='4GB'")  # Set explicit memory limit
-        
+
         # Get total property count for chunking
         total_properties = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]
         chunk_size = 250000  # Reduced chunk size to prevent memory exhaustion
