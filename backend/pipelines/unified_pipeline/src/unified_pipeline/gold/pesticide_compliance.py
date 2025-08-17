@@ -239,7 +239,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         super().__init__(config)
         self.logger = Logger.get_logger()
         self.conn = duckdb.connect()
-        self.gcs_access = GCSDataAccess()
+        self.gcs_access = GCSDataAccess(connection=self.conn)
 
         # Initialize API client for dosage compliance checking
         self.api_client = PlanteITAPI() if config.enable_dosage_compliance else None
