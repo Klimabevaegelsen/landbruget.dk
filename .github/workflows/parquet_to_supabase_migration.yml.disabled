@@ -1,0 +1,487 @@
+name: Parquet to Supabase Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      phases:
+        description: 'Migration phases to run (space-separated)'
+        required: true
+        default: 'schema reference core'
+        type: string
+      tables:
+        description: 'Specific tables to migrate (space-separated, optional)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Run in dry-run mode (no actual changes)'
+        required: false
+        default: false
+        type: boolean
+      skip_validation:
+        description: 'Skip post-migration validation'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.11'
+  SUPABASE_CLI_VERSION: '1.123.4'
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+jobs:
+  pre_migration_checks:
+    name: Pre-Migration Validation
+    runs-on: ubuntu-latest
+    outputs:
+      migration_id: ${{ steps.generate_id.outputs.migration_id }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate Migration ID
+        id: generate_id
+        run: |
+          MIGRATION_ID="migration_$(date +%Y%m%d_%H%M%S)_${{ github.run_number }}"
+          echo "migration_id=$MIGRATION_ID" >> $GITHUB_OUTPUT
+          echo "Generated Migration ID: $MIGRATION_ID"
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas duckdb psycopg2-binary psutil asyncio
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+        version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      - name: Validate Environment Configuration
+        env:
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          if [[ -z "$SUPABASE_STAGING_HOST" ]] || [[ -z "$SUPABASE_STAGING_PASSWORD" ]]; then
+            echo "❌ Missing staging environment secrets"
+            exit 1
+          fi
+          elif [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
+          if [[ -z "$SUPABASE_PROD_HOST" ]] || [[ -z "$SUPABASE_PROD_PASSWORD" ]]; then
+            echo "❌ Missing production environment secrets"
+            exit 1
+          fi
+          fi
+          echo "✅ Environment configuration validated"
+
+      - name: Test Database Connection
+        env:
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
+        run: |
+          # Determine which environment to use
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          export SUPABASE_HOST="$SUPABASE_STAGING_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+          else
+          export SUPABASE_HOST="$SUPABASE_PROD_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+          fi
+
+          python -c "import psycopg2; import os; conn = psycopg2.connect(host=os.environ['SUPABASE_HOST'], port=5432, database='postgres', user='postgres', password=os.environ['SUPABASE_PASSWORD']); cursor = conn.cursor(); cursor.execute('SELECT version()'); version = cursor.fetchone()[0]; print('Database connection successful: ' + version); cursor.close(); conn.close()"
+
+      - name: Validate Migration Scripts
+        run: |
+          python -m py_compile scripts/migration/run_migration.py
+          python -m py_compile scripts/migration/parquet_to_supabase_etl.py
+          python -m py_compile scripts/migration/validation_framework.py
+          echo "✅ Migration scripts validated"
+
+  schema_migration:
+    name: Schema Migration
+    runs-on: ubuntu-latest
+    needs: pre_migration_checks
+    if: contains(github.event.inputs.phases, 'schema')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+        version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      - name: Apply Schema Migrations
+        env:
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_STAGING_PROJECT_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_REF }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
+        SUPABASE_PROD_PROJECT_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
+        run: |
+          # Determine which environment to use
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+          SUPABASE_PROJECT_REF="$SUPABASE_STAGING_PROJECT_REF"
+          else
+          SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+          SUPABASE_PROJECT_REF="$SUPABASE_PROD_PROJECT_REF"
+          fi
+
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+          echo "🔍 DRY RUN: Would apply schema migrations"
+          supabase db diff --linked --schema public
+          else
+          echo "🚀 Applying schema migrations to ${{ github.event.inputs.environment }}"
+          supabase link --project-ref $SUPABASE_PROJECT_REF
+          supabase db push --password $SUPABASE_PASSWORD
+          echo "✅ Schema migrations applied successfully"
+          fi
+
+  data_migration:
+    name: Data Migration
+    runs-on: ubuntu-latest
+    needs: [pre_migration_checks, schema_migration]
+    if: ${{ !cancelled() && (needs.schema_migration.result == 'success' || needs.schema_migration.result == 'skipped') }}
+
+    strategy:
+      matrix:
+        phase:
+          - reference
+          - core
+          - financial
+          - field
+          - pesticide
+          - animal
+          - worker
+      fail-fast: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas duckdb psycopg2-binary psutil asyncio
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Run Data Migration Phase
+        env:
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
+        MIGRATION_ID: ${{ needs.pre_migration_checks.outputs.migration_id }}
+        run: |
+          # Check if this phase was requested
+          if [[ "${{ github.event.inputs.phases }}" != *"${{ matrix.phase }}"* ]] && [[ "${{ github.event.inputs.phases }}" != "all" ]]; then
+          echo "⏭️ Phase ${{ matrix.phase }} not requested, skipping"
+          exit 0
+          fi
+
+          # Determine which environment to use
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          export SUPABASE_HOST="$SUPABASE_STAGING_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+          else
+          export SUPABASE_HOST="$SUPABASE_PROD_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+          fi
+
+          # Prepare arguments
+          ARGS=(
+          --environment ${{ github.event.inputs.environment }}
+          --phase ${{ matrix.phase }}
+          )
+
+          if [[ -n "${{ github.event.inputs.tables }}" ]]; then
+          ARGS+=(--tables ${{ github.event.inputs.tables }})
+          fi
+
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+          ARGS+=(--dry-run)
+          fi
+
+          # Run migration
+          echo "🚀 Running migration phase: ${{ matrix.phase }}"
+          python scripts/migration/run_migration.py "${ARGS[@]}"
+
+          # Save migration logs
+          mkdir -p migration_artifacts
+          cp logs/migration/migration_${{ github.event.inputs.environment }}_*.log migration_artifacts/ || true
+
+      - name: Upload Migration Logs
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: migration-logs-${{ matrix.phase }}-${{ needs.pre_migration_checks.outputs.migration_id }}
+          path: migration_artifacts/
+          retention-days: 30
+
+  computed_data:
+    name: Generate Computed Data
+    runs-on: ubuntu-latest
+    needs: [pre_migration_checks, data_migration]
+    if: ${{ !cancelled() && needs.data_migration.result == 'success' && contains(github.event.inputs.phases, 'computed') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas duckdb psycopg2-binary psutil asyncio
+
+      - name: Generate Computed Data
+        env:
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
+        run: |
+          # Determine which environment to use
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          export SUPABASE_HOST="$SUPABASE_STAGING_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+          else
+          export SUPABASE_HOST="$SUPABASE_PROD_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+          fi
+
+          ARGS=(
+          --environment ${{ github.event.inputs.environment }}
+          --phase computed
+          )
+
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+          ARGS+=(--dry-run)
+          fi
+
+          echo "🧮 Generating computed data and refreshing materialized views"
+          python scripts/migration/run_migration.py "${ARGS[@]}"
+
+  validation:
+    name: Migration Validation
+    runs-on: ubuntu-latest
+    needs: [pre_migration_checks, data_migration, computed_data]
+    if: ${{ !cancelled() && github.event.inputs.skip_validation != 'true' && (needs.data_migration.result == 'success' || needs.computed_data.result == 'success') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas duckdb psycopg2-binary psutil asyncio
+
+      - name: Run Migration Validation
+        env:
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
+        MIGRATION_ID: ${{ needs.pre_migration_checks.outputs.migration_id }}
+        run: |
+          # Determine which environment to use
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          SUPABASE_HOST="$SUPABASE_STAGING_HOST"
+          SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+          else
+          SUPABASE_HOST="$SUPABASE_PROD_HOST"
+          SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+          fi
+
+          echo "🔍 Running comprehensive migration validation"
+
+          mkdir -p validation_reports
+
+          python scripts/migration/validation_framework.py \
+          --host $SUPABASE_HOST \
+          --password $SUPABASE_PASSWORD \
+          --output validation_reports/validation_report_${MIGRATION_ID}.json \
+          --html validation_reports/validation_report_${MIGRATION_ID}.html
+
+          # Check validation results
+          VALIDATION_STATUS=$(python -c "
+          import json
+          with open('validation_reports/validation_report_${MIGRATION_ID}.json', 'r') as f:
+            report = json.load(f)
+          suite = report['validation_report']['suite_summary']
+          print('PASS' if suite['status'] == 'pass' else 'FAIL')
+          print(f\"Validation: {suite['passed']}/{suite['total_checks']} passed ({suite['success_rate']:.1f}%)\")
+          ")
+
+          if [[ "$VALIDATION_STATUS" == *"FAIL"* ]]; then
+          echo "❌ Migration validation failed"
+          echo "$VALIDATION_STATUS"
+          exit 1
+          else
+          echo "✅ Migration validation passed"
+          echo "$VALIDATION_STATUS"
+          fi
+
+      - name: Upload Validation Reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: validation-reports-${{ needs.pre_migration_checks.outputs.migration_id }}
+          path: validation_reports/
+          retention-days: 90
+
+  notification:
+    name: Migration Notification
+    runs-on: ubuntu-latest
+    needs: [pre_migration_checks, schema_migration, data_migration, computed_data, validation]
+    if: always()
+
+    steps:
+      - name: Determine Migration Status
+        id: status
+        run: |
+          SCHEMA_STATUS="${{ needs.schema_migration.result }}"
+          DATA_STATUS="${{ needs.data_migration.result }}"
+          COMPUTED_STATUS="${{ needs.computed_data.result }}"
+          VALIDATION_STATUS="${{ needs.validation.result }}"
+
+          # Determine overall status
+          if [[ "$SCHEMA_STATUS" == "failure" ]] || [[ "$DATA_STATUS" == "failure" ]] || [[ "$VALIDATION_STATUS" == "failure" ]]; then
+          OVERALL_STATUS="failure"
+          STATUS_EMOJI="❌"
+          elif [[ "$SCHEMA_STATUS" == "success" ]] && [[ "$DATA_STATUS" == "success" ]] && ([[ "$VALIDATION_STATUS" == "success" ]] || [[ "$VALIDATION_STATUS" == "skipped" ]]); then
+          OVERALL_STATUS="success"
+          STATUS_EMOJI="✅"
+          else
+          OVERALL_STATUS="partial"
+          STATUS_EMOJI="⚠️"
+          fi
+
+          echo "overall_status=$OVERALL_STATUS" >> $GITHUB_OUTPUT
+          echo "status_emoji=$STATUS_EMOJI" >> $GITHUB_OUTPUT
+
+          # Create summary
+          SUMMARY="Migration ${{ needs.pre_migration_checks.outputs.migration_id }} - $OVERALL_STATUS"
+          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+
+      - name: Create Migration Summary
+        run: |
+          cat > migration_summary.md << EOF
+          # Migration Summary
+
+          **Migration ID**: ${{ needs.pre_migration_checks.outputs.migration_id }}
+          **Environment**: ${{ github.event.inputs.environment }}
+          **Status**: ${{ steps.status.outputs.status_emoji }} ${{ steps.status.outputs.overall_status }}
+          **Triggered by**: @${{ github.actor }}
+          **Phases**: ${{ github.event.inputs.phases }}
+          **Tables**: ${{ github.event.inputs.tables || 'All tables' }}
+          **Dry Run**: ${{ github.event.inputs.dry_run }}
+
+          ## Phase Results
+          - **Schema Migration**: ${{ needs.schema_migration.result || 'skipped' }}
+          - **Data Migration**: ${{ needs.data_migration.result || 'skipped' }}
+          - **Computed Data**: ${{ needs.computed_data.result || 'skipped' }}
+          - **Validation**: ${{ needs.validation.result || 'skipped' }}
+
+          ## Artifacts
+          - Migration logs available in workflow artifacts
+          - Validation reports available in workflow artifacts (if validation ran)
+
+          ## Next Steps
+          EOF
+
+          if [[ "${{ steps.status.outputs.overall_status }}" == "success" ]]; then
+          cat >> migration_summary.md << EOF
+          ✅ Migration completed successfully
+          - Review validation reports for data quality confirmation
+          - Monitor application performance
+          - Consider running additional phases if needed
+          EOF
+          elif [[ "${{ steps.status.outputs.overall_status }}" == "failure" ]]; then
+          cat >> migration_summary.md << EOF
+          ❌ Migration failed
+          - Review workflow logs for error details
+          - Check migration logs in artifacts
+          - Consider rollback if necessary
+          - Fix issues and retry migration
+          EOF
+          else
+          cat >> migration_summary.md << EOF
+          ⚠️ Migration partially completed
+          - Review individual phase results
+          - Check validation reports for issues
+          - Consider completing remaining phases
+          EOF
+          fi
+
+          echo "Migration Summary:"
+          cat migration_summary.md
+
+      - name: Comment on PR (if applicable)
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+        script: |
+          const fs = require('fs');
+          const summary = fs.readFileSync('migration_summary.md', 'utf8');
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: summary
+          });
+
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [pre_migration_checks, notification]
+    if: always()
+
+    steps:
+      - name: Cleanup Migration Resources
+        run: |
+          echo "🧹 Cleaning up migration resources"
+          # Add any cleanup tasks here (temp files, connections, etc.)
+          echo "✅ Cleanup completed"
