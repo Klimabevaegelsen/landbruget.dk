@@ -1507,52 +1507,55 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 
                 # Load GKEA data for this year with proper column naming
                 self.log.info(f"📊 Loading GKEA fertilizer data for year {year} from {gkea_path}")
-                gkea_column_name = f"gkea{year}_markplan_goedningskvote"
+                
+                # Use correct column names based on year and file structure
+                if year in [2021, 2022, 2023]:
+                    gkea_column_name = f"gkea{year}_markplan_goedningskvote"
+                else:  # 2024 and future years
+                    gkea_column_name = f"gkea{year}_markplan_med_goedningsoplysninger"
+                
+                # Area column varies by year
+                area_column = "column_6" if year == 2021 else "column_4"
                 
                 table_name = f"gkea_raw_{year}" if not all_gkea_data_loaded else "gkea_raw_temp"
                 
-                # Query GKEA data, skipping header rows (first 2 rows are empty/headers)
                 self.gcs_access.query_parquet_direct(
                     gkea_path,
                     f"""
                     SELECT 
                         column_1 as cvr_number,
                         {gkea_column_name} as gkea_journal_number,
-                        TRY_CAST(column_4 AS DOUBLE) as area_ha,
-                        TRY_CAST(column_10 AS INTEGER) as crop_code,
+                        TRY_CAST({area_column} AS DOUBLE) as area_ha,
+                        column_10 as hovedafgroede,
                         {year} as data_year
-                    WHERE column_1 IS NOT NULL
-                      AND column_1 != 'CVR'  -- Skip header row
-                      AND column_4 IS NOT NULL
-                      AND column_4 != 'Areal'  -- Skip header row
-                      AND TRY_CAST(column_4 AS DOUBLE) > 0
-                      -- PII FILTERING: Exclude DDMMYY-XXXX patterns
-                      AND NOT REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]{{6}}-[0-9X]{{4}}$')
-                      -- Only valid 8-digit CVR numbers
-                      AND LENGTH(TRIM(CAST(column_1 AS VARCHAR))) = 8
-                      AND REGEXP_MATCHES(TRIM(CAST(column_1 AS VARCHAR)), '^[0-9]+$')
                     """,
                     table_name
                 )
                 
+                # Apply filtering after loading the data
+                self.conn.execute(f"""
+                    DELETE FROM {table_name}
+                    WHERE cvr_number IS NULL
+                       OR cvr_number = 'CVR'  -- Skip header row
+                       OR area_ha IS NULL
+                       OR CAST(area_ha AS VARCHAR) = 'Areal'  -- Skip header row (area_ha is already cast to DOUBLE)
+                       OR area_ha <= 0
+                       -- PII FILTERING: Exclude DDMMYY-XXXX patterns
+                       OR REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]{{6}}-[0-9X]{{4}}$')
+                       -- Only valid 8-digit CVR numbers
+                       OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
+                       OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
+                """)
+                
                 # Union with previous years' data
-                try:
-                    if not all_gkea_data_loaded:
-                        # First year - rename to main table
-                        self.log.debug(f"Creating initial gkea_raw table from {table_name}")
-                        self.conn.execute(f"CREATE OR REPLACE TABLE gkea_raw AS SELECT * FROM {table_name}")
-                        all_gkea_data_loaded = True
-                    else:
-                        # Subsequent years - union with existing data
-                        self.log.debug(f"Appending data from {table_name} to gkea_raw")
-                        self.conn.execute(f"INSERT INTO gkea_raw SELECT * FROM {table_name}")
-                    
-                    # Clean up the temporary table
-                    self.log.debug(f"Dropping temporary table {table_name}")
-                    self.conn.execute(f"DROP TABLE {table_name}")
-                except Exception as e:
-                    self.log.error(f"Error in GKEA data union for {table_name}: {e}")
-                    raise
+                if not all_gkea_data_loaded:
+                    # First year - rename to main table
+                    self.conn.execute(f"CREATE OR REPLACE TABLE gkea_raw AS SELECT * FROM {table_name}")
+                    all_gkea_data_loaded = True
+                else:
+                    # Subsequent years - union with existing data
+                    self.conn.execute("INSERT INTO gkea_raw SELECT * FROM gkea_raw_temp")
+                    self.conn.execute("DROP TABLE gkea_raw_temp")
             
             if not all_gkea_data_loaded:
                 self.log.warning("No GKEA fertilizer data found for any field years - skipping CVR identification")
@@ -1560,83 +1563,54 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             
             # Find existing CVRs in FVM data to exclude from GKEA matching
             existing_cvrs = []
-            self.log.info("🔍 Finding existing CVRs in FVM data...")
             for year in self.config.marker_years:
                 marker_table = f"final_processed_marker_{year}"
                 try:
-                    cvr_query = f"""
+                    year_cvrs = self.conn.execute(f"""
                         SELECT DISTINCT cvr_number 
                         FROM {marker_table} 
                         WHERE cvr_number IS NOT NULL 
                           AND cvr_number != '' 
                           AND cvr_number != '0'
                           AND LENGTH(TRIM(cvr_number)) = 8
-                    """
-                    self.log.debug(f"Executing CVR extraction query for {marker_table}")
-                    year_cvrs = self.conn.execute(cvr_query).df()['cvr_number'].tolist()
+                    """).df()['cvr_number'].tolist()
                     existing_cvrs.extend(year_cvrs)
-                    self.log.debug(f"Found {len(year_cvrs)} CVRs in {marker_table}")
                 except Exception as e:
-                    self.log.error(f"Error extracting CVRs from {marker_table}: {e}")
-                    self.log.error(f"CVR query was: {cvr_query}")
+                    self.log.debug(f"Could not extract CVRs from {marker_table}: {e}")
                     continue
             
             existing_cvrs = list(set(existing_cvrs))  # Remove duplicates
             self.log.info(f"   Found {len(existing_cvrs):,} existing CVRs in FVM data")
             
+            if not existing_cvrs:
+                self.log.warning("No existing CVRs found in FVM data - skipping pattern matching")
+                return
+            
             # Filter GKEA to only CVRs that are NOT in FVM (the missing ones)
-            if existing_cvrs:
-                # Properly escape CVR values to avoid SQL syntax errors
-                escaped_cvrs = []
-                for cvr in existing_cvrs:
-                    # Convert to string and escape single quotes
-                    cvr_str = str(cvr).replace("'", "''")
-                    escaped_cvrs.append(f"'{cvr_str}'")
-                
-                cvr_filter = ', '.join(escaped_cvrs)
-                sql_query = f"""
-                    CREATE OR REPLACE TABLE gkea_missing_cvrs AS
-                    SELECT * FROM gkea_raw
-                    WHERE cvr_number NOT IN ({cvr_filter})
-                """
-                self.log.debug(f"Executing CVR filter query with {len(escaped_cvrs)} CVRs")
-                self.log.debug(f"CVR filter query: {sql_query[:200]}...")  # Log first 200 chars
-                try:
-                    self.conn.execute(sql_query)
-                    self.log.debug("CVR filter query executed successfully")
-                except Exception as e:
-                    self.log.error(f"Error in CVR filter query: {e}")
-                    self.log.error(f"Full CVR filter query: {sql_query}")
-                    raise
-            else:
-                self.log.warning("No existing CVRs found in FVM data - including all GKEA data for pattern matching")
-                # No existing CVRs, so include all GKEA data
-                self.conn.execute("""
-                    CREATE OR REPLACE TABLE gkea_missing_cvrs AS
-                    SELECT * FROM gkea_raw
-                """)
+            cvr_filter = "', '".join(map(str, existing_cvrs))
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE gkea_missing_cvrs AS
+                SELECT * FROM gkea_raw
+                WHERE cvr_number NOT IN ('{cvr_filter}')
+            """)
             
             # Create GKEA operations (CVR + journal_number) - ONLY multi-field operations
             self.log.info("🌾 Creating GKEA operations (multi-field only, missing CVRs only)...")
-            try:
-                gkea_ops_df = self.conn.execute("""
-                    SELECT 
-                        cvr_number,
-                        gkea_journal_number,
-                        COUNT(*) as field_count,
-                        SUM(area_ha) as total_area,
-                        AVG(area_ha) as avg_field_size,
-                        COUNT(DISTINCT crop_code) as crop_diversity,
-                        STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
-                    FROM gkea_missing_cvrs
-                    GROUP BY cvr_number, gkea_journal_number
-                    HAVING COUNT(*) > 1  -- Only multi-field operations
-                       AND SUM(area_ha) > 0
-                    ORDER BY cvr_number, gkea_journal_number
-                """).df()
-            except Exception as e:
-                self.log.error(f"Error creating GKEA operations query: {e}")
-                raise
+            gkea_ops_df = self.conn.execute("""
+                SELECT 
+                    cvr_number,
+                    gkea_journal_number,
+                    COUNT(*) as field_count,
+                    SUM(area_ha) as total_area,
+                    AVG(area_ha) as avg_field_size,
+                    COUNT(DISTINCT crop_code) as crop_diversity,
+                    STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
+                FROM gkea_missing_cvrs
+                GROUP BY cvr_number, gkea_journal_number
+                HAVING COUNT(*) > 1  -- Only multi-field operations
+                   AND SUM(area_ha) > 0
+                ORDER BY cvr_number, gkea_journal_number
+            """).df()
             
             if len(gkea_ops_df) == 0:
                 self.log.warning("No GKEA multi-field operations with missing CVRs found")
@@ -1658,28 +1632,24 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.log.info(f"🔍 Processing CVR identification for marker year {year}...")
                 
                 # Create FVM operations for this year (journal_number) - ONLY multi-field operations with missing CVRs
-                try:
-                    fvm_ops_df = self.conn.execute(f"""
-                        SELECT 
-                            journal_number as fvm_journal_number,
-                            COUNT(*) as field_count,
-                            SUM(area_ha) as total_area,
-                            AVG(area_ha) as avg_field_size,
-                            COUNT(DISTINCT crop_code) as crop_diversity,
-                            STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
-                        FROM {marker_table}
-                        WHERE (cvr_number IS NULL OR cvr_number = '' OR cvr_number = '0')
-                          AND journal_number IS NOT NULL
-                          AND area_ha > 0
-                          AND crop_code IS NOT NULL
-                        GROUP BY journal_number
-                        HAVING COUNT(*) > 1  -- Only multi-field operations
-                           AND SUM(area_ha) > 0
-                        ORDER BY journal_number
-                    """).df()
-                except Exception as e:
-                    self.log.error(f"Error creating FVM operations query for {marker_table}: {e}")
-                    continue
+                fvm_ops_df = self.conn.execute(f"""
+                    SELECT 
+                        journal_number as fvm_journal_number,
+                        COUNT(*) as field_count,
+                        SUM(area_ha) as total_area,
+                        AVG(area_ha) as avg_field_size,
+                        COUNT(DISTINCT crop_code) as crop_diversity,
+                        STRING_AGG(CAST(crop_code AS VARCHAR), ',' ORDER BY crop_code) as crop_composition
+                    FROM {marker_table}
+                    WHERE (cvr_number IS NULL OR cvr_number = '' OR cvr_number = '0')
+                      AND journal_number IS NOT NULL
+                      AND area_ha > 0
+                      AND crop_code IS NOT NULL
+                    GROUP BY journal_number
+                    HAVING COUNT(*) > 1  -- Only multi-field operations
+                       AND SUM(area_ha) > 0
+                    ORDER BY journal_number
+                """).df()
                 
                 if len(fvm_ops_df) == 0:
                     self.log.info(f"   No FVM operations with missing CVRs found for year {year}")
@@ -1709,10 +1679,6 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             
         except Exception as e:
             self.log.error(f"Error during agricultural CVR identification: {e}")
-            self.log.error(f"Exception type: {type(e).__name__}")
-            self.log.error(f"Exception details: {str(e)}")
-            import traceback
-            self.log.error(f"Full traceback: {traceback.format_exc()}")
             # Don't fail the entire pipeline if CVR identification fails
             pass
 
@@ -1836,11 +1802,6 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             for fvm_idx, gkea_idx, combined_sim, crop_sim in matches:
                 fvm_journal = fvm_ops_df.iloc[fvm_idx]['fvm_journal_number']
                 identified_cvr = gkea_ops_df.iloc[gkea_idx]['cvr_number']
-                
-                # Skip if either value is None or empty
-                if fvm_journal is None or identified_cvr is None or str(fvm_journal).strip() == '' or str(identified_cvr).strip() == '':
-                    self.log.warning(f"Skipping match due to missing data: journal={fvm_journal}, cvr={identified_cvr}")
-                    continue
                 
                 update_cases.append(f"WHEN journal_number = '{fvm_journal}' THEN '{identified_cvr}'")
             
