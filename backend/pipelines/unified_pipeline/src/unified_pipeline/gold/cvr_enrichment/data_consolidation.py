@@ -93,19 +93,22 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         try:
             # Aggressive memory settings to prevent accumulation issues
             self.conn.execute("SET memory_limit = '8GB'")  # Lower limit to force spilling
-            self.conn.execute("SET preserve_insertion_order = false")  # Disable ordering for memory efficiency
+            self.conn.execute("SET preserve_insertion_order = false")  # Disable ordering for memory
             self.conn.execute("SET threads = 2")  # Fewer threads to reduce memory pressure
             self.conn.execute("PRAGMA cache_size = -1000")  # Small cache size (1MB)
             self.conn.execute("SET temp_directory = '/tmp'")  # Use temp directory for spill
             self.conn.execute("SET enable_progress_bar = false")  # Disable progress bar for memory
-            
+
             # Critical settings to prevent CTE and intermediate result accumulation
             self.conn.execute("SET max_expression_depth = 100")  # Limit expression complexity
             self.conn.execute("SET enable_object_cache = false")  # Disable object caching
             self.conn.execute("SET checkpoint_threshold = '32MB'")  # More frequent checkpoints
-            
-            self.log.info("✅ DuckDB configured with aggressive memory-optimized settings for large dataset processing")
-            
+
+            self.log.info(
+                "✅ DuckDB configured with aggressive memory-optimized settings "
+                "for large dataset processing"
+            )
+
         except Exception as e:
             self.log.warning(f"Could not set all DuckDB memory optimizations: {e}")
             # Try essential settings only
@@ -414,7 +417,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             )
             table_name = f"financial_data_{int(time.time() * 1000)}"
             self.gcs_access.create_table_from_gcs(table_name, input_path)
-            
+
             # Work with the actual financial data structure as saved by the financial documents step
             # The parquet file contains processed financial summary data, not raw metrics
             result = self.conn.execute(
@@ -435,7 +438,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                   AND (document_count > 0 OR has_financial_metrics = true)
             """
             ).fetchall()
-            
+
             # Clean up the temporary table
             self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
         else:
@@ -456,26 +459,32 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             cvr_number = row[0]
             try:
                 # Now we always select all columns from parquet format
-                # Based on actual data: cvr_number, company_name, document_count, xml_document_count,
-                # total_xml_size_bytes, latest_reporting_date, has_financial_metrics, financial_data_json, processing_timestamp, batch_number
+                # Based on actual data: cvr_number, company_name, document_count,
+                # xml_document_count,
+                # total_xml_size_bytes, latest_reporting_date, has_financial_metrics,
+                # financial_data_json, processing_timestamp, batch_number
                 document_count = row[2]  # document_count is the 3rd column (index 2)
                 has_financial_metrics = row[6]  # has_financial_metrics is the 7th column (index 6)
-                
+
                 # Create proper financial data structure
                 documents = []
                 if has_financial_metrics and document_count > 0:
                     # Create documents array with the actual document count
                     for i in range(document_count):
-                        documents.append({
-                            "cvr_number": cvr_number,
-                            "document_index": i,
-                            "has_financial_data": True
-                        })
-                
+                        documents.append(
+                            {
+                                "cvr_number": cvr_number,
+                                "document_index": i,
+                                "has_financial_data": True,
+                            }
+                        )
+
                 financial_data[str(cvr_number)] = {
                     "documents": documents,
                     "document_count": document_count,
-                    "financial_metrics": {"has_metrics": has_financial_metrics} if has_financial_metrics else None
+                    "financial_metrics": (
+                        {"has_metrics": has_financial_metrics} if has_financial_metrics else None
+                    ),
                 }
             except json.JSONDecodeError as e:
                 self.log.warning(f"Failed to parse financial data for CVR {cvr_number}: {e}")
@@ -734,8 +743,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Process companies in smaller chunks to prevent CTE memory accumulation
         # The real issue is that complex CTEs build up memory - solution is smaller batches
-        chunk_size = 100  # Reasonable batch size - not too big to cause memory issues, not too small to be slow
-        total_companies = len(companies_list)        
+        # Reasonable batch size - not too big to cause memory issues, not too small to be slow
+        chunk_size = 100
+        total_companies = len(companies_list)
         num_chunks = (total_companies + chunk_size - 1) // chunk_size
 
         self.log.info(
@@ -759,15 +769,18 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
             try:
                 # Process the chunk with optimized table operations
-                self._process_companies_chunk_memory_optimized(chunk_companies, table_name, chunk_idx)
+                self._process_companies_chunk_memory_optimized(
+                    chunk_companies, table_name, chunk_idx
+                )
 
                 # Force checkpoint and cleanup after each chunk to prevent accumulation
                 self.conn.execute("CHECKPOINT")
-                
+
                 # Light memory cleanup after every chunk
                 import gc
+
                 gc.collect()
-                
+
                 # Periodic deep cleanup every 10 chunks (reasonable frequency)
                 if (chunk_idx + 1) % 10 == 0:
                     self.log.info(f"🧹 Performing periodic cleanup after {chunk_idx + 1} chunks")
@@ -778,7 +791,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 if "Out of Memory" in str(e) or "memory" in str(e).lower():
                     self.log.warning("⚠️ Memory exhaustion detected - attempting recovery")
                     self._emergency_memory_cleanup()
-                    
+
                     # Try to continue with smaller chunk size for remaining companies
                     if chunk_idx < num_chunks - 1:
                         self.log.warning("🔄 Attempting to continue with smaller chunk sizes")
@@ -798,7 +811,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         # Each employment type is processed separately to avoid the 7.4GB memory issue
         self.log.info("✅ Employment data processing enabled with memory-efficient approach")
         self.log.info("🔧 Processing employment types one at a time to avoid memory exhaustion")
-        
+
         # Log final table sizes
         self._log_final_table_sizes(table_name)
 
@@ -969,8 +982,6 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 )
             """)
 
-
-
     def _create_main_companies_table(self, companies: Dict[str, Any]) -> str:
         """Create the main companies table."""
         table_name = "cvr_enriched_companies"
@@ -984,7 +995,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             f"""
             CREATE TABLE {table_name} AS
             SELECT
-                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                 json_extract(json_data, '$.company_name')::VARCHAR as company_name,
                 json_extract(json_data, '$.company_type_description')::VARCHAR as
@@ -1020,7 +1033,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     ELSE false
                 END as has_financial_metrics,
                 {("json_data as company_data_json," if self.config.include_raw_json else "")}
-                json_extract(json_data, '$.consolidation_timestamp')::VARCHAR as consolidation_timestamp,
+                json_extract(
+                    json_data, '$.consolidation_timestamp'
+                )::VARCHAR as consolidation_timestamp,
                 json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
             FROM unnest($1) as t(json_data)
         """,
@@ -1052,7 +1067,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 f"""
                 CREATE TABLE {table_name} AS
                 SELECT
-                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.source_type')::VARCHAR as source_type,
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
@@ -1131,7 +1148,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 f"""
                 CREATE TABLE {table_name} AS
                 SELECT
-                    company_uuid(json_extract(json_data, '$.parent_cvr_number')::INTEGER) as company_uuid,
+                    company_uuid(
+                        json_extract(json_data, '$.parent_cvr_number')::INTEGER
+                    ) as company_uuid,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
@@ -1186,7 +1205,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 f"""
                 CREATE TABLE {table_name} AS
                 SELECT
-                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.document_count')::INTEGER as document_count,
                     json_extract(json_data, '$.has_metrics')::BOOLEAN as has_financial_metrics
@@ -1222,7 +1243,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 f"""
                 CREATE TABLE {table_name} AS
                 SELECT
-                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.company_name')::VARCHAR as company_name,
                     -- json_data as consolidated_data_json  -- Removed to prevent memory bloat
@@ -1320,26 +1343,46 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             f"""
             INSERT INTO {table_name}
             SELECT
-                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                 json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR as company_type_description,
+                json_extract(
+                    json_data, '$.company_type_description'
+                )::VARCHAR as company_type_description,
                 json_extract(json_data, '$.status')::VARCHAR as status,
                 json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
                 json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
-                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
-                json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE as address_latitude,
-                json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE as address_longitude,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR as address_coordinate_system,
+                json_extract(
+                    json_data, '$.advertisement_protection'
+                )::BOOLEAN as advertisement_protection,
+                json_extract(
+                    json_data, '$.primary_address_geometry.latitude'
+                )::DOUBLE as address_latitude,
+                json_extract(
+                    json_data, '$.primary_address_geometry.longitude'
+                )::DOUBLE as address_longitude,
+                json_extract(
+                    json_data, '$.primary_address_geometry.coordinate_system'
+                )::VARCHAR as address_coordinate_system,
                 json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
-                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR as address_geom_wkt,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR as address_coordinate_quality,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR as address_coordinate_source,
+                json_extract(
+                    json_data, '$.primary_address_geometry.geometry_wkt'
+                )::VARCHAR as address_geom_wkt,
+                json_extract(
+                    json_data, '$.primary_address_geometry.coordinate_quality'
+                )::VARCHAR as address_coordinate_quality,
+                json_extract(
+                    json_data, '$.primary_address_geometry.coordinate_source'
+                )::VARCHAR as address_coordinate_source,
                 json_extract(json_data, '$.data_source')::VARCHAR as data_source,
                 json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
                 json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
-                json_extract(json_data, '$.source_pipeline_count')::INTEGER as source_pipeline_count,
-                json_extract(json_data, '$.financial_document_count')::INTEGER as financial_document_count,
+                json_extract(json_data, '$.source_pipeline_count')::INTEGER as
+                    source_pipeline_count,
+                json_extract(json_data, '$.financial_document_count')::INTEGER as
+                    financial_document_count,
                 json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
                 json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
             FROM unnest($1) as t(json_data)
@@ -1349,54 +1392,58 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
         # Process ALL tables with proper memory management - NO functionality removed!
         # Process each table type separately with immediate cleanup to prevent accumulation
-        
+
         self._process_addresses_chunk(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after addresses
-        
-        self._process_leadership_chunk(json_strings, table_name) 
+
+        self._process_leadership_chunk(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after leadership
-        
+
         self._process_financial_chunk(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after financial
-        
+
         self._process_industries_chunk(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after industries
-        
+
         # Process employment data with memory-efficient approach (one type at a time)
         self._process_employment_chunk_memory_efficient(json_strings, table_name)
         self.conn.execute("CHECKPOINT")  # Immediate checkpoint after employment
-        
+
         # Force cleanup after all processing
         del json_strings
         import gc
-        gc.collect()
 
+        gc.collect()
 
     def _pre_chunk_memory_management(self) -> None:
         """Pre-chunk memory management and checks."""
         try:
             import gc
             import os
-            
+
             # Try to import psutil for memory monitoring
             try:
                 import psutil
+
                 # Check current memory usage
                 process = psutil.Process(os.getpid())
                 memory_info = process.memory_info()
                 memory_mb = memory_info.rss / 1024 / 1024
-                
+
                 # If memory usage is high, force cleanup before processing
                 if memory_mb > 8000:  # Over 8GB
-                    self.log.info(f"🧹 High memory usage detected ({memory_mb:.1f}MB), forcing pre-chunk cleanup")
+                    self.log.info(
+                        f"🧹 High memory usage detected ({memory_mb:.1f}MB), "
+                        f"forcing pre-chunk cleanup"
+                    )
                     self._deep_memory_cleanup()
-                    
+
             except ImportError:
                 self.log.debug("psutil not available, skipping memory usage monitoring")
-            
+
             # Force garbage collection (always available)
             gc.collect()
-            
+
         except Exception as e:
             self.log.debug(f"Pre-chunk memory management warning: {e}")
 
@@ -1409,6 +1456,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
             # Force Python garbage collection
             import gc
+
             collected = gc.collect()
 
             # Additional DuckDB memory management
@@ -1419,17 +1467,17 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
                 # Force temporary directory cleanup
                 self.conn.execute("PRAGMA temp_store = memory")
-                
+
                 # Clear any temporary tables that might exist
                 temp_tables = self.conn.execute("""
                     SELECT table_name FROM information_schema.tables 
                     WHERE table_name LIKE '%_temp_%' OR table_name LIKE 'temp_%'
                 """).fetchall()
-                
+
                 for (table_name,) in temp_tables:
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-                    except:
+                    except Exception:
                         pass  # Ignore errors dropping temp tables
 
             except Exception as pragma_e:
@@ -1445,46 +1493,53 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         try:
             import gc
             import os
-            
+
             before_mb = 0
             after_mb = 0
-            
+
             # Try to get memory usage if psutil is available
             try:
                 import psutil
+
                 process = psutil.Process(os.getpid())
                 before_mb = process.memory_info().rss / 1024 / 1024
             except ImportError:
                 self.log.debug("psutil not available for memory monitoring")
-            
+
             # Force multiple rounds of garbage collection
             for i in range(3):
                 collected = gc.collect()
-                self.log.debug(f"GC round {i+1}: collected {collected} objects")
-            
+                self.log.debug(f"GC round {i + 1}: collected {collected} objects")
+
             # Aggressive DuckDB cleanup
             self.conn.execute("CHECKPOINT")
             self.conn.execute("VACUUM")  # Reclaim space
             self.conn.execute("PRAGMA optimize")
-            
+
             # Reset DuckDB memory settings to be more conservative
             try:
                 self.conn.execute("SET memory_limit = '8GB'")  # Reduce memory limit
-                self.conn.execute("SET preserve_insertion_order = false")  # Disable ordering preservation
+                self.conn.execute(
+                    "SET preserve_insertion_order = false"
+                )  # Disable ordering preservation
                 self.conn.execute("SET threads = 2")  # Reduce parallelism to save memory
             except Exception as pragma_e:
                 self.log.debug(f"Memory limit pragma warning: {pragma_e}")
-            
+
             # Log memory usage after cleanup if available
             try:
                 import psutil
+
                 process = psutil.Process(os.getpid())
                 after_mb = process.memory_info().rss / 1024 / 1024
                 saved_mb = before_mb - after_mb
-                self.log.info(f"🧹 Deep cleanup: {before_mb:.1f}MB → {after_mb:.1f}MB (saved {saved_mb:.1f}MB)")
+                self.log.info(
+                    f"🧹 Deep cleanup: {before_mb:.1f}MB → {after_mb:.1f}MB "
+                    f"(saved {saved_mb:.1f}MB)"
+                )
             except ImportError:
                 self.log.info("🧹 Deep cleanup completed (memory monitoring unavailable)")
-            
+
         except Exception as e:
             self.log.warning(f"Deep memory cleanup warning: {e}")
 
@@ -1493,26 +1548,27 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         try:
             import gc
             import os
-            
+
             self.log.warning("🚨 Performing emergency memory cleanup")
-            
+
             before_mb = 0
             after_mb = 0
-            
+
             # Log current memory usage if possible
             try:
                 import psutil
+
                 process = psutil.Process(os.getpid())
                 before_mb = process.memory_info().rss / 1024 / 1024
                 self.log.warning(f"💾 Current memory usage: {before_mb:.1f}MB")
             except ImportError:
                 self.log.warning("💾 Memory monitoring unavailable")
-            
+
             # Aggressive garbage collection
             for i in range(5):
                 collected = gc.collect()
-                self.log.debug(f"Emergency GC round {i+1}: collected {collected} objects")
-            
+                self.log.debug(f"Emergency GC round {i + 1}: collected {collected} objects")
+
             # Emergency DuckDB settings
             try:
                 self.conn.execute("SET memory_limit = '6GB'")  # Aggressive memory limit
@@ -1523,17 +1579,21 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.conn.execute("VACUUM")
             except Exception as e:
                 self.log.debug(f"Emergency DuckDB cleanup warning: {e}")
-            
+
             # Final memory check if available
             try:
                 import psutil
+
                 process = psutil.Process(os.getpid())
                 after_mb = process.memory_info().rss / 1024 / 1024
                 saved_mb = before_mb - after_mb
-                self.log.warning(f"🚨 Emergency cleanup: {before_mb:.1f}MB → {after_mb:.1f}MB (saved {saved_mb:.1f}MB)")
+                self.log.warning(
+                    f"🚨 Emergency cleanup: {before_mb:.1f}MB → {after_mb:.1f}MB "
+                    f"(saved {saved_mb:.1f}MB)"
+                )
             except ImportError:
                 self.log.warning("🚨 Emergency cleanup completed (memory monitoring unavailable)")
-            
+
         except Exception as e:
             self.log.error(f"Emergency memory cleanup failed: {e}")
 
@@ -1577,7 +1637,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             """).fetchall()
 
             self.log.info(
-                "🎉 Successfully created sophisticated normalized CVR tables using chunked processing!"
+                "🎉 Successfully created sophisticated normalized CVR tables using "
+                "chunked processing!"
             )
             self.log.info(f"   📋 Companies: {main_count}")
             self.log.info(f"   👥 Leadership entries: {leadership_count}")
@@ -1590,7 +1651,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
 
             for row in sample_results:
                 self.log.info(
-                    f"   📋 CVR: {row[0]} | Name: {row[1]} | Type: {row[2]} | Founded: {row[3]} | Sources: {row[4]} | Fin.Docs: {row[5]}"
+                    f"   📋 CVR: {row[0]} | Name: {row[1]} | Type: {row[2]} | "
+                    f"Founded: {row[3]} | Sources: {row[4]} | Fin.Docs: {row[5]}"
                 )
 
         except Exception as e:
@@ -1638,7 +1700,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                         WITH addresses_flattened AS (
                             SELECT
                                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                                unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
+                                unnest(
+                                    json_transform(json_extract(json_data, '$.addresses'), $2)
+                                ) as address_parsed
                             FROM unnest($1) as t(json_data)
                             WHERE json_extract(json_data, '$.addresses') IS NOT NULL
                             AND json_array_length(json_extract(json_data, '$.addresses')) > 0
@@ -1682,7 +1746,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                         WITH addresses_flattened AS (
                             SELECT
                                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                                unnest(json_transform(json_extract(json_data, '$.addresses'), $2)) as address_parsed
+                                unnest(
+                                    json_transform(json_extract(json_data, '$.addresses'), $2)
+                                ) as address_parsed
                             FROM unnest($1) as t(json_data)
                             WHERE json_extract(json_data, '$.addresses') IS NOT NULL
                             AND json_array_length(json_extract(json_data, '$.addresses')) > 0
@@ -1751,9 +1817,13 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     f"""
                     INSERT INTO {table_name}_leadership
                     SELECT
-                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                        company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                         json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                        unnest(json_transform(json_extract(json_data, '$.leadership'), $2)) as leadership_data
+                        unnest(
+                            json_transform(json_extract(json_data, '$.leadership'), $2)
+                        ) as leadership_data
                     FROM unnest($1) as t(json_data)
                     WHERE json_extract(json_data, '$.leadership') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.leadership')) > 0
@@ -1787,7 +1857,9 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 self.log.info(f"Found {len(available_fields)} available financial fields in data")
                 return available_fields
             else:
-                self.log.warning("No financial metrics found in data, will use NULL values for all fields")
+                self.log.warning(
+                    "No financial metrics found in data, will use NULL values for all fields"
+                )
                 return set()
         except Exception as e:
             self.log.warning(f"Could not determine available financial fields: {e}")
@@ -1815,8 +1887,12 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             "current_assets": "current_assets",
             "cash_and_cash_equivalents": "cash_and_cash_equivalents",
             "liabilities_other_than_provisions": "liabilities_other_than_provisions",
-            "shortterm_liabilities_other_than_provisions": "shortterm_liabilities_other_than_provisions",
-            "longterm_liabilities_other_than_provisions": "longterm_liabilities_other_than_provisions",
+            "shortterm_liabilities_other_than_provisions": (
+                "shortterm_liabilities_other_than_provisions"
+            ),
+            "longterm_liabilities_other_than_provisions": (
+                "longterm_liabilities_other_than_provisions"
+            ),
             "provisions": "provisions",
             "property_plant_equipment": "property_plant_equipment",
             "contributed_capital": "contributed_capital",
@@ -1836,7 +1912,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         return ",\n                        ".join(select_fields)
 
     def _process_financial_chunk(self, json_strings: list, table_name: str) -> None:
-        """Process financial documents for a chunk of companies with sophisticated metrics (ported from original)."""
+        """Process financial documents for a chunk of companies with sophisticated
+        metrics (ported from original)."""
         # Check for financial data in the merged company structure
         financial_check = self.conn.execute(
             """
@@ -1849,21 +1926,27 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         ).fetchone()[0]
 
         if financial_check > 0:
-            self.log.info(f"Found {financial_check} companies with financial data - creating financial records")
-            
+            self.log.info(
+                f"Found {financial_check} companies with financial data - "
+                f"creating financial records"
+            )
+
             # Insert financial data into the financial table
             self.conn.execute(
                 f"""
                 INSERT INTO {table_name}_financial
                 SELECT
-                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     NULL as publication_type,
                     NULL as publication_time,
                     NULL as case_number,
                     NULL as reporting_period_start,
                     NULL as reporting_period_end,
-                    json_extract(json_data, '$.financial_document_count')::INTEGER as document_count,
+                    json_extract(json_data, '$.financial_document_count')::INTEGER as
+                        document_count,
                     NULL as xml_size_bytes,
                     true as download_success,
                     NULL as duration_context,
@@ -1903,6 +1986,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.log.info(f"Created {financial_check} financial records in {table_name}_financial")
         else:
             self.log.info("No financial data found in this chunk")
+
     def _process_industries_chunk(self, json_strings: list, table_name: str) -> None:
         """Process industries for a chunk of companies (ported from original)."""
         industry_check = self.conn.execute(
@@ -1935,9 +2019,13 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     f"""
                     INSERT INTO {table_name}_industries
                     SELECT
-                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                        company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                         json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                        unnest(json_transform(json_extract(json_data, '$.industries'), $2)) as industry_data
+                        unnest(
+                            json_transform(json_extract(json_data, '$.industries'), $2)
+                        ) as industry_data
                     FROM unnest($1) as t(json_data)
                     WHERE json_extract(json_data, '$.industries') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.industries')) > 0
@@ -1948,30 +2036,32 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
     def _process_all_employment_data(self, companies_list: list, table_name: str) -> None:
         """Process all employment data separately to avoid memory accumulation in chunks."""
         import json
-        
-        self.log.info(f"Processing employment data for {len(companies_list)} companies in separate batches")
-        
+
+        self.log.info(
+            f"Processing employment data for {len(companies_list)} companies in separate batches"
+        )
+
         employment_types = [
             ("annual_employment", "annual"),
             ("quarterly_employment", "quarterly"),
             ("monthly_employment", "monthly"),
             ("replacement_monthly_employment", "replacement_monthly"),
         ]
-        
+
         for employment_field, table_suffix in employment_types:
             self.log.info(f"Processing {employment_field} data...")
-            
+
             # Process employment data in smaller batches to avoid memory issues
             batch_size = 500  # Process 500 companies at a time for employment
             total_batches = (len(companies_list) + batch_size - 1) // batch_size
-            
+
             for batch_idx in range(total_batches):
                 start_idx = batch_idx * batch_size
                 end_idx = min(start_idx + batch_size, len(companies_list))
                 batch_companies = companies_list[start_idx:end_idx]
-                
+
                 json_strings = [json.dumps(company) for company in batch_companies]
-                
+
                 # Check if any companies in this batch have this employment type
                 employment_check = self.conn.execute(
                     """
@@ -1988,10 +2078,14 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                     employment_schema = self.conn.execute(
                         """
                         WITH employment_sample AS (
-                            SELECT json_extract(json_data, '$.employment_data.' || $2) as employment_json
+                            SELECT json_extract(json_data,
+                                '$.employment_data.' || $2) as employment_json
                             FROM unnest($1) as t(json_data)
-                            WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
-                            AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                            WHERE json_extract(json_data,
+                                '$.employment_data.' || $2) IS NOT NULL
+                            AND json_array_length(
+                                json_extract(json_data, '$.employment_data.' || $2)
+                            ) > 0
                             LIMIT 1
                         )
                         SELECT json_structure(employment_json) FROM employment_sample
@@ -2005,24 +2099,35 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                             f"""
                             INSERT INTO {table_name}_employment_{table_suffix}
                             SELECT
-                                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                                company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                                unnest(json_transform(json_extract(json_data, '$.employment_data.{employment_field}'), $2)) as employment_data
+                                unnest(
+                json_transform(
+                    json_extract(json_data, '$.employment_data.{employment_field}'), $2
+                )
+            ) as employment_data
                             FROM unnest($1) as t(json_data)
-                            WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
-                            AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                            WHERE json_extract(
+                        json_data, '$.employment_data.{employment_field}'
+                    ) IS NOT NULL
+                            AND json_array_length(
+                      json_extract(json_data, '$.employment_data.{employment_field}')
+                  ) > 0
                         """,
                             [json_strings, employment_schema[0]],
                         )
-                
+
                 # Clean up after each batch
                 del json_strings
                 import gc
+
                 gc.collect()
-                
+
                 if (batch_idx + 1) % 5 == 0:  # Every 5 batches
                     self.conn.execute("CHECKPOINT")
-            
+
             self.log.info(f"Completed processing {employment_field} data")
 
     def _process_employment_chunk(self, json_strings: list, table_name: str) -> None:
@@ -2049,10 +2154,14 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 employment_schema = self.conn.execute(
                     """
                     WITH employment_sample AS (
-                        SELECT json_extract(json_data, '$.employment_data.' || $2) as employment_json
+                        SELECT json_extract(json_data,
+                            '$.employment_data.' || $2) as employment_json
                         FROM unnest($1) as t(json_data)
-                        WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
-                        AND json_array_length(json_extract(json_data, '$.employment_data.' || $2)) > 0
+                        WHERE json_extract(json_data,
+                            '$.employment_data.' || $2) IS NOT NULL
+                        AND json_array_length(
+                            json_extract(json_data, '$.employment_data.' || $2)
+                        ) > 0
                         LIMIT 1
                     )
                     SELECT json_structure(employment_json) FROM employment_sample
@@ -2065,21 +2174,34 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                         f"""
                         INSERT INTO {table_name}_employment_{table_suffix}
                         SELECT
-                            company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                            company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            unnest(json_transform(json_extract(json_data, '$.employment_data.{employment_field}'), $2)) as employment_data
+                            unnest(
+                json_transform(
+                    json_extract(json_data, '$.employment_data.{employment_field}'), $2
+                )
+            ) as employment_data
                         FROM unnest($1) as t(json_data)
-                        WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
-                        AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                        WHERE json_extract(
+                        json_data, '$.employment_data.{employment_field}'
+                    ) IS NOT NULL
+                        AND json_array_length(
+                      json_extract(json_data, '$.employment_data.{employment_field}')
+                  ) > 0
                     """,
                         [json_strings, employment_schema[0]],
                     )
 
-    def _process_employment_chunk_memory_efficient(self, json_strings: list, table_name: str) -> None:
+    def _process_employment_chunk_memory_efficient(
+        self, json_strings: list, table_name: str
+    ) -> None:
         """Process employment data one type at a time to avoid memory exhaustion.
-        
+
         This method solves the memory issue by processing employment types sequentially
-        instead of all 1.25M records simultaneously, reducing memory usage from 7.4GB to manageable levels.
+        instead of all 1.25M records simultaneously, reducing memory usage from 7.4GB to
+        manageable levels.
         """
         employment_types = [
             ("annual_employment", "annual"),
@@ -2087,9 +2209,12 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             ("monthly_employment", "monthly"),
             ("replacement_monthly_employment", "replacement_monthly"),
         ]
-        
-        self.log.info(f"🔧 Processing employment data efficiently - one type at a time to avoid memory exhaustion")
-        
+
+        self.log.info(
+            "🔧 Processing employment data efficiently - "
+            "one type at a time to avoid memory exhaustion"
+        )
+
         for employment_field, table_suffix in employment_types:
             # Check if this employment type has data before processing
             employment_check = self.conn.execute(
@@ -2097,17 +2222,21 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 SELECT COUNT(*)
                 FROM unnest($1) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
-                  AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                  AND json_array_length(
+                      json_extract(json_data, '$.employment_data.{employment_field}')
+                  ) > 0
                 """,
-                [json_strings]
+                [json_strings],
             ).fetchone()[0]
-            
+
             if employment_check == 0:
                 self.log.info(f"⏭️ No {employment_field} data found, skipping")
                 continue
-                
-            self.log.info(f"📊 Processing {employment_check:,} companies with {employment_field} data")
-            
+
+            self.log.info(
+                f"📊 Processing {employment_check:,} companies with {employment_field} data"
+            )
+
             # Get the employment table schema using json_structure (same as original code)
             employment_schema = self.conn.execute(
                 """
@@ -2122,34 +2251,45 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             """,
                 [json_strings, employment_field],
             ).fetchone()
-            
+
             if not employment_schema or not employment_schema[0]:
                 self.log.warning(f"⚠️ No schema found for {employment_field}")
                 continue
-            
+
             # Process this employment type only - much more memory efficient
             try:
                 self.conn.execute(
                     f"""
                     INSERT INTO {table_name}_employment_{table_suffix}
                     SELECT
-                        company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                        company_uuid(
+                json_extract(json_data, '$.cvr_number')::INTEGER
+            ) as company_uuid,
                         json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                        unnest(json_transform(json_extract(json_data, '$.employment_data.{employment_field}'), $2)) as employment_data
+                        unnest(
+                json_transform(
+                    json_extract(json_data, '$.employment_data.{employment_field}'), $2
+                )
+            ) as employment_data
                     FROM unnest($1) as t(json_data)
-                    WHERE json_extract(json_data, '$.employment_data.{employment_field}') IS NOT NULL
-                      AND json_array_length(json_extract(json_data, '$.employment_data.{employment_field}')) > 0
+                    WHERE json_extract(
+                        json_data, '$.employment_data.{employment_field}'
+                    ) IS NOT NULL
+                      AND json_array_length(
+                      json_extract(json_data, '$.employment_data.{employment_field}')
+                  ) > 0
                     """,
                     [json_strings, employment_schema[0]],
                 )
-                
+
                 # Immediate cleanup after each employment type
                 self.conn.execute("CHECKPOINT")
                 import gc
+
                 gc.collect()
-                
+
                 self.log.info(f"✅ Completed processing {employment_field} data")
-                
+
             except Exception as e:
                 self.log.error(f"❌ Error processing {employment_field}: {str(e)}")
                 # Continue with other employment types even if one fails
@@ -2160,60 +2300,67 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
     ) -> None:
         """
         Process remaining companies with progressively smaller chunk sizes after memory exhaustion.
-        
+
         This method implements the memory fallback strategy from the Field Production pipeline.
         """
-        self.log.info(f"🔧 Processing {len(remaining_companies):,} remaining companies with smaller chunks")
-        
+        self.log.info(
+            f"🔧 Processing {len(remaining_companies):,} remaining companies with smaller chunks"
+        )
+
         # Start with a much smaller chunk size after memory exhaustion
         chunk_size = 25  # Start very small
         max_retries = 3
-        
+
         for retry in range(max_retries):
             try:
                 self.log.info(f"🔄 Attempt {retry + 1}/{max_retries} with chunk size {chunk_size}")
-                
+
                 num_chunks = (len(remaining_companies) + chunk_size - 1) // chunk_size
                 self.log.info(
                     f"📦 Processing {len(remaining_companies)} remaining companies "
                     f"in {num_chunks} chunks of {chunk_size}"
                 )
-                
+
                 for chunk_idx in range(num_chunks):
                     start_idx = chunk_idx * chunk_size
                     end_idx = min(start_idx + chunk_size, len(remaining_companies))
                     chunk_companies = remaining_companies[start_idx:end_idx]
-                    
+
                     actual_chunk_num = start_chunk_idx + chunk_idx
                     self.log.info(
                         f"📦 Processing recovery chunk {chunk_idx + 1}/{num_chunks} "
                         f"(companies {start_idx}-{end_idx - 1})"
                     )
-                    
+
                     try:
                         self._process_companies_chunk_memory_optimized(
                             chunk_companies, table_name, actual_chunk_num
                         )
-                        
+
                         # Aggressive cleanup after each recovery chunk
                         self.conn.execute("CHECKPOINT")
                         import gc
+
                         gc.collect()
-                        
+
                     except Exception as chunk_e:
                         if "Out of Memory" in str(chunk_e) or "memory" in str(chunk_e).lower():
-                            self.log.error(f"❌ Memory exhaustion in recovery chunk {chunk_idx + 1}")
+                            self.log.error(
+                                f"❌ Memory exhaustion in recovery chunk {chunk_idx + 1}"
+                            )
                             raise  # Will be caught by outer try-except
                         else:
                             self.log.error(
                                 f"❌ Non-memory error in recovery chunk {chunk_idx + 1}: {chunk_e}"
                             )
                             raise
-                
+
                 # If we get here, all chunks processed successfully
-                self.log.info(f"✅ Successfully processed all {len(remaining_companies)} remaining companies")
+                self.log.info(
+                    f"✅ Successfully processed all {len(remaining_companies)} remaining companies"
+                )
                 return
-                
+
             except Exception as e:
                 if "Out of Memory" in str(e) or "memory" in str(e).lower():
                     if retry < max_retries - 1:
@@ -2221,17 +2368,20 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                         old_chunk_size = chunk_size
                         chunk_size = max(5, chunk_size // 2)  # Minimum chunk size of 5
                         self.log.warning(f"⚠️ Reducing chunk size: {old_chunk_size} → {chunk_size}")
-                        
+
                         # Emergency cleanup before retry
                         self._emergency_memory_cleanup()
                         continue
                     else:
-                        self.log.error(f"❌ Failed to process remaining companies after {max_retries} attempts")
-                        self.log.error(f"💔 Lost {len(remaining_companies)} companies due to persistent memory issues")
+                        self.log.error(
+                            f"❌ Failed to process remaining companies after {max_retries} attempts"
+                        )
+                        self.log.error(
+                            f"💔 Lost {len(remaining_companies)} companies "
+                            f"due to persistent memory issues"
+                        )
                         break
                 else:
                     # Non-memory error, don't retry
                     self.log.error(f"❌ Non-memory error processing remaining companies: {e}")
                     break
-
-

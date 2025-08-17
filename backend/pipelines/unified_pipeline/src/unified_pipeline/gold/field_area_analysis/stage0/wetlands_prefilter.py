@@ -121,18 +121,28 @@ class WetlandsPreFilter(PreFilteringStageBase):
         
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
-            self.log.info(f"📍 Coordinate bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})")
+            self.log.info(
+                f"📍 Coordinate bounds: X({min_x:.2f}, {max_x:.2f}), "
+                f"Y({min_y:.2f}, {max_y:.2f})"
+            )
             
             # Check if coordinates are in expected ranges for Denmark
             if min_x >= 8 and max_x <= 16 and min_y >= 54 and max_y <= 58:
-                self.log.info("✅ Coordinates appear to be in WGS84 (EPSG:4326) - Denmark bounds OK")
+                self.log.info(
+                    "✅ Coordinates appear to be in WGS84 (EPSG:4326) - Denmark bounds OK"
+                )
             elif min_x >= 440000 and max_x <= 900000 and min_y >= 6040000 and max_y <= 6420000:
-                self.log.info("✅ Coordinates appear to be in UTM Zone 32N (EPSG:25832) - Denmark bounds OK")
+                self.log.info(
+                    "✅ Coordinates appear to be in UTM Zone 32N (EPSG:25832) - "
+                    "Denmark bounds OK"
+                )
             else:
-                self.log.warning(f"⚠️ Coordinates outside expected Denmark bounds!")
-                self.log.warning(f"   WGS84 expected: X(8-16), Y(54-58)")
-                self.log.warning(f"   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
-                self.log.warning(f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})")
+                self.log.warning("⚠️ Coordinates outside expected Denmark bounds!")
+                self.log.warning("   WGS84 expected: X(8-16), Y(54-58)")
+                self.log.warning("   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
+                self.log.warning(
+                    f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
+                )
         else:
             self.log.warning("⚠️ Could not validate coordinate bounds")
         
@@ -156,7 +166,9 @@ class WetlandsPreFilter(PreFilteringStageBase):
                         try:
                             first_val, second_val = map(float, coords_str.split())
                             coord_pairs.append((first_val, second_val))
-                            self.log.info(f"   Wetland {i+1}: POINT({first_val:.6f} {second_val:.6f})")
+                            self.log.info(
+                                f"   Wetland {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                            )
                         except Exception:
                             continue
                 
@@ -222,7 +234,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
         raw_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_raw").fetchone()[0]
         decomposed_count = self.conn.execute("SELECT COUNT(*) FROM wetlands_full").fetchone()[0]
         self.log.info(
-            f"📊 Input: {raw_count:,} wetland MultiPolygons → {decomposed_count:,} individual polygons after ST_Dump"
+            f"📊 Input: {raw_count:,} wetland MultiPolygons → {decomposed_count:,} "
+            f"individual polygons after ST_Dump"
         )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
@@ -310,7 +323,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
             chunk_time = time.time() - chunk_start
 
             self.log.info(
-                f"  ✅ Chunk {chunk_num + 1}: {chunk_filtered:,}/{chunk_count:,} wetlands kept ({chunk_filtered / chunk_count * 100:.1f}%) - {chunk_time:.1f}s"
+                f"  ✅ Chunk {chunk_num + 1}: {chunk_filtered:,}/{chunk_count:,} wetlands kept "
+                f"({chunk_filtered / chunk_count * 100:.1f}%) - {chunk_time:.1f}s"
             )
 
             # Add unique IDs with spatial ordering (ST_Dump already done in _load_input_data)
@@ -322,7 +336,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
             SELECT
                 -- Deterministic fragment key based on initial decomposed geometry
                 md5(CAST(ST_AsWKB(geometry) AS VARCHAR)) AS wetland_key,
-                -- Legacy numeric ID retained for backward compatibility (non-deterministic ordering)
+                -- Legacy numeric ID retained for backward compatibility
+                -- (non-deterministic ordering)
                 ROW_NUMBER() OVER (
                     ORDER BY toerv_pct, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
                 ) AS wetland_id,
@@ -335,7 +350,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
         cols = [
             r[0]
             for r in self.conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_filtered'"
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'wetlands_filtered'"
             ).fetchall()
         ]
         if "wetland_key" not in [c.lower() for c in cols]:
@@ -350,7 +366,8 @@ class WetlandsPreFilter(PreFilteringStageBase):
         reduction_pct = (1 - total_intersecting / total_wetlands) * 100
 
         self.log.info(
-            f"🎯 MASSIVE WETLANDS REDUCTION: {total_wetlands:,} → {total_intersecting:,} polygons ({reduction_pct:.1f}% reduction)"
+            f"🎯 MASSIVE WETLANDS REDUCTION: {total_wetlands:,} → "
+            f"{total_intersecting:,} polygons ({reduction_pct:.1f}% reduction)"
         )
         self.log.info(
             f"📐 After ST_Dump: {total_filtered:,} wetland pieces for downstream processing"
@@ -368,7 +385,9 @@ class WetlandsPreFilter(PreFilteringStageBase):
             "reduction_percentage": reduction_pct,
             "processing_time_seconds": processing_time,
             "output_path": output_path,
-            "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 2 wetlands processing",
+            "performance_improvement": (
+                f"{reduction_pct:.1f}% reduction in Stage 2 wetlands processing"
+            ),
         }
 
     def _save_output_data(self, result: Dict[str, Any]):

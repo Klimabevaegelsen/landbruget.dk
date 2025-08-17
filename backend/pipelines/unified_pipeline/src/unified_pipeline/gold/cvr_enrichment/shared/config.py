@@ -276,7 +276,8 @@ def _get_latest_input_paths_from_gcs(
             patterns = [
                 f"{base_pattern}/*/company_fetching.parquet",
                 f"{base_pattern}/*/pnumber_fetching.parquet",
-                f"gs://{bucket}/gold/cvr_enrichment_financial/*/financial_documents.parquet",  # Financial docs use different dataset
+                # Financial docs use different dataset
+                f"gs://{bucket}/gold/cvr_enrichment_financial/*/financial_documents.parquet",
                 f"{base_pattern}/*/address_geocoding.parquet",
             ]
 
@@ -376,9 +377,10 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
         True if file contains company data, False otherwise
     """
     try:
+        import os
+
         import duckdb
         import gcsfs
-        import os
 
         # Create a temporary connection for checking file structure
         temp_conn = duckdb.connect()
@@ -583,7 +585,8 @@ def _get_traditional_input_paths(
 
     elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
         # Address geocoding depends on both company and P-number data (no batching)
-        # Note: These paths are for pipeline dependencies only - independent execution uses different paths
+        # Note: These paths are for pipeline dependencies only - 
+        # independent execution uses different paths
         return [f"{base_path}/company_fetching.parquet", f"{base_path}/pnumber_fetching.parquet"]
 
     elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
@@ -591,7 +594,8 @@ def _get_traditional_input_paths(
         return [
             f"{base_path}/company_fetching.parquet",
             f"{base_path}/pnumber_fetching.parquet",
-            f"gs://{bucket}/gold/cvr_enrichment_financial/{date_pattern}/financial_documents.parquet",  # Financial docs use different dataset
+            # Financial docs use different dataset
+            f"gs://{bucket}/gold/cvr_enrichment_financial/{date_pattern}/financial_documents.parquet",
             f"{base_path}/address_geocoding.parquet",
         ]
 

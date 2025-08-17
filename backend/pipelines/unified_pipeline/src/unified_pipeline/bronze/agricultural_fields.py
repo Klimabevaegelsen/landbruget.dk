@@ -331,8 +331,8 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
         historical analysis and trend identification.
 
         Returns:
-            Optional[dict]: Dictionary containing all processed table names organized by dataset and year,
-                           or None if processing fails
+            Optional[dict]: Dictionary containing all processed table names organized 
+                           by dataset and year, or None if processing fails
 
         Note:
             This is the main entry point for the bronze layer processing of

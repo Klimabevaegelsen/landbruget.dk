@@ -9,13 +9,13 @@ This transformer handles the harmonization of Danish fertiliser data from multip
 
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, Union, List
+from typing import Any
 
 import duckdb
 import pandas as pd
 
-from .base import BaseTransformer, TransformResult
 from ..models.schema import ColumnDef, TableSchema
+from .base import BaseTransformer, TransformResult
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +23,13 @@ logger = logging.getLogger(__name__)
 class FertiliserTransformer(BaseTransformer):
     """Transformer for fertiliser parquet files."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the fertiliser transformer."""
         super().__init__()
         self.conn = duckdb.connect()
         self._setup_harmonization_schemas()
     
-    def _setup_harmonization_schemas(self):
+    def _setup_harmonization_schemas(self) -> None:
         """Setup the standardized schemas for harmonized fertiliser data."""
         self.harmonized_schema = {
             'data_source': 'VARCHAR',
@@ -48,7 +48,7 @@ class FertiliserTransformer(BaseTransformer):
             'data_source_file': 'VARCHAR'
         }
     
-    def can_handle(self, file_path: Path, metadata: Dict[str, Any]) -> bool:
+    def can_handle(self, file_path: Path, metadata: dict[str, Any]) -> bool:
         """
         Check if this transformer can handle the given file.
         
@@ -144,8 +144,8 @@ class FertiliserTransformer(BaseTransformer):
         self, 
         content: bytes, 
         filename: str, 
-        metadata: Dict[str, Any]
-    ) -> Optional[pd.DataFrame]:
+        metadata: dict[str, Any]
+    ) -> pd.DataFrame | None:
         """
         Transform fertiliser data from file content.
         
@@ -158,8 +158,8 @@ class FertiliserTransformer(BaseTransformer):
             Harmonized DataFrame or None if transformation failed
         """
         try:
-            import tempfile
             import os
+            import tempfile
             
             # Create temporary file
             with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp:
@@ -188,7 +188,7 @@ class FertiliserTransformer(BaseTransformer):
             logger.error(f"Failed to transform fertiliser content from {filename}: {str(e)}")
             return None
     
-    def _harmonize_fertiliser_data(self, df: pd.DataFrame, filename: str) -> Optional[pd.DataFrame]:
+    def _harmonize_fertiliser_data(self, df: pd.DataFrame, filename: str) -> pd.DataFrame | None:
         """
         Harmonize fertiliser data based on the file type.
         
@@ -446,7 +446,7 @@ class FertiliserTransformer(BaseTransformer):
         else:
             return 'Generic Fertiliser'
     
-    def get_expected_schema(self) -> Optional[TableSchema]:
+    def get_expected_schema(self) -> TableSchema | None:
         """
         Get the expected schema for harmonized fertiliser data.
         

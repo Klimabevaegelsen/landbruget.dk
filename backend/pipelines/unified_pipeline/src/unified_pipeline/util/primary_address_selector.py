@@ -5,8 +5,8 @@ This module provides intelligent primary address selection for the main company 
 while keeping all addresses in the separate address table.
 """
 
-from typing import List, Dict, Any, Optional
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class AddressType(Enum):
@@ -24,7 +24,9 @@ class CoordinateQuality(Enum):
     D = 4  # Poor quality
 
 
-def select_primary_address_for_company_table(addresses: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def select_primary_address_for_company_table(
+    addresses: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
     """
     Select the primary address for the main company table.
     
@@ -106,12 +108,18 @@ def select_primary_address_for_company_table(addresses: List[Dict[str, Any]]) ->
         
         # Completeness score (higher is better, so negate for sorting)
         completeness = 0
-        if addr.get('street_name'): completeness += 1
-        if addr.get('house_number'): completeness += 1
-        if addr.get('postal_code'): completeness += 1
-        if addr.get('city'): completeness += 1
-        if addr.get('municipality_code'): completeness += 1
-        if addr.get('latitude') and addr.get('longitude'): completeness += 2
+        if addr.get('street_name'):
+            completeness += 1
+        if addr.get('house_number'):
+            completeness += 1
+        if addr.get('postal_code'):
+            completeness += 1
+        if addr.get('city'):
+            completeness += 1
+        if addr.get('municipality_code'):
+            completeness += 1
+        if addr.get('latitude') and addr.get('longitude'):
+            completeness += 2
         
         # Return tuple for sorting (lower values = higher priority)
         return (
@@ -119,7 +127,8 @@ def select_primary_address_for_company_table(addresses: List[Dict[str, Any]]) ->
             type_priority,         # 2nd: Address type
             geocoding_priority,    # 3rd: Geocoding quality
             quality_priority,      # 4th: Coordinate quality
-            -completeness,         # 5th: Completeness (negated, so higher completeness = lower score)
+            -completeness,         # 5th: Completeness (negated, so higher
+                                   #      completeness = lower score)
             addr.get('full_address', '') or ''  # 6th: Alphabetical for consistency
         )
     

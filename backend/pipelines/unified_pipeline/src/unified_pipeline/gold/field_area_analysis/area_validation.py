@@ -81,9 +81,15 @@ class FieldAreaValidator:
 
             # Create validation message
             if is_valid:
-                message = f"✅ Area validation PASSED for {stage_name}: {area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+                message = (
+                    f"✅ Area validation PASSED for {stage_name}: "
+                    f"{area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+                )
             else:
-                message = f"❌ Area validation FAILED for {stage_name}: {area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+                message = (
+                    f"❌ Area validation FAILED for {stage_name}: "
+                    f"{area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+                )
 
             # Detailed validation info
             validation_time = time.time() - validation_start
@@ -114,10 +120,12 @@ class FieldAreaValidator:
 
             self.log.info(message)
             self.log.info(
-                f"📊 Before: {before_stats['field_count']:,} fields, {before_stats['total_area']:,.0f} m²"
+                f"📊 Before: {before_stats['field_count']:,} fields, "
+                f"{before_stats['total_area']:,.0f} m²"
             )
             self.log.info(
-                f"📊 After:  {after_stats['field_count']:,} fields, {after_stats['total_area']:,.0f} m²"
+                f"📊 After:  {after_stats['field_count']:,} fields, "
+                f"{after_stats['total_area']:,.0f} m²"
             )
             self.log.info(
                 f"📊 Difference: {area_difference:+,.0f} m² ({area_difference_pct:+.3f}%)"
@@ -181,7 +189,8 @@ class FieldAreaValidator:
 
         if has_fragments:
             self.log.info(
-                f"🔍 Fragment mode detected for {table_name}: {fragment_check[0]} records, {fragment_check[1]} unique fields"
+                f"🔍 Fragment mode detected for {table_name}: "
+                f"{fragment_check[0]} records, {fragment_check[1]} unique fields"
             )
 
         # Get statistics - handle fragments correctly to avoid double-counting
@@ -274,9 +283,15 @@ class FieldAreaValidator:
 
             # Create validation message
             if is_valid:
-                message = f"✅ Area validation PASSED for {stage_name}: {area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+                message = (
+                    f"✅ Area validation PASSED for {stage_name}: "
+                    f"{area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+                )
             else:
-                message = f"❌ Area validation FAILED for {stage_name}: {area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+                message = (
+                    f"❌ Area validation FAILED for {stage_name}: "
+                    f"{area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+                )
 
             validation_time = time.time() - validation_start
             details = {
@@ -312,7 +327,8 @@ class FieldAreaValidator:
                 f"📊 Reference: {reference_field_count:,} fields, {reference_total_area:,.0f} m²"
             )
             self.log.info(
-                f"📊 Output:    {output_stats['field_count']:,} fields, {output_stats['total_area']:,.0f} m²"
+                f"📊 Output:    {output_stats['field_count']:,} fields, "
+                f"{output_stats['total_area']:,.0f} m²"
             )
             self.log.info(
                 f"📊 Difference: {area_difference:+,.0f} m² ({area_difference_pct:+.3f}%)"
@@ -399,9 +415,15 @@ class FieldAreaValidator:
             is_valid = total_violations == 0
 
             if is_valid:
-                message = f"✅ Area hierarchy validation PASSED for {stage_name}: All hierarchy constraints satisfied"
+                message = (
+                    f"✅ Area hierarchy validation PASSED for {stage_name}: "
+                    f"All hierarchy constraints satisfied"
+                )
             else:
-                message = f"❌ Area hierarchy validation FAILED for {stage_name}: {total_violations:,} total violations found"
+                message = (
+                    f"❌ Area hierarchy validation FAILED for {stage_name}: "
+                    f"{total_violations:,} total violations found"
+                )
 
             validation_time = time.time() - validation_start
             details = {
@@ -482,9 +504,16 @@ class FieldAreaValidator:
             validation_query = f"""
                 SELECT
                     COUNT(*) as total_groups,
-                    COUNT(*) FILTER (WHERE ABS(detail_sum - aggregate_total) > aggregate_total * {self.tolerance_pct}/100.0) as inconsistent_groups,
-                    MAX(ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)) as max_difference_ratio,
-                    AVG(ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)) as avg_difference_ratio
+                    COUNT(*) FILTER (
+                        WHERE ABS(detail_sum - aggregate_total) > 
+                              aggregate_total * {self.tolerance_pct}/100.0
+                    ) as inconsistent_groups,
+                    MAX(
+                        ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)
+                    ) as max_difference_ratio,
+                    AVG(
+                        ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)
+                    ) as avg_difference_ratio
                 FROM (
                     SELECT
                         {group_by_clause_detail},
@@ -506,9 +535,15 @@ class FieldAreaValidator:
             is_valid = inconsistent_groups == 0
 
             if is_valid:
-                message = f"✅ Fragment sum consistency validation PASSED for {stage_name}: All {total_groups:,} groups consistent"
+                message = (
+                    f"✅ Fragment sum consistency validation PASSED for {stage_name}: "
+                    f"All {total_groups:,} groups consistent"
+                )
             else:
-                message = f"❌ Fragment sum consistency validation FAILED for {stage_name}: {inconsistent_groups:,}/{total_groups:,} groups inconsistent"
+                message = (
+                    f"❌ Fragment sum consistency validation FAILED for {stage_name}: "
+                    f"{inconsistent_groups:,}/{total_groups:,} groups inconsistent"
+                )
 
             validation_time = time.time() - validation_start
             details = {

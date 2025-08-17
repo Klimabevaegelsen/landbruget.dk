@@ -140,7 +140,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             processed_data = self._process_financial_data(financial_data)
 
             # Step 4: Process employment data directly (moved from data_consolidation)
-            self.log.info("⚙️ Step 4a/5: Processing employment data directly to avoid memory bottleneck")
+            self.log.info(
+                "⚙️ Step 4a/5: Processing employment data directly to avoid memory bottleneck"
+            )
             self._process_employment_data_directly(company_batch)
 
             # Step 5: Save financial data
@@ -185,7 +187,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         if not input_paths:
             if self.config.shared_config.enable_independent_execution:
                 raise ValueError(
-                    f"No company data found within {self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"No company data found within "
+                    f"{self.config.shared_config.max_days_back_for_inputs} days. "
                     f"Please run the company fetching step first or disable independent execution."
                 )
             else:
@@ -511,7 +514,10 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 "profit_loss_before_tax": "ProfitLossFromOrdinaryActivitiesBeforeTax",
                 "employee_benefits_expense": "EmployeeBenefitsExpense",
                 "average_number_of_employees": "AverageNumberOfEmployees",
-                "depreciation_expense": "DepreciationAmortisationExpenseAndImpairmentLossesOfPropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss",
+                "depreciation_expense": (
+                    "DepreciationAmortisationExpenseAndImpairmentLossesOfPropertyPlantAnd"
+                    "EquipmentAndIntangibleAssetsRecognisedInProfitOrLoss"
+                ),
                 "other_finance_income": "OtherFinanceIncome",
                 "other_finance_expenses": "OtherFinanceExpenses",
                 "tax_expense": "TaxExpense",
@@ -526,8 +532,12 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 "contributed_capital": "ContributedCapital",
                 "cash_and_cash_equivalents": "CashAndCashEquivalents",
                 "liabilities_other_than_provisions": "LiabilitiesOtherThanProvisions",
-                "shortterm_liabilities_other_than_provisions": "ShorttermLiabilitiesOtherThanProvisions",
-                "longterm_liabilities_other_than_provisions": "LongtermLiabilitiesOtherThanProvisions",
+                "shortterm_liabilities_other_than_provisions": (
+                    "ShorttermLiabilitiesOtherThanProvisions"
+                ),
+                "longterm_liabilities_other_than_provisions": (
+                    "LongtermLiabilitiesOtherThanProvisions"
+                ),
                 "provisions": "Provisions",
                 "property_plant_equipment": "PropertyPlantAndEquipment",
             }
@@ -673,7 +683,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
     @timed(name="Saving financial data")
     def _save_financial_data(self, processed_data: Dict[str, Any]) -> str:
         """
-        Save processed financial documents data to GCS using batch processing to avoid memory issues.
+        Save processed financial documents data to GCS using batch processing to avoid memory
+        issues.
 
         Args:
             processed_data: Processed financial data
@@ -701,9 +712,6 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             total_companies = len(financial_data)
             num_batches = (total_companies + batch_size - 1) // batch_size
 
-            self.log.info(
-                f"📦 Processing {total_companies} companies in {num_batches} batches of {batch_size}"
-            )
 
             # Create empty table with correct schema first (no JSON bloat)
             self.conn.execute(f"""
@@ -726,9 +734,6 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 end_idx = min(start_idx + batch_size, total_companies)
                 batch_data = financial_data[start_idx:end_idx]
 
-                self.log.info(
-                    f"📦 Processing batch {batch_idx + 1}/{num_batches}: companies {start_idx}-{end_idx - 1}"
-                )
 
                 try:
                     # Convert batch to JSON strings for DuckDB
@@ -742,16 +747,21 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                             json_extract(json_data, '$.company_name')::VARCHAR as company_name,
                             json_extract(json_data, '$.document_count')::INTEGER as document_count,
-                            json_extract(json_data, '$.xml_document_count')::INTEGER as xml_document_count,
-                            json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as total_xml_size_bytes,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as latest_reporting_date,
+                            json_extract(json_data, '$.xml_document_count')::INTEGER as
+                                xml_document_count,
+                            json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as
+                                total_xml_size_bytes,
+                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as
+                                latest_reporting_date,
                             CASE
-                                WHEN json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL
+                                WHEN json_extract(json_data, '$.latest_financial_metrics')
+                             IS NOT NULL
                                 THEN true
                                 ELSE false
                             END as has_financial_metrics,
                             -- json_data as financial_data_json,  -- Removed to prevent memory bloat
-                            json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                            json_extract(json_data, '$.processing_timestamp')::VARCHAR as
+                                processing_timestamp,
                             json_extract(json_data, '$.batch_number')::INTEGER as batch_number
                         FROM unnest($1) as t(json_data)
                     """,
@@ -772,9 +782,6 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                         break
                     raise
 
-            self.log.info(
-                f"✅ Created table {table_name} with {len(financial_data)} companies using batch processing"
-            )
         else:
             # Create empty table with schema
             self.conn.execute(f"""
@@ -888,7 +895,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 companies_data, employment_field, table_suffix
             )
             
-    def _process_employment_type_batched(self, companies_data: List[Dict], employment_field: str, table_suffix: str):
+    def _process_employment_type_batched(
+        self, companies_data: List[Dict], employment_field: str, table_suffix: str
+    ):
         """Process one employment type in batches and save directly."""
         batch_size = 500  # Small batches to avoid memory accumulation
         table_name = f"cvr_employment_{table_suffix}"
@@ -900,22 +909,25 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         num_batches = (total_companies + batch_size - 1) // batch_size
         total_records = 0
         
-        self.log.info(f"📦 Processing {total_companies} companies in {num_batches} batches for {employment_field}")
-        
         # Process companies in batches
         for batch_idx in range(num_batches):
             start_idx = batch_idx * batch_size
             end_idx = min(start_idx + batch_size, total_companies)
             batch_companies = companies_data[start_idx:end_idx]
             
-            self.log.info(f"📦 Processing batch {batch_idx + 1}/{num_batches}: companies {start_idx}-{end_idx - 1}")
             
             try:
-                employment_records = self._extract_employment_records(batch_companies, employment_field)
+                employment_records = self._extract_employment_records(
+                    batch_companies, employment_field
+                )
                 if employment_records:
-                    batch_record_count = self._save_employment_batch(employment_records, table_name, batch_idx == 0)
+                    batch_record_count = self._save_employment_batch(
+                        employment_records, table_name, batch_idx == 0
+                    )
                     total_records += batch_record_count
-                    self.log.info(f"✅ Batch {batch_idx + 1}: {batch_record_count} {employment_field} records")
+                    self.log.info(
+                        f"✅ Batch {batch_idx + 1}: {batch_record_count} {employment_field} records"
+                    )
                 
                 # Clear batch data from memory
                 employment_records = None
@@ -927,7 +939,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             except Exception as e:
                 self.log.error(f"Error processing employment batch {batch_idx + 1}: {e}")
                 if "Out of Memory" in str(e) or "memory" in str(e).lower():
-                    self.log.warning("⚠️ Memory exhaustion detected - stopping employment processing")
+                    self.log.warning(
+                        "⚠️ Memory exhaustion detected - stopping employment processing"
+                    )
                     break
                 continue
         
@@ -937,7 +951,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         else:
             self.log.info(f"No {employment_field} records found")
             
-    def _extract_employment_records(self, companies: List[Dict], employment_field: str) -> List[Dict]:
+    def _extract_employment_records(
+        self, companies: List[Dict], employment_field: str
+    ) -> List[Dict]:
         """Extract employment records from company data for a specific employment type."""
         employment_records = []
         
@@ -969,7 +985,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         
         return employment_records
     
-    def _save_employment_batch(self, employment_records: List[Dict], table_name: str, is_first_batch: bool) -> int:
+    def _save_employment_batch(
+        self, employment_records: List[Dict], table_name: str, is_first_batch: bool
+    ) -> int:
         """Save employment records batch to DuckDB table."""
         if not employment_records:
             return 0
@@ -987,7 +1005,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.year')::INTEGER as year,
                     json_extract(json_data, '$.employee_count')::INTEGER as employee_count,
-                    json_extract(json_data, '$.full_time_employee_count')::INTEGER as full_time_employee_count,
+                    json_extract(json_data, '$.full_time_employee_count')::INTEGER as
+                        full_time_employee_count,
                     json_extract(json_data, '$.unit')::VARCHAR as unit,
                     json_extract(json_data, '$.quarter')::INTEGER as quarter,
                     json_extract(json_data, '$.month')::INTEGER as month,
@@ -1006,7 +1025,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.year')::INTEGER as year,
                     json_extract(json_data, '$.employee_count')::INTEGER as employee_count,
-                    json_extract(json_data, '$.full_time_employee_count')::INTEGER as full_time_employee_count,
+                    json_extract(json_data, '$.full_time_employee_count')::INTEGER as
+                        full_time_employee_count,
                     json_extract(json_data, '$.unit')::VARCHAR as unit,
                     json_extract(json_data, '$.quarter')::INTEGER as quarter,
                     json_extract(json_data, '$.month')::INTEGER as month,
@@ -1018,7 +1038,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         
         return len(employment_records)
     
-    def _save_employment_table_to_gcs(self, table_name: str, table_suffix: str, total_records: int) -> None:
+    def _save_employment_table_to_gcs(
+        self, table_name: str, table_suffix: str, total_records: int
+    ) -> None:
         """Save employment table to GCS."""
         self.log.info(f"💾 Saving {total_records} {table_suffix} employment records to GCS")
         
@@ -1039,7 +1061,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             self.log.info(f"Saved {table_suffix} employment data locally to {local_path}")
 
     def _cleanup_memory_after_batch(self) -> None:
-        """Aggressive memory cleanup after processing a batch (copied from data_consolidation.py)."""
+        """Aggressive memory cleanup after processing a batch (copied from
+        data_consolidation.py)."""
         try:
             # DuckDB-specific cleanup
             self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL

@@ -136,9 +136,11 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                 )
             else:
                 self.log.warning("⚠️ Soil types coordinates outside expected Denmark bounds!")
-                self.log.warning(f"   WGS84 expected: X(8-16), Y(54-58)")
-                self.log.warning(f"   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
-                self.log.warning(f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})")
+                self.log.warning("   WGS84 expected: X(8-16), Y(54-58)")
+                self.log.warning("   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
+                self.log.warning(
+                    f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
+                )
         else:
             self.log.warning("⚠️ Could not validate soil types coordinate bounds")
         
@@ -272,7 +274,10 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types_filtered AS
             SELECT
-                ROW_NUMBER() OVER (ORDER BY soil_description, soil_code, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as soil_id,
+                ROW_NUMBER() OVER (
+                    ORDER BY soil_description, soil_code, 
+                             ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))
+                ) as soil_id,
                 soil_code,
                 soil_description,  -- Only meaningful Danish soil types
                 geometry,
@@ -288,7 +293,8 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         self.log.info(f"   Original: {total_soil_types:,} soil type polygons")
         self.log.info(f"   Filtered: {total_filtered:,} soil type polygons")
         self.log.info(
-            f"   Reduction: {reduction_pct:.1f}% ({total_soil_types - total_filtered:,} polygons removed)"
+            f"   Reduction: {reduction_pct:.1f}% "
+            f"({total_soil_types - total_filtered:,} polygons removed)"
         )
         self.log.info(f"   Processing time: {processing_time:.1f} seconds")
         self.log.info(f"   🚀 Stage 1D will be {total_soil_types / total_filtered:.1f}x faster")
@@ -319,7 +325,9 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             "processing_time": processing_time,
             "output_path": output_path,
             "soil_type_breakdown": soil_type_stats,
-            "performance_improvement": f"{reduction_pct:.1f}% reduction in Stage 1D soil types processing",
+            "performance_improvement": (
+                f"{reduction_pct:.1f}% reduction in Stage 1D soil types processing"
+            ),
         }
 
     def _save_output_data(self, result: Dict[str, Any]):

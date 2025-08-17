@@ -27,11 +27,11 @@ from typing import Any, Dict, List, Optional
 import duckdb
 import gcsfs
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
 )
 
 from unified_pipeline.util.log_util import Logger
