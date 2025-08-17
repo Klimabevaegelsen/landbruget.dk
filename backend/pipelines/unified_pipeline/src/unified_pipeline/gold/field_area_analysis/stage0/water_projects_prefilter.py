@@ -142,6 +142,54 @@ class WaterProjectsPreFilter(PreFilteringStageBase):
         else:
             self.log.warning("⚠️ Could not validate water projects coordinate bounds")
         
+        # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs to verify actual order
+        try:
+            sample_wkt = self.conn.execute("""
+                SELECT 
+                    ST_AsText(ST_Centroid(geometry)) as wkt_centroid
+                FROM water_projects_raw 
+                WHERE geometry IS NOT NULL 
+                LIMIT 5
+            """).fetchall()
+            
+            if sample_wkt:
+                self.log.info("🧭 WATER PROJECTS COORDINATE ORDER CHECK - Raw WKT centroids:")
+                coord_pairs = []
+                for i, (wkt,) in enumerate(sample_wkt[:3]):
+                    # Extract coordinates from "POINT(x y)" format
+                    if wkt and 'POINT(' in wkt:
+                        coords_str = wkt.replace('POINT(', '').replace(')', '')
+                        try:
+                            first_val, second_val = map(float, coords_str.split())
+                            coord_pairs.append((first_val, second_val))
+                            self.log.info(f"   Water Project {i+1}: POINT({first_val:.6f} {second_val:.6f})")
+                        except Exception:
+                            continue
+                
+                if coord_pairs:
+                    # Analyze the pattern - first value in coordinate pair
+                    first_vals = [pair[0] for pair in coord_pairs]
+                    second_vals = [pair[1] for pair in coord_pairs]
+                    first_range = (min(first_vals), max(first_vals))
+                    second_range = (min(second_vals), max(second_vals))
+                    
+                    if (8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 
+                        54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58):
+                        self.log.info(f"✅ WATER PROJECTS CONFIRMED: Data stored as (LON, LAT) - "
+                                    f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                    f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                    elif (54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 
+                          8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15):
+                        self.log.warning(f"⚠️ WATER PROJECTS ALERT: Data stored as (LAT, LON) - "
+                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                    else:
+                        self.log.warning(f"❓ WATER PROJECTS UNCLEAR: Coordinate order unclear - "
+                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+        except Exception as e:
+            self.log.warning(f"⚠️ Could not verify water projects coordinate order: {e}")
+        
         # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
         # Use simpler approach: since we know geometry is GEOMETRY type, use it directly
         try:
