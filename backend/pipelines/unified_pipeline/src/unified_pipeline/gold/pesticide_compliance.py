@@ -391,18 +391,21 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 latest_path,
                 """
                 SELECT
-                    registrerings_nr as registration_number,
-                    produktnavn as product_name,
-                    aktivstofnavn_e as active_substances,
-                    produktstatus as product_status,
-                    godkendelsesdato as approval_date,
-                    udløbsdato as expiry_date,
-                    frist_for_anvendelse_og_besiddelse as restriction_date,
+                    registrerings_nr,
+                    produktnavn,
+                    aktivstofnavn_e,
+                    produktstatus,
+                    godkendelsesdato,
+                    udløbsdato,
+                    frist_for_anvendelse_og_besiddelse,
                     -- Parse restriction date for comparison
                     TRY_CAST(frist_for_anvendelse_og_besiddelse AS DATE) as restriction_date_parsed,
                     -- Additional fields for analysis
-                    formulering as formulation,
-                    anvendelse as application_area
+                    formulering,
+                    anvendelse,
+                    -- Unit sanitization columns (CRITICAL: Required for unit analysis)
+                    enhed_er,
+                    koncentration_er
                 WHERE registrerings_nr IS NOT NULL
                     AND registrerings_nr != ''
             """,
@@ -415,20 +418,23 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE bmd_data AS
                     SELECT
-                        registrerings_nr as registration_number,
-                        produktnavn as product_name,
-                        aktivstofnavn_e as active_substances,
-                        produktstatus as product_status,
-                        godkendelsesdato as approval_date,
-                        udløbsdato as expiry_date,
-                        frist_for_anvendelse_og_besiddelse as restriction_date,
+                        registrerings_nr,
+                        produktnavn,
+                        aktivstofnavn_e,
+                        produktstatus,
+                        godkendelsesdato,
+                        udløbsdato,
+                        frist_for_anvendelse_og_besiddelse,
                         -- Parse restriction date for comparison
                         TRY_CAST(
                             frist_for_anvendelse_og_besiddelse AS DATE
                         ) as restriction_date_parsed,
                         -- Additional fields for analysis
-                        formulering as formulation,
-                        anvendelse as application_area
+                        formulering,
+                        anvendelse,
+                        -- Unit sanitization columns (CRITICAL: Required for unit analysis)
+                        enhed_er,
+                        koncentration_er
                     FROM read_parquet('{temp_file}')
                     WHERE registrerings_nr IS NOT NULL
                     AND registrerings_nr != ''
@@ -853,7 +859,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                             "crop_code": crop_code,
                             "api_crop_id": api_crop_id,
                             "api_crop_name": api_crop_names.get(api_crop_id, ""),
-                            "registration_number": reg_number,
+                            "registrerings_nr": reg_number,
                             "product_name": detail.get("Name", ""),
                             "max_dosage_app": detail.get("MaxDosageApp"),
                             "product_unit": detail.get("ProductUnit", ""),
@@ -871,7 +877,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     crop_code VARCHAR,
                     api_crop_id INTEGER,
                     api_crop_name VARCHAR,
-                    registration_number VARCHAR,
+                    registrerings_nr VARCHAR,
                     product_name VARCHAR,
                     max_dosage_app DOUBLE,
                     product_unit VARCHAR,
@@ -891,7 +897,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         item.get("crop_code"),
                         item.get("api_crop_id"),
                         item.get("api_crop_name"),
-                        item.get("registration_number"),
+                        item.get("registrerings_nr"),
                         item.get("product_name"),
                         item.get("max_dosage_app"),
                         item.get("product_unit"),
@@ -905,7 +911,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             self.conn.execute(
                 "CREATE OR REPLACE TABLE dosage_limits ("
                 "crop_code VARCHAR, api_crop_id INTEGER, api_crop_name VARCHAR, "
-                "registration_number VARCHAR, product_name VARCHAR, max_dosage_app DOUBLE, "
+                "registrerings_nr VARCHAR, product_name VARCHAR, max_dosage_app DOUBLE, "
                 "product_unit VARCHAR, max_applications INTEGER)"
             )
             self.logger.warning("⚠️ No dosage limits found from API")
@@ -1020,7 +1026,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             COALESCE(d.api_crop_name, NULL) as api_crop_name_from_plante_it,
             -- BMD regulatory information
             b.restriction_date_parsed,
-            b.product_status,
+            b.produktstatus,
             -- Registration mismatch detection
             rm.suggested_valid_registration,
             rm.valid_status as suggested_registration_status,
@@ -1062,11 +1068,11 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             -- Categorize compliance status (enhanced with registration mismatch detection)
             CASE
                 WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'TIMING_VIOLATION'
-                WHEN (b.product_status IN (
+                WHEN (b.produktstatus IN (
             'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
         ))
                      AND rm.expired_registration IS NOT NULL THEN 'POTENTIAL_REGISTRATION_ERROR'
-                WHEN b.product_status IN (
+                WHEN b.produktstatus IN (
             'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
         ) THEN 'WITHDRAWN_PRODUCT_USE'
                 WHEN d.max_dosage_app IS NOT NULL AND a.area_ha > 0
@@ -1081,11 +1087,11 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             '{ag_year}' as agricultural_year_analyzed,
             CURRENT_TIMESTAMP as analysis_timestamp
         FROM pesticide_applications a
-        INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registration_number
+        INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registrerings_nr
         LEFT JOIN agricultural_fields f ON a.field_uuid = f.field_uuid
         LEFT JOIN dosage_limits d ON (
             f.crop_code = d.crop_code
-            AND a.pesticide_registration_number = d.registration_number
+            AND a.pesticide_registration_number = d.registrerings_nr
         )
         LEFT JOIN registration_mismatch_detection rm ON (
             a.pesticide_registration_number = rm.expired_registration
