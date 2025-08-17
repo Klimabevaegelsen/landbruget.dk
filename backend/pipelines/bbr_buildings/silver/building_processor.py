@@ -253,7 +253,7 @@ class BuildingProcessor:
 
         # Save processed buildings
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / "buildings_processed.geoparquet"
+        output_file = output_dir / "buildings_processed.parquet"
 
         # 🚀 ENHANCED: Try native GCS export first if available
         gcs_export_success = False
@@ -261,7 +261,7 @@ class BuildingProcessor:
             try:
                 gcs_access = OptimizedGCSDataAccess()
                 timestamp = Path(output_dir).name  # Extract timestamp from output directory
-                gcs_path = f"gs://landbrugsdata-raw-data/silver/bbr_buildings/{timestamp}/buildings_processed.geoparquet"
+                gcs_path = f"gs://landbrugsdata-raw-data/silver/bbr_buildings/{timestamp}/buildings_processed.parquet"
 
                 # Use native GCS export with server-side compression
                 gcs_access.export_to_gcs_native(

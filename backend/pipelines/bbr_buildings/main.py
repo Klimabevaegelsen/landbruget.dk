@@ -1330,7 +1330,7 @@ def _upload_silver_data_to_gcs(
             logger.info("📤 Uploading processed files with coordinate fixes...")
             for file_path in processed_dir.glob("*.parquet"):
                 # Map processed file names to expected names for compatibility
-                if file_path.name == "buildings_processed.geoparquet":
+                if file_path.name == "buildings_processed.parquet":
                     target_name = "joined_buildings.parquet"
                 else:
                     target_name = file_path.name
