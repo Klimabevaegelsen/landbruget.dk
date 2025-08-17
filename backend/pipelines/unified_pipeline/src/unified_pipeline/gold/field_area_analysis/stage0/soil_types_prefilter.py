@@ -126,7 +126,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             )
             
             # Check if coordinates are in expected ranges for Denmark
-            if min_x >= 8 and max_x <= 15 and min_y >= 54 and max_y <= 58:
+            if min_x >= 8 and max_x <= 16 and min_y >= 54 and max_y <= 58:
                 self.log.info(
                     "✅ Soil types coordinates in WGS84 (EPSG:4326) - Denmark bounds OK"
                 )
@@ -136,9 +136,9 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                 )
             else:
                 self.log.warning("⚠️ Soil types coordinates outside expected Denmark bounds!")
-                self.log.warning(
-                    f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})"
-                )
+                self.log.warning(f"   WGS84 expected: X(8-16), Y(54-58)")
+                self.log.warning(f"   UTM32N expected: X(440000-900000), Y(6040000-6420000)")
+                self.log.warning(f"   Actual: X({min_x:.2f}-{max_x:.2f}), Y({min_y:.2f}-{max_y:.2f})")
         else:
             self.log.warning("⚠️ Could not validate soil types coordinate bounds")
         
