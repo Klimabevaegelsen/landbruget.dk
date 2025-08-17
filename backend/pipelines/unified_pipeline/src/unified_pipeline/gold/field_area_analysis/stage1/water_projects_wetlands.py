@@ -187,7 +187,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     wetland_id,  -- Use existing wetland_id from decomposed wetlands table
                     toerv_pct,  -- Keep wetland type for analysis
                     geometry,
-                    ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as wetland_area_m2
+                    ST_Area_Spheroid(geometry) as wetland_area_m2
                 FROM wetlands_batch_raw
             """)
 
@@ -209,7 +209,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             sample_wetland = self.conn.execute("""
                 SELECT
                     ST_IsValid(geometry),
-                    ST_Area_Spheroid(ST_FlipCoordinates(geometry)),
+                    ST_Area_Spheroid(geometry),
                     'unknown' as srid,
                     ST_GeometryType(geometry),
                     ST_X(ST_Centroid(geometry)),
@@ -221,7 +221,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             sample_water = self.conn.execute("""
                 SELECT
                     ST_IsValid(geometry),
-                    ST_Area_Spheroid(ST_FlipCoordinates(geometry)),
+                    ST_Area_Spheroid(geometry),
                     'unknown' as srid,
                     ST_GeometryType(geometry),
                     ST_X(ST_Centroid(geometry)),
@@ -255,12 +255,12 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 wb.toerv_pct,  -- Wetland type for analysis
                 wp.project_id,
                 ST_Intersection(wb.geometry, wp.geometry) as intersection_geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(wb.geometry, wp.geometry))) as intersection_area_m2,
+                ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) as intersection_area_m2,
                 wb.wetland_area_m2,
-                ST_Area_Spheroid(ST_FlipCoordinates(wp.geometry)) as project_area_m2
+                ST_Area_Spheroid(wp.geometry) as project_area_m2
             FROM wetlands_batch wb
             JOIN water_projects wp ON ST_Intersects(wb.geometry, wp.geometry)
-            WHERE ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(wb.geometry, wp.geometry))) > 0
+            WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 0
             """
 
             self.conn.execute(batch_query)
@@ -370,7 +370,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     ST_XMax(geometry) as max_x,
                     ST_YMin(geometry) as min_y,
                     ST_YMax(geometry) as max_y,
-                    ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as area_spheroid,
+                    ST_Area_Spheroid(geometry) as area_spheroid,
                     ST_Area(geometry) as area_planar,
                     ST_IsValid(geometry) as is_valid,
                     ST_GeometryType(geometry) as geom_type
@@ -405,7 +405,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     ST_XMax(geometry) as max_x,
                     ST_YMin(geometry) as min_y,
                     ST_YMax(geometry) as max_y,
-                    ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as area_spheroid,
+                    ST_Area_Spheroid(geometry) as area_spheroid,
                     ST_Area(geometry) as area_planar,
                     ST_IsValid(geometry) as is_valid,
                     ST_GeometryType(geometry) as geom_type

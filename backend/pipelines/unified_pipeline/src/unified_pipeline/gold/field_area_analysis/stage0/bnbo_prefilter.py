@@ -264,7 +264,7 @@ class BNBOPreFilter(PreFilteringStageBase):
                 ) as bnbo_id,
                 status_category,
                 geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as bnbo_area_m2
+                ST_Area_Spheroid(geometry) as bnbo_area_m2
             FROM bnbo_intersecting
         """)
 

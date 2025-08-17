@@ -266,8 +266,8 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             """)
 
             # ✅ MIGRATION: Use DuckDB-spatial geometry validation
-            # ✅ COORDINATE FIX: ST_FlipCoordinates is applied in the validator
-            # to fix swapped lat/lon coordinates
+            # ✅ COORDINATE FIX: Validator handles UTM→WGS84 conversion
+            # ST_Area_Spheroid calls use (LAT, LON) data directly for accuracy
             validate_and_transform_geometries_duckdb(
                 self.conn, processed_table, self.config.dataset
             )
@@ -392,7 +392,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 if not (7.0 <= min_x <= 16.0 and 54.0 <= min_y <= 58.0):
                     self.log.warning(
                         "Coordinates appear to be outside Denmark bounds "
-                        "(coordinates should be fixed with ST_FlipCoordinates)"
+                        "(may indicate CRS detection or transformation issue)"
                     )
 
             # Check attribute distributions

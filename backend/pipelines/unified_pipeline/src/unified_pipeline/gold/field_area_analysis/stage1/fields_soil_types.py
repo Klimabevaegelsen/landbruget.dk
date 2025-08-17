@@ -47,7 +47,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 year,
                 field_uuid,
                 geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(geometry)) as field_area_m2
+                ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_raw
         """)
 
@@ -67,7 +67,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
             SELECT
                 soil_description,  -- Only keep useful Danish soil type classification
                 UNNEST(ST_Dump(geometry)).geom as geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(UNNEST(ST_Dump(geometry)).geom)) as soil_area_m2
+                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as soil_area_m2
             FROM soil_types_raw
         """)
 
@@ -130,7 +130,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 s.soil_description,  -- Only keep useful soil classification (Danish soil types)
                 -- Calculate intersection geometry and area in single operation
                 ST_Intersection(f.geometry, s.geometry) as intersection_geometry,
-                ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geometry, s.geometry))) as soil_intersection_area_m2
+                ST_Area_Spheroid(ST_Intersection(f.geometry, s.geometry)) as soil_intersection_area_m2
             FROM soil_types s  -- BUILD side (smaller, pre-filtered dataset - gets spatial indexed)
             JOIN agricultural_fields f ON ST_Intersects(s.geometry, f.geometry)  -- PROBE side (larger dataset)
         """)

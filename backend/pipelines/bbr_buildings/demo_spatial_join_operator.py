@@ -89,7 +89,7 @@ def demonstrate_spatial_join_operator() -> bool:
         f.field_id,
         f.field_type,
         f.field_area_m2,
-        ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(b.geometry, f.geometry))) as intersection_area_m2
+        ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) as intersection_area_m2
     FROM buildings b
     INNER JOIN agricultural_fields f ON ST_Intersects(b.geometry, f.geometry)
     WHERE ST_IsValid(b.geometry)

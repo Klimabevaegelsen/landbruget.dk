@@ -106,14 +106,14 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             b.status_category,
             wp.geometry as water_project_geometry,
             ST_Intersection(b.geometry, wp.geometry) as intersection_geometry,
-            ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(b.geometry, wp.geometry))) as intersection_area_m2,
-            ST_Area_Spheroid(ST_FlipCoordinates(wp.geometry)) as water_project_area_m2,
-            ST_Area_Spheroid(ST_FlipCoordinates(b.geometry)) as bnbo_area_m2,
-            (ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(b.geometry, wp.geometry))) / ST_Area_Spheroid(ST_FlipCoordinates(wp.geometry))) * 100 as wp_coverage_percentage
+            ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) as intersection_area_m2,
+            ST_Area_Spheroid(wp.geometry) as water_project_area_m2,
+            ST_Area_Spheroid(b.geometry) as bnbo_area_m2,
+            (ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) / ST_Area_Spheroid(wp.geometry)) * 100 as wp_coverage_percentage
             
         FROM water_projects wp
         JOIN bnbo_status b ON ST_Intersects(wp.geometry, b.geometry)
-        WHERE ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(b.geometry, wp.geometry))) > 0  -- Keep all intersections
+        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 0  -- Keep all intersections
         """
 
         self.log.info("Executing Water Projects × BNBO spatial intersection...")
