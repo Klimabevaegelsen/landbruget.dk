@@ -1,8 +1,8 @@
 """
 DST Zone Mapping silver layer component for DAGI pipeline.
 
-This module creates a spatial lookup table that maps field geometries 
-to DST (Danmarks Statistik) zones by combining DAGI administrative 
+This module creates a spatial lookup table that maps field geometries
+to DST (Danmarks Statistik) zones by combining DAGI administrative
 data with DST regional classifications.
 
 The module contains:
@@ -176,7 +176,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                         f"INSERT INTO {layer}_raw VALUES ({placeholders})", values
                                     )
 
-                            # Create standardized table with spatial geometry 
+                            # Create standardized table with spatial geometry
                             # - use layer-specific column mapping
                             if layer == "kommuner":
                                 code_column = "kode"
@@ -371,7 +371,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                     ) as tmp_file:
                                         temp_path = tmp_file.name
 
-                                    # Create a temporary view with the selected columns 
+                                    # Create a temporary view with the selected columns
                                     # in the GCS connection
                                     conn.execute(f"""
                                         CREATE OR REPLACE VIEW temp_layer_view AS
@@ -515,9 +515,9 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     l.name as landsdel_name,
                     '' as landsdel_dagi_id,
                     l.region_code as dagi_region_code,
-                    l.name as dagi_region_name,  
+                    l.name as dagi_region_name,
                     -- Use name as region_name since we don't have separate region names
-                    '' as dagi_region_nuts2,     
+                    '' as dagi_region_nuts2,
                     -- Empty for now since regioner table might not be available
                     STRING_AGG(dm.dst_region, '|' ORDER BY dm.dst_region) as dst_regions,
                     l.geometry_wkt as geometry,
@@ -586,7 +586,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             self.log.error(f"Error creating reference table: {e}")
             raise
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """
         Run the DST zone mapping processing using DuckDB.
 
@@ -636,6 +636,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     f"Created lookup table with {lookup_count} records covering "
                     f"{len(self.config.dst_mappings)} DST regions"
                 )
+
+                # ✅ FIXED: Return success information to prevent "no data returned" error
+                return {
+                    "status": "completed",
+                    "lookup_table_records": lookup_count,
+                    "dst_regions_covered": len(self.config.dst_mappings),
+                    "processing_time_seconds": timer.elapsed(),
+                    "tables_created": ["dst_zone_lookup", "dst_zone_reference"],
+                }
 
         except Exception as e:
             self.log.error(f"Critical error in DST zone mapping processing: {e}")
