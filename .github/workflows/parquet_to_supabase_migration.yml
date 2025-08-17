@@ -71,14 +71,19 @@ jobs:
         version: ${{ env.SUPABASE_CLI_VERSION }}
         
     - name: Validate Environment Configuration
+      env:
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
       run: |
         if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
-          if [[ -z "${{ secrets.SUPABASE_STAGING_HOST }}" ]] || [[ -z "${{ secrets.SUPABASE_STAGING_PASSWORD }}" ]]; then
+          if [[ -z "$SUPABASE_STAGING_HOST" ]] || [[ -z "$SUPABASE_STAGING_PASSWORD" ]]; then
             echo "❌ Missing staging environment secrets"
             exit 1
           fi
         elif [[ "${{ github.event.inputs.environment }}" == "production" ]]; then
-          if [[ -z "${{ secrets.SUPABASE_PROD_HOST }}" ]] || [[ -z "${{ secrets.SUPABASE_PROD_PASSWORD }}" ]]; then
+          if [[ -z "$SUPABASE_PROD_HOST" ]] || [[ -z "$SUPABASE_PROD_PASSWORD" ]]; then
             echo "❌ Missing production environment secrets"
             exit 1
           fi
@@ -87,18 +92,30 @@ jobs:
         
     - name: Test Database Connection
       env:
-        SUPABASE_HOST: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_HOST || secrets.SUPABASE_PROD_HOST }}
-        SUPABASE_PASSWORD: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_PASSWORD || secrets.SUPABASE_PROD_PASSWORD }}
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
       run: |
+        # Determine which environment to use
+        if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          export SUPABASE_HOST="$SUPABASE_STAGING_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+        else
+          export SUPABASE_HOST="$SUPABASE_PROD_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+        fi
+        
         python -c "
         import psycopg2
+        import os
         try:
             conn = psycopg2.connect(
-                host='$SUPABASE_HOST',
+                host=os.environ['SUPABASE_HOST'],
                 port=5432,
                 database='postgres',
                 user='postgres',
-                password='$SUPABASE_PASSWORD'
+                password=os.environ['SUPABASE_PASSWORD']
             )
             cursor = conn.cursor()
             cursor.execute('SELECT version()')
@@ -135,9 +152,20 @@ jobs:
         
     - name: Apply Schema Migrations
       env:
-        SUPABASE_PASSWORD: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_PASSWORD || secrets.SUPABASE_PROD_PASSWORD }}
-        SUPABASE_PROJECT_REF: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_PROJECT_REF || secrets.SUPABASE_PROD_PROJECT_REF }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_STAGING_PROJECT_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_REF }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
+        SUPABASE_PROD_PROJECT_REF: ${{ secrets.SUPABASE_PROD_PROJECT_REF }}
       run: |
+        # Determine which environment to use
+        if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+          SUPABASE_PROJECT_REF="$SUPABASE_STAGING_PROJECT_REF"
+        else
+          SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+          SUPABASE_PROJECT_REF="$SUPABASE_PROD_PROJECT_REF"
+        fi
+        
         if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
           echo "🔍 DRY RUN: Would apply schema migrations"
           supabase db diff --linked --schema public
@@ -190,14 +218,25 @@ jobs:
       
     - name: Run Data Migration Phase
       env:
-        SUPABASE_HOST: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_HOST || secrets.SUPABASE_PROD_HOST }}
-        SUPABASE_PASSWORD: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_PASSWORD || secrets.SUPABASE_PROD_PASSWORD }}
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
         MIGRATION_ID: ${{ needs.pre_migration_checks.outputs.migration_id }}
       run: |
         # Check if this phase was requested
         if [[ "${{ github.event.inputs.phases }}" != *"${{ matrix.phase }}"* ]] && [[ "${{ github.event.inputs.phases }}" != "all" ]]; then
           echo "⏭️ Phase ${{ matrix.phase }} not requested, skipping"
           exit 0
+        fi
+        
+        # Determine which environment to use
+        if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          export SUPABASE_HOST="$SUPABASE_STAGING_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+        else
+          export SUPABASE_HOST="$SUPABASE_PROD_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
         fi
         
         # Prepare arguments
@@ -252,9 +291,20 @@ jobs:
         
     - name: Generate Computed Data
       env:
-        SUPABASE_HOST: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_HOST || secrets.SUPABASE_PROD_HOST }}
-        SUPABASE_PASSWORD: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_PASSWORD || secrets.SUPABASE_PROD_PASSWORD }}
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
       run: |
+        # Determine which environment to use
+        if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          export SUPABASE_HOST="$SUPABASE_STAGING_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+        else
+          export SUPABASE_HOST="$SUPABASE_PROD_HOST"
+          export SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+        fi
+        
         ARGS=(
           --environment ${{ github.event.inputs.environment }}
           --phase computed
@@ -289,10 +339,21 @@ jobs:
         
     - name: Run Migration Validation
       env:
-        SUPABASE_HOST: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_HOST || secrets.SUPABASE_PROD_HOST }}
-        SUPABASE_PASSWORD: ${{ github.event.inputs.environment == 'staging' && secrets.SUPABASE_STAGING_PASSWORD || secrets.SUPABASE_PROD_PASSWORD }}
+        SUPABASE_STAGING_HOST: ${{ secrets.SUPABASE_STAGING_HOST }}
+        SUPABASE_STAGING_PASSWORD: ${{ secrets.SUPABASE_STAGING_PASSWORD }}
+        SUPABASE_PROD_HOST: ${{ secrets.SUPABASE_PROD_HOST }}
+        SUPABASE_PROD_PASSWORD: ${{ secrets.SUPABASE_PROD_PASSWORD }}
         MIGRATION_ID: ${{ needs.pre_migration_checks.outputs.migration_id }}
       run: |
+        # Determine which environment to use
+        if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+          SUPABASE_HOST="$SUPABASE_STAGING_HOST"
+          SUPABASE_PASSWORD="$SUPABASE_STAGING_PASSWORD"
+        else
+          SUPABASE_HOST="$SUPABASE_PROD_HOST"
+          SUPABASE_PASSWORD="$SUPABASE_PROD_PASSWORD"
+        fi
+        
         echo "🔍 Running comprehensive migration validation"
         
         mkdir -p validation_reports
@@ -419,7 +480,7 @@ jobs:
         
     - name: Comment on PR (if applicable)
       uses: actions/github-script@v6
-      if: github.event.pull_request
+      if: github.event_name == 'pull_request'
       with:
         script: |
           const fs = require('fs');
