@@ -989,11 +989,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         # Check if corrected_dosage_unit column exists (from unit sanitization)
         has_corrected_units = self._check_corrected_dosage_unit_exists()
-<<<<<<< HEAD
-        
-=======
 
->>>>>>> a4ddf35 (Fix missing corrected_dosage_unit column error in pesticide compliance)
         # Determine the dosage unit expression based on whether unit sanitization was applied
         if has_corrected_units:
             dosage_unit_expr = "COALESCE(a.corrected_dosage_unit, a.dosage_unit)"
@@ -1045,7 +1041,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             CASE
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
 <<<<<<< HEAD
-                WHEN {dosage_unit_expr} != d.product_unit 
+                WHEN {dosage_unit_expr} != d.product_unit
 =======
                 WHEN {dosage_unit_expr} != d.product_unit
 >>>>>>> a4ddf35 (Fix missing corrected_dosage_unit column error in pesticide compliance)
