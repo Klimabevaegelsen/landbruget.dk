@@ -162,7 +162,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 geom,
                 field_uuid,
                 primary_field_id,
-                ST_Area_Spheroid(geom) as field_area_m2
+                ST_Area_Spheroid(ST_FlipCoordinates(geom)) as field_area_m2
             FROM fields_raw
             WHERE geom IS NOT NULL AND ST_IsValid(geom)
         """)
@@ -307,7 +307,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     SUM(CASE
                         WHEN b.status_category IS NOT NULL
-                        THEN ST_Area_Spheroid(ST_Intersection(f.geom, b.geom))
+                        THEN ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geom, b.geom)))
                         ELSE 0
                     END), 0
                 ) as total_bnbo_area_m2,
@@ -315,7 +315,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     SUM(CASE
                         WHEN b.status_category IS NOT NULL AND wp.project_id IS NOT NULL
-                        THEN ST_Area_Spheroid(ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom))
+                        THEN ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom)))
                         ELSE 0
                     END), 0
                 ) as bnbo_covered_by_water_projects_m2,
@@ -324,7 +324,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     SUM(CASE
                         WHEN w.wetland_id IS NOT NULL
-                        THEN ST_Area_Spheroid(ST_Intersection(f.geom, w.geom))
+                        THEN ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geom, w.geom)))
                         ELSE 0
                     END), 0
                 ) as total_wetland_area_m2,
@@ -332,7 +332,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     SUM(CASE
                         WHEN w.wetland_id IS NOT NULL AND wp.project_id IS NOT NULL
-                        THEN ST_Area_Spheroid(ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom))
+                        THEN ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom)))
                         ELSE 0
                     END), 0
                 ) as wetland_covered_by_water_projects_m2
@@ -460,12 +460,12 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                         f.block_id,
                         f.cvr_number,
                         p.bfe_number,
-                        ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) / f.field_area_m2 * 100 as area_share,
+                        ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geom, p.geom))) / f.field_area_m2 * 100 as area_share,
                         f.field_uuid,
                         f.primary_field_id
                     FROM fields_with_wetlands f
                     JOIN properties_chunk p ON ST_Intersects(f.geom, p.geom)
-                WHERE ST_Area_Spheroid(ST_Intersection(f.geom, p.geom)) / f.field_area_m2 > 0.01
+                WHERE ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geom, p.geom))) / f.field_area_m2 > 0.01
             """)
 
             processed += chunk_size_actual
