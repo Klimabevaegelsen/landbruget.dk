@@ -49,9 +49,9 @@ class CVREnrichmentSharedConfig(BaseModel):
     )
 
     api_batch_size: int = Field(
-        default=100,
+        default=50,
         description="Number of CVR numbers or P-numbers to fetch per API call using "
-        "'terms' query (optimized for maximum efficiency)",
+        "'terms' query (reduced for GitHub Actions memory constraints)",
     )
 
     # Address geocoding configuration
