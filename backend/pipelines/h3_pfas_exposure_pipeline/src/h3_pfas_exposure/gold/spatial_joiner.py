@@ -405,7 +405,7 @@ class SpatialJoiner:
                         ST_Union_Agg(r.geometry),
                         r.h3_geometry
                     )
-                )) / 10000.0 as actual_intersection_area_ha,
+                ) / 10000.0 as actual_intersection_area_ha,
                 -- Calculate H3 cell area for validation
                 ST_Area_Spheroid(r.h3_geometry) / 10000.0 as h3_area_ha
             FROM {raw_intersections_table} r
