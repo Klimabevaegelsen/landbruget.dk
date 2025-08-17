@@ -14,6 +14,7 @@ from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.dawa_api_client import DAWAAPIClient
+from unified_pipeline.util.primary_address_selector import select_primary_address_for_company_table
 from unified_pipeline.util.timing import timed
 
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
@@ -742,8 +743,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
-                    CASE 
-                        WHEN json_extract(json_data, '$.p_number') IS NOT NULL 
+                    CASE
+                        WHEN json_extract(json_data, '$.p_number') IS NOT NULL
                         THEN pnumber_uuid(json_extract(json_data, '$.p_number')::INTEGER)
                         ELSE NULL
                     END as pnumber_uuid,
@@ -848,24 +849,36 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             if len(columns_loaded) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_loaded) - 10} more columns")
 
-            # Create geocoding lookup from address table
-            # Get primary addresses for companies (first geocoded address per company)
+            # Create geocoding lookup from address table using proper primary address selection
+            # Use the sophisticated primary address selection algorithm
+            self.log.info("Applying primary address selection algorithm")
+            select_primary_address_for_company_table(self.conn, "cvr_addresses")
+
+            # Create table with selected primary addresses
             self.conn.execute("""
                 CREATE OR REPLACE TABLE company_geocoding AS
-                SELECT 
+                SELECT
                     cvr_number,
                     latitude,
                     longitude,
                     coordinate_quality,
                     dawa_enriched,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY cvr_number ORDER BY geocoding_timestamp DESC
-                    ) as rn
+                    -- Include structured address fields
+                    full_address as current_full_address,
+                    street_name as current_street_name,
+                    house_number as current_house_number,
+                    floor as current_floor,
+                    door as current_door,
+                    postal_code as current_postal_code,
+                    city as current_city,
+                    municipality_code as current_municipality_code,
+                    municipality_name as current_municipality_name,
+                    address_type as current_address_type,
+                    coordinate_source
                 FROM cvr_addresses
-                WHERE cvr_number IS NOT NULL
-                  AND p_number IS NULL
-                  AND latitude IS NOT NULL
-                  AND longitude IS NOT NULL
+                WHERE (cvr_number, address_id) IN (
+                    SELECT cvr_number, address_id FROM primary_address_selection
+                )
             """)
 
             # 🔧 FIX: Preserve all existing columns and only update geocoding fields
@@ -876,7 +889,23 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
             # Build SELECT clause that preserves all existing columns
             select_clauses = []
-            geocoding_fields = {"latitude", "longitude", "coordinate_quality", "dawa_enriched"}
+            geocoding_fields = {
+                "latitude",
+                "longitude",
+                "coordinate_quality",
+                "dawa_enriched",
+                "coordinate_source",
+                "current_full_address",
+                "current_street_name",
+                "current_house_number",
+                "current_floor",
+                "current_door",
+                "current_postal_code",
+                "current_city",
+                "current_municipality_code",
+                "current_municipality_name",
+                "current_address_type",
+            }
 
             for col in existing_columns:
                 if col in geocoding_fields:
@@ -886,22 +915,27 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     # Keep existing column as-is
                     select_clauses.append(f"c.{col}")
 
+            # Add any new geocoding fields that don't exist in existing table
+            for field in geocoding_fields:
+                if field not in existing_columns:
+                    select_clauses.append(f"g.{field}")
+
+            # Remove the rn field filtering since we've already applied primary address selection
             select_clause = ",\n                    ".join(select_clauses)
 
+            new_fields_count = len([f for f in geocoding_fields if f not in existing_columns])
             self.log.info(
-                f"🔍 DEBUG: Creating table with {len(existing_columns)} columns "
-                f"(preserving all existing schema)"
+                f"🔍 DEBUG: Creating table with {len(existing_columns)} existing columns "
+                f"plus {new_fields_count} new address fields"
             )
 
             # Update companies with geocoding data while preserving all existing columns
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {company_table} AS
-                SELECT 
+                SELECT
                     {select_clause}
                 FROM existing_companies c
-                LEFT JOIN (
-                    SELECT * FROM company_geocoding WHERE rn = 1
-                ) g ON c.cvr_number = g.cvr_number
+                LEFT JOIN company_geocoding g ON c.cvr_number = g.cvr_number
             """)
 
             # 🐛 DEBUG: Check what columns we're saving
@@ -976,7 +1010,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Get primary addresses for pnumbers (first geocoded address per pnumber)
             self.conn.execute("""
                 CREATE OR REPLACE TABLE pnumber_geocoding AS
-                SELECT 
+                SELECT
                     p_number,
                     latitude,
                     longitude,
@@ -1019,7 +1053,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Update pnumbers with geocoding data while preserving all existing columns
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {pnumber_table} AS
-                SELECT 
+                SELECT
                     {select_clause}
                 FROM existing_pnumbers p
                 LEFT JOIN (

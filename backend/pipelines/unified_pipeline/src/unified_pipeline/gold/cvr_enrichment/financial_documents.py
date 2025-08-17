@@ -712,7 +712,6 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             total_companies = len(financial_data)
             num_batches = (total_companies + batch_size - 1) // batch_size
 
-
             # Create empty table with correct schema first (no JSON bloat)
             self.conn.execute(f"""
                 CREATE TABLE {table_name} (
@@ -733,7 +732,6 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 start_idx = batch_idx * batch_size
                 end_idx = min(start_idx + batch_size, total_companies)
                 batch_data = financial_data[start_idx:end_idx]
-
 
                 try:
                     # Convert batch to JSON strings for DuckDB
@@ -840,24 +838,24 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         """
         Process employment data directly to parquet files.
         Moved from data_consolidation.py to eliminate memory bottleneck.
-        
+
         This processes 1.25M employment records in batches and saves them directly
         to separate parquet files, avoiding the memory accumulation that caused
         the 7.4GB memory usage in data_consolidation.
         """
         self.log.info(f"🔄 Processing employment data for {len(companies_data)} companies")
-        
+
         if not companies_data:
             self.log.info("No companies to process for employment data")
             return
-            
+
         # Set up crypto extension for UUID generation
         try:
             self.conn.execute("INSTALL crypto FROM community")
             self.conn.execute("LOAD crypto")
         except Exception as e:
             self.log.warning(f"Crypto extension already loaded: {e}")
-        
+
         # Create company UUID function
         self.conn.execute("""
             CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
@@ -880,42 +878,39 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 END
             )
         """)
-        
+
         employment_types = [
             ("annual_employment", "annual"),
-            ("quarterly_employment", "quarterly"), 
+            ("quarterly_employment", "quarterly"),
             ("monthly_employment", "monthly"),
             ("replacement_monthly_employment", "replacement_monthly"),
         ]
-        
+
         for employment_field, table_suffix in employment_types:
             self.log.info(f"📊 Processing {employment_field} data...")
             # Process in small batches to avoid memory issues
-            self._process_employment_type_batched(
-                companies_data, employment_field, table_suffix
-            )
-            
+            self._process_employment_type_batched(companies_data, employment_field, table_suffix)
+
     def _process_employment_type_batched(
         self, companies_data: List[Dict], employment_field: str, table_suffix: str
     ):
         """Process one employment type in batches and save directly."""
         batch_size = 500  # Small batches to avoid memory accumulation
         table_name = f"cvr_employment_{table_suffix}"
-        
+
         # Drop existing table
         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-        
+
         total_companies = len(companies_data)
         num_batches = (total_companies + batch_size - 1) // batch_size
         total_records = 0
-        
+
         # Process companies in batches
         for batch_idx in range(num_batches):
             start_idx = batch_idx * batch_size
             end_idx = min(start_idx + batch_size, total_companies)
             batch_companies = companies_data[start_idx:end_idx]
-            
-            
+
             try:
                 employment_records = self._extract_employment_records(
                     batch_companies, employment_field
@@ -928,14 +923,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     self.log.info(
                         f"✅ Batch {batch_idx + 1}: {batch_record_count} {employment_field} records"
                     )
-                
+
                 # Clear batch data from memory
                 employment_records = None
                 batch_companies = None
-                
+
                 # Memory cleanup after each batch
                 self._cleanup_memory_after_batch()
-                
+
             except Exception as e:
                 self.log.error(f"Error processing employment batch {batch_idx + 1}: {e}")
                 if "Out of Memory" in str(e) or "memory" in str(e).lower():
@@ -944,60 +939,61 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     )
                     break
                 continue
-        
+
         # Save employment table to GCS
         if total_records > 0:
             self._save_employment_table_to_gcs(table_name, table_suffix, total_records)
         else:
             self.log.info(f"No {employment_field} records found")
-            
+
     def _extract_employment_records(
         self, companies: List[Dict], employment_field: str
     ) -> List[Dict]:
         """Extract employment records from company data for a specific employment type."""
         employment_records = []
-        
+
         for company in companies:
             cvr_number = company.get("cvr_number")
             if not cvr_number:
                 continue
-                
+
             # Extract employment data from company JSON
             employment_data = company.get("employment_data", {})
             employment_list = employment_data.get(employment_field, [])
-            
+
             if not employment_list:
                 continue
-                
+
             # Process each employment record
             for emp_record in employment_list:
                 if not emp_record:
                     continue
-                    
+
                 # Create employment record with UUID
                 employment_record = {
                     "employment_uuid": str(uuid.uuid4()),
                     "cvr_number": cvr_number,
                     "company_uuid": None,  # Will be calculated in SQL
-                    **emp_record  # Include all employment fields
+                    **emp_record,  # Include all employment fields
                 }
                 employment_records.append(employment_record)
-        
+
         return employment_records
-    
+
     def _save_employment_batch(
         self, employment_records: List[Dict], table_name: str, is_first_batch: bool
     ) -> int:
         """Save employment records batch to DuckDB table."""
         if not employment_records:
             return 0
-            
+
         # Convert to JSON strings for DuckDB
         json_strings = [json.dumps(record) for record in employment_records]
-        
+
         if is_first_batch:
             # Create table on first batch
-            self.conn.execute(f"""
+            self.conn.execute(
+                f"""
                 CREATE TABLE {table_name} AS
                 SELECT
                     json_extract(json_data, '$.employment_uuid')::VARCHAR as employment_uuid,
@@ -1014,10 +1010,13 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     json_extract(json_data, '$.employment_type')::VARCHAR as employment_type,
                     '{self.date_pattern}' as processing_timestamp
                 FROM unnest($1) as t(json_data)
-            """, [json_strings])
+            """,
+                [json_strings],
+            )
         else:
             # Insert into existing table
-            self.conn.execute(f"""
+            self.conn.execute(
+                f"""
                 INSERT INTO {table_name}
                 SELECT
                     json_extract(json_data, '$.employment_uuid')::VARCHAR as employment_uuid,
@@ -1034,16 +1033,18 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     json_extract(json_data, '$.employment_type')::VARCHAR as employment_type,
                     '{self.date_pattern}' as processing_timestamp
                 FROM unnest($1) as t(json_data)
-            """, [json_strings])
-        
+            """,
+                [json_strings],
+            )
+
         return len(employment_records)
-    
+
     def _save_employment_table_to_gcs(
         self, table_name: str, table_suffix: str, total_records: int
     ) -> None:
         """Save employment table to GCS."""
         self.log.info(f"💾 Saving {total_records} {table_suffix} employment records to GCS")
-        
+
         # Save to GCS
         self._save_data(
             data=table_name,
@@ -1052,9 +1053,10 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             stage="gold",
             filename="data.parquet",
         )
-        
+
         # Also save locally for GitHub Actions artifact sharing
         import os
+
         if os.getenv("GITHUB_ACTIONS") == "true":
             local_path = f"/tmp/cvr_employment_{table_suffix}_data.parquet"
             self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
