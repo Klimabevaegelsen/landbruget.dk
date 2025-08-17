@@ -227,7 +227,7 @@ class SpatialJoiner:
             ST_Area_Spheroid(ST_Intersection(
                 geometry,
                 h3_geometry
-            ))) / 10000.0 as intersection_area_ha,
+            )) / 10000.0 as intersection_area_ha,
             -- Calculate coverage ratio
             CASE
                 WHEN ST_Area_Spheroid(h3_geometry) > 0 THEN
@@ -241,7 +241,7 @@ class SpatialJoiner:
         WHERE ST_Area_Spheroid(ST_Intersection(
             geometry,
             h3_geometry
-        ))) > 0
+        )) > 0
         """
 
         self.conn.execute(query)
