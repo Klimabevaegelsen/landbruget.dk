@@ -47,6 +47,54 @@ class PropertiesPreFilter(PreFilteringStageBase):
 
         # Log dataset sizes and validate data integrity
         properties_count = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]
+        
+        # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs to verify actual order
+        try:
+            sample_wkt = self.conn.execute("""
+                SELECT 
+                    ST_AsText(ST_Centroid(geometry)) as wkt_centroid
+                FROM properties_full 
+                WHERE geometry IS NOT NULL 
+                LIMIT 5
+            """).fetchall()
+            
+            if sample_wkt:
+                self.log.info("🧭 PROPERTIES COORDINATE ORDER CHECK - Raw WKT centroids:")
+                coord_pairs = []
+                for i, (wkt,) in enumerate(sample_wkt[:3]):
+                    # Extract coordinates from "POINT(x y)" format
+                    if wkt and 'POINT(' in wkt:
+                        coords_str = wkt.replace('POINT(', '').replace(')', '')
+                        try:
+                            first_val, second_val = map(float, coords_str.split())
+                            coord_pairs.append((first_val, second_val))
+                            self.log.info(f"   Property {i+1}: POINT({first_val:.6f} {second_val:.6f})")
+                        except Exception:
+                            continue
+                
+                if coord_pairs:
+                    # Analyze the pattern - first value in coordinate pair
+                    first_vals = [pair[0] for pair in coord_pairs]
+                    second_vals = [pair[1] for pair in coord_pairs]
+                    first_range = (min(first_vals), max(first_vals))
+                    second_range = (min(second_vals), max(second_vals))
+                    
+                    if (8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 
+                        54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58):
+                        self.log.info(f"✅ PROPERTIES CONFIRMED: Data stored as (LON, LAT) - "
+                                    f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                    f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                    elif (54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 
+                          8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15):
+                        self.log.warning(f"⚠️ PROPERTIES ALERT: Data stored as (LAT, LON) - "
+                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                    else:
+                        self.log.warning(f"❓ PROPERTIES UNCLEAR: Coordinate order unclear - "
+                                       f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                       f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+        except Exception as e:
+            self.log.warning(f"⚠️ Could not verify properties coordinate order: {e}")
         self.log.info(f"📊 Input: {properties_count:,} properties to filter")
         
         # Validate dataset integrity to prevent segfaults

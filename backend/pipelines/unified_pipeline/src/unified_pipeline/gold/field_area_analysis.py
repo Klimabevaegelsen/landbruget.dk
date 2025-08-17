@@ -169,6 +169,46 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
 
         field_count = self.conn.execute("SELECT COUNT(*) FROM agricultural_fields").fetchone()[0]
         self.log.info(f"✅ Loaded {field_count:,} valid agricultural fields for {latest_year}")
+        
+        # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs to verify actual order
+        try:
+            sample_wkt = self.conn.execute("""
+                SELECT 
+                    ST_AsText(ST_Centroid(geom)) as wkt_centroid
+                FROM agricultural_fields 
+                WHERE geom IS NOT NULL 
+                LIMIT 5
+            """).fetchall()
+            
+            if sample_wkt:
+                self.log.info("🧭 FIELDS COORDINATE ORDER CHECK - Raw WKT centroids:")
+                coord_pairs = []
+                for i, (wkt,) in enumerate(sample_wkt[:3]):
+                    # Extract coordinates from "POINT(x y)" format
+                    if wkt and 'POINT(' in wkt:
+                        coords_str = wkt.replace('POINT(', '').replace(')', '')
+                        try:
+                            first_val, second_val = map(float, coords_str.split())
+                            coord_pairs.append((first_val, second_val))
+                            self.log.info(f"   Field {i+1}: POINT({first_val:.6f} {second_val:.6f})")
+                        except:
+                            continue
+                
+                if coord_pairs:
+                    # Analyze the pattern - first value in coordinate pair
+                    first_vals = [pair[0] for pair in coord_pairs]
+                    second_vals = [pair[1] for pair in coord_pairs]
+                    first_range = (min(first_vals), max(first_vals))
+                    second_range = (min(second_vals), max(second_vals))
+                    
+                    if 8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58:
+                        self.log.info(f"✅ FIELDS CONFIRMED: Data stored as (LON, LAT) - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
+                    elif 54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15:
+                        self.log.warning(f"⚠️ FIELDS ALERT: Data stored as (LAT, LON) - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
+                    else:
+                        self.log.warning(f"❓ FIELDS UNCLEAR: Coordinate order unclear - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
+        except Exception as e:
+            self.log.warning(f"⚠️ Could not verify fields coordinate order: {e}")
 
     def _load_reference_datasets(self):
         """Load all reference datasets."""

@@ -151,15 +151,11 @@ def validate_and_transform_geometries_duckdb(
 
             if is_wgs84_lon_lat:
                 logger.info(
-                    f"{dataset_name}: Data in WGS84 lon/lat order - flipping to lat/lon for ST_Area_Spheroid accuracy"
+                    f"{dataset_name}: Data in WGS84 lon/lat order - KEEPING as-is (spheroid functions now use ST_FlipCoordinates wrapper)"
                 )
-                # CRITICAL FIX: ST_Area_Spheroid expects lat/lon order, not lon/lat order
-                # Even if data appears correct, we need to flip for accurate area calculations
-                conn.execute(f"""
-                    UPDATE {table_name} SET
-                        {geometry_column} = ST_FlipCoordinates({geometry_column})
-                    WHERE {geometry_column} IS NOT NULL
-                """)
+                # COORDINATE APPROACH CHANGED: Keep data in LON/LAT format throughout pipeline
+                # ST_Area_Spheroid calls now wrapped with ST_FlipCoordinates for correct calculation
+                # No longer transforming the underlying data to avoid double-flipping issues
             elif is_wgs84_lat_lon:
                 logger.info(
                     f"{dataset_name}: Data in WGS84 but lat/lon order - will flip after processing"
@@ -213,12 +209,10 @@ def validate_and_transform_geometries_duckdb(
                 )
 
                 if is_wgs84_lat_lon_after:
-                    logger.info(f"{dataset_name}: Detected LAT/LON order - flipping to LON/LAT order for ST_Area_Spheroid accuracy")
-                    conn.execute(f"""
-                        UPDATE {table_name} SET
-                            {geometry_column} = ST_FlipCoordinates({geometry_column})
-                        WHERE {geometry_column} IS NOT NULL
-                    """)
+                    logger.info(f"{dataset_name}: Detected LAT/LON order - KEEPING as-is (spheroid functions now use ST_FlipCoordinates wrapper)")
+                    # COORDINATE APPROACH CHANGED: Keep data in LAT/LON format if that's what it is
+                    # ST_Area_Spheroid calls now wrapped with ST_FlipCoordinates for correct calculation
+                    # No longer transforming the underlying data to avoid double-flipping issues
 
                 # Verify the flip worked
                 final_bounds = conn.execute(f"""
@@ -239,6 +233,54 @@ def validate_and_transform_geometries_duckdb(
                     )
             else:
                 logger.info(f"{dataset_name}: Coordinates are in correct order")
+            
+            # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs to verify actual storage order
+            try:
+                sample_wkt = conn.execute(f"""
+                    SELECT 
+                        ST_AsText(ST_Centroid({geometry_column})) as wkt_centroid
+                    FROM {table_name} 
+                    WHERE {geometry_column} IS NOT NULL 
+                    LIMIT 5
+                """).fetchall()
+                
+                if sample_wkt:
+                    logger.info(f"🧭 {dataset_name}: COORDINATE ORDER VERIFICATION - Raw WKT centroids:")
+                    coord_pairs = []
+                    for i, (wkt,) in enumerate(sample_wkt[:3]):
+                        # Extract coordinates from "POINT(x y)" format
+                        if wkt and 'POINT(' in wkt:
+                            coords_str = wkt.replace('POINT(', '').replace(')', '')
+                            try:
+                                first_val, second_val = map(float, coords_str.split())
+                                coord_pairs.append((first_val, second_val))
+                                logger.info(f"   Sample {i+1}: POINT({first_val:.6f} {second_val:.6f})")
+                            except Exception:
+                                continue
+                    
+                    if coord_pairs:
+                        # Analyze the pattern - first value in coordinate pair
+                        first_vals = [pair[0] for pair in coord_pairs]
+                        second_vals = [pair[1] for pair in coord_pairs]
+                        first_range = (min(first_vals), max(first_vals))
+                        second_range = (min(second_vals), max(second_vals))
+                        
+                        if (8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 
+                            54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58):
+                            logger.info(f"✅ {dataset_name}: CONFIRMED - Data stored as (LON, LAT) - "
+                                      f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                      f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                        elif (54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 
+                              8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15):
+                            logger.warning(f"⚠️ {dataset_name}: ALERT - Data stored as (LAT, LON) - "
+                                         f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                         f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+                        else:
+                            logger.warning(f"❓ {dataset_name}: UNCLEAR - Coordinate order unclear - "
+                                         f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                         f"{second_range[0]:.2f}-{second_range[1]:.2f})")
+            except Exception as e:
+                logger.warning(f"⚠️ {dataset_name}: Could not verify coordinate order: {e}")
 
         # Final validation in WGS84
         invalid_wgs84 = conn.execute(f"""
