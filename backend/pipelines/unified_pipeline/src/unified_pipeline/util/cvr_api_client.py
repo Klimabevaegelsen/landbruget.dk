@@ -800,7 +800,8 @@ class CVRAPIClient:
             company_data = company_data.copy()
             company_data["addresses"] = enriched_addresses
 
-            # Add primary address using intelligent selection (both geometry and full address details)
+            # Add primary address using intelligent selection 
+            # (both geometry and full address details)
             from .primary_address_selector import select_primary_address_for_company_table
             
             primary_address = select_primary_address_for_company_table(enriched_addresses)
@@ -1939,7 +1940,8 @@ class CVRAPIClient:
             pnumber_data = pnumber_data.copy()
             pnumber_data["addresses"] = enriched_addresses
 
-            # Add primary address using intelligent selection (both geometry and full address details)
+            # Add primary address using intelligent selection 
+            # (both geometry and full address details)
             from .primary_address_selector import select_primary_address_for_company_table
             
             primary_address = select_primary_address_for_company_table(enriched_addresses)

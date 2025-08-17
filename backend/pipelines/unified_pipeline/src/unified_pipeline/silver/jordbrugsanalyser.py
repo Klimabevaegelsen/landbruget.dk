@@ -339,7 +339,8 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                     parsed_features.append(feature_data)
 
             self.log.info(
-                f"Parsed {len(parsed_features)} features from {len(features)} XML elements for year {year}"
+                f"Parsed {len(parsed_features)} features from {len(features)} "
+                f"XML elements for year {year}"
             )
             return parsed_features
 
@@ -561,15 +562,18 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                         # Log some statistics using DuckDB
                         total_area = (
                             self.conn.execute(
-                                f"SELECT SUM(area_ha) FROM {processed_table} WHERE area_ha IS NOT NULL"
+                                f"SELECT SUM(area_ha) FROM {processed_table} "
+                                f"WHERE area_ha IS NOT NULL"
                             ).fetchone()[0]
                             or 0
                         )
                         unique_crops = self.conn.execute(
-                            f"SELECT COUNT(DISTINCT crop_code) FROM {processed_table} WHERE crop_code IS NOT NULL"
+                            f"SELECT COUNT(DISTINCT crop_code) FROM {processed_table} "
+                            f"WHERE crop_code IS NOT NULL"
                         ).fetchone()[0]
                         unique_blocks = self.conn.execute(
-                            f"SELECT COUNT(DISTINCT field_block) FROM {processed_table} WHERE field_block IS NOT NULL"
+                            f"SELECT COUNT(DISTINCT field_block) FROM {processed_table} "
+                            f"WHERE field_block IS NOT NULL"
                         ).fetchone()[0]
 
                         self.log.info(f"Year {year} statistics:")

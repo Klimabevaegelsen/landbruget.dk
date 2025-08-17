@@ -19,7 +19,8 @@ class FieldAreaAnalysisConfig(BaseModel):
     properties_dataset: str = "property_cadastral_merged"
     soil_types_dataset: str = "soil_types"
     bnbo_status_dataset: str = "bnbo_status_dissolved"
-    wetlands_dataset: str = "wetlands_dissolved"  # Use dissolved wetlands - now preserves toerv_pct AND eliminates overlaps
+    wetlands_dataset: str = "wetlands_dissolved"  # Use dissolved wetlands - now preserves
+    # toerv_pct AND eliminates overlaps
     water_projects_dataset: str = "water_projects_dissolved"
 
     # Stage 0 pre-filtered dataset names (dramatically reduced sizes)
@@ -67,27 +68,41 @@ class FieldAreaAnalysisConfig(BaseModel):
         "bnbo_water_coverage": "field_analysis_bnbo_water_coverage",
         "water_projects_bnbo_intersections": "field_analysis_water_projects_bnbo_intersections",
         "wetland_water_coverage": "field_analysis_wetland_water_coverage",
-        "water_projects_wetlands_intersections": "field_analysis_water_projects_wetlands_intersections",
+        "water_projects_wetlands_intersections":
+            "field_analysis_water_projects_wetlands_intersections",
         "field_property_intersections": "field_analysis_property_intersections",
         "field_soil_intersections": "field_analysis_soil_intersections",
         # Stage 2 outputs (field-level intersection geometries only - aggregations moved to Stage 4)
-        "field_bnbo_intersections": "field_analysis_field_bnbo_intersections",  # For Stage 3 optimization
-        "field_bnbo_water_intersections": "field_analysis_field_bnbo_water_intersections",  # For Stage 3 optimization
-        "field_wetland_intersections": "field_analysis_field_wetland_intersections",  # For Stage 3 optimization
-        "field_wetland_water_intersections": "field_analysis_field_wetland_water_intersections",  # For Stage 3 optimization
+        "field_bnbo_intersections": "field_analysis_field_bnbo_intersections",
+        # For Stage 3 optimization
+        "field_bnbo_water_intersections":
+            "field_analysis_field_bnbo_water_intersections",  # For Stage 3 optimization
+        "field_wetland_intersections":
+            "field_analysis_field_wetland_intersections",  # For Stage 3 optimization
+        "field_wetland_water_intersections":
+            "field_analysis_field_wetland_water_intersections",  # For Stage 3 optimization
         # Stage 3 outputs (property-level analysis)
         "final_bnbo": "field_analysis_bnbo",
         "final_wetland": "field_analysis_wetland",
-        "property_bnbo_intersections": "field_analysis_property_bnbo_intersections",  # For two-table architecture
-        "property_bnbo_water_intersections": "field_analysis_property_bnbo_water_intersections",  # For two-table architecture
-        "property_wetland_intersections": "field_analysis_property_wetland_intersections",  # For two-table architecture
-        "property_wetland_water_intersections": "field_analysis_property_wetland_water_intersections",  # For two-table architecture
+        "property_bnbo_intersections":
+            "field_analysis_property_bnbo_intersections",  # For two-table architecture
+        "property_bnbo_water_intersections":
+            "field_analysis_property_bnbo_water_intersections",  # For two-table architecture
+        "property_wetland_intersections":
+            "field_analysis_property_wetland_intersections",  # For two-table architecture
+        "property_wetland_water_intersections":
+            "field_analysis_property_wetland_water_intersections",
+        # For two-table architecture
         # Stage 4 outputs (consolidation) - Two-Table Architecture
         "consolidated": "field_analysis",  # Legacy single table (deprecated)
         "field_environmental_analysis": "field_environmental",  # Table 1: Field-level (legacy)
-        "field_environmental_analysis_fields": "field_environmental_analysis_fields",  # Table 1: Field-level (redesigned)
-        "property_environmental_analysis": "property_environmental",  # Table 2: Property-level (legacy)
-        "field_environmental_analysis_properties": "field_environmental_analysis_properties",  # Table 2: Property-level (redesigned)
+        "field_environmental_analysis_fields":
+            "field_environmental_analysis_fields",  # Table 1: Field-level (redesigned)
+        "property_environmental_analysis":
+            "property_environmental",  # Table 2: Property-level (legacy)
+        "field_environmental_analysis_properties":
+            "field_environmental_analysis_properties",
+        # Table 2: Property-level (redesigned)
     }
 
     # Parquet export settings for optimal performance

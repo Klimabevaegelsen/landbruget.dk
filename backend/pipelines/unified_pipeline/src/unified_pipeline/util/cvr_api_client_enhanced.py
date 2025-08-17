@@ -5,11 +5,10 @@ This module provides a patched version of the CVR API client that replaces
 the arbitrary "first address" selection with intelligent address prioritization.
 """
 
-import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from .cvr_api_client import CVRAPIClient as BaseCVRAPIClient
 from .address_selection_integration import get_primary_address_geometry_enhanced
+from .cvr_api_client import CVRAPIClient as BaseCVRAPIClient
 
 
 class EnhancedCVRAPIClient(BaseCVRAPIClient):
@@ -44,7 +43,7 @@ class EnhancedCVRAPIClient(BaseCVRAPIClient):
         
         self.address_selection_strategy = address_selection_strategy
         
-        self.log.info(f"Enhanced CVR API client initialized")
+        self.log.info("Enhanced CVR API client initialized")
         self.log.info(f"Address selection strategy: {address_selection_strategy}")
     
     def enrich_company_with_geometry(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,14 +101,18 @@ class EnhancedCVRAPIClient(BaseCVRAPIClient):
                                 "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp"),
                             })
                     except Exception as e:
-                        self.log.debug(f"DAWA geocoding failed for {address.get('full_address')}: {e}")
+                        self.log.debug(
+                            f"DAWA geocoding failed for {address.get('full_address')}: {e}"
+                        )
                 
                 # Fallback to Datavask API if DAWA failed
                 if not enriched_address.get("dawa_enriched"):
                     try:
                         full_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            full_address = f"{full_address}, {address['postal_code']} {address['city']}"
+                            full_address = (
+                                f"{full_address}, {address['postal_code']} {address['city']}"
+                            )
                         
                         if full_address.strip():
                             geocoded = self.datavask_client.geocode_address(full_address)
@@ -134,7 +137,8 @@ class EnhancedCVRAPIClient(BaseCVRAPIClient):
                         self.log.debug(f"Datavask geocoding failed for {full_address}: {e}")
                 
                 # Set enrichment status
-                if not enriched_address.get("dawa_enriched") and not enriched_address.get("datavask_enriched"):
+                if (not enriched_address.get("dawa_enriched") and 
+                    not enriched_address.get("datavask_enriched")):
                     enriched_address["dawa_enriched"] = False
                     enriched_address["datavask_enriched"] = False
                 

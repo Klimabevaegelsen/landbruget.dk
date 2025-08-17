@@ -60,10 +60,10 @@ from pydantic import ConfigDict, Field
 from requests.auth import HTTPBasicAuth
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+from unified_pipeline.gold.pesticide_unit_sanitization import PesticideUnitSanitizer
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
-from unified_pipeline.gold.pesticide_unit_sanitization import PesticideUnitSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -100,16 +100,25 @@ class PlanteITAPI:
             
             # Check for authentication issues
             if response.status_code == 401:
-                raise ValueError(f"Authentication failed for Plante IT API. Please check credentials. Status: {response.status_code}")
+                raise ValueError(
+                    f"Authentication failed for Plante IT API. "
+                    f"Please check credentials. Status: {response.status_code}"
+                )
             elif response.status_code == 403:
-                raise ValueError(f"Access forbidden for Plante IT API. Please check permissions. Status: {response.status_code}")
+                raise ValueError(
+                    f"Access forbidden for Plante IT API. "
+                    f"Please check permissions. Status: {response.status_code}"
+                )
             
             response.raise_for_status()
             result = response.json()
             
             # Validate response structure
             if not isinstance(result, list):
-                logger.warning(f"Unexpected API response format for crop {crop_id}: expected list, got {type(result)}")
+                logger.warning(
+                    f"Unexpected API response format for crop {crop_id}: "
+                    f"expected list, got {type(result)}"
+                )
                 logger.warning(f"Response content: {result}")
             
             return result
@@ -129,16 +138,25 @@ class PlanteITAPI:
             
             # Check for authentication issues
             if response.status_code == 401:
-                raise ValueError(f"Authentication failed for Plante IT API. Please check credentials. Status: {response.status_code}")
+                raise ValueError(
+                    f"Authentication failed for Plante IT API. "
+                    f"Please check credentials. Status: {response.status_code}"
+                )
             elif response.status_code == 403:
-                raise ValueError(f"Access forbidden for Plante IT API. Please check permissions. Status: {response.status_code}")
+                raise ValueError(
+                    f"Access forbidden for Plante IT API. "
+                    f"Please check permissions. Status: {response.status_code}"
+                )
             
             response.raise_for_status()
             result = response.json()
             
             # Validate response structure for product details
             if result and not isinstance(result, dict):
-                logger.warning(f"Unexpected API response format for product {product_id}: expected dict, got {type(result)}")
+                logger.warning(
+                    f"Unexpected API response format for product {product_id}: "
+                    f"expected dict, got {type(result)}"
+                )
                 logger.warning(f"Response content: {result}")
             
             return result
@@ -552,7 +570,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         ).fetchone()[0]
 
         self.logger.info(
-            f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes from FVM marker data"
+            f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes "
+            f"from FVM marker data"
         )
     
     async def _sanitize_pesticide_units(self) -> None:
@@ -583,10 +602,18 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             self.logger.info("✅ Unit sanitization completed successfully")
             self.logger.info(f"   📊 Total records: {summary['total_records']:,}")
             self.logger.info(f"   ⚠️ Unit mismatches detected: {summary['mismatches_detected']:,}")
-            self.logger.info(f"   🔧 Auto-corrected: {summary['auto_corrected']:,} ({summary['correction_rate']:.1f}%)")
-            self.logger.info(f"   🏷️ Manual review required: {summary['manual_review_required']:,} ({summary['manual_review_rate']:.1f}%)")
+            self.logger.info(
+                f"   🔧 Auto-corrected: {summary['auto_corrected']:,} "
+                f"({summary['correction_rate']:.1f}%)"
+            )
+            self.logger.info(
+                f"   🏷️ Manual review required: {summary['manual_review_required']:,} "
+                f"({summary['manual_review_rate']:.1f}%)"
+            )
             self.logger.info(f"   🧪 Products corrected: {summary['products_corrected']:,}")
-            self.logger.info(f"   ⚠️ Products needing review: {summary['products_needing_review']:,}")
+            self.logger.info(
+                f"   ⚠️ Products needing review: {summary['products_needing_review']:,}"
+            )
             
             # Store sanitization summary for reporting
             self.sanitization_summary = summary
@@ -609,14 +636,19 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     SELECT 
                         LOWER(TRIM(produktnavn)) as normalized_name,
                         LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))) as normalized_ingredients,
-                        COALESCE(TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE), 0.0) as concentration,
+                        COALESCE(
+                            TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE),
+                            0.0
+                        ) as concentration,
                         COALESCE(enhed_er, '') as concentration_unit,
                         registrerings_nr as expired_registration,
                         produktstatus as expired_status,
                         udløbsdato as expired_expiry,
                         frist_for_anvendelse_og_besiddelse as expired_restriction
                     FROM bmd_data
-                    WHERE produktstatus IN ('Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt')
+                    WHERE produktstatus IN (
+                        'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
+                    )
                     AND produktnavn IS NOT NULL 
                     AND produktnavn != ''
                     AND registrerings_nr IS NOT NULL
@@ -626,7 +658,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     SELECT 
                         LOWER(TRIM(produktnavn)) as normalized_name,
                         LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))) as normalized_ingredients,
-                        COALESCE(TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE), 0.0) as concentration,
+                        COALESCE(
+                            TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE),
+                            0.0
+                        ) as concentration,
                         COALESCE(enhed_er, '') as concentration_unit,
                         registrerings_nr as valid_registration,
                         produktstatus as valid_status,
@@ -635,14 +670,21 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                             PARTITION BY 
                                 LOWER(TRIM(produktnavn)),
                                 LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))),
-                                COALESCE(TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE), 0.0),
+                                COALESCE(
+                                    TRY_CAST(
+                                        REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE
+                                    ),
+                                    0.0
+                                ),
                                 COALESCE(enhed_er, '')
                             ORDER BY 
                                 CASE WHEN produktstatus = 'Produkt godkendt' THEN 1 ELSE 2 END,
                                 registrerings_nr
                         ) as rank
                     FROM bmd_data
-                    WHERE produktstatus NOT IN ('Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt')
+                    WHERE produktstatus NOT IN (
+                        'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
+                    )
                     AND produktnavn IS NOT NULL 
                     AND produktnavn != ''
                     AND registrerings_nr IS NOT NULL
@@ -671,10 +713,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             """)
             
             # Get statistics
-            mismatch_count = self.conn.execute("SELECT COUNT(*) FROM registration_mismatch_detection").fetchone()[0]
-            product_groups = self.conn.execute("SELECT COUNT(DISTINCT normalized_name) FROM registration_mismatch_detection").fetchone()[0]
+            mismatch_count = self.conn.execute(
+            "SELECT COUNT(*) FROM registration_mismatch_detection"
+        ).fetchone()[0]
+            product_groups = self.conn.execute(
+            "SELECT COUNT(DISTINCT normalized_name) FROM registration_mismatch_detection"
+        ).fetchone()[0]
             
-            self.logger.info(f"📊 Created registration mismatch detection table:")
+            self.logger.info("📊 Created registration mismatch detection table:")
             self.logger.info(f"   - {mismatch_count:,} potential mismatch mappings")
             self.logger.info(f"   - {product_groups:,} product groups with alternatives")
             
@@ -778,16 +824,27 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             
             # Check if we're getting empty responses (could indicate auth issues)
             if processed == 1 and not products:
-                self.logger.warning(f"⚠️ First API call returned no products for crop {api_crop_id}. This might indicate authentication issues.")
+                self.logger.warning(
+                    f"⚠️ First API call returned no products for crop {api_crop_id}. "
+                    f"This might indicate authentication issues."
+                )
             elif processed <= 10 and not products:
-                self.logger.warning(f"⚠️ No products returned for crop {api_crop_id} (call #{processed})")
+                self.logger.warning(
+                    f"⚠️ No products returned for crop {api_crop_id} (call #{processed})"
+                )
 
             for product in products:
                 if str(product.get("RegNumber", "")).strip() == str(reg_number).strip():
                     # Get product ID - try different possible field names
-                    product_id = product.get("Id") or product.get("id") or product.get("ID") or product.get("ProductId")
+                    product_id = (
+                        product.get("Id") or product.get("id") or 
+                        product.get("ID") or product.get("ProductId")
+                    )
                     if not product_id:
-                        self.logger.warning(f"⚠️ No product ID found for reg_number {reg_number}. Available fields: {list(product.keys())}")
+                        self.logger.warning(
+                            f"⚠️ No product ID found for reg_number {reg_number}. "
+                            f"Available fields: {list(product.keys())}"
+                        )
                         continue
                     
                     # Get detailed product info
@@ -950,7 +1007,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             -- Dosage compliance status (using corrected units if available)
             CASE
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
-                WHEN COALESCE(a.corrected_dosage_unit, a.dosage_unit) != d.product_unit THEN 'UNIT_MISMATCH'
+                WHEN COALESCE(a.corrected_dosage_unit, a.dosage_unit) != d.product_unit 
+                    THEN 'UNIT_MISMATCH'
                 WHEN a.area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
                 WHEN (
                     a.dosage_quantity / a.area_ha
@@ -971,9 +1029,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             -- Categorize compliance status (enhanced with registration mismatch detection)
             CASE
                 WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'TIMING_VIOLATION'
-                WHEN (b.product_status IN ('Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'))
+                WHEN (b.product_status IN (
+            'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
+        ))
                      AND rm.expired_registration IS NOT NULL THEN 'POTENTIAL_REGISTRATION_ERROR'
-                WHEN b.product_status IN ('Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt') THEN 'WITHDRAWN_PRODUCT_USE'
+                WHEN b.product_status IN (
+            'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
+        ) THEN 'WITHDRAWN_PRODUCT_USE'
                 WHEN d.max_dosage_app IS NOT NULL AND a.area_ha > 0
                      AND a.dosage_quantity IS NOT NULL
                      AND COALESCE(a.corrected_dosage_unit, a.dosage_unit) = d.product_unit
@@ -1245,10 +1307,12 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     f"📈 Dosage ratio column present: {'dosage_ratio' in column_names}"
                 )
                 self.logger.info(
-                    f"🔍 Registration error flag present: {'is_potential_registration_error' in column_names}"
+                    f"🔍 Registration error flag present: "
+                    f"{'is_potential_registration_error' in column_names}"
                 )
                 self.logger.info(
-                    f"💡 Suggested valid registration present: {'suggested_valid_registration' in column_names}"
+                    f"💡 Suggested valid registration present: "
+                    f"{'suggested_valid_registration' in column_names}"
                 )
 
                 if record_count > 0:
@@ -1315,10 +1379,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 """
 
         for i, company in enumerate(summary["top_companies_with_issues"][:10], 1):
-            report += f"{i}. **{company['company_name']}** (CVR: {company['cvr_number']})\n"
-            report += f"   - Issues: {company['total_issues']:,}\n"
-            report += f"   - Area affected: {company['total_area_ha']:,.1f} ha\n"
-            report += f"   - Products used: {company['products_used']:,}\n\n"
+            report += f"{i}. **{company['company_name']}** (CVR: {company['cvr_number']}) "
+            report += f"   - Issues: {company['total_issues']:,} "
+            report += f"   - Area affected: {company['total_area_ha']:,.1f} ha "
+            report += f"   - Products used: {company['products_used']:,}  "
 
         report += f"""
 ## Methodology
@@ -1334,7 +1398,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 - **TIMING_VIOLATION**: Pesticide used after official restriction date
 - **DOSAGE_VIOLATION**: Pesticide used in excessive dosage compared to approved limits
 - **WITHDRAWN_PRODUCT_USE**: Use of products with withdrawn/expired approval (confirmed violations)
-- **POTENTIAL_REGISTRATION_ERROR**: Use of expired registration number where valid alternative exists (likely input errors)
+- **POTENTIAL_REGISTRATION_ERROR**: Use of expired registration number where valid
+  alternative exists (likely input errors)
 
 ## Data Quality
 

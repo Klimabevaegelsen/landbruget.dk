@@ -5,11 +5,12 @@ This module provides a drop-in replacement for the current primary address
 selection logic in the CVR API client.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+
 from .enhanced_address_selection import (
-    EnhancedAddressSelector,
+    AddressSelectionConfig,
     AddressSelectionStrategy,
-    AddressSelectionConfig
+    EnhancedAddressSelector,
 )
 
 

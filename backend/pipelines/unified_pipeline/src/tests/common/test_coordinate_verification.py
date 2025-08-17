@@ -8,12 +8,10 @@ around ST_Area_Spheroid functions.
 This is critical for accurate area calculations and spatial operations.
 """
 
-import pytest
+from typing import List, Tuple
+
 import duckdb
-from pathlib import Path
-from typing import List, Tuple, Optional
-import tempfile
-import os
+import pytest
 
 
 class CoordinateOrderVerifier:
@@ -77,13 +75,25 @@ class CoordinateOrderVerifier:
                          8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15)
             
             if is_lon_lat:
-                status = f"✅ CONFIRMED: (LON, LAT) order - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})"
+                status = (
+                    f"✅ CONFIRMED: (LON, LAT) order - "
+                    f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                    f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                )
                 return True, status, coord_pairs
             elif is_lat_lon:
-                status = f"❌ INCORRECT: (LAT, LON) order - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})"
+                status = (
+                    f"❌ INCORRECT: (LAT, LON) order - "
+                    f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                    f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                )
                 return False, status, coord_pairs
             else:
-                status = f"❓ UNCLEAR: Coordinate order unclear - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})"
+                status = (
+                    f"❓ UNCLEAR: Coordinate order unclear - "
+                    f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                    f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                )
                 return False, status, coord_pairs
                 
         except Exception as e:
@@ -156,15 +166,19 @@ class TestCoordinateOrderVerification:
         is_correct, status, coords = verifier.verify_coordinate_order("test_lon_lat")
         
         # Test the detection logic
-        assert is_correct == True, f"Algorithm should detect LON/LAT as correct: {status}"
+        assert is_correct, f"Algorithm should detect LON/LAT as correct: {status}"
         assert "✅ CONFIRMED" in status
         
         # Verify the algorithm correctly identified the coordinate ranges
         first_vals = [pair[0] for pair in coords]  # Should be longitudes
         second_vals = [pair[1] for pair in coords]  # Should be latitudes
         
-        assert all(8 <= val <= 15 for val in first_vals), "First values should be in longitude range"
-        assert all(54 <= val <= 58 for val in second_vals), "Second values should be in latitude range"
+        assert all(8 <= val <= 15 for val in first_vals), (
+            "First values should be in longitude range"
+        )
+        assert all(54 <= val <= 58 for val in second_vals), (
+            "Second values should be in latitude range"
+        )
     
     def test_incorrect_lat_lon_order(self, incorrect_geometry_data):
         """Test that incorrect (LAT, LON) order is detected."""
@@ -246,7 +260,9 @@ class TestPipelineCoordinateConsistency:
         sample_geometry_data.execute("""
             CREATE TABLE test_polygon AS
             SELECT 
-                ST_GeomFromText('POLYGON((12.5 55.6, 12.6 55.6, 12.6 55.7, 12.5 55.7, 12.5 55.6))') as geometry
+                ST_GeomFromText(
+                    'POLYGON((12.5 55.6, 12.6 55.6, 12.6 55.7, 12.5 55.7, 12.5 55.6))'
+                ) as geometry
         """)
         
         # Test area calculation: direct (correct) vs flipped (incorrect for our LAT/LON data)
@@ -259,10 +275,13 @@ class TestPipelineCoordinateConsistency:
         
         area_correct, area_incorrect = result
         
-        # The correct (LAT, LON) version should give a reasonable area for a small polygon in Denmark
+        # The correct (LAT, LON) version should give a reasonable area for a small
+        # polygon in Denmark
         # (approximately 0.1° x 0.1° should be roughly 100-200 km²)
         assert area_correct > 0, "Area should be positive"
-        assert 50_000_000 < area_correct < 500_000_000, f"Area {area_correct} m² should be reasonable for small Denmark polygon"
+        assert 50_000_000 < area_correct < 500_000_000, (
+            f"Area {area_correct} m² should be reasonable for small Denmark polygon"
+        )
         
         # The flipped calculation should be different (and incorrect for our LAT/LON data)
         assert area_incorrect > 0, "Flipped area should still be positive"
@@ -276,7 +295,10 @@ class TestSampleDatasetCoordinates:
     def test_all_sample_datasets_coordinate_order(self, duck_conn):
         """Test coordinate order verification across all sample datasets."""
         # Import here to avoid import issues in CI
-        from tests.fixtures.sample_geometries import setup_all_sample_datasets, get_expected_coordinate_orders
+        from tests.fixtures.sample_geometries import (
+            get_expected_coordinate_orders,
+            setup_all_sample_datasets,
+        )
         
         # Create all sample datasets
         dataset_tables = setup_all_sample_datasets(duck_conn)
@@ -301,8 +323,12 @@ class TestSampleDatasetCoordinates:
             # For correct datasets, verify coordinates are in Denmark bounds
             if expected_correct:
                 for lon, lat in coords:
-                    assert 8 <= lon <= 15, f"Longitude {lon} out of Denmark range for {dataset_name}"
-                    assert 54 <= lat <= 58, f"Latitude {lat} out of Denmark range for {dataset_name}"
+                    assert 8 <= lon <= 15, (
+                        f"Longitude {lon} out of Denmark range for {dataset_name}"
+                    )
+                    assert 54 <= lat <= 58, (
+                        f"Latitude {lat} out of Denmark range for {dataset_name}"
+                    )
     
     def test_wrong_coordinates_detection(self, duck_conn):
         """Test that datasets with wrong coordinate order are properly detected."""

@@ -10,11 +10,13 @@ from pathlib import Path
 parent_dir = Path(__file__).parent
 sys.path.insert(0, str(parent_dir))
 
-def test_file_structure():
+def test_file_structure() -> bool:
     """Test that the fertiliser transformer file exists and has correct structure."""
     print("📁 Testing File Structure")
     
-    fertiliser_transformer_path = parent_dir / "silver" / "transformers" / "fertiliser_transformer.py"
+    fertiliser_transformer_path = (
+        parent_dir / "silver" / "transformers" / "fertiliser_transformer.py"
+    )
     
     if not fertiliser_transformer_path.exists():
         print("❌ Fertiliser transformer file not found")
@@ -23,7 +25,7 @@ def test_file_structure():
     print("✅ Fertiliser transformer file exists")
     
     # Check file contents
-    with open(fertiliser_transformer_path, 'r') as f:
+    with open(fertiliser_transformer_path) as f:
         content = f.read()
     
     required_elements = [
@@ -49,7 +51,7 @@ def test_file_structure():
     print("✅ All required methods present")
     return True
 
-def test_processor_integration():
+def test_processor_integration() -> bool:
     """Test that the processor file has been updated correctly."""
     print("\n🔗 Testing Processor Integration")
     
@@ -59,7 +61,7 @@ def test_processor_integration():
         print("❌ Silver processor file not found")
         return False
     
-    with open(processor_path, 'r') as f:
+    with open(processor_path) as f:
         content = f.read()
     
     # Check for fertiliser transformer import and registration
@@ -80,7 +82,7 @@ def test_processor_integration():
     print("✅ Silver processor correctly updated")
     return True
 
-def test_unified_pipeline_cleanup():
+def test_unified_pipeline_cleanup() -> bool:
     """Test that unified pipeline references have been removed."""
     print("\n🧹 Testing Unified Pipeline Cleanup")
     
@@ -102,7 +104,7 @@ def test_unified_pipeline_cleanup():
     # Check app.py for removed imports
     app_path = unified_base / "app.py" 
     if app_path.exists():
-        with open(app_path, 'r') as f:
+        with open(app_path) as f:
             app_content = f.read()
         
         removed_imports = [
@@ -120,7 +122,7 @@ def test_unified_pipeline_cleanup():
     # Check cli.py for removed source
     cli_path = unified_base / "model" / "cli.py"
     if cli_path.exists():
-        with open(cli_path, 'r') as f:
+        with open(cli_path) as f:
             cli_content = f.read()
         
         if 'fertiliser = "fertiliser"' in cli_content:
@@ -131,7 +133,7 @@ def test_unified_pipeline_cleanup():
     
     return True
 
-def test_import_structure():
+def test_import_structure() -> bool:
     """Test the basic import structure without actually importing."""
     print("\n📦 Testing Import Structure")
     
@@ -151,12 +153,12 @@ def test_import_structure():
         return False
     
     # Read base transformer to understand interface
-    with open(base_transformer_path, 'r') as f:
-        base_content = f.read()
+    with open(base_transformer_path) as f:
+        f.read()
     
     # Read our fertiliser transformer
     fertiliser_transformer_path = transformers_dir / "fertiliser_transformer.py"
-    with open(fertiliser_transformer_path, 'r') as f:
+    with open(fertiliser_transformer_path) as f:
         fertiliser_content = f.read()
     
     # Check that fertiliser transformer imports from base

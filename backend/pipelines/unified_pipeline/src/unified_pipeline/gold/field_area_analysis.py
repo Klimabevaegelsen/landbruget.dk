@@ -190,8 +190,10 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                         try:
                             first_val, second_val = map(float, coords_str.split())
                             coord_pairs.append((first_val, second_val))
-                            self.log.info(f"   Field {i+1}: POINT({first_val:.6f} {second_val:.6f})")
-                        except:
+                            self.log.info(
+                                f"   Field {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                            )
+                        except Exception:
                             continue
                 
                 if coord_pairs:
@@ -201,12 +203,26 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                     first_range = (min(first_vals), max(first_vals))
                     second_range = (min(second_vals), max(second_vals))
                     
-                    if 8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58:
-                        self.log.info(f"✅ FIELDS CONFIRMED: Data stored as (LON, LAT) - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
-                    elif 54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15:
-                        self.log.warning(f"⚠️ FIELDS ALERT: Data stored as (LAT, LON) - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
+                    if (8 <= first_range[0] <= 15 and 8 <= first_range[1] <= 15 and 
+                        54 <= second_range[0] <= 58 and 54 <= second_range[1] <= 58):
+                        self.log.info(
+                            f"✅ FIELDS CONFIRMED: Data stored as (LON, LAT) - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
+                    elif (54 <= first_range[0] <= 58 and 54 <= first_range[1] <= 58 and 
+                          8 <= second_range[0] <= 15 and 8 <= second_range[1] <= 15):
+                        self.log.warning(
+                            f"⚠️ FIELDS ALERT: Data stored as (LAT, LON) - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
                     else:
-                        self.log.warning(f"❓ FIELDS UNCLEAR: Coordinate order unclear - ({first_range[0]:.2f}-{first_range[1]:.2f}, {second_range[0]:.2f}-{second_range[1]:.2f})")
+                        self.log.warning(
+                            f"❓ FIELDS UNCLEAR: Coordinate order unclear - "
+                            f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                            f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                        )
         except Exception as e:
             self.log.warning(f"⚠️ Could not verify fields coordinate order: {e}")
 
@@ -355,7 +371,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     SUM(CASE
                         WHEN b.status_category IS NOT NULL AND wp.project_id IS NOT NULL
-                        THEN ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom)))
+                        THEN ST_Area_Spheroid(
+                            ST_FlipCoordinates(
+                                ST_Intersection(ST_Intersection(f.geom, b.geom), wp.geom)
+                            )
+                        )
                         ELSE 0
                     END), 0
                 ) as bnbo_covered_by_water_projects_m2,
@@ -372,7 +392,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COALESCE(
                     SUM(CASE
                         WHEN w.wetland_id IS NOT NULL AND wp.project_id IS NOT NULL
-                        THEN ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom)))
+                        THEN ST_Area_Spheroid(
+                            ST_FlipCoordinates(
+                                ST_Intersection(ST_Intersection(f.geom, w.geom), wp.geom)
+                            )
+                        )
                         ELSE 0
                     END), 0
                 ) as wetland_covered_by_water_projects_m2
@@ -401,7 +425,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 
                 CASE
                     WHEN total_bnbo_area_m2 > 0
-                    THEN ((total_bnbo_area_m2 - bnbo_covered_by_water_projects_m2) / total_bnbo_area_m2) * 100
+                    THEN ((total_bnbo_area_m2 - bnbo_covered_by_water_projects_m2) / 
+                          total_bnbo_area_m2) * 100
                     ELSE 0
                 END as bnbo_not_covered_by_water_projects_pct,
                 
@@ -414,7 +439,8 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 
                 CASE
                     WHEN total_wetland_area_m2 > 0
-                    THEN ((total_wetland_area_m2 - wetland_covered_by_water_projects_m2) / total_wetland_area_m2) * 100
+                    THEN ((total_wetland_area_m2 - wetland_covered_by_water_projects_m2) / 
+                          total_wetland_area_m2) * 100
                     ELSE 0
                 END as wetland_not_covered_by_water_projects_pct,
                 
@@ -431,9 +457,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 COUNT(*) as total_fields,
                 COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
                 COUNT(CASE WHEN total_wetland_area_m2 > 0 THEN 1 END) as fields_with_wetlands,
-                AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct ELSE NULL END)
+                AVG(CASE WHEN total_bnbo_area_m2 > 0 
+                    THEN bnbo_covered_by_water_projects_pct ELSE NULL END)
                     as avg_bnbo_coverage,
-                AVG(CASE WHEN total_wetland_area_m2 > 0 THEN wetland_covered_by_water_projects_pct ELSE NULL END)
+                AVG(CASE WHEN total_wetland_area_m2 > 0 
+                    THEN wetland_covered_by_water_projects_pct ELSE NULL END)
                     as avg_wetland_coverage
             FROM field_coverage_percentages
         """).fetchone()
@@ -500,12 +528,14 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                         f.block_id,
                         f.cvr_number,
                         p.bfe_number,
-                        ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geom, p.geom))) / f.field_area_m2 * 100 as area_share,
+                        ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geom, p.geom))) / 
+                            f.field_area_m2 * 100 as area_share,
                         f.field_uuid,
                         f.primary_field_id
                     FROM fields_with_wetlands f
                     JOIN properties_chunk p ON ST_Intersects(f.geom, p.geom)
-                WHERE ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geom, p.geom))) / f.field_area_m2 > 0.01
+                WHERE ST_Area_Spheroid(ST_FlipCoordinates(ST_Intersection(f.geom, p.geom))) / 
+                    f.field_area_m2 > 0.01
             """)
 
             processed += chunk_size_actual
@@ -647,9 +677,11 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 SELECT
                     COUNT(CASE WHEN total_bnbo_area_m2 > 0 THEN 1 END) as fields_with_bnbo,
                     COUNT(CASE WHEN total_wetland_area_m2 > 0 THEN 1 END) as fields_with_wetlands,
-                    AVG(CASE WHEN total_bnbo_area_m2 > 0 THEN bnbo_covered_by_water_projects_pct ELSE NULL END)
+                    AVG(CASE WHEN total_bnbo_area_m2 > 0 
+                    THEN bnbo_covered_by_water_projects_pct ELSE NULL END)
                     as avg_bnbo_coverage,
-                    AVG(CASE WHEN total_wetland_area_m2 > 0 THEN wetland_covered_by_water_projects_pct ELSE NULL END)
+                    AVG(CASE WHEN total_wetland_area_m2 > 0 
+                    THEN wetland_covered_by_water_projects_pct ELSE NULL END)
                     as avg_wetland_coverage
                 FROM field_area_analysis_final
                 WHERE total_bnbo_area_m2 IS NOT NULL OR total_wetland_area_m2 IS NOT NULL
