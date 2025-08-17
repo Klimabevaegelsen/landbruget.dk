@@ -200,7 +200,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                     # Parse as 2D coordinates (x, y pairs) - Danish UTM coordinates
                     if len(pos) % 2 != 0:
                         self.log.warning(
-                            f"Odd number of coordinates: {len(pos)} values, cannot parse as coordinate pairs"
+                            f"Odd number of coordinates: {len(pos)} values, "
+                            f"cannot parse as coordinate pairs"
                         )
                         continue
 
@@ -215,7 +216,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                         polygons.append(coords)
                     else:
                         self.log.warning(
-                            f"Insufficient coordinates for polygon: {len(coords)} pairs (need at least 4)"
+                            f"Insufficient coordinates for polygon: {len(coords)} pairs "
+                            f"(need at least 4)"
                         )
                 except Exception as e:
                     self.log.error(f"Failed to parse coordinates: {str(e)}")
@@ -228,14 +230,16 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             # Use the same approach as BNBO status pipeline for consistency
             polygon_wkts = []
             for i, coords in enumerate(polygons):
-                # Create coordinate pairs with proper WKT format (space between x y, comma between pairs)
+                # Create coordinate pairs with proper WKT format
+                # (space between x y, comma between pairs)
                 coord_pairs = [f"{x} {y}" for x, y in coords]
                 polygon_wkt = f"POLYGON(({', '.join(coord_pairs)}))"
 
                 # Validate WKT completeness - check for proper closing
                 if not polygon_wkt.endswith("))"):
                     self.log.error(
-                        f"Invalid WKT detected - missing closing parentheses: {polygon_wkt[:100]}..."
+                        f"Invalid WKT detected - missing closing parentheses: "
+                        f"{polygon_wkt[:100]}..."
                     )
                     continue
 
@@ -368,7 +372,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                                             "INSERT INTO temp_date VALUES (?)", [value]
                                         )
                                         result = self.conn.execute(
-                                            "SELECT CAST(date_str AS DATE) as parsed_date FROM temp_date"
+                                            "SELECT CAST(date_str AS DATE) as parsed_date "
+                        "FROM temp_date"
                                         ).fetchone()
                                         value = result[0] if result else None
                                     except Exception:
@@ -658,7 +663,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
         self.log.info(f"  - Successfully converted: {successful_conversions:,} geometries")
         self.log.info(f"  - Failed conversions: {failed_conversions:,} geometries")
         self.log.info(
-            f"  - Total success rate: {success_rate:.1f}% ({successful_conversions:,}/{total_processed:,})"
+            f"  - Total success rate: {success_rate:.1f}% "
+            f"({successful_conversions:,}/{total_processed:,})"
         )
         self.log.info(f"  - Final feature count: {feature_count:,} features")
 
@@ -739,7 +745,8 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
                 return dissolved_table_name
 
             # Use DuckDB-spatial ST_Union_Agg to dissolve overlapping geometries
-            # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
+            # ✅ MIGRATION: Use unified geometry validator instead of manual
+            # coordinate transformation
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name}_temp AS
                 SELECT
@@ -899,7 +906,10 @@ class WaterProjectsSilver(BaseSource[WaterProjectsSilverConfig], SilverJobInterf
             ).fetchone()[0]
             
             if spatial_geom_count > 0:
-                self.log.info(f"Applying geometry validation to {spatial_geom_count:,} water project geometries...")
+                self.log.info(
+                    f"Applying geometry validation to {spatial_geom_count:,} "
+                    f"water project geometries..."
+                )
                 validate_and_transform_geometries_duckdb(
                     self.conn,
                     table_name,

@@ -115,13 +115,15 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 fwi.year,
                 fwi.wetland_id,
                 fwi.toerv_pct,
-                ST_Intersection(p.property_geometry, fwi.field_wetland_geometry) as property_wetland_geometry
+                ST_Intersection(p.property_geometry, fwi.field_wetland_geometry) as
+                    property_wetland_geometry
             FROM field_property_intersections p
             JOIN field_wetland_intersections fwi ON p.field_uuid = fwi.field_uuid
                 AND ST_Intersects(p.property_geometry, fwi.field_wetland_geometry)
         """)
 
-        # Step 2: Create property × wetland × water intersections (water-covered wetlands within properties)
+        # Step 2: Create property × wetland × water intersections
+        # (water-covered wetlands within properties)
         self.log.info("📦 Step 2: Creating property_wetland_water_intersections")
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_wetland_water_intersections AS
@@ -135,7 +137,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
                 fwwi.wetland_id,
                 fwwi.toerv_pct,
                 fwwi.project_id,
-                ST_Intersection(p.property_geometry, fwwi.field_wetland_water_geometry) as property_wetland_water_geometry
+                ST_Intersection(p.property_geometry, fwwi.field_wetland_water_geometry) as
+                    property_wetland_water_geometry
             FROM field_property_intersections p
             JOIN stage3b_field_wetland_water_intersections fwwi ON p.field_uuid = fwwi.field_uuid
                 AND ST_Intersects(p.property_geometry, fwwi.field_wetland_water_geometry)
@@ -210,7 +213,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         invalid_water = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_wetland_water_intersections
-            WHERE property_wetland_water_geometry IS NULL OR NOT ST_IsValid(property_wetland_water_geometry)
+            WHERE property_wetland_water_geometry IS NULL OR 
+                NOT ST_IsValid(property_wetland_water_geometry)
         """).fetchone()[0]
 
         # Check for empty geometries
@@ -223,7 +227,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         empty_water = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_wetland_water_intersections
-            WHERE property_wetland_water_geometry IS NOT NULL AND ST_IsEmpty(property_wetland_water_geometry)
+            WHERE property_wetland_water_geometry IS NOT NULL AND 
+                ST_IsEmpty(property_wetland_water_geometry)
         """).fetchone()[0]
 
         # Report geometry validation results
@@ -236,7 +241,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
 
         if invalid_wetland > 0:
             self.log.error(
-                f"❌ Found {invalid_wetland:,}/{total_wetland:,} invalid/NULL geometries in property_wetland_intersections"
+                f"❌ Found {invalid_wetland:,}/{total_wetland:,} invalid/NULL geometries in "
+                f"property_wetland_intersections"
             )
         else:
             self.log.info(
@@ -245,7 +251,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
 
         if invalid_water > 0:
             self.log.error(
-                f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries in property_wetland_water_intersections"
+                f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries in "
+                f"property_wetland_water_intersections"
             )
         else:
             self.log.info(
@@ -295,24 +302,30 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
 
         # Log validation results
         self.log.info(
-            f"📊 Input data: {field_property_count:,} field×property intersections, {field_wetland_count:,} field×wetland, {field_wetland_water_count:,} field×wetland×water"
+            f"📊 Input data: {field_property_count:,} field×property intersections, "
+            f"{field_wetland_count:,} field×wetland, "
+            f"{field_wetland_water_count:,} field×wetland×water"
         )
         self.log.info(
-            f"📊 Output data: {property_wetland_count:,} property×wetland intersections, {property_wetland_water_count:,} property×wetland×water intersections"
+            f"📊 Output data: {property_wetland_count:,} property×wetland intersections, "
+            f"{property_wetland_water_count:,} property×wetland×water intersections"
         )
         self.log.info(
-            f"📊 Property coverage: {unique_properties_with_wetland:,} properties with wetlands, {unique_properties_with_water:,} properties with water-covered wetlands"
+            f"📊 Property coverage: {unique_properties_with_wetland:,} properties with wetlands, "
+            f"{unique_properties_with_water:,} properties with water-covered wetlands"
         )
 
         # Sanity checks
         if property_wetland_count == 0:
             self.log.warning(
-                "⚠️ No property×wetland intersections produced (may be expected if no field×property×wetland overlap)"
+                "⚠️ No property×wetland intersections produced "
+                "(may be expected if no field×property×wetland overlap)"
             )
 
         if property_wetland_count > field_property_count * field_wetland_count:
             self.log.warning(
-                f"⚠️ Very high intersection count: {property_wetland_count:,} (check for data explosion)"
+                f"⚠️ Very high intersection count: {property_wetland_count:,} "
+                f"(check for data explosion)"
             )
 
     def _validate_data_consistency(self):
@@ -323,30 +336,36 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         water_only_properties = self.conn.execute("""
             SELECT COUNT(DISTINCT pww.bfe_number)
             FROM property_wetland_water_intersections pww
-            LEFT JOIN property_wetland_intersections pw ON pww.bfe_number = pw.bfe_number AND pww.field_uuid = pw.field_uuid
+            LEFT JOIN property_wetland_intersections pw ON 
+                pww.bfe_number = pw.bfe_number AND pww.field_uuid = pw.field_uuid
             WHERE pw.bfe_number IS NULL
         """).fetchone()[0]
 
         if water_only_properties > 0:
             self.log.error(
-                f"❌ CRITICAL: {water_only_properties:,} properties have water-covered wetlands but no total wetland (data inconsistency)"
+                f"❌ CRITICAL: {water_only_properties:,} properties have "
+                f"water-covered wetlands but no "
+                f"total wetland (data inconsistency)"
             )
         else:
             self.log.info(
-                "✅ Data consistency: All water-covered wetland properties also have total wetland records"
+                "✅ Data consistency: All water-covered wetland properties also have "
+                "total wetland records"
             )
 
         # Validate property IDs consistency
         invalid_bfe_numbers = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_wetland_intersections pw
-            LEFT JOIN field_property_intersections fp ON pw.field_uuid = fp.field_uuid AND pw.bfe_number = fp.bfe_number
+            LEFT JOIN field_property_intersections fp ON 
+                pw.field_uuid = fp.field_uuid AND pw.bfe_number = fp.bfe_number
             WHERE fp.bfe_number IS NULL
         """).fetchone()[0]
 
         if invalid_bfe_numbers > 0:
             self.log.error(
-                f"❌ CRITICAL: {invalid_bfe_numbers:,} intersection records have invalid bfe_number references"
+                f"❌ CRITICAL: {invalid_bfe_numbers:,} intersection records have "
+                f"invalid bfe_number references"
             )
         else:
             self.log.info("✅ All intersection records have valid bfe_number references")
@@ -357,7 +376,8 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         ).fetchone()[0]
         unique_combinations = self.conn.execute("""
             SELECT COUNT(*) FROM (
-                SELECT DISTINCT field_uuid, bfe_number, wetland_id FROM property_wetland_intersections
+                SELECT DISTINCT field_uuid, bfe_number, wetland_id 
+                FROM property_wetland_intersections
             )
         """).fetchone()[0]
         duplicates = total_records - unique_combinations

@@ -140,7 +140,9 @@ async def run_stage0_prefiltering(config: FieldAnalysisStageConfig = None) -> Di
     return {
         "stage0_total_time": stage0_time,
         "results": results,
-        "performance_summary": "Stage 0 pre-filtering achieved 80-90% dataset reductions across all layers",
+        "performance_summary": (
+            "Stage 0 pre-filtering achieved 80-90% dataset reductions across all layers"
+        ),
     }
 
 

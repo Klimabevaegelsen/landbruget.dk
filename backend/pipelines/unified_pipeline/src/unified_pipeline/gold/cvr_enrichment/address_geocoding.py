@@ -7,7 +7,6 @@ for parallel execution.
 """
 
 import json
-import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -127,13 +126,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
             # Step 4: Create comprehensive addresses table
             addresses_table = self._create_addresses_table(processed_data)
-            
+
             # Step 5: Update company and pnumber tables with geocoding data
             self._update_company_table_with_geocoding(processed_data)
             self._update_pnumber_table_with_geocoding(processed_data)
 
             self.log.info(
-                "Address geocoding completed successfully. Tables updated: companies, pnumbers, addresses"
+                "Address geocoding completed successfully. "
+                "Tables updated: companies, pnumbers, addresses"
             )
             return addresses_table
 
@@ -286,7 +286,8 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
                                 except json.JSONDecodeError as e:
                                     self.log.warning(
-                                        f"Failed to parse P-number data for P-number {p_number}: {e}"
+                                        f"Failed to parse P-number data for "
+                                        f"P-number {p_number}: {e}"
                                     )
                                     continue
 
@@ -360,13 +361,20 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
         # Apply test limit if configured
         if self.config.shared_config.test_limit is not None:
-            # Limit addresses based on test_limit (approximate, since we're limiting by address count)
-            max_addresses = self.config.shared_config.test_limit * 3  # Rough estimate: 3 addresses per company
+            # Limit addresses based on test_limit (approximate, since we're limiting by
+            # address count)
+            max_addresses = (
+                self.config.shared_config.test_limit * 3
+            )  # Rough estimate: 3 addresses per company
             original_count = len(all_addresses)
             if original_count > max_addresses:
                 all_addresses = all_addresses[:max_addresses]
-                self.log.info(f"Applied test limit: processing {len(all_addresses)} addresses (limited from {original_count} due to test_limit={self.config.shared_config.test_limit})")
-        
+                self.log.info(
+                    f"Applied test limit: processing {len(all_addresses)} addresses "
+                    f"(limited from {original_count} due to "
+                    f"test_limit={self.config.shared_config.test_limit})"
+                )
+
         # Process all addresses (no batching)
         batch_addresses = all_addresses
         self.log.info(f"Extracted {len(batch_addresses)} addresses from all sources")
@@ -670,7 +678,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             self.conn.execute("LOAD crypto")
         except Exception as e:
             self.log.warning(f"Crypto extension already loaded: {e}")
-        
+
         # Create UUID functions
         self.conn.execute("""
             CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
@@ -693,7 +701,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 END
             )
         """)
-        
+
         self.conn.execute("""
             CREATE OR REPLACE FUNCTION pnumber_uuid(p_number) AS (
                 SELECT CASE
@@ -790,49 +798,56 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             stage="gold",
             filename="address_geocoding.parquet",  # Use step name as filename
         )
-        
+
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
 
         return table_name
-    
+
     def _update_company_table_with_geocoding(self, processed_data: Dict[str, Any]) -> None:
         """
         Update company table with primary address geocoding information.
         """
         self.log.info("Updating company table with geocoding data")
-        
+
         # Load existing company table from GCS
         company_table = "cvr_companies_with_geocoding"
-        
+
         # Get the company data path - find most recent company data
-        from unified_pipeline.gold.cvr_enrichment.shared.config import _find_latest_file_with_pattern
+        from unified_pipeline.gold.cvr_enrichment.shared.config import (
+            _find_latest_file_with_pattern,
+        )
         from unified_pipeline.util.gcs_access import GCSDataAccess
-        
+
         gcs_access = GCSDataAccess()
         company_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/*/data.parquet"
         company_input_path = _find_latest_file_with_pattern(
             gcs_access, company_pattern, self.config.shared_config.max_days_back_for_inputs
         )
-        
+
         if not company_input_path:
-            self.log.warning(f"No company data found within {self.config.shared_config.max_days_back_for_inputs} days")
+            self.log.warning(
+                f"No company data found within "
+                f"{self.config.shared_config.max_days_back_for_inputs} days"
+            )
             return
-        
+
         try:
             # Create table from GCS company data
             self.gcs_access.create_table_from_gcs("existing_companies", company_input_path)
-            
+
             # 🐛 DEBUG: Check what columns we loaded
             columns_loaded = self.conn.execute("DESCRIBE existing_companies").fetchall()
-            self.log.info(f"🔍 DEBUG: Loaded {len(columns_loaded)} columns from existing companies table:")
+            self.log.info(
+                f"🔍 DEBUG: Loaded {len(columns_loaded)} columns from existing companies table:"
+            )
             for i, row in enumerate(columns_loaded[:10], 1):  # Show first 10
                 col_name = row[0]
                 col_type = row[1] if len(row) > 1 else "UNKNOWN"
                 self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
             if len(columns_loaded) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_loaded) - 10} more columns")
-            
+
             # Create geocoding lookup from address table
             # Get primary addresses for companies (first geocoded address per company)
             self.conn.execute("""
@@ -843,22 +858,26 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     longitude,
                     coordinate_quality,
                     dawa_enriched,
-                    ROW_NUMBER() OVER (PARTITION BY cvr_number ORDER BY geocoding_timestamp DESC) as rn
+                    ROW_NUMBER() OVER (
+                        PARTITION BY cvr_number ORDER BY geocoding_timestamp DESC
+                    ) as rn
                 FROM cvr_addresses
                 WHERE cvr_number IS NOT NULL
                   AND p_number IS NULL
                   AND latitude IS NOT NULL
                   AND longitude IS NOT NULL
             """)
-            
+
             # 🔧 FIX: Preserve all existing columns and only update geocoding fields
             # Get all column names from existing companies table
-            existing_columns = [row[0] for row in self.conn.execute("DESCRIBE existing_companies").fetchall()]
-            
+            existing_columns = [
+                row[0] for row in self.conn.execute("DESCRIBE existing_companies").fetchall()
+            ]
+
             # Build SELECT clause that preserves all existing columns
             select_clauses = []
-            geocoding_fields = {'latitude', 'longitude', 'coordinate_quality', 'dawa_enriched'}
-            
+            geocoding_fields = {"latitude", "longitude", "coordinate_quality", "dawa_enriched"}
+
             for col in existing_columns:
                 if col in geocoding_fields:
                     # Use geocoding data if available, otherwise keep existing value
@@ -866,11 +885,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 else:
                     # Keep existing column as-is
                     select_clauses.append(f"c.{col}")
-            
+
             select_clause = ",\n                    ".join(select_clauses)
-            
-            self.log.info(f"🔍 DEBUG: Creating table with {len(existing_columns)} columns (preserving all existing schema)")
-            
+
+            self.log.info(
+                f"🔍 DEBUG: Creating table with {len(existing_columns)} columns "
+                f"(preserving all existing schema)"
+            )
+
             # Update companies with geocoding data while preserving all existing columns
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {company_table} AS
@@ -881,7 +903,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     SELECT * FROM company_geocoding WHERE rn = 1
                 ) g ON c.cvr_number = g.cvr_number
             """)
-            
+
             # 🐛 DEBUG: Check what columns we're saving
             columns_saving = self.conn.execute(f"DESCRIBE {company_table}").fetchall()
             self.log.info(f"🔍 DEBUG: Saving {len(columns_saving)} columns to companies table:")
@@ -891,7 +913,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
             if len(columns_saving) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_saving) - 10} more columns")
-            
+
             # Save updated company table back to GCS
             self._save_data(
                 data=company_table,
@@ -900,49 +922,56 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 stage="gold",
                 filename="data.parquet",
             )
-            
+
             self.log.info("Updated company table with geocoding data")
-            
+
         except Exception as e:
             self.log.error(f"Failed to update company table with geocoding: {e}")
-            
+
     def _update_pnumber_table_with_geocoding(self, processed_data: Dict[str, Any]) -> None:
         """
         Update pnumber table with address geocoding information.
         """
         self.log.info("Updating pnumber table with geocoding data")
-        
+
         # Load existing pnumber table from GCS
         pnumber_table = "cvr_pnumbers_with_geocoding"
-        
+
         # Get the pnumber data path - find most recent pnumber data
-        from unified_pipeline.gold.cvr_enrichment.shared.config import _find_latest_file_with_pattern
+        from unified_pipeline.gold.cvr_enrichment.shared.config import (
+            _find_latest_file_with_pattern,
+        )
         from unified_pipeline.util.gcs_access import GCSDataAccess
-        
+
         gcs_access = GCSDataAccess()
         pnumber_pattern = f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
         pnumber_input_path = _find_latest_file_with_pattern(
             gcs_access, pnumber_pattern, self.config.shared_config.max_days_back_for_inputs
         )
-        
+
         if not pnumber_input_path:
-            self.log.warning(f"No pnumber data found within {self.config.shared_config.max_days_back_for_inputs} days")
+            self.log.warning(
+                f"No pnumber data found within "
+                f"{self.config.shared_config.max_days_back_for_inputs} days"
+            )
             return
-        
+
         try:
             # Create table from GCS pnumber data
             self.gcs_access.create_table_from_gcs("existing_pnumbers", pnumber_input_path)
-            
+
             # 🐛 DEBUG: Check what columns we loaded
             columns_loaded = self.conn.execute("DESCRIBE existing_pnumbers").fetchall()
-            self.log.info(f"🔍 DEBUG: Loaded {len(columns_loaded)} columns from existing P-numbers table:")
+            self.log.info(
+                f"🔍 DEBUG: Loaded {len(columns_loaded)} columns from existing P-numbers table:"
+            )
             for i, row in enumerate(columns_loaded[:10], 1):  # Show first 10
                 col_name = row[0]
                 col_type = row[1] if len(row) > 1 else "UNKNOWN"
                 self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
             if len(columns_loaded) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_loaded) - 10} more columns")
-            
+
             # Create geocoding lookup from address table
             # Get primary addresses for pnumbers (first geocoded address per pnumber)
             self.conn.execute("""
@@ -953,21 +982,25 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     longitude,
                     coordinate_quality,
                     dawa_enriched,
-                    ROW_NUMBER() OVER (PARTITION BY p_number ORDER BY geocoding_timestamp DESC) as rn
+                    ROW_NUMBER() OVER (
+                        PARTITION BY p_number ORDER BY geocoding_timestamp DESC
+                    ) as rn
                 FROM cvr_addresses
                 WHERE p_number IS NOT NULL
                   AND latitude IS NOT NULL
                   AND longitude IS NOT NULL
             """)
-            
+
             # 🔧 FIX: Preserve all existing columns and only update geocoding fields
             # Get all column names from existing P-numbers table
-            existing_columns = [row[0] for row in self.conn.execute("DESCRIBE existing_pnumbers").fetchall()]
-            
+            existing_columns = [
+                row[0] for row in self.conn.execute("DESCRIBE existing_pnumbers").fetchall()
+            ]
+
             # Build SELECT clause that preserves all existing columns
             select_clauses = []
-            geocoding_fields = {'latitude', 'longitude', 'coordinate_quality', 'dawa_enriched'}
-            
+            geocoding_fields = {"latitude", "longitude", "coordinate_quality", "dawa_enriched"}
+
             for col in existing_columns:
                 if col in geocoding_fields:
                     # Use geocoding data if available, otherwise keep existing value
@@ -975,11 +1008,14 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 else:
                     # Keep existing column as-is
                     select_clauses.append(f"p.{col}")
-            
+
             select_clause = ",\n                    ".join(select_clauses)
-            
-            self.log.info(f"🔍 DEBUG: Creating P-number table with {len(existing_columns)} columns (preserving all existing schema)")
-            
+
+            self.log.info(
+                f"🔍 DEBUG: Creating P-number table with {len(existing_columns)} columns "
+                f"(preserving all existing schema)"
+            )
+
             # Update pnumbers with geocoding data while preserving all existing columns
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {pnumber_table} AS
@@ -990,7 +1026,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     SELECT * FROM pnumber_geocoding WHERE rn = 1
                 ) g ON p.p_number = g.p_number
             """)
-            
+
             # 🐛 DEBUG: Check what columns we're saving
             columns_saving = self.conn.execute(f"DESCRIBE {pnumber_table}").fetchall()
             self.log.info(f"🔍 DEBUG: Saving {len(columns_saving)} columns to P-numbers table:")
@@ -1000,7 +1036,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 self.log.info(f"🔍 DEBUG:   {i:2d}. {col_name:<25} {col_type}")
             if len(columns_saving) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_saving) - 10} more columns")
-            
+
             # Save updated pnumber table back to GCS
             self._save_data(
                 data=pnumber_table,
@@ -1009,9 +1045,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 stage="gold",
                 filename="data.parquet",
             )
-            
+
             self.log.info("Updated pnumber table with geocoding data")
-            
+
         except Exception as e:
             self.log.error(f"Failed to update pnumber table with geocoding: {e}")
 

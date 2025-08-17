@@ -97,7 +97,8 @@ class WorkPermitsTransformer(BaseTransformer):
         can_handle_result = any(indicator in filename_lower for indicator in work_permit_indicators)
 
         logger.info(
-            f"WorkPermitsTransformer: filename='{filename_lower}', matches={matches}, can_handle={can_handle_result}"
+            f"WorkPermitsTransformer: filename='{filename_lower}', matches={matches}, "
+            f"can_handle={can_handle_result}"
         )
 
         return can_handle_result
@@ -313,7 +314,8 @@ class WorkPermitsTransformer(BaseTransformer):
                                         }
                                     )
                                     logger.debug(
-                                        f"Added record: {current_cvr} - {country} - {year}: {count} permits"
+                                        f"Added record: {current_cvr} - {country} - {year}: "
+                                        f"{count} permits"
                                     )
 
                     break  # Found country match, don't check other countries for this line

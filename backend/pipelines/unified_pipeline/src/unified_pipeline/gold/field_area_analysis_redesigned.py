@@ -351,7 +351,8 @@ class FieldAreaAnalysisRedesigned:
             chunk_properties = min(chunk_size, total_properties - offset)
 
             self.log.info(
-                f"   Processing properties chunk {offset // chunk_size + 1}: {chunk_properties:,} properties"
+                f"   Processing properties chunk {offset // chunk_size + 1}: "
+                f"{chunk_properties:,} properties"
             )
 
             # Create current properties chunk (build side) - stream directly from GCS
@@ -381,7 +382,8 @@ class FieldAreaAnalysisRedesigned:
 
             processed_properties += chunk_properties
             self.log.info(
-                f"   Processed {processed_properties:,}/{total_properties:,} properties ({processed_properties / total_properties * 100:.1f}%)"
+                f"   Processed {processed_properties:,}/{total_properties:,} properties "
+                f"({processed_properties / total_properties * 100:.1f}%)"
             )
 
         properties_time = time.time() - chunk_start
@@ -521,7 +523,9 @@ class FieldAreaAnalysisRedesigned:
         self.log.info(f"New implementation (with coordinate fix): {total_time / 60:.1f} minutes")
         self.log.info(f"Improvement: {improvement:.0f}x faster!")
         self.log.info("🎯 Root cause: ST_Area_Spheroid expected LAT/LON but data was LON/LAT")
-        self.log.info("✅ Solution: ST_Area_Spheroid calls use (LAT, LON) data directly - no flipping needed")
+        self.log.info(
+            "✅ Solution: ST_Area_Spheroid calls use (LAT, LON) data directly - no flipping needed"
+        )
         self.log.info("=" * 80)
 
     def _get_latest_dataset_path(self, dataset_name: str) -> Optional[str]:

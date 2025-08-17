@@ -3,8 +3,10 @@
 Correct GKEA mapping analysis based on actual header row inspection.
 """
 
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+
 
 def analyze_correct_gkea_mappings():
     """Analyze GKEA files by looking at actual headers and matching to data."""
@@ -50,7 +52,7 @@ def analyze_correct_gkea_mappings():
             
             print(f"{col_name.ljust(12)} {str(header_text).ljust(25)} {sample_str}")
         
-        print(f"\n🎯 KEY FIELD IDENTIFICATION:")
+        print("\n🎯 KEY FIELD IDENTIFICATION:")
         
         # Find Journal Nummer column
         journal_col = None

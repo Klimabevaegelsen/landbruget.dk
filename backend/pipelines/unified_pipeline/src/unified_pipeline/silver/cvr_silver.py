@@ -400,7 +400,9 @@ class CVRSilver(BaseSource[CVRSilverConfig], SilverJobInterface):
                                         ownership_pct = value_entry.get("vaerdi")
                                         
                                         # Convert decimal to percentage (1.0 = 100%)
-                                        ownership_percentage = float(ownership_pct) * 100 if ownership_pct else None
+                                        ownership_percentage = (
+                                            float(ownership_pct) * 100 if ownership_pct else None
+                                        )
                                         
                                         # Insert ownership record for each time period
                                         self.conn.execute(

@@ -51,8 +51,10 @@ analysis that identified unit errors vs. legitimate formulation differences.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Tuple
+
 import duckdb
+
 from unified_pipeline.util.log_util import Logger
 
 logger = logging.getLogger(__name__)
@@ -166,7 +168,10 @@ class PesticideUnitSanitizer:
         ).fetchone()[0]
         
         self.logger.info(f"📊 Unit analysis dataset created: {total_records:,} total records")
-        self.logger.info(f"⚠️ Unit mismatches detected: {mismatch_records:,} records ({mismatch_records/total_records*100:.3f}%)")
+        self.logger.info(
+            f"⚠️ Unit mismatches detected: {mismatch_records:,} records "
+            f"({mismatch_records/total_records*100:.3f}%)"
+        )
     
     def _calculate_statistical_baselines(self) -> None:
         """Calculate statistical baselines for each product by unit type."""
@@ -197,12 +202,30 @@ class PesticideUnitSanitizer:
             SELECT 
                 pesticide_registration_number,
                 pesticide_name,
-                MAX(CASE WHEN unit_compatibility = 'compatible' THEN mean_dosage_per_ha END) as compatible_mean,
-                MAX(CASE WHEN unit_compatibility = 'compatible' THEN stddev_dosage_per_ha END) as compatible_stddev,
-                MAX(CASE WHEN unit_compatibility = 'compatible' THEN record_count END) as compatible_count,
-                MAX(CASE WHEN unit_compatibility = 'mismatch' THEN mean_dosage_per_ha END) as mismatch_mean,
-                MAX(CASE WHEN unit_compatibility = 'mismatch' THEN stddev_dosage_per_ha END) as mismatch_stddev,
-                MAX(CASE WHEN unit_compatibility = 'mismatch' THEN record_count END) as mismatch_count
+                MAX(CASE 
+                    WHEN unit_compatibility = 'compatible' 
+                    THEN mean_dosage_per_ha 
+                    END) as compatible_mean,
+                MAX(CASE 
+                    WHEN unit_compatibility = 'compatible' 
+                    THEN stddev_dosage_per_ha 
+                    END) as compatible_stddev,
+                MAX(CASE 
+                    WHEN unit_compatibility = 'compatible' 
+                    THEN record_count 
+                    END) as compatible_count,
+                MAX(CASE 
+                    WHEN unit_compatibility = 'mismatch' 
+                    THEN mean_dosage_per_ha 
+                    END) as mismatch_mean,
+                MAX(CASE 
+                    WHEN unit_compatibility = 'mismatch' 
+                    THEN stddev_dosage_per_ha 
+                    END) as mismatch_stddev,
+                MAX(CASE 
+                    WHEN unit_compatibility = 'mismatch' 
+                    THEN record_count 
+                    END) as mismatch_count
             FROM product_dosage_statistics
             GROUP BY pesticide_registration_number, pesticide_name
             HAVING compatible_mean IS NOT NULL 
@@ -210,8 +233,13 @@ class PesticideUnitSanitizer:
               AND compatible_stddev > 0
         """)
         
-        mixed_products = self.conn.execute("SELECT COUNT(*) FROM products_with_mixed_units").fetchone()[0]
-        self.logger.info(f"📊 Found {mixed_products} products with both compatible and mismatch units for statistical analysis")
+        mixed_products = self.conn.execute(
+            "SELECT COUNT(*) FROM products_with_mixed_units"
+        ).fetchone()[0]
+        self.logger.info(
+            f"📊 Found {mixed_products} products with both compatible and "
+            "mismatch units for statistical analysis"
+        )
     
     def _apply_statistical_corrections(self) -> str:
         """Apply statistical corrections based on deviation analysis."""
@@ -242,9 +270,11 @@ class PesticideUnitSanitizer:
                 CASE 
                     WHEN j.unit_mismatch_detected = false THEN 'no_action_needed'
                     WHEN s.compatible_stddev IS NULL THEN 'insufficient_data'
-                    WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= {self.AUTO_CORRECTION_THRESHOLD} 
+                    WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev 
+                         <= {self.AUTO_CORRECTION_THRESHOLD} 
                     THEN 'auto_correct'
-                    WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= {self.OUTLIER_FLAG_THRESHOLD} 
+                    WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev 
+                         <= {self.OUTLIER_FLAG_THRESHOLD} 
                     THEN 'flag_for_review'
                     ELSE 'extreme_outlier'
                 END as correction_action,
@@ -253,10 +283,13 @@ class PesticideUnitSanitizer:
                 CASE 
                     WHEN j.unit_mismatch_detected = true 
                          AND s.compatible_stddev > 0
-                         AND ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= {self.AUTO_CORRECTION_THRESHOLD}
+                         AND ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev 
+                             <= {self.AUTO_CORRECTION_THRESHOLD}
                     THEN CASE 
-                        WHEN j.dosage_unit = '2' AND j.bmd_unit LIKE '%g/l%' THEN '4'  -- kg -> liter
-                        WHEN j.dosage_unit = '4' AND j.bmd_unit LIKE '%g/kg%' THEN '2' -- liter -> kg
+                        WHEN j.dosage_unit = '2' AND j.bmd_unit LIKE '%g/l%' 
+                        THEN '4'  -- kg -> liter
+                        WHEN j.dosage_unit = '4' AND j.bmd_unit LIKE '%g/kg%' 
+                        THEN '2' -- liter -> kg
                         ELSE j.dosage_unit
                     END
                     ELSE j.dosage_unit
@@ -266,7 +299,8 @@ class PesticideUnitSanitizer:
                 CASE 
                     WHEN j.unit_mismatch_detected = true 
                          AND s.compatible_stddev > 0
-                         AND ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= {self.AUTO_CORRECTION_THRESHOLD}
+                         AND ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev 
+                             <= {self.AUTO_CORRECTION_THRESHOLD}
                     THEN true
                     ELSE false
                 END as unit_corrected,
@@ -275,9 +309,12 @@ class PesticideUnitSanitizer:
                 CASE 
                     WHEN j.unit_mismatch_detected = true AND s.compatible_stddev > 0
                     THEN CASE 
-                        WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= 1.0 THEN 'high'
-                        WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= 2.0 THEN 'medium'
-                        WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= 3.0 THEN 'low'
+                        WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= 1.0 
+                        THEN 'high'
+                        WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= 2.0 
+                        THEN 'medium'
+                        WHEN ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev <= 3.0 
+                        THEN 'low'
                         ELSE 'very_low'
                     END
                     ELSE 'not_applicable'
@@ -290,7 +327,8 @@ class PesticideUnitSanitizer:
                 CASE 
                     WHEN j.unit_mismatch_detected = true 
                          AND s.compatible_stddev > 0
-                         AND ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev > {self.OUTLIER_FLAG_THRESHOLD}
+                         AND ABS(j.dosage_per_ha - s.compatible_mean) / s.compatible_stddev 
+                             > {self.OUTLIER_FLAG_THRESHOLD}
                     THEN true
                     ELSE false
                 END as requires_manual_review,
@@ -316,7 +354,7 @@ class PesticideUnitSanitizer:
             f"SELECT COUNT(*) FROM {sanitized_table} WHERE requires_manual_review = true"
         ).fetchone()[0]
         
-        self.logger.info(f"📊 Sanitization Results:")
+        self.logger.info("📊 Sanitization Results:")
         self.logger.info(f"   Total records: {total_records:,}")
         self.logger.info(f"   Unit mismatches detected: {mismatches_detected:,}")
         self.logger.info(f"   Auto-corrected: {auto_corrected:,}")
@@ -376,7 +414,10 @@ class PesticideUnitSanitizer:
         self.logger.info("=" * 50)
         
         for _, row in correction_stats.iterrows():
-            self.logger.info(f"   {row['correction_action']}: {row['record_count']:,} records ({row['unique_products']} products)")
+            self.logger.info(
+                f"   {row['correction_action']}: {row['record_count']:,} records "
+                f"({row['unique_products']} products)"
+            )
         
         if len(auto_corrected_products) > 0:
             self.logger.info("\n🔧 Top Auto-Corrected Products:")
@@ -413,9 +454,18 @@ class PesticideUnitSanitizer:
                 COUNT(CASE WHEN unit_mismatch_detected THEN 1 END) as mismatches_detected,
                 COUNT(CASE WHEN unit_corrected THEN 1 END) as auto_corrected,
                 COUNT(CASE WHEN requires_manual_review THEN 1 END) as manual_review_required,
-                COUNT(CASE WHEN correction_action = 'insufficient_data' THEN 1 END) as insufficient_data,
-                COUNT(DISTINCT CASE WHEN unit_corrected THEN pesticide_registration_number END) as products_corrected,
-                COUNT(DISTINCT CASE WHEN requires_manual_review THEN pesticide_registration_number END) as products_needing_review
+                COUNT(CASE 
+                    WHEN correction_action = 'insufficient_data' 
+                    THEN 1 
+                    END) as insufficient_data,
+                COUNT(DISTINCT CASE 
+                    WHEN unit_corrected 
+                    THEN pesticide_registration_number 
+                    END) as products_corrected,
+                COUNT(DISTINCT CASE 
+                    WHEN requires_manual_review 
+                    THEN pesticide_registration_number 
+                    END) as products_needing_review
             FROM {sanitized_table}
         """).fetchone()
         

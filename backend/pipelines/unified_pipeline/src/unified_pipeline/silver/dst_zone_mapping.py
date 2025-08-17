@@ -1,8 +1,9 @@
 """
 DST Zone Mapping silver layer component for DAGI pipeline.
 
-This module creates a spatial lookup table that maps field geometries to DST (Danmarks Statistik) zones
-by combining DAGI administrative data with DST regional classifications.
+This module creates a spatial lookup table that maps field geometries 
+to DST (Danmarks Statistik) zones by combining DAGI administrative 
+data with DST regional classifications.
 
 The module contains:
 - DSTZoneMappingConfig: Configuration for DST zone mapping processing
@@ -175,7 +176,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                         f"INSERT INTO {layer}_raw VALUES ({placeholders})", values
                                     )
 
-                            # Create standardized table with spatial geometry - use layer-specific column mapping
+                            # Create standardized table with spatial geometry 
+                            # - use layer-specific column mapping
                             if layer == "kommuner":
                                 code_column = "kode"
                             elif layer == "regioner":
@@ -369,7 +371,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                     ) as tmp_file:
                                         temp_path = tmp_file.name
 
-                                    # Create a temporary view with the selected columns in the GCS connection
+                                    # Create a temporary view with the selected columns 
+                                    # in the GCS connection
                                     conn.execute(f"""
                                         CREATE OR REPLACE VIEW temp_layer_view AS
                                         SELECT {select_clause}
@@ -400,7 +403,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                                 except Exception as e:
                                     self.log.warning(
-                                        f"Failed optimized transfer for {layer}, falling back to row-by-row: {e}"
+                                        f"Failed optimized transfer for {layer}, "
+                                        f"falling back to row-by-row: {e}"
                                     )
                                     # Fallback to row-by-row copying
                                     rows = conn.execute(f"""
@@ -511,8 +515,10 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     l.name as landsdel_name,
                     '' as landsdel_dagi_id,
                     l.region_code as dagi_region_code,
-                    l.name as dagi_region_name,  -- Use name as region_name since we don't have separate region names
-                    '' as dagi_region_nuts2,     -- Empty for now since regioner table might not be available
+                    l.name as dagi_region_name,  
+                    -- Use name as region_name since we don't have separate region names
+                    '' as dagi_region_nuts2,     
+                    -- Empty for now since regioner table might not be available
                     STRING_AGG(dm.dst_region, '|' ORDER BY dm.dst_region) as dst_regions,
                     l.geometry_wkt as geometry,
                     l.area_m2,

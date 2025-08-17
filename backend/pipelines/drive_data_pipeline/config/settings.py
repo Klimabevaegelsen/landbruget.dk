@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 # Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
@@ -65,7 +65,7 @@ class Settings(BaseModel):
         case_sensitive = False
 
     @model_validator(mode='after')
-    def validate_storage_and_credentials(self):
+    def validate_storage_and_credentials(self) -> 'Settings':
         """Validate storage and credentials configuration."""
         # Validate GCS bucket
         if self.storage_type == StorageType.GCS and not self.gcs_bucket:
@@ -77,7 +77,9 @@ class Settings(BaseModel):
             if str(self.google_application_credentials) == "":
                 self.google_application_credentials = None
             elif not self.google_application_credentials.exists():
-                raise ValueError(f"Credentials file not found: {self.google_application_credentials}")
+                raise ValueError(
+                    f"Credentials file not found: {self.google_application_credentials}"
+                )
         
         return self
 

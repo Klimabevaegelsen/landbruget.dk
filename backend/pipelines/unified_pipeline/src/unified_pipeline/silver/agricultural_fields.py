@@ -270,7 +270,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
             year: Year of the data being processed
 
         Returns:
-            A tuple (table_name, connection) containing all processed features with validated geometries,
+            A tuple (table_name, connection) containing all processed features with validated
+            geometries,
             or (None, None) if processing fails
         """
         async with AsyncTimer("Processing data with DuckDB-spatial"):
@@ -338,7 +339,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 # ✅ MIGRATION: Create temporary table using DuckDB directly
                 processing_conn.execute(
-                    "CREATE OR REPLACE TABLE temp_features AS SELECT * FROM (VALUES (1)) t(dummy) WHERE false"
+                    "CREATE OR REPLACE TABLE temp_features AS SELECT * FROM (VALUES (1)) "
+                    "t(dummy) WHERE false"
                 )
 
                 # Get column names from first feature
@@ -377,7 +379,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                         # Insert batch
                         processing_conn.executemany(
-                            f"INSERT INTO temp_features ({', '.join(columns)}) VALUES ({placeholders})",
+                            f"INSERT INTO temp_features ({', '.join(columns)}) "
+                            f"VALUES ({placeholders})",
                             values,
                         )
 
@@ -391,7 +394,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     # Clear the full features list from memory
                     del all_features
 
-                # Column names are already cleaned, so we can use temp_features directly as features_raw
+                # Column names are already cleaned, so we can use temp_features directly
+                # as features_raw
                 processing_conn.execute(
                     "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
                 )
@@ -408,7 +412,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 select_columns = []
 
                 for old_col, new_col in self.config.column_mapping.items():
-                    # Since column names are already cleaned, we need to look for the cleaned version
+                    # Since column names are already cleaned, we need to look for the
+                    # cleaned version
                     cleaned_old_col = (
                         old_col.replace(".", "_")
                         .replace("()", "_")
@@ -430,7 +435,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                             select_columns.append(f'CAST({cleaned_old_col} AS DOUBLE) as {new_col}')
                         else:
                             select_columns.append(f'{cleaned_old_col} as {new_col}')
-                    # Also check if the original column name exists (for columns without special chars)
+                    # Also check if the original column name exists (for columns without
+                    # special chars)
                     elif old_col in available_columns:
                         # Apply proper type casting for area columns
                         if new_col in [
@@ -469,10 +475,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 # DEBUG: Log what columns will be selected
                 self.log.info(f"Select columns built: {select_columns}")
 
-                # Ensure we have at least some columns to select, fallback to all columns except special ones
+                # Ensure we have at least some columns to select, fallback to all columns
+                # except special ones
                 if not select_columns:
                     self.log.warning(
-                        "No columns mapped, using all available columns except geometry_json and payload_id"
+                        "No columns mapped, using all available columns except geometry_json "
+                        "and payload_id"
                     )
                     for col in available_columns:
                         if col not in ["geometry_json", "payload_id"]:
@@ -515,7 +523,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 processing_conn.execute(sql_query)
 
-                # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
+                # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate
+                # transformation
                 validate_and_transform_geometries_duckdb(
                     processing_conn,
                     final_table_name,
@@ -591,10 +600,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                                     # Bronze data should contain raw data lists now
                                     raw_data_table = bronze_data[bronze_key][year]
                                     if isinstance(raw_data_table, list):
-                                        # List of JSON strings - create table in silver layer's connection
+                                        # List of JSON strings - create table in silver layer's
+                        # connection
                                         table_name = f"bronze_raw_{dataset}_{year}"
                                         self.conn.execute(
-                                            f"CREATE OR REPLACE TABLE {table_name} (payload VARCHAR)"
+                                            f"CREATE OR REPLACE TABLE {table_name} "
+                                            f"(payload VARCHAR)"
                                         )
                                         for json_str in raw_data_table:
                                             self.conn.execute(
@@ -603,7 +614,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                                         raw_data = table_name
                                     else:
                                         self.log.error(
-                                            f"Expected list of JSON strings from bronze, got {type(raw_data_table)}"
+                                            f"Expected list of JSON strings from bronze, got "
+                                            f"{type(raw_data_table)}"
                                         )
                                         continue
                                 else:
@@ -659,7 +671,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         continue
 
             self.log.info(
-                "Agricultural Fields silver job completed for all available years using DuckDB-spatial"
+                "Agricultural Fields silver job completed for all available years "
+                "using DuckDB-spatial"
             )
 
             # Final cleanup after all processing

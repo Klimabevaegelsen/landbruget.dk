@@ -11,6 +11,7 @@ import sys
 import time
 from pathlib import Path
 
+
 def run_cadastral_silver_test():
     """Run the cadastral silver processing test."""
     

@@ -52,7 +52,8 @@ class DuckDBProcessor:
                 print("✅ DuckDB GCS HMAC authentication configured")
             else:
                 print(
-                    "ℹ️  GCS HMAC credentials not found (set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY)"
+                    "ℹ️  GCS HMAC credentials not found "
+                    "(set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY)"
                 )
         except Exception as e:
             print(f"Warning: Could not setup GCS HMAC authentication: {e}")

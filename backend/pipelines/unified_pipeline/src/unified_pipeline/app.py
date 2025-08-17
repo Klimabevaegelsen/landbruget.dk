@@ -33,8 +33,6 @@ from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterPro
 from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
-
-
 from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
     ArbjdstilsynetInspectionsGoldConfig,
@@ -50,6 +48,7 @@ from unified_pipeline.gold.cvr_enrichment.company_fetching import (
     CompanyFetchingConfig,
 )
 from unified_pipeline.gold.cvr_enrichment.cvr_collection import CVRCollection, CVRCollectionConfig
+
 # from unified_pipeline.gold.cvr_enrichment.data_consolidation import (
 #     DataConsolidation,
 #     DataConsolidationConfig,
@@ -202,7 +201,8 @@ async def execute_pipeline_jobs(
                     )
                     if total_size > 10_000_000:  # More than 10MB of string data
                         log.info(
-                            f"📊 Bronze data size: {total_size:,} chars (will be cleared after silver processing)"
+                            f"📊 Bronze data size: {total_size:,} chars "
+                            f"(will be cleared after silver processing)"
                         )
 
             elif issubclass(job_cls, SilverJobInterface):
@@ -224,7 +224,8 @@ async def execute_pipeline_jobs(
                     dataset_name = instance.config.dataset
                     silver_data[dataset_name] = result
                     log.info(
-                        f"Silver job {job_cls.__name__} completed successfully using {stage_description}"
+                        f"Silver job {job_cls.__name__} completed successfully using "
+                        f"{stage_description}"
                     )
                 else:
                     log.error(f"Silver job {job_cls.__name__} failed - no data returned")
@@ -251,11 +252,13 @@ async def execute_pipeline_jobs(
                 # Gold stage - pass collected silver data
                 print(f"🚨 APP: About to call {job_cls.__name__}.run() with silver_data")
                 print(
-                    f"🚨 APP: Silver data keys: {list(silver_data.keys()) if silver_data else 'None'}"
+                    f"🚨 APP: Silver data keys: "
+                    f"{list(silver_data.keys()) if silver_data else 'None'}"
                 )
                 await instance.run(silver_data=silver_data)
                 print(f"🚨 APP: {job_cls.__name__}.run() completed successfully")
-                # Gold jobs don't return data, so we consider them successful if they don't raise an exception
+                # Gold jobs don't return data, so we consider them successful
+                # if they don't raise an exception
                 job_successful = True
                 log.info(f"Gold job {job_cls.__name__} completed successfully using silver data")
 
@@ -467,7 +470,8 @@ def execute(cli_config: cli.CliConfig) -> int:
             cli.Stage.pnumber_fetching: [(PNumberFetching, PNumberFetchingConfig)],
             cli.Stage.financial_documents: [(FinancialDocuments, FinancialDocumentsConfig)],
             cli.Stage.address_geocoding: [(AddressGeocoding, AddressGeocodingConfig)],
-            # cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],  # REMOVED: Eliminated in redesign
+            # cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
+            # REMOVED: Eliminated in redesign
         },
         cli.Source.dst: {
             cli.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
@@ -532,12 +536,14 @@ def execute(cli_config: cli.CliConfig) -> int:
         return 1
     elif successful_jobs < total_jobs:
         log.warning(
-            f"⚠️  Pipeline completed with partial success: {successful_jobs}/{total_jobs} jobs completed successfully"
+            f"⚠️  Pipeline completed with partial success: "
+            f"{successful_jobs}/{total_jobs} jobs completed successfully"
         )
         return 0  # Still consider it a success if at least one job completed
     else:
         log.info(
-            f"✅ Pipeline completed successfully: {successful_jobs}/{total_jobs} jobs completed successfully"
+            f"✅ Pipeline completed successfully: "
+            f"{successful_jobs}/{total_jobs} jobs completed successfully"
         )
         return 0
 
@@ -605,7 +611,8 @@ def execute(cli_config: cli.CliConfig) -> int:
     "--pesticide-year",
     "pesticide_year",
     type=int,
-    help="Year filter for pesticide matrix jobs (e.g., 2018). If not specified, processes all available years.",
+    help="Year filter for pesticide matrix jobs (e.g., 2018). "
+    "If not specified, processes all available years.",
     required=False,
 )
 @click.option(
@@ -619,7 +626,8 @@ def execute(cli_config: cli.CliConfig) -> int:
     "--total-batches",
     "total_batches",
     type=int,
-    help="Total number of batches for parallel processing. Used with CVR enrichment pipeline steps.",
+    help="Total number of batches for parallel processing. "
+    "Used with CVR enrichment pipeline steps.",
     required=False,
 )
 def run_cli(
@@ -651,7 +659,8 @@ def run_cli(
 
     Example:
         $ python -m unified_pipeline -s bnbo -j bronze
-        $ python -m unified_pipeline -s fvm_wfs -j bronze --fvm-layer-type markblokke --fvm-year 2024
+        $ python -m unified_pipeline -s fvm_wfs -j bronze \
+            --fvm-layer-type markblokke --fvm-year 2024
     """
     app_config = cli.CliConfig(
         env=cli.Env(env),
