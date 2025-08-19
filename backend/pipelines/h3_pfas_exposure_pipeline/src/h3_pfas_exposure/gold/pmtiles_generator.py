@@ -551,8 +551,10 @@ class H3PMTilesGenerator:
 
             if has_kommune_boundaries:
                 # Use actual kommune geometries from the boundaries table
+                # Note: DAGI data uses lat,lng for WGS84 spherical calculations
+                # but GeoJSON requires lng,lat order, so we need to swap coordinates
                 geometry_select = """
-                    ST_AsGeoJSON(kb.geometry)::JSON
+                    ST_AsGeoJSON(ST_FlipCoordinates(kb.geometry))::JSON
                 """
                 geometry_condition = "kb.geometry IS NOT NULL"
                 join_clause = (
@@ -560,10 +562,14 @@ class H3PMTilesGenerator:
                 )
             else:
                 # Fallback to centroids as points if boundaries table is not available
+                # Note: DAGI uses lat,lng order, so:
+                # - kommune_centroid_x = latitude (ST_X of lat,lng = lat)
+                # - kommune_centroid_y = longitude (ST_Y of lat,lng = lng)
+                # GeoJSON needs [lng,lat] order, so we use [y,x]
                 geometry_select = """
                     json_object(
                         'type', 'Point',
-                        'coordinates', json_array(kommune_centroid_x, kommune_centroid_y)
+                        'coordinates', json_array(kommune_centroid_y, kommune_centroid_x)
                     )
                 """
                 geometry_condition = (
