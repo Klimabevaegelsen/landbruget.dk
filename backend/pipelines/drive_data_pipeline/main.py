@@ -137,7 +137,14 @@ def _save_discovered_cvr_numbers(
                 if source == "gcs":
                     # 🚀 ENHANCED: Use native HMAC acceleration for faster Drive data loading
                     try:
+                        # Use GCS access connection directly for both table creation and CVR extraction
                         gcs_access.query_parquet_native(file_path, "SELECT *", table_name)
+                        # Extract CVR numbers using the GCS connection
+                        cvr_numbers = extract_cvr_numbers_from_table(
+                            table_name=table_name,
+                            connection=gcs_access.duckdb_conn,
+                            cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                        )
                     except Exception as e:
                         print(f"Native loading failed, using fallback: {e}")
                         # Fallback to existing temp file method
@@ -146,18 +153,23 @@ def _save_discovered_cvr_numbers(
                                 f"CREATE TABLE {table_name} AS "
                                 f"SELECT * FROM read_parquet('{temp_file}')"
                             )
+                        # Extract CVR numbers using the main connection for fallback
+                        cvr_numbers = extract_cvr_numbers_from_table(
+                            table_name=table_name,
+                            connection=conn,
+                            cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                        )
                 else:
                     # Local file - use directly
                     conn.execute(
                         f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
                     )
-
-                # Extract CVR numbers from this table
-                cvr_numbers = extract_cvr_numbers_from_table(
-                    table_name=table_name,
-                    connection=conn,
-                    cvr_column="cvr_number",  # Standardized column name from Excel transformer
-                )
+                    # Extract CVR numbers from this table
+                    cvr_numbers = extract_cvr_numbers_from_table(
+                        table_name=table_name,
+                        connection=conn,
+                        cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                    )
 
                 if cvr_numbers:
                     all_cvr_numbers.extend(cvr_numbers)
@@ -474,10 +486,12 @@ def main() -> int:
             logger.info("Starting Silver layer processing")
 
             # Initialize Silver processor with progress tracking
+            schema_dir = Path(__file__).parent / "schemas"
             silver_processor = SilverProcessor(
                 settings=settings,
                 storage_manager=storage_manager,
                 metadata_manager=metadata_manager,
+                schema_dir=schema_dir if schema_dir.exists() else None,
                 progress_callback=progress.update_silver_progress,
             )
 
