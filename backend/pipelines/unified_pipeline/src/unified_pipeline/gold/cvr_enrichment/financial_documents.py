@@ -139,9 +139,11 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             # Step 3: Process and parse financial data
             processed_data = self._process_financial_data(financial_data)
 
-            # Step 4: Process financial employment data separately (different from CVR register employment)
+            # Step 4: Process financial employment data separately 
+            # (different from CVR register employment)
             self.log.info(
-                "⚙️ Step 4a/5: Processing employment data from financial documents (separate from CVR register employment)"
+                "⚙️ Step 4a/5: Processing employment data from financial documents "
+                "(separate from CVR register employment)"
             )
             self._process_employment_data_directly(company_batch)
 
@@ -706,7 +708,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
         if financial_data:
             self.log.info(
-                f"🔄 Processing {len(financial_data)} companies in batches to save both metadata and comprehensive financial data"
+                f"🔄 Processing {len(financial_data)} companies in batches to save "
+                f"both metadata and comprehensive financial data"
             )
 
             # Process in smaller batches for memory efficiency
@@ -817,33 +820,73 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                         f"""
                         INSERT INTO {financial_table}
                         SELECT
-                            md5(json_extract(json_data, '$.cvr_number')::VARCHAR)::VARCHAR as company_uuid,
+                            md5(
+                                json_extract(json_data, '$.cvr_number')::VARCHAR
+                            )::VARCHAR as company_uuid,
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                             'Annual Report' as publication_type,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as publication_time,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as publication_time,
                             NULL as case_number,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as reporting_period_start,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as reporting_period_end,
-                            json_extract(json_data, '$.document_count')::INTEGER as document_count,
-                            json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as xml_size_bytes,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as reporting_period_start,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as reporting_period_end,
+                            json_extract(
+                                json_data, '$.document_count'
+                            )::INTEGER as document_count,
+                            json_extract(
+                                json_data, '$.total_xml_size_bytes'
+                            )::INTEGER as xml_size_bytes,
                             true as download_success,
                             'duration' as duration_context,
                             'instant' as instant_context,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as income_statement_start_date,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as income_statement_end_date,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as balance_sheet_date,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as income_statement_start_date,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as income_statement_end_date,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as balance_sheet_date,
                             -- Extract financial metrics from parsed XBRL data
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.net_profit_loss') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.ResultatEfterSkat') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.ProfitLoss') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data, '$.latest_financial_metrics.net_profit_loss'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data, '$.latest_financial_metrics.ResultatEfterSkat'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(json_data, '$.latest_financial_metrics.ProfitLoss')
+                                    AS DOUBLE
+                                )
                             ) as net_profit_loss,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.gross_profit_loss') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.BruttoResultat') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(json_data, '$.latest_financial_metrics.gross_profit_loss')
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(json_data, '$.latest_financial_metrics.BruttoResultat')
+                                    AS DOUBLE
+                                )
                             ) as gross_profit_loss,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.operating_profit_loss') AS DOUBLE),
+                                TRY_CAST(
+                                    json_extract(json_data, '$.latest_financial_metrics.operating_profit_loss')
+                                    AS DOUBLE
+                                ),
                                 TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.ResultatAfPrimæreDrift') AS DOUBLE)
                             ) as operating_profit_loss,
                             COALESCE(
@@ -904,21 +947,21 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             ) as property_plant_equipment,
                             TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.contributed_capital') AS DOUBLE) as contributed_capital,
                             -- Calculate ratios from available data
-                            CASE 
-                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE) > 0 
-                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_equity') AS DOUBLE) / 
+                            CASE
+                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE) > 0
+                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_equity') AS DOUBLE) /
                                      TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE)
                                 ELSE NULL
                             END as equity_ratio,
-                            CASE 
-                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.average_number_of_employees') AS DOUBLE) > 0 
-                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.net_profit_loss') AS DOUBLE) / 
+                            CASE
+                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.average_number_of_employees') AS DOUBLE) > 0
+                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.net_profit_loss') AS DOUBLE) /
                                      TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.average_number_of_employees') AS DOUBLE)
                                 ELSE NULL
                             END as profit_per_employee,
-                            CASE 
-                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE) > 0 
-                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.net_profit_loss') AS DOUBLE) / 
+                            CASE
+                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE) > 0
+                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.net_profit_loss') AS DOUBLE) /
                                      TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE)
                                 ELSE NULL
                             END as return_on_assets
