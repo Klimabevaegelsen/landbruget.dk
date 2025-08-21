@@ -239,6 +239,7 @@ def load_cattle_movement_summaries(
     herd_number: int,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    discovery_results: Optional[Dict] = None,
 ) -> Optional[Dict]:
     """
     Fetches cattle movement data using chunked processing for high-volume herds.
@@ -264,9 +265,9 @@ def load_cattle_movement_summaries(
 
     logger.info(f"🎯 Fetching cattle movement summaries for herd {herd_number} from {start_date} to {end_date}")
 
-    # Get optimal date ranges (handles chunking for high-volume herds)
+    # Get optimal date ranges (handles chunking for high-volume herds with inline discovery)
     logger.debug(f"📅 Calculating optimal date ranges for herd {herd_number}...")
-    date_ranges = get_optimal_date_range(herd_number, start_date, end_date)
+    date_ranges = get_optimal_date_range(herd_number, start_date, end_date, discovery_results)
     logger.info(f"📊 Herd {herd_number}: Will process {len(date_ranges)} date chunks")
 
     if len(date_ranges) > 1:
@@ -323,6 +324,42 @@ def load_cattle_movement_summaries(
                         logger.warning(f"❌ Chunk {chunk_idx + 1} failed: no result returned")
 
             except Exception as e:
+                error_str = str(e).lower()
+                # Check if this looks like a volume-related issue (timeout, memory, large response)
+                volume_keywords = ["timeout", "memory", "too large", "connection", "soap fault"]
+                if any(keyword in error_str for keyword in volume_keywords):
+                    logger.warning(f"⚠️ Herd {herd_number} chunk {chunk_idx + 1} failed with volume-related error: {e}")
+
+                    # If this is the first chunk and it's a full date range, auto-configure for chunking
+                    if len(date_ranges) == 1 and chunk_idx == 0:
+                        from .volume_management import add_high_volume_herd, is_high_volume_herd
+
+                        if not is_high_volume_herd(herd_number):
+                            logger.info(
+                                f"🔧 Auto-configuring herd {herd_number} for chunked processing due to volume issues"
+                            )
+                            # Estimate volume based on date range and configure chunking
+                            total_days = (chunk_end - chunk_start).days + 1
+                            if total_days > 365:
+                                chunk_days = 30  # Monthly chunks for large ranges
+                            elif total_days > 90:
+                                chunk_days = 14  # Bi-weekly chunks for medium ranges
+                            else:
+                                chunk_days = 7  # Weekly chunks for smaller ranges
+
+                            add_high_volume_herd(herd_number, max_days=chunk_days, volume_estimate=None)
+
+                            # Retry with chunked processing
+                            logger.info(f"🔄 Retrying herd {herd_number} with {chunk_days}-day chunking...")
+                            try:
+                                return load_cattle_movement_summaries(
+                                    chr_dyr_client, username, herd_number, start_date, end_date, discovery_results
+                                )
+                            except Exception as retry_error:
+                                logger.error(
+                                    f"❌ Retry with chunking also failed for herd {herd_number}: {retry_error}"
+                                )
+
                 logger.error(f"❌ Error processing chunk {chunk_idx + 1} for herd {herd_number}: {e}")
                 failed_chunks += 1
                 continue
