@@ -482,51 +482,51 @@ class SilverPipeline:
 
             cvr_client = CVRAPIClient(username=cvr_username, password=cvr_password)
 
-            # Map P-numbers to CVR numbers using the CVR API
+            # Map P-numbers to CVR numbers using bulk CVR API
+            self.logger.info(f"🚀 Using bulk P-number to CVR mapping for {len(p_numbers)} P-numbers")
+
+            # Use bulk P-number fetching from CVR enrichment system
+            pnumber_results = cvr_client.fetch_multiple_pnumbers(
+                pnumbers=p_numbers,
+                fetch_all_fields=False,  # Only fetch basic fields for performance
+                enrich_with_geometry=False,  # Skip geocoding for performance
+                batch_size=50,  # Process in batches of 50
+            )
+
+            # Extract CVR numbers from P-number results
             cvr_numbers = set()
             successful_mappings = 0
 
-            for p_number in p_numbers[:50]:  # Limit to first 50 P-numbers to avoid overwhelming the API
+            for pnumber, pnumber_data in pnumber_results.get("results", {}).items():
                 try:
-                    # Query CVR register for P-number to find the parent CVR number
-                    # Use a search query to find companies with this P-number
-                    query = {
-                        "query": {
-                            "bool": {
-                                "should": [
-                                    {"term": {"Vrvirksomhed.penheder.pNummer": int(p_number)}},
-                                    {"term": {"pNummer": int(p_number)}},
-                                ]
-                            }
-                        },
-                        "size": 1,
-                        "_source": ["Vrvirksomhed.cvrNummer", "cvrNummer"],
-                    }
-
-                    # Make request to CVR API
-                    response = cvr_client._make_request(cvr_client.company_endpoint, query)
-
-                    if response and "hits" in response and response["hits"]["hits"]:
-                        hit = response["hits"]["hits"][0]["_source"]
-
-                        # Extract CVR number from response
-                        cvr_number = None
-                        if "Vrvirksomhed" in hit and "cvrNummer" in hit["Vrvirksomhed"]:
-                            cvr_number = str(hit["Vrvirksomhed"]["cvrNummer"])
-                        elif "cvrNummer" in hit:
-                            cvr_number = str(hit["cvrNummer"])
-
-                        if cvr_number and len(cvr_number) == 8 and cvr_number.isdigit():
-                            cvr_numbers.add(cvr_number)
-                            successful_mappings += 1
-                            self.logger.debug(f"✅ Mapped P-number {p_number} to CVR {cvr_number}")
-
+                    if pnumber_data and "company_relations" in pnumber_data:
+                        # Extract parent CVR number from company relations
+                        for relation in pnumber_data["company_relations"]:
+                            if relation.get("is_current", False) and relation.get("cvr_number"):
+                                cvr_number = str(relation["cvr_number"])
+                                if len(cvr_number) == 8 and cvr_number.isdigit():
+                                    cvr_numbers.add(cvr_number)
+                                    successful_mappings += 1
+                                    self.logger.debug(f"✅ Mapped P-number {pnumber} to CVR {cvr_number}")
+                                    break  # Use first valid current relation
                 except Exception as e:
-                    self.logger.debug(f"⚠️ Could not map P-number {p_number}: {e}")
+                    self.logger.debug(f"⚠️ Could not extract CVR from P-number {pnumber}: {e}")
                     continue
 
+            # Log bulk processing results
+            total_processed = len(pnumber_results.get("results", {}))
+            efficiency_info = pnumber_results.get("summary", {})
+
             self.logger.info(
-                f"🎯 Successfully mapped {successful_mappings} P-numbers to {len(cvr_numbers)} unique CVR numbers"
+                f"🎯 Bulk P-number processing completed: {successful_mappings}/{total_processed} successful mappings"
+            )
+            self.logger.info(
+                f"📊 Efficiency: {efficiency_info.get('api_calls', 0)} API calls for {len(p_numbers)} P-numbers "
+                f"({efficiency_info.get('efficiency_gain', '1.0x')} efficiency gain)"
+            )
+            self.logger.info(
+                f"✅ Final result: {len(cvr_numbers)} unique CVR numbers from {len(p_numbers)} P-numbers "
+                f"({len(cvr_numbers)/len(p_numbers)*100:.1f}% success rate)"
             )
 
             if cvr_numbers:

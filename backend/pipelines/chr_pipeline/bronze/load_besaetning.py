@@ -155,7 +155,11 @@ def load_herd_list(
                         except (ValueError, TypeError):
                             logger.warning(f"Skipping invalid herd number: {herd_num_str}")
             else:
-                logger.warning("BesaetningsnummerListe or BesNrListe not found in response.")
+                # Only log as debug since many species/usage combinations legitimately have no herds
+                logger.debug(
+                    f"No herds found for species {species_code}, usage {usage_code} - "
+                    "BesaetningsnummerListe or BesNrListe not found in response."
+                )
         else:
             logger.warning("Response attribute not found in the SOAP response object.")
 

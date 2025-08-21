@@ -15,7 +15,7 @@ except ImportError:
     GCSDataAccess = None
 
 from .utils import create_base_request
-from .volume_management import add_high_volume_herd, is_high_volume_herd
+from .volume_management import is_high_volume_herd
 
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.herd_discovery")
 
@@ -119,14 +119,10 @@ def discover_herd_volumes_for_year(
                 large_herds.append(herd_info)
                 discovery_stats["large_herds_found"] += 1
 
-                # Pre-configure for future processing
-                add_high_volume_herd(
-                    herd_info["herd"], herd_info["suggested_chunk_days"], volume_estimate=int(estimated_yearly)
-                )
-
                 logger.info(
                     f"🐄 Large herd detected: {herd_number} "
-                    f"(~{estimated_yearly:,.0f} animals/year, {herd_info['suggested_chunk_days']}-day chunks)"
+                    f"(~{estimated_yearly:,.0f} animals/year, {herd_info['suggested_chunk_days']}-day chunks) "
+                    f"- will be configured for chunked processing when needed"
                 )
             else:
                 normal_herds.append(herd_number)
