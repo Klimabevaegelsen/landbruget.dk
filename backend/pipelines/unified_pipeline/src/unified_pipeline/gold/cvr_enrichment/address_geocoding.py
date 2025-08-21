@@ -14,7 +14,6 @@ from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
 from unified_pipeline.util.dawa_api_client import DAWAAPIClient
-from unified_pipeline.util.primary_address_selector import select_primary_address_for_company_table
 from unified_pipeline.util.timing import timed
 
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
@@ -852,33 +851,78 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             # Create geocoding lookup from address table using proper primary address selection
             # Use the sophisticated primary address selection algorithm
             self.log.info("Applying primary address selection algorithm")
-            select_primary_address_for_company_table(self.conn, "cvr_addresses")
+
+            # Create a SQL query that implements the primary address selection logic
+            # This selects the best address for each CVR number based on priority rules:
+            # 1. Current addresses over historical
+            # 2. Successfully geocoded addresses (dawa_enriched = true)
+            # 3. Business address types (beliggenhedsadresse > postadresse > kontaktadresse)
+            # 4. Higher coordinate quality (A > B > C > D)
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE primary_address_selection AS
+                WITH address_scores AS (
+                    SELECT *,
+                        -- Score for current vs historical (current = 1000, historical = 0)
+                        CASE WHEN is_current THEN 1000 ELSE 0 END +
+                        -- Score for geocoding success (geocoded = 100, not geocoded = 0)
+                        CASE WHEN dawa_enriched OR datavask_enriched THEN 100 ELSE 0 END +
+                        -- Score for address type priority
+                        CASE
+                            WHEN UPPER(address_type) LIKE '%BELIGGENHED%' THEN 30
+                            WHEN UPPER(address_type) LIKE '%POST%' THEN 20
+                            WHEN UPPER(address_type) LIKE '%KONTAKT%' THEN 10
+                            ELSE 5
+                        END +
+                        -- Score for coordinate quality (A=4, B=3, C=2, D=1, NULL=0)
+                        CASE
+                            WHEN coordinate_quality = 'A' THEN 4
+                            WHEN coordinate_quality = 'B' THEN 3
+                            WHEN coordinate_quality = 'C' THEN 2
+                            WHEN coordinate_quality = 'D' THEN 1
+                            ELSE 0
+                        END +
+                        -- Small bonus for having coordinates
+                        CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 ELSE 0 END
+                        as selection_score
+                    FROM cvr_addresses
+                ),
+                ranked_addresses AS (
+                    SELECT *,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY cvr_number
+                            ORDER BY selection_score DESC, address_id
+                        ) as rank
+                    FROM address_scores
+                )
+                SELECT cvr_number, address_id, selection_score
+                FROM ranked_addresses
+                WHERE rank = 1
+            """)
 
             # Create table with selected primary addresses
             self.conn.execute("""
                 CREATE OR REPLACE TABLE company_geocoding AS
                 SELECT
-                    cvr_number,
-                    latitude,
-                    longitude,
-                    coordinate_quality,
-                    dawa_enriched,
+                    a.cvr_number,
+                    a.latitude,
+                    a.longitude,
+                    a.coordinate_quality,
+                    a.dawa_enriched,
                     -- Include structured address fields
-                    full_address as current_full_address,
-                    street_name as current_street_name,
-                    house_number as current_house_number,
-                    floor as current_floor,
-                    door as current_door,
-                    postal_code as current_postal_code,
-                    city as current_city,
-                    municipality_code as current_municipality_code,
-                    municipality_name as current_municipality_name,
-                    address_type as current_address_type,
-                    coordinate_source
-                FROM cvr_addresses
-                WHERE (cvr_number, address_id) IN (
-                    SELECT cvr_number, address_id FROM primary_address_selection
-                )
+                    a.full_address as current_full_address,
+                    a.street_name as current_street_name,
+                    a.house_number as current_house_number,
+                    a.floor as current_floor,
+                    a.door as current_door,
+                    a.postal_code as current_postal_code,
+                    a.city as current_city,
+                    a.municipality_code as current_municipality_code,
+                    a.municipality_name as current_municipality_name,
+                    a.address_type as current_address_type,
+                    a.coordinate_source
+                FROM cvr_addresses a
+                INNER JOIN primary_address_selection p
+                    ON a.cvr_number = p.cvr_number AND a.address_id = p.address_id
             """)
 
             # 🔧 FIX: Preserve all existing columns and only update geocoding fields
