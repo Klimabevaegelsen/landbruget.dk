@@ -37,7 +37,7 @@ except ImportError as e:
     save_pipeline_cvr_numbers = None
     CVRAPIClient = None
     CVR_COLLECTION_AVAILABLE = False
-    print(f"CVR collection not available: {e}")
+    logging.warning(f"CVR collection not available: {e}")
 
 
 def _get_optimized_gcs_access() -> type | None:
@@ -747,10 +747,10 @@ if __name__ == "__main__":
     except RuntimeError as e:
         # Logger might not be configured if __main__ is run and SilverPipeline init fails before logger setup
         # So, print to stderr as well
-        print(f"Silver Pipeline ERROR: {e}", file=sys.stderr)
+        logging.error(f"Silver Pipeline ERROR: {e}")
         logging.getLogger(__name__).error(f"Silver Pipeline execution failed: {e}", exc_info=True)
         exit(1)
     except Exception as e:
-        print(f"Silver Pipeline UNEXPECTED ERROR: {e}", file=sys.stderr)
+        logging.error(f"Silver Pipeline UNEXPECTED ERROR: {e}")
         logging.getLogger(__name__).error(f"Unexpected error in silver pipeline __main__: {e}", exc_info=True)
         exit(1)
