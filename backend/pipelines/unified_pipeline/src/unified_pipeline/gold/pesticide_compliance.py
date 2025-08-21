@@ -570,22 +570,67 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(f"📅 Agricultural years available: {[y[0] for y in years_available]}")
 
     async def _load_agricultural_fields_data(self) -> None:
-        """Load FVM marker data to get crop information for mapping."""
+        """Load FVM marker data to get crop information for mapping using Y+1 temporal pattern."""
         self.logger.info("📥 Loading FVM marker data for crop mapping")
 
-        # Find latest FVM marker data
-        pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/data.parquet"
-        files = self.gcs_access.list_files_with_timestamps(pattern)
+        # Get the application years from pesticide data to determine correct field years
+        application_years = self.conn.execute("""
+            SELECT DISTINCT application_year
+            FROM pesticide_applications
+            ORDER BY application_year
+        """).fetchall()
 
-        if not files:
-            self.logger.warning("⚠️ FVM marker data not found - crop mapping will be limited")
+        if not application_years:
+            self.logger.warning(
+                "⚠️ No pesticide application data found - cannot determine field years"
+            )
             return
 
-        # Sort by timestamp to get the most recent file
-        files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
-        latest_path, timestamp = files_sorted[0]
+        # Use Y+1 temporal pattern: pesticide year X uses field year X+1
+        # This matches the proven logic from pesticide disaggregation
+        field_years = [year[0] + 1 for year in application_years]
+        pesticide_years = [y[0] for y in application_years]
+        self.logger.info(
+            f"🗓️ Using Y+1 temporal pattern: pesticide years {pesticide_years} → "
+            f"field years {field_years}"
+        )
 
-        self.logger.info(f"📄 Loading FVM marker data from: {latest_path}")
+        # Try to find the best matching FVM marker data for each field year
+        agricultural_fields_loaded = False
+
+        for field_year in sorted(field_years, reverse=True):  # Try newest first
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{field_year}/*/data.parquet"
+            files = self.gcs_access.list_files_with_timestamps(pattern)
+
+            if files:
+                # Sort by timestamp to get the most recent file for this year
+                files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
+                latest_path, timestamp = files_sorted[0]
+
+                self.logger.info(
+                    f"📄 Loading FVM marker data from: {latest_path} (field year {field_year})"
+                )
+                agricultural_fields_loaded = True
+                break
+
+        if not agricultural_fields_loaded:
+            # Fallback to latest available if no exact year match found
+            self.logger.warning(
+                f"⚠️ No FVM marker data found for field years {field_years}, "
+                "falling back to latest available"
+            )
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/data.parquet"
+            files = self.gcs_access.list_files_with_timestamps(pattern)
+
+            if not files:
+                self.logger.warning("⚠️ FVM marker data not found - crop mapping will be limited")
+                return
+
+            files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
+            latest_path, timestamp = files_sorted[0]
+            self.logger.info(
+                f"📄 Loading FVM marker data from: {latest_path} (fallback - latest available)"
+            )
 
         # Load FVM marker data using proper GCS access pattern
         with self.gcs_access._temp_download(latest_path) as temp_file:
