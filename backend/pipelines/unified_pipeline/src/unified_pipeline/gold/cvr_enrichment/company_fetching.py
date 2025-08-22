@@ -476,13 +476,13 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             INSERT INTO {table_name}
             SELECT
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                md5(json_extract(json_data, '$.cvr_number')::VARCHAR)::VARCHAR as company_uuid,
-                json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR
+                md5(json_extract_string(json_data, '$.cvr_number'))::VARCHAR as company_uuid,
+                json_extract_string(json_data, '$.company_name') as company_name,
+                json_extract_string(json_data, '$.company_type_description')
                     as company_type_description,
-                json_extract(json_data, '$.status')::VARCHAR as status,
-                json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
-                json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
+                json_extract_string(json_data, '$.status') as status,
+                json_extract_string(json_data, '$.founded_date') as founded_date,
+                json_extract_string(json_data, '$.dissolution_date') as dissolution_date,
                 json_extract(json_data, '$.advertisement_protection')::BOOLEAN
                     as advertisement_protection,
                 json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
@@ -504,7 +504,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 NULL::VARCHAR as coordinate_source,
                 NULL::BOOLEAN as dawa_enriched,
                 json_data as company_data_json,
-                json_extract(json_data, '$.processing_timestamp')::VARCHAR
+                json_extract_string(json_data, '$.processing_timestamp')
                     as processing_timestamp
             FROM unnest($1) as t(json_data)
         """,
@@ -1206,13 +1206,13 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 CREATE TABLE {table_name} AS
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    md5(json_extract(json_data, '$.cvr_number')::VARCHAR)::VARCHAR as company_uuid,
-                    json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                    json_extract(json_data, '$.company_type_description')::VARCHAR
+                    md5(json_extract_string(json_data, '$.cvr_number'))::VARCHAR as company_uuid,
+                    json_extract_string(json_data, '$.company_name') as company_name,
+                    json_extract_string(json_data, '$.company_type_description')
                         as company_type_description,
-                    json_extract(json_data, '$.status')::VARCHAR as status,
-                    json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
-                    json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
+                    json_extract_string(json_data, '$.status') as status,
+                    json_extract_string(json_data, '$.founded_date') as founded_date,
+                    json_extract_string(json_data, '$.dissolution_date') as dissolution_date,
                     json_extract(json_data, '$.advertisement_protection')::BOOLEAN
                     as advertisement_protection,
                     json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
@@ -1221,36 +1221,36 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                     -- Priority: 1) Current addresses,
                     -- 2) Beliggenhedsadresse > Postadresse > Kontaktadresse,
                     -- 3) Best coordinate quality
-                    json_extract(json_data, '$.primary_address.full_address')::VARCHAR
+                    json_extract_string(json_data, '$.primary_address.full_address')
                     as current_full_address,
-                    json_extract(json_data, '$.primary_address.street_name')::VARCHAR
+                    json_extract_string(json_data, '$.primary_address.street_name')
                     as current_street_name,
-                    json_extract(json_data, '$.primary_address.house_number')::VARCHAR
+                    json_extract_string(json_data, '$.primary_address.house_number')
                     as current_house_number,
-                    json_extract(json_data, '$.primary_address.floor')::VARCHAR as current_floor,
-                    json_extract(json_data, '$.primary_address.door')::VARCHAR as current_door,
+                    json_extract_string(json_data, '$.primary_address.floor') as current_floor,
+                    json_extract_string(json_data, '$.primary_address.door') as current_door,
                     TRY_CAST(json_extract(json_data, '$.primary_address.postal_code') AS INTEGER)
                     as current_postal_code,
-                    json_extract(json_data, '$.primary_address.city')::VARCHAR as current_city,
+                    json_extract_string(json_data, '$.primary_address.city') as current_city,
                     TRY_CAST(json_extract(json_data,
                         '$.primary_address.municipality_code') AS INTEGER)
                     as current_municipality_code,
-                    json_extract(json_data, '$.primary_address.municipality_name')::VARCHAR
+                    json_extract_string(json_data, '$.primary_address.municipality_name')
                     as current_municipality_name,
-                    json_extract(json_data, '$.primary_address.address_type')::VARCHAR
+                    json_extract_string(json_data, '$.primary_address.address_type')
                     as current_address_type,
                     TRY_CAST(json_extract(json_data, '$.primary_address.latitude') AS DOUBLE)
                     as latitude,
                     TRY_CAST(json_extract(json_data, '$.primary_address.longitude') AS DOUBLE)
                     as longitude,
-                    json_extract(json_data, '$.primary_address.coordinate_quality')::VARCHAR
+                    json_extract_string(json_data, '$.primary_address.coordinate_quality')
                     as coordinate_quality,
-                    json_extract(json_data, '$.primary_address.coordinate_source')::VARCHAR
+                    json_extract_string(json_data, '$.primary_address.coordinate_source')
                     as coordinate_source,
                     json_extract(json_data, '$.primary_address.dawa_enriched')::BOOLEAN
                     as dawa_enriched,
                     json_data as company_data_json,  -- Keep for pipeline dependencies (artifacts)
-                    json_extract(json_data, '$.processing_timestamp')::VARCHAR
+                    json_extract_string(json_data, '$.processing_timestamp')
                         as processing_timestamp
                 FROM unnest($1) as t(json_data)
             """,

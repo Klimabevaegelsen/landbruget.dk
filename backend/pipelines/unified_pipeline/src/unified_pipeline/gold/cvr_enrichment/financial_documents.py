@@ -793,13 +793,13 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                         INSERT INTO {metadata_table}
                         SELECT
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            json_extract(json_data, '$.company_name')::VARCHAR as company_name,
+                            json_extract_string(json_data, '$.company_name') as company_name,
                             json_extract(json_data, '$.document_count')::INTEGER as document_count,
                             json_extract(json_data, '$.xml_document_count')::INTEGER as
                                 xml_document_count,
                             json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as
                                 total_xml_size_bytes,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as
+                            json_extract_string(json_data, '$.latest_reporting_date') as
                                 latest_reporting_date,
                             CASE
                                 WHEN json_extract(json_data, '$.latest_financial_metrics')
@@ -807,7 +807,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                                 THEN true
                                 ELSE false
                             END as has_financial_metrics,
-                            json_extract(json_data, '$.processing_timestamp')::VARCHAR as
+                            json_extract_string(json_data, '$.processing_timestamp') as
                                 processing_timestamp,
                             json_extract(json_data, '$.batch_number')::INTEGER as batch_number
                         FROM unnest($1) as t(json_data)
@@ -821,7 +821,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                         INSERT INTO {financial_table}
                         SELECT
                             md5(
-                                json_extract(json_data, '$.cvr_number')::VARCHAR
+                                json_extract_string(json_data, '$.cvr_number')
                             )::VARCHAR as company_uuid,
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                             'Annual Report' as publication_type,
@@ -889,14 +889,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             COALESCE(
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.operating_profit_loss'
                                     )
                                     AS DOUBLE
                                 ),
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.ResultatAfPrimæreDrift'
                                     )
                                     AS DOUBLE
@@ -905,14 +905,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             COALESCE(
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.profit_loss_before_tax'
                                     )
                                     AS DOUBLE
                                 ),
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.ResultatFørSkat'
                                     )
                                     AS DOUBLE
@@ -921,14 +921,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             COALESCE(
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.employee_benefits_expense'
                                     )
                                     AS DOUBLE
                                 ),
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.PersonaleOmkostninger'
                                     )
                                     AS DOUBLE
@@ -937,14 +937,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             COALESCE(
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.average_number_of_employees'
                                     )
                                     AS DOUBLE
                                 ),
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.GennemsnitligtAntalMedarbejdere'
                                     )
                                     AS DOUBLE
@@ -953,14 +953,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             COALESCE(
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.depreciation_expense'
                                     )
                                     AS DOUBLE
                                 ),
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.Afskrivninger'
                                     )
                                     AS DOUBLE
@@ -968,14 +968,14 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             ) as depreciation_expense,
                             TRY_CAST(
                                 json_extract(
-                                    json_data, 
+                                    json_data,
                                     '$.latest_financial_metrics.other_finance_income'
                                 )
                                 AS DOUBLE
                             ) as other_finance_income,
                             TRY_CAST(
                                 json_extract(
-                                    json_data, 
+                                    json_data,
                                     '$.latest_financial_metrics.other_finance_expenses'
                                 )
                                 AS DOUBLE
@@ -983,65 +983,251 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             COALESCE(
                                 TRY_CAST(
                                     json_extract(
-                                        json_data, 
+                                        json_data,
                                         '$.latest_financial_metrics.tax_expense'
                                     )
                                     AS DOUBLE
                                 ),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.Skat') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Skat'
+                                    )
+                                    AS DOUBLE
+                                )
                             ) as tax_expense,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.AktiverIAlt') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.Assets') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.AktiverIAlt'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Assets'
+                                    )
+                                    AS DOUBLE
+                                )
                             ) as total_assets,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_equity') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.EgenkapitalIAlt') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.Equity') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_equity'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.EgenkapitalIAlt'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Equity'
+                                    )
+                                    AS DOUBLE
+                                )
                             ) as total_equity,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.noncurrent_assets') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.AnlægsAktiver') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.noncurrent_assets'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.AnlægsAktiver'
+                                    )
+                                    AS DOUBLE
+                                )
                             ) as noncurrent_assets,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.current_assets') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.OmsætningsAktiver') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.current_assets'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.OmsætningsAktiver'
+                                    )
+                                    AS DOUBLE
+                                )
                             ) as current_assets,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.cash_and_cash_equivalents') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.LikvideBehold') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.Cash') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.cash_and_cash_equivalents'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.LikvideBehold'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Cash'
+                                    )
+                                    AS DOUBLE
+                                )
                             ) as cash_and_cash_equivalents,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.liabilities_other_than_provisions') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.GældIAlt') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.liabilities_other_than_provisions'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.GældIAlt'
+                                    )
+                                    AS DOUBLE
+                                )
                             ) as liabilities_other_than_provisions,
-                            TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.shortterm_liabilities_other_than_provisions') AS DOUBLE) as shortterm_liabilities_other_than_provisions,
-                            TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.longterm_liabilities_other_than_provisions') AS DOUBLE) as longterm_liabilities_other_than_provisions,
-                            TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.provisions') AS DOUBLE) as provisions,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.shortterm_liabilities_other_than_provisions'
+                                )
+                                AS DOUBLE
+                            ) as shortterm_liabilities_other_than_provisions,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.longterm_liabilities_other_than_provisions'
+                                )
+                                AS DOUBLE
+                            ) as longterm_liabilities_other_than_provisions,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.provisions'
+                                )
+                                AS DOUBLE
+                            ) as provisions,
                             COALESCE(
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.property_plant_equipment') AS DOUBLE),
-                                TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.MaterialeAktiver') AS DOUBLE)
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.property_plant_equipment'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.MaterialeAktiver'
+                                    )
+                                    AS DOUBLE
+                                )
                             ) as property_plant_equipment,
-                            TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.contributed_capital') AS DOUBLE) as contributed_capital,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.contributed_capital'
+                                )
+                                AS DOUBLE
+                            ) as contributed_capital,
                             -- Calculate ratios from available data
                             CASE
-                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE) > 0
-                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_equity') AS DOUBLE) /
-                                     TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE)
+                                WHEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                    AS DOUBLE
+                                ) > 0
+                                THEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_equity'
+                                    )
+                                    AS DOUBLE
+                                ) /
+                                     TRY_CAST(
+                                        json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                        AS DOUBLE
+                                    )
                                 ELSE NULL
                             END as equity_ratio,
                             CASE
-                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.average_number_of_employees') AS DOUBLE) > 0
-                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.net_profit_loss') AS DOUBLE) /
-                                     TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.average_number_of_employees') AS DOUBLE)
+                                WHEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.average_number_of_employees'
+                                    )
+                                    AS DOUBLE
+                                ) > 0
+                                THEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.net_profit_loss'
+                                    )
+                                    AS DOUBLE
+                                ) /
+                                     TRY_CAST(
+                                        json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.average_number_of_employees'
+                                    )
+                                        AS DOUBLE
+                                    )
                                 ELSE NULL
                             END as profit_per_employee,
                             CASE
-                                WHEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE) > 0
-                                THEN TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.net_profit_loss') AS DOUBLE) /
-                                     TRY_CAST(json_extract(json_data, '$.latest_financial_metrics.total_assets') AS DOUBLE)
+                                WHEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                    AS DOUBLE
+                                ) > 0
+                                THEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.net_profit_loss'
+                                    )
+                                    AS DOUBLE
+                                ) /
+                                     TRY_CAST(
+                                        json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                        AS DOUBLE
+                                    )
                                 ELSE NULL
                             END as return_on_assets
                         FROM unnest($1) as t(json_data)
@@ -1369,18 +1555,18 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 f"""
                 CREATE TABLE {table_name} AS
                 SELECT
-                    json_extract(json_data, '$.employment_uuid')::VARCHAR as employment_uuid,
+                    json_extract_string(json_data, '$.employment_uuid') as employment_uuid,
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.year')::INTEGER as year,
                     json_extract(json_data, '$.employee_count')::INTEGER as employee_count,
                     json_extract(json_data, '$.full_time_employee_count')::INTEGER as
                         full_time_employee_count,
-                    json_extract(json_data, '$.unit')::VARCHAR as unit,
+                    json_extract_string(json_data, '$.unit') as unit,
                     json_extract(json_data, '$.quarter')::INTEGER as quarter,
                     json_extract(json_data, '$.month')::INTEGER as month,
-                    json_extract(json_data, '$.reporting_period')::VARCHAR as reporting_period,
-                    json_extract(json_data, '$.employment_type')::VARCHAR as employment_type,
+                    json_extract_string(json_data, '$.reporting_period') as reporting_period,
+                    json_extract_string(json_data, '$.employment_type') as employment_type,
                     '{self.date_pattern}' as processing_timestamp
                 FROM unnest($1) as t(json_data)
             """,
@@ -1392,18 +1578,18 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 f"""
                 INSERT INTO {table_name}
                 SELECT
-                    json_extract(json_data, '$.employment_uuid')::VARCHAR as employment_uuid,
+                    json_extract_string(json_data, '$.employment_uuid') as employment_uuid,
                     company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                     json_extract(json_data, '$.year')::INTEGER as year,
                     json_extract(json_data, '$.employee_count')::INTEGER as employee_count,
                     json_extract(json_data, '$.full_time_employee_count')::INTEGER as
                         full_time_employee_count,
-                    json_extract(json_data, '$.unit')::VARCHAR as unit,
+                    json_extract_string(json_data, '$.unit') as unit,
                     json_extract(json_data, '$.quarter')::INTEGER as quarter,
                     json_extract(json_data, '$.month')::INTEGER as month,
-                    json_extract(json_data, '$.reporting_period')::VARCHAR as reporting_period,
-                    json_extract(json_data, '$.employment_type')::VARCHAR as employment_type,
+                    json_extract_string(json_data, '$.reporting_period') as reporting_period,
+                    json_extract_string(json_data, '$.employment_type') as employment_type,
                     '{self.date_pattern}' as processing_timestamp
                 FROM unnest($1) as t(json_data)
             """,
