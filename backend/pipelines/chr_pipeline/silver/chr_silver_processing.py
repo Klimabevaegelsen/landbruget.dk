@@ -365,23 +365,39 @@ def process_chr_data_streaming(
                     logging.info("🔍 Looking for CHR movement files across month-suffixed bronze directories...")
 
                     try:
-                        # Find all month-suffixed directories for this bronze timestamp
-                        all_dirs = gcs_access.list_files(f"gs://{bucket_name}/bronze/chr/")
-                        bronze_dirs = [d for d in all_dirs if d.startswith(f"bronze/chr/{bronze_timestamp}")]
+                        # FIXED: Use raw gcsfs instead of gcs_access.list_files() for directory listing
+                        import gcsfs
 
-                        logging.info(f"Found bronze directories: {bronze_dirs}")
+                        fs = gcsfs.GCSFileSystem()
+
+                        # Find all month-suffixed directories for this bronze timestamp
+                        all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")
+                        bronze_dirs = [d for d in all_dirs if bronze_timestamp in d]
+
+                        logging.info(
+                            f"Found {len(bronze_dirs)} bronze directories matching timestamp {bronze_timestamp}"
+                        )
 
                         matching_files = []
-                        for bronze_path in bronze_dirs:
-                            dir_files = gcs_access.list_files(f"gs://{bucket_name}/{bronze_path}")
-                            pattern_prefix = pattern.replace("*", "").replace(".parquet", "")
-                            dir_matches = [
-                                f"gs://{bucket_name}/{f}"
-                                for f in dir_files
-                                if pattern_prefix in f and f.endswith(".parquet")
-                            ]
-                            matching_files.extend(dir_matches)
-                            logging.info(f"Found {len(dir_matches)} CHR movement files in {bronze_path}")
+                        pattern_prefix = pattern.replace("*", "").replace(".parquet", "")
+
+                        for bronze_dir in bronze_dirs:
+                            try:
+                                # List files in this directory
+                                dir_files = fs.ls(bronze_dir)
+
+                                # Find matching files
+                                dir_matches = [
+                                    f"gs://{f}" for f in dir_files if pattern_prefix in f and f.endswith(".parquet")
+                                ]
+                                matching_files.extend(dir_matches)
+                                logging.info(f"Found {len(dir_matches)} CHR movement files in {bronze_dir}")
+
+                            except Exception as dir_e:
+                                logging.warning(f"Could not list files in {bronze_dir}: {dir_e}")
+                                continue
+
+                        logging.info(f"Total CHR movement files found: {len(matching_files)}")
 
                     except Exception as e:
                         logging.error(f"Error discovering month-suffixed bronze directories: {e}")
