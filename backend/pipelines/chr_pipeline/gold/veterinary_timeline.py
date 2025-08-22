@@ -59,7 +59,7 @@ def reconstruct_stable_fires_from_table(con: duckdb.DuckDBPyConnection) -> bool:
                     TRY_CAST("{column_names[1]}" AS DOUBLE) as fire_x_coord,
                     TRY_CAST("{column_names[2]}" AS DOUBLE) as fire_y_coord,
                     "{column_names[3]}" as fire_street,
-                    TRY_CAST("{column_names[4]}" AS DOUBLE) as fire_house_number,
+                    CAST("{column_names[4]}" AS VARCHAR) as fire_house_number,
                     "{column_names[5]}" as fire_municipality,
                     -- Try to parse date from various formats like "08-feb-21"
                     TRY_CAST(
