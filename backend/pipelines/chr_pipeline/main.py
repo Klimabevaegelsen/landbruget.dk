@@ -632,6 +632,20 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if context["args"]["progress"]:
             logger.info(f"Animal movements completed: {len(successful_results)}/{len(results)} herds successful")
 
+        # CRITICAL FIX: Finalize consolidated processing to save animal movements data to GCS
+        try:
+            from bronze.load_chr_dyr import finalize_consolidated_processing
+
+            logger.info("🚀 Finalizing consolidated animal movements processing...")
+            success = finalize_consolidated_processing()
+            if success:
+                logger.info("✅ Animal movements data successfully saved to GCS")
+            else:
+                logger.warning("⚠️ Consolidated processing finalization returned False")
+        except Exception as e:
+            logger.error(f"❌ Failed to finalize consolidated processing: {e}", exc_info=True)
+            # Don't raise - let the pipeline continue, but log the error
+
     elif step == "vetstat":
         if "chr_to_species" not in context:
             raise ValueError("Cannot run 'vetstat' step without first running 'herd_details'")
