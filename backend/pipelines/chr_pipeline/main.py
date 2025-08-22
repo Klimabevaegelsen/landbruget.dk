@@ -598,6 +598,14 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
         # Import the smart aggregation function with integrated discovery
         from bronze.animal_movements import load_cattle_movement_summaries
+        from bronze.load_chr_dyr import initialize_consolidated_processing
+
+        # Initialize consolidated processing for CHR_dyr movement summaries
+        logger.info("🚀 Initializing consolidated CHR_dyr processing...")
+        if not initialize_consolidated_processing():
+            logger.error("❌ Failed to initialize consolidated processing")
+            context["animal_movements_results"] = []
+            return context
 
         logger.info(
             f"🚀 Starting animal movements processing with integrated discovery for {len(cattle_herds)} cattle herds"

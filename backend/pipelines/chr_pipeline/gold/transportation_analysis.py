@@ -173,9 +173,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
             sv.missing_animal_count
         FROM svineflytning sv
         WHERE sv.receiver_country_code = 'DK'
-        
+
         UNION ALL
-        
+
         -- Standard A,EU.DK format matches with _nt (with comprehensive fields)
         SELECT DISTINCT
             sv.traces_document,
@@ -233,9 +233,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document IS NOT NULL
         AND nt.i_2_imsoc_reference IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- Standard A,EU.DK format matches with _cl (with comprehensive fields)
         SELECT DISTINCT
             sv.traces_document,
@@ -293,9 +293,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document IS NOT NULL
         AND cl.i_2_certificate_reference_number IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- Standard A,EU.DK format matches with 2024-2025
         SELECT DISTINCT
             sv.traces_document,
@@ -353,9 +353,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document IS NOT NULL
         AND new.i_2_imsoc_reference IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- DK format matches with _nt
         SELECT DISTINCT
             sv.traces_document,
@@ -413,9 +413,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document LIKE 'DK%'
         AND nt.i_2_imsoc_reference IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- EU.DK format matches with _nt
         SELECT DISTINCT
             sv.traces_document,
@@ -473,9 +473,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document LIKE 'EU.DK.%'
         AND nt.i_2_imsoc_reference IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- EU.DK format matches with 2024-2025
         SELECT DISTINCT
             sv.traces_document,
@@ -533,9 +533,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document LIKE 'EU.DK.%'
         AND new.i_2_imsoc_reference IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- Numeric certificate reconstruction with _nt
         SELECT DISTINCT
             sv.traces_document,
@@ -594,9 +594,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document ~ '^[0-9]+$'
         AND nt.i_2_imsoc_reference IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- Numeric certificate reconstruction with 2024-2025
         SELECT DISTINCT
             sv.traces_document,
@@ -657,9 +657,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document ~ '^[0-9]+$'
         AND new.i_2_imsoc_reference IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- Partial date format matches with _nt
         SELECT DISTINCT
             sv.traces_document,
@@ -717,9 +717,9 @@ def create_comprehensive_certificate_matching(conn: duckdb.DuckDBPyConnection) -
         WHERE sv.receiver_country_code != 'DK'
         AND sv.traces_document ~ '^[0-9]{4}\\.[0-9]+$'
         AND nt.i_2_imsoc_reference IS NOT NULL
-        
+
         UNION ALL
-        
+
         -- Partial date format matches with 2024-2025
         SELECT DISTINCT
             sv.traces_document,
@@ -883,9 +883,9 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                 'intl_cattle_traces_cl' as source_file
             FROM intl_cattle_traces_cl
             WHERE i_15_date_and_time_of_departure != '-'
-            
+
             UNION ALL
-            
+
             -- NT version (2017-2024) - has different schema than CL, with deduplication
             SELECT
                 i_2_imsoc_reference as certificate,
@@ -908,9 +908,9 @@ def perform_cattle_traces_matching(conn: duckdb.DuckDBPyConnection) -> None:
                 WHERE i_14_dato_og_klokkeslaet_for_afgang != '-'
             ) ranked
             WHERE rn = 1  -- Only most recent version of each certificate
-            
+
             UNION ALL
-            
+
             -- Combined 2024-2025 (same schema as NT) - cattle only
             SELECT
                 i_2_imsoc_reference as certificate,
@@ -1077,63 +1077,63 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
         CREATE OR REPLACE TABLE unified_transportation_dataset AS
         SELECT
             cm.*,
-            
+
             -- Sender information from CHR herds
             sender_h.usage_type_name as sender_usage_type,
             sender_h.business_type_name as sender_business_type,
             sender_h.species_name as sender_species,
-            
+
             -- Receiver information from CHR herds
             receiver_h.usage_type_name as receiver_usage_type,
             receiver_h.business_type_name as receiver_business_type,
             receiver_h.species_name as receiver_species,
-            
+
             -- Sender address information
             sender_p.address as sender_address,
             sender_p.postal_code as sender_postal_code,
             sender_p.municipality_name as sender_municipality,
-            
+
             -- Receiver address information
             receiver_p.address as receiver_address,
             receiver_p.postal_code as receiver_postal_code,
             receiver_p.municipality_name as receiver_municipality,
-            
+
             -- COMPREHENSIVE Destination type classification
             CASE
                 -- Slaughterhouses
                 WHEN receiver_h.business_type_name LIKE '%slagteri%' THEN 'Slaughterhouse'
-                
+
                 -- Rendering plants (carcass disposal)
                 WHEN receiver_h.business_type_name = 'Forarbejdningsanlæg' THEN 'Rendering Plant'
-                
+
                 -- Collection and logistics infrastructure
                 WHEN receiver_h.business_type_name LIKE '%sammenbringning%' THEN 'Collection Center'
                 WHEN receiver_h.business_type_name LIKE '%Afhentningsplads%' THEN 'Collection Point'
                 WHEN receiver_h.business_type_name LIKE '%Køleanlæg%' THEN 'Cooling Facility'
-                
+
                 -- Production farms by type
                 WHEN receiver_h.business_type_name LIKE '%produktionsbesætning%' THEN 'Production Farm'
                 WHEN receiver_h.business_type_name LIKE '%avls- og opformering%' THEN 'Breeding Farm'
                 WHEN receiver_h.business_type_name LIKE '%Smågriseopdræt%' THEN 'Piglet Farm'
                 WHEN receiver_h.business_type_name LIKE '%Frilandssvin%' THEN 'Free-range Pig Farm'
                 WHEN receiver_h.business_type_name LIKE '%Økologisk svin%' THEN 'Organic Pig Farm'
-                
+
                 -- Cattle farms by type
                 WHEN receiver_h.business_type_name LIKE '%Malkekvæg%' THEN 'Dairy Farm'
                 WHEN receiver_h.business_type_name LIKE '%Kødkvæg%' THEN 'Beef Farm'
                 WHEN receiver_h.business_type_name LIKE '%Kviehotel%' THEN 'Heifer Hotel'
                 WHEN receiver_h.business_type_name LIKE '%Slagtekalv%' THEN 'Veal Farm'
-                
+
                 -- Specialized facilities
                 WHEN receiver_h.business_type_name LIKE '%karantæne%' THEN 'Quarantine Facility'
                 WHEN receiver_h.business_type_name LIKE '%forsøg%' THEN 'Research Facility'
                 WHEN receiver_h.business_type_name LIKE '%sædopsamling%' THEN 'AI Station'
-                
+
                 -- Trading and markets
                 WHEN receiver_h.business_type_name LIKE '%handel%'
                     OR receiver_h.business_type_name LIKE '%marked%'
                     THEN 'Market/Trading'
-                
+
                 -- Hobby and recreational
                 WHEN receiver_h.business_type_name LIKE '%Hobby%' THEN 'Hobby Farm'
                 WHEN receiver_h.business_type_name LIKE '%pension%'
@@ -1143,27 +1143,27 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
                 WHEN receiver_h.business_type_name LIKE '%væddeløb%'
                     OR receiver_h.business_type_name LIKE '%træning%'
                     THEN 'Racing/Training'
-                
+
                 -- Other livestock operations
                 WHEN receiver_h.business_type_name LIKE '%Øvrige%' THEN 'Other Livestock'
                 WHEN receiver_h.business_type_name LIKE '%besætning%' THEN 'Livestock Farm'
-                
+
                 -- Environmental and seasonal
                 WHEN receiver_h.business_type_name LIKE '%Sæsonafgræsning%' THEN 'Seasonal Grazing'
                 WHEN receiver_h.business_type_name LIKE '%Naturpleje%' THEN 'Nature Management'
-                
+
                 -- Events and exhibitions
                 WHEN receiver_h.business_type_name LIKE '%Dyrskue%' THEN 'Livestock Show'
                 WHEN receiver_h.business_type_name LIKE '%Zoologisk%' THEN 'Zoo'
-                
+
                 -- International movements
                 WHEN cm.movement_type = 'international_export' THEN 'International Export'
-                
+
                 -- Fallback categories
                 WHEN receiver_h.business_type_name IS NOT NULL THEN 'Other Commercial'
                 ELSE 'Unknown'
             END as destination_type,
-            
+
             -- COMPREHENSIVE Origin type classification (same logic)
             CASE
                 WHEN sender_h.business_type_name LIKE '%slagteri%' THEN 'Slaughterhouse'
@@ -1203,11 +1203,11 @@ def create_destination_classifications(conn: duckdb.DuckDBPyConnection) -> None:
                 WHEN sender_h.business_type_name IS NOT NULL THEN 'Other Commercial'
                 ELSE 'Unknown'
             END as origin_type,
-            
+
             -- Processing metadata
             CURRENT_TIMESTAMP as processed_at,
             '1.0' as schema_version
-            
+
         FROM certificate_matched_movements cm
         LEFT JOIN chr_herds sender_h ON cm.sender_chr_number = sender_h.chr_number
         LEFT JOIN chr_herds receiver_h ON cm.receiver_chr_number = receiver_h.chr_number
@@ -1315,6 +1315,13 @@ def create_transportation_analysis(gcs_access) -> bool:
 
         if failed_loads:
             logger.warning(f"Failed datasets: {failed_loads}")
+
+        # Check if CHR_dyr movements are available - required for transportation analysis
+        if not loaded_tables.get("chr_dyr_movements", False):
+            logger.warning("⚠️ CHR_dyr movement summaries not available - skipping transportation analysis")
+            logger.info("   Transportation analysis requires CHR_dyr data with international movement flags")
+            logger.info("   Consider running CHR pipeline with animal_movements step to collect CHR_dyr data")
+            return True  # Return success but skip analysis
 
         # Execute pipeline steps
         create_comprehensive_certificate_matching(gcs_access.duckdb_conn)
