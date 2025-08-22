@@ -29,10 +29,10 @@ export function NavBanner() {
               Kilder
             </Link>
             <Link
-              href="/?search=om-os"
+              href="/om-os"
               className="flex items-center text-xs font-medium hover:underline"
             >
-              Om os
+              Om landbruget.dk
             </Link>
           </div>
         </div>
