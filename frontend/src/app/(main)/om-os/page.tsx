@@ -100,7 +100,7 @@ export default function AboutPage() {
                 </p>
 
                 <p className="text-lg text-gray-700 leading-relaxed">
-                  Selvom vi lægger stor vægt på datakvalitet og nøjagtighed, og løbende arbejder på at forbedre disse, er det vigtigt at understrege, at platformen og de data, den indeholder, stilles til rådighed <strong className="font-bold text-gray-900">'som de er og forefindes'</strong>. Vi kan derfor ikke give garantier for, at alle informationer til enhver tid er fuldstændigt udtømmende, fejlfrie eller opdaterede, især i et felt der konstant udvikler sig.
+                  Selvom vi lægger stor vægt på datakvalitet og nøjagtighed, og løbende arbejder på at forbedre disse, er det vigtigt at understrege, at platformen og de data, den indeholder, stilles til rådighed <strong className="font-bold text-gray-900">&apos;som de er og forefindes&apos;</strong>. Vi kan derfor ikke give garantier for, at alle informationer til enhver tid er fuldstændigt udtømmende, fejlfrie eller opdaterede, især i et felt der konstant udvikler sig.
                 </p>
 
                 <p className="text-lg text-gray-700 leading-relaxed">

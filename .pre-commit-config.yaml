@@ -11,9 +11,9 @@ repos:
       - id: end-of-file-fixer
         exclude: '\.md$'
       - id: check-yaml
-        args: ['--unsafe']  # Allow custom YAML tags in GitHub Actions
+        args: ["--unsafe"] # Allow custom YAML tags in GitHub Actions
       - id: check-added-large-files
-        args: ['--maxkb=1000']  # Prevent files larger than 1MB
+        args: ["--maxkb=1000"] # Prevent files larger than 1MB
       - id: check-merge-conflict
       - id: debug-statements
         language_version: python3
@@ -31,11 +31,24 @@ repos:
 
   - repo: local
     hooks:
+      # ESLint for frontend
+      - id: eslint
+        name: ESLint
+        entry: bash
+        args: [-c, "cd frontend && npm run lint"]
+        language: system
+        files: '^frontend/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
       # Custom hook to prevent committing to data directories
       - id: check-data-directories
         name: Prevent commits to data directories
         entry: bash
-        args: [-c, 'if git diff --cached --name-only | grep -E "^(data_cache|data_local)/"; then echo "Error: Do not commit files in data_cache/ or data_local/"; exit 1; fi']
+        args:
+          [
+            -c,
+            'if git diff --cached --name-only | grep -E "^(data_cache|data_local)/"; then echo "Error: Do not commit files in data_cache/ or data_local/"; exit 1; fi',
+          ]
         language: system
         pass_filenames: false
         always_run: true
@@ -44,7 +57,11 @@ repos:
       - id: check-debug-code
         name: Check for debugging code
         entry: bash
-        args: [-c, 'if git diff --cached --name-only -z | xargs -0 grep -l "print(" 2>/dev/null | grep -v test; then echo "Warning: Found print() statements in non-test files"; fi']
+        args:
+          [
+            -c,
+            'if git diff --cached --name-only -z | xargs -0 grep -l "print(" 2>/dev/null | grep -v test; then echo "Warning: Found print() statements in non-test files"; fi',
+          ]
         language: system
         pass_filenames: false
         always_run: true
