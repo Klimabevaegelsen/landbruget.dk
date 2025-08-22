@@ -9,8 +9,14 @@ export function Footer() {
         <div className="flex flex-col gap-4 lg:flex-row py-6 justify-between items-center">
           <Logo className="h-[26px]" />
           <div className="flex  gap-6">
-            <Link className="text-sm font-medium hover:underline" href="/">
+            <Link className="text-sm font-medium hover:underline" href="/om-os">
               Om Landbruget.dk
+            </Link>
+            <Link className="text-sm font-medium hover:underline" href="/brugsvilkaar">
+              Brugsvilkår
+            </Link>
+            <Link className="text-sm font-medium hover:underline" href="/privatlivspolitik">
+              Privatlivspolitik
             </Link>
             <Link className="text-sm font-medium hover:underline" href="/">
               Kilder
