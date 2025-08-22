@@ -1381,24 +1381,36 @@ def process_transportation_analysis(export_timestamp: str, gold_dir: Optional[Pa
         success = create_transportation_analysis(gcs_access)
 
         if success:
-            # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
-            if gcs_access and migrate_save_data_pattern:
-                bucket = "landbrugsdata-raw-data"
-                # Use subdataset parameter to create separate filenames
-                migrate_save_data_pattern(
-                    gcs_access,
-                    "unified_transportation_dataset",
-                    "chr",
-                    bucket,
-                    "gold",
-                    export_timestamp,
-                    "transportation_analysis",
+            # Check if unified_transportation_dataset table exists before trying to export
+            try:
+                table_exists = (
+                    gcs_access.duckdb_conn.execute("SELECT 1 FROM unified_transportation_dataset LIMIT 1").fetchone()
+                    is not None
                 )
+            except Exception:
+                table_exists = False
 
-                logger.info("✅ Transportation analysis processing completed successfully")
+            if table_exists:
+                # Export tables using GCS pattern (tables are in gcs_access.duckdb_conn)
+                if gcs_access and migrate_save_data_pattern:
+                    bucket = "landbrugsdata-raw-data"
+                    # Use subdataset parameter to create separate filenames
+                    migrate_save_data_pattern(
+                        gcs_access,
+                        "unified_transportation_dataset",
+                        "chr",
+                        bucket,
+                        "gold",
+                        export_timestamp,
+                        "transportation_analysis",
+                    )
+
+                    logger.info("✅ Transportation analysis processing completed successfully")
+                else:
+                    # Fallback to local export
+                    logger.warning("⚠️ GCS not available, exporting locally only")
             else:
-                # Fallback to local export
-                logger.warning("⚠️ GCS not available, exporting locally only")
+                logger.info("✅ Transportation analysis skipped successfully - no data to export")
 
         else:
             logger.error("❌ Transportation analysis processing failed")
