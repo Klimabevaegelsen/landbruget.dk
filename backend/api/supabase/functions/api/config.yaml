@@ -2,13 +2,12 @@ metadata:
   configVersion: "1.3"
 
 pageBuilder:
-
   - _key: company-identity
     _type: infoCard
     title: "Virksomhed Identitet"
     dataSource:
       params:
-        source: 'companies'
+        source: "companies"
         record:
           mappings:
             - label: "Navn"
@@ -30,7 +29,7 @@ pageBuilder:
     title: "Ejerforhold (Oversigt)"
     dataSource:
       params:
-        source: 'company_owners'
+        source: "company_owners"
         table:
           columns:
             - key: "owner"
@@ -45,7 +44,7 @@ pageBuilder:
     title: "Ledelse"
     dataSource:
       params:
-        source: 'company_leadership'
+        source: "company_leadership"
         table:
           columns:
             - key: "name"
@@ -67,34 +66,34 @@ pageBuilder:
         map:
           layers:
             - name: "Bygninger"
-              source: 'building_footprints'
-              geometryColumn: 'geom'
+              source: "building_footprints"
+              geometryColumn: "geom"
               properties:
-                - 'building_name'
-                - 'type'
-              style: 'building'
+                - "building_name"
+                - "type"
+              style: "building"
             - name: "Marker"
-              source: 'field_boundaries'
-              geometryColumn: 'geom'
+              source: "field_boundaries"
+              geometryColumn: "geom"
               properties:
-                - 'field_identifier'
-                - 'area_ha'
-              style: 'field'
+                - "field_identifier"
+                - "area_ha"
+              style: "field"
             - name: "Virksomhedens adresse"
-              source: 'companies'
-              geometryColumn: 'address_geom'
+              source: "companies"
+              geometryColumn: "address_geom"
               properties:
-                - 'address'
-              style: 'hq_marker'
+                - "address"
+              style: "hq_marker"
 
   - _key: financials-latest-kpis
     _type: kpiGroup
     title: "Finansielle Nøgletal (Seneste År)"
     dataSource:
       params:
-        source: 'yearly_financials'
+        source: "yearly_financials"
         kpis:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
           metrics:
             - key: "revenue"
@@ -115,45 +114,45 @@ pageBuilder:
     title: "Økonomisk Udvikling (pr. År)"
     dataSource:
       params:
-        source: 'yearly_financials'
+        source: "yearly_financials"
         timeSeries:
-          timeColumn: 'year'
+          timeColumn: "year"
           metrics:
-            - key: 'revenue'
-              column: 'revenue'
-              seriesName: 'Omsætning'
-            - key: 'profit'
-              column: 'profit'
-              seriesName: 'Resultat'
-            - key: 'subsidies'
-              column: 'total_subsidies'
-              seriesName: 'Tilskud'
+            - key: "revenue"
+              column: "revenue"
+              seriesName: "Omsætning"
+            - key: "profit"
+              column: "profit"
+              seriesName: "Resultat"
+            - key: "subsidies"
+              column: "total_subsidies"
+              seriesName: "Tilskud"
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: "year"
+            direction: "asc"
 
   - _key: subsidies-history-stacked
     _type: stackedBarChart
     title: "Tilskud Fordelt på Type (pr. År)"
     dataSource:
       params:
-        source: 'subsidy_details'
+        source: "subsidy_details"
         timeSeries:
-          timeColumn: 'year'
-          valueColumn: 'amount_dkk'
-          groupByColumn: 'subsidy_type'
+          timeColumn: "year"
+          valueColumn: "amount_dkk"
+          groupByColumn: "subsidy_type"
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: "year"
+            direction: "asc"
 
   - _key: land-use-kpis
     _type: kpiGroup
     title: "Arealanvendelse Nøgletal"
     dataSource:
       params:
-        source: 'land_use_summary'
+        source: "land_use_summary"
         kpis:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
           metrics:
             - key: "total_ha"
@@ -182,17 +181,17 @@ pageBuilder:
     title: "Afgrødefordeling (Seneste År, Øko/Konv)"
     dataSource:
       params:
-        source: 'field_yearly_data'
+        source: "field_yearly_data"
         category:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
-          categoryColumn: 'crop_name'
-          valueColumn: 'area_ha'
-          stackByColumn: 'is_organic'
+          categoryColumn: "crop_name"
+          valueColumn: "area_ha"
+          stackByColumn: "is_organic"
           topN: 9
           orderBy:
-            - column: 'area_ha'
-              direction: 'desc'
+            - column: "area_ha"
+              direction: "desc"
 
   - _key: land-use-field-map
     _type: mapChart
@@ -202,94 +201,94 @@ pageBuilder:
         map:
           layers:
             - name: "Marker"
-              source: 'field_boundaries'
-              geometryColumn: 'geom'
+              source: "field_boundaries"
+              geometryColumn: "geom"
               properties:
-                - 'field_identifier'
-                - 'field_name'
-                - 'area_ha'
-                - 'crop_name'
-                - 'is_organic'
-              style: 'field_detailed'
+                - "field_identifier"
+                - "field_name"
+                - "area_ha"
+                - "crop_name"
+                - "is_organic"
+              style: "field_detailed"
 
   - _key: land-use-bnbo-chart
     _type: horizontalStackedBarChart
     title: "BNBO Status Fordeling (Snapshot)"
     dataSource:
       params:
-        source: 'bnbo_summary'
+        source: "bnbo_summary"
         category:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
-          categoryColumn: 'status'
-          valueColumn: 'area_ha'
+          categoryColumn: "status"
+          valueColumn: "area_ha"
 
   - _key: land-use-bnbo-kpis
     _type: kpiGroup
     title: "BNBO Nøgletal & Placering"
     dataSource:
       params:
-        source: 'bnbo_summary'
+        source: "bnbo_summary"
         kpis:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
           filter:
-             status: 'not_dealt_with'
+            status: "not_dealt_with"
           metrics:
-             - key: "ha_not_dealt_with"
-               label: "Hektar ikke håndteret"
-               column: "area_ha"
-               format: "number"
-             - key: "rank_dk_bnbo_not_dealt_with"
-               label: "Placering DK (BNBO)"
-               column: "rank_dk_area_not_dealt_with"
-             - key: "rank_mun_bnbo_not_dealt_with"
-               label: "Placering Kommune (BNBO)"
-               column: "rank_municipality_area_not_dealt_with"
+            - key: "ha_not_dealt_with"
+              label: "Hektar ikke håndteret"
+              column: "area_ha"
+              format: "number"
+            - key: "rank_dk_bnbo_not_dealt_with"
+              label: "Placering DK (BNBO)"
+              column: "rank_dk_area_not_dealt_with"
+            - key: "rank_mun_bnbo_not_dealt_with"
+              label: "Placering Kommune (BNBO)"
+              column: "rank_municipality_area_not_dealt_with"
 
   - _key: land-use-wetlands-chart
     _type: horizontalStackedBarChart
     title: "Vådområder Status Fordeling (Snapshot)"
     dataSource:
       params:
-        source: 'wetlands_summary'
+        source: "wetlands_summary"
         category:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
-          categoryColumn: 'status'
-          valueColumn: 'area_ha'
+          categoryColumn: "status"
+          valueColumn: "area_ha"
 
   - _key: land-use-wetlands-kpis
     _type: kpiGroup
     title: "Vådområder Nøgletal & Placering"
     dataSource:
       params:
-        source: 'wetlands_summary'
+        source: "wetlands_summary"
         kpis:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
           filter:
-             status: 'not_dealt_with'
+            status: "not_dealt_with"
           metrics:
-             - key: "ha_not_dealt_with"
-               label: "Hektar ikke håndteret"
-               column: "area_ha"
-               format: "number"
-             - key: "rank_dk_wetlands_not_dealt_with"
-               label: "Placering DK (Vådomr.)"
-               column: "rank_dk_area_not_dealt_with"
-             - key: "rank_mun_wetlands_not_dealt_with"
-               label: "Placering Kommune (Vådomr.)"
-               column: "rank_municipality_area_not_dealt_with"
+            - key: "ha_not_dealt_with"
+              label: "Hektar ikke håndteret"
+              column: "area_ha"
+              format: "number"
+            - key: "rank_dk_wetlands_not_dealt_with"
+              label: "Placering DK (Vådomr.)"
+              column: "rank_dk_area_not_dealt_with"
+            - key: "rank_mun_wetlands_not_dealt_with"
+              label: "Placering Kommune (Vådomr.)"
+              column: "rank_municipality_area_not_dealt_with"
 
   - _key: environment-kpis
     _type: kpiGroup
     title: "Miljø Nøgletal"
     dataSource:
       params:
-        source: 'environment_summary'
+        source: "environment_summary"
         kpis:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
           metrics:
             - key: "fertiliser_kg"
@@ -331,24 +330,24 @@ pageBuilder:
     title: "Hændelser med Gylleudslip"
     dataSource:
       params:
-        source: 'incidents'
+        source: "incidents"
         events:
           filter:
-            type: 'slurry_leak'
-          dateColumn: 'incident_date'
-          descriptionColumn: 'description'
+            type: "slurry_leak"
+          dateColumn: "incident_date"
+          descriptionColumn: "description"
         orderBy:
-          - column: 'incident_date'
-            direction: 'desc'
+          - column: "incident_date"
+            direction: "desc"
 
   - _key: environment-nitrogen-leaching
     _type: comboChart
     title: "Kvælstofudvaskning (Total og pr. Hektar)"
     dataSource:
       params:
-        source: 'environment_summary'
+        source: "environment_summary"
         timeSeries:
-          timeColumn: 'year'
+          timeColumn: "year"
           metrics:
             - key: "total_n"
               seriesName: "Total Kg N Udledt"
@@ -361,20 +360,20 @@ pageBuilder:
               type: "line"
               yAxis: "right"
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: "year"
+            direction: "asc"
 
   - _key: environment-nitrogen-per-field
     _type: dataGrid
     title: "Kvælstofudvaskning pr. Mark (Detaljeret)"
     dataSource:
       params:
-        source: 'field_yearly_data'
+        source: "field_yearly_data"
         table:
           columns:
             - key: "field_id"
               label: "Mark ID"
-              column: "field_boundary_id"
+              column: "field_uuid"
             - key: "year"
               label: "År"
               column: "year"
@@ -385,12 +384,12 @@ pageBuilder:
               column: "n_leached_kg"
               format: "number"
           initialFilter:
-            year: 'latest'
+            year: "latest"
         orderBy:
-          - column: 'year'
-            direction: 'desc'
-          - column: 'field_boundary_id'
-            direction: 'asc'
+          - column: "year"
+            direction: "desc"
+          - column: "field_uuid"
+            direction: "asc"
     allowFiltering: true
 
   - _key: environment-pesticide-load
@@ -398,9 +397,9 @@ pageBuilder:
     title: "Pesticidbelastning (Total og pr. Hektar)"
     dataSource:
       params:
-        source: 'environment_summary'
+        source: "environment_summary"
         timeSeries:
-          timeColumn: 'year'
+          timeColumn: "year"
           metrics:
             - key: "total_load"
               seriesName: "Total Belastning"
@@ -413,15 +412,15 @@ pageBuilder:
               type: "line"
               yAxis: "right"
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: "year"
+            direction: "asc"
 
   - _key: environment-pesticide-risks
     _type: dataGrid
     title: "Pesticidanvendelse Detaljer og Risici"
     dataSource:
       params:
-        source: 'pesticide_applications'
+        source: "pesticide_applications"
         table:
           columns:
             - key: "year"
@@ -457,12 +456,12 @@ pageBuilder:
               label: "Nærhed Skole (m)"
               column: "proximity_school_m"
           initialFilter:
-            year: 'latest'
+            year: "latest"
         orderBy:
-          - column: 'risk_category'
-            direction: 'asc'
-          - column: 'pesticide_name'
-            direction: 'asc'
+          - column: "risk_category"
+            direction: "asc"
+          - column: "pesticide_name"
+            direction: "asc"
     allowFiltering: true
 
   - _key: worker-welfare-kpis
@@ -470,9 +469,9 @@ pageBuilder:
     title: "Medarbejderforhold Nøgletal (Seneste)"
     dataSource:
       params:
-        source: 'worker_yearly_summary'
+        source: "worker_yearly_summary"
         kpis:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
           metrics:
             - key: "employees"
@@ -480,44 +479,44 @@ pageBuilder:
               column: "average_employee_count"
             - key: "injuries"
               label: "Arbejdsskader (År)"
-              column: 'injury_count_reported'
+              column: "injury_count_reported"
 
   - _key: worker-welfare-employees-monthly
     _type: barChart
     title: "Antal Ansatte pr. Måned"
     dataSource:
       params:
-        source: 'employee_monthly_counts'
+        source: "employee_monthly_counts"
         timeSeries:
-          timeColumn: 'month_year'
+          timeColumn: "month_year"
           metrics:
-            - key: 'employee_count'
-              column: 'employee_count'
-              seriesName: 'Antal Ansatte'
+            - key: "employee_count"
+              column: "employee_count"
+              seriesName: "Antal Ansatte"
         orderBy:
-          - column: 'month_year'
-            direction: 'asc'
+          - column: "month_year"
+            direction: "asc"
 
   - _key: worker-welfare-visas
     _type: stackedBarChart
     title: "Førstegangstilladelser pr. År (Fordelt på Nationalitet)"
     dataSource:
       params:
-        source: 'visa_yearly_counts'
+        source: "visa_yearly_counts"
         timeSeries:
-          timeColumn: 'year'
-          valueColumn: 'first_permits_count'
-          groupByColumn: 'nationality'
+          timeColumn: "year"
+          valueColumn: "first_permits_count"
+          groupByColumn: "nationality"
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: "year"
+            direction: "asc"
 
   - _key: worker-welfare-injuries
     _type: dataGrid
     title: "Arbejdsskader pr. År (Rapporteret Antal)"
     dataSource:
       params:
-        source: 'worker_yearly_summary'
+        source: "worker_yearly_summary"
         table:
           columns:
             - key: "year"
@@ -527,8 +526,8 @@ pageBuilder:
               label: "Antal Skader Rapporteret"
               column: "injury_count_reported"
         orderBy:
-          - column: 'year'
-            direction: 'desc'
+          - column: "year"
+            direction: "desc"
     allowFiltering: false
 
   - _key: animal-welfare-kpis-overall
@@ -536,9 +535,9 @@ pageBuilder:
     title: "Dyrevelærd Nøgletal (Samlet)"
     dataSource:
       params:
-        source: 'animal_welfare_summary'
+        source: "animal_welfare_summary"
         kpis:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
           metrics:
             - key: "sites"
@@ -577,23 +576,23 @@ pageBuilder:
     title: "Dyreproduktion pr. År (Samlet, Fordelt på Art)"
     dataSource:
       params:
-        source: 'animal_production_log'
+        source: "site_species_production_ranked"
         timeSeries:
-          timeColumn: 'year'
-          valueColumn: 'production_volume_equiv'
-          groupByColumn: 'species_name'
+          timeColumn: "year"
+          valueColumn: "production_volume_equiv"
+          groupByColumn: "species_name"
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: "year"
+            direction: "asc"
 
   - _key: animal-welfare-antibiotics-usage-chart
     _type: comboChart
     title: "Antibiotikaforbrug (Samlet, Total og Rate)"
     dataSource:
       params:
-        source: 'animal_welfare_summary'
+        source: "animal_welfare_summary"
         timeSeries:
-          timeColumn: 'year'
+          timeColumn: "year"
           metrics:
             - key: "total_usage"
               seriesName: "Total Forbrug (DDD)"
@@ -606,39 +605,38 @@ pageBuilder:
               type: "line"
               yAxis: "right"
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: "year"
+            direction: "asc"
 
   - _key: animal-welfare-site-map
     _type: mapChart
     title: "Produktionssteder (Sites)"
     dataSource:
       params:
-        source: 'production_sites'
+        source: "production_sites"
         map:
           layers:
             - name: "Produktionssteder"
-              source: 'production_sites'
-              geometryColumn: 'location_geom'
+              source: "production_sites"
+              geometryColumn: "location_geom"
               properties:
-                - 'chr'
-                - 'site_name'
-                - 'main_species_name'
-                - 'capacity'
-              style: 'production_site_marker'
+                - "chr"
+                - "site_name"
+                - "capacity"
+              style: "production_site_marker"
 
   - _key: animal-welfare-sites-iteration
     _type: iteratedSection
     title: "Detaljer pr. Produktionssted (Site)"
     iteratorDataSource:
       params:
-        source: 'production_sites'
+        source: "production_sites"
         columns:
-          - 'chr'
-          - 'site_name'
+          - "chr"
+          - "site_name"
     iterationConfig:
-      layout: 'collapsible'
-      titleField: 'site_name'
+      layout: "collapsible"
+      titleField: "site_name"
 
     template:
       - _key: site-details-{iteratorContext.chr}
@@ -646,11 +644,11 @@ pageBuilder:
         title: "Site Basis Info ({iteratorContext.site_name})"
         dataSource:
           params:
-            source: 'site_details_summary_ranked'
+            source: "site_details_summary_ranked"
             record:
               filter:
-                chr: '{iteratorContext.chr}'
-                year: 'latest'
+                chr: "{iteratorContext.chr}"
+                year: "latest"
               mappings:
                 - label: "Site CHR"
                   column: "chr"
@@ -668,11 +666,11 @@ pageBuilder:
         title: "Site Nøgletal & Placering"
         dataSource:
           params:
-            source: 'site_details_summary_ranked'
+            source: "site_details_summary_ranked"
             kpis:
               filter:
-                chr: '{iteratorContext.chr}'
-                year: 'latest'
+                chr: "{iteratorContext.chr}"
+                year: "latest"
               metrics:
                 - key: "production"
                   label: "Produktion (Ækv.)"
@@ -698,34 +696,34 @@ pageBuilder:
         title: "Site Veterinære Hændelser"
         dataSource:
           params:
-            source: 'vet_events'
+            source: "vet_events"
             events:
               filter:
-                chr: '{iteratorContext.chr}'
-              dateColumn: 'event_date'
-              descriptionColumn: 'description'
+                chr: "{iteratorContext.chr}"
+              dateColumn: "event_date"
+              descriptionColumn: "description"
               groupByColumns:
-                - 'event_type'
+                - "event_type"
               filterColumns:
-                - 'event_type'
+                - "event_type"
             orderBy:
-              - column: 'event_date'
-                direction: 'desc'
+              - column: "event_date"
+                direction: "desc"
 
       - _key: site-species-iteration-{iteratorContext.chr}
         _type: iteratedSection
         title: "Detaljer pr. Dyreart på Site"
         iteratorDataSource:
           params:
-            source: 'site_species_production_ranked'
+            source: "site_species_production_ranked"
             filter:
-              chr: '{iteratorContext.chr}'
+              chr: "{iteratorContext.chr}"
             columns:
-              - 'species_id'
-              - 'species_name'
+              - "species_id"
+              - "species_name"
         iterationConfig:
-          layout: 'collapsible'
-          titleField: 'species_name'
+          layout: "collapsible"
+          titleField: "species_name"
 
         template:
           - _key: species-kpis-{iteratorContext.chr}-{iteratorContext.species_id}
@@ -733,12 +731,12 @@ pageBuilder:
             title: "{iteratorContext.species_name} Produktion & Placering"
             dataSource:
               params:
-                source: 'site_species_production_ranked'
+                source: "site_species_production_ranked"
                 kpis:
                   filter:
-                    chr: '{iteratorContext.chr}'
-                    species_id: '{iteratorContext.species_id}'
-                    year: 'latest'
+                    chr: "{iteratorContext.chr}"
+                    species_id: "{iteratorContext.species_id}"
+                    year: "latest"
                   metrics:
                     - key: "production_animals"
                       label: "Produktion (Antal/Ækv.)"
@@ -752,43 +750,43 @@ pageBuilder:
 
           - _key: species-age-chart-{iteratorContext.chr}-{iteratorContext.species_id}
             _type: stackedBarChart
-            title: "{iteratorContext.species_name} Produktion pr. År (Aldersgruppe)"
+            title: "{iteratorContext.species_name} Produktion pr. År (Kategori)"
             dataSource:
               params:
-                source: 'animal_production_log'
+                source: "animal_capacity_log"
                 timeSeries:
                   filter:
-                    chr: '{iteratorContext.chr}'
-                    species_id: '{iteratorContext.species_id}'
-                  timeColumn: 'year'
-                  valueColumn: 'production_volume_equiv'
-                  groupByColumn: 'age_group'
+                    chr: "{iteratorContext.chr}"
+                    species_id: "{iteratorContext.species_id}"
+                  timeColumn: "EXTRACT(YEAR FROM capacity_date)"
+                  valueColumn: "capacity_count"
+                  groupByColumn: "category"
                 orderBy:
-                  - column: 'year'
-                    direction: 'asc'
+                  - column: "EXTRACT(YEAR FROM capacity_date)"
+                    direction: "asc"
 
   - _key: animal-welfare-transport-chart
     _type: barChart
     title: "Dyretransporter pr. Uge (Samlet, Fordelt på Destination)"
     dataSource:
       params:
-        source: 'animal_transport_weekly_summary'
+        source: "animal_transport_weekly_summary"
         timeSeries:
-          timeColumn: 'transport_date_week_start'
-          valueColumn: 'animal_count'
-          groupByColumn: 'destination_type'
+          timeColumn: "transport_date_week_start"
+          valueColumn: "animal_count"
+          groupByColumn: "destination_type"
         orderBy:
-          - column: 'transport_date_week_start'
-            direction: 'asc'
+          - column: "transport_date_week_start"
+            direction: "asc"
 
   - _key: carbon-accounting-kpis
     _type: kpiGroup
     title: "Klimaregnskab Nøgletal (Seneste År)"
     dataSource:
       params:
-        source: 'carbon_summary'
+        source: "carbon_summary"
         kpis:
-          timeContext: 'last_n_years'
+          timeContext: "last_n_years"
           n: 1
           metrics:
             - key: "total_co2e"
@@ -806,21 +804,21 @@ pageBuilder:
     title: "CO2e Emissioner pr. År (Fordelt på Kilde)"
     dataSource:
       params:
-        source: 'carbon_emission_details_yearly'
+        source: "carbon_emission_details_yearly"
         timeSeries:
-          timeColumn: 'year'
-          valueColumn: 'co2e_tonnes'
-          groupByColumn: 'emission_source'
+          timeColumn: "year"
+          valueColumn: "co2e_tonnes"
+          groupByColumn: "emission_source"
         orderBy:
-          - column: 'year'
-            direction: 'asc'
+          - column: "year"
+            direction: "asc"
 
   - _key: carbon-accounting-details
     _type: dataGrid
     title: "Detaljeret Klimaregnskab (Kilde x Faktor pr. År)"
     dataSource:
       params:
-        source: 'carbon_emission_factors'
+        source: "carbon_emission_factors"
         table:
           columns:
             - key: "year"
@@ -853,12 +851,12 @@ pageBuilder:
               column: "co2e_tonnes"
               format: "number"
           initialFilter:
-            year: 'latest'
+            year: "latest"
         orderBy:
-          - column: 'year'
-            direction: 'desc'
-          - column: 'source_category'
-            direction: 'asc'
-          - column: 'sub_source'
-            direction: 'asc'
+          - column: "year"
+            direction: "desc"
+          - column: "source_category"
+            direction: "asc"
+          - column: "sub_source"
+            direction: "asc"
     allowFiltering: true
