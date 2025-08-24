@@ -1,4 +1,4 @@
-from unified_pipeline import app
+from unified_pipeline.app import cli
 
 if __name__ == "__main__":
-    app.run_cli()
+    cli()

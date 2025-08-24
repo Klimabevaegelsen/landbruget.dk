@@ -1,10 +1,10 @@
-# Unified Pipeline
+# Unified Pipeline - Manual Execution
+# For manual testing and running specific pipelines on-demand
+# Scheduled pipelines now use dedicated weekly/monthly workflows
 
-name: Unified Pipeline
+name: Unified Pipeline - Manual
 
 on:
-  schedule:
-    - cron: "0 0 * * 0" # every Sunday at midnight UTC (Note: agricultural_fields processes multi-year data 2020-2025)
   workflow_dispatch:
     # Allow manual triggering
     inputs:
@@ -15,26 +15,28 @@ on:
         type: choice
         options:
           - all
+          # Manual-only pipelines (not scheduled)
+          - soil_types
+          - wetlands
+          - water_typology
+          - pesticide_disaggregation
+          - pesticide_compliance
+          - worker_safety
+          - work_permits
+          - dmi
+          # All other pipelines (for manual testing)
           - cadastral
           - agricultural_fields
           - bnbo
           - dagi
           - jordbrugsanalyser
           - fvm_wfs
-          - soil_types
-          - wetlands
           - water_projects
-          - water_typology
           - property_cadastral_merge
           - field_production
           - field_area_analysis
-          - pesticide_disaggregation
-          - pesticide_compliance
           - arbejdstilsynet_inspections
-          - worker_safety
-          - work_permits
           - dst
-          - dmi
           - cvr_enrichment
       stage:
         description: "Pipeline stage to run"
@@ -75,10 +77,8 @@ jobs:
                {"source":"fvm_wfs","layer_type":"smaabiotoper","year":2023},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2024},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2025},
                {"source":"fvm_wfs","layer_type":"organic_areas","year":2012},{"source":"fvm_wfs","layer_type":"organic_areas","year":2013},{"source":"fvm_wfs","layer_type":"organic_areas","year":2014},{"source":"fvm_wfs","layer_type":"organic_areas","year":2015},{"source":"fvm_wfs","layer_type":"organic_areas","year":2016},{"source":"fvm_wfs","layer_type":"organic_areas","year":2017},{"source":"fvm_wfs","layer_type":"organic_areas","year":2018},{"source":"fvm_wfs","layer_type":"organic_areas","year":2019},{"source":"fvm_wfs","layer_type":"organic_areas","year":2020},{"source":"fvm_wfs","layer_type":"organic_areas","year":2021},{"source":"fvm_wfs","layer_type":"organic_areas","year":2022},{"source":"fvm_wfs","layer_type":"organic_areas","year":2023},{"source":"fvm_wfs","layer_type":"organic_areas","year":2024}
              ]')) ||
-            (github.event_name == 'schedule' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_compliance"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             (github.event.inputs.source == 'all' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_compliance"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"soil_types"},{"source":"wetlands"},{"source":"water_typology"},{"source":"pesticide_disaggregation"},{"source":"pesticide_compliance"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"dmi"},{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"fvm_wfs"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"arbejdstilsynet_inspections"},{"source":"dst"},{"source":"cvr_enrichment"}]')) ||
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
@@ -242,7 +242,7 @@ jobs:
 
   # Pesticide Processing Matrix Jobs - Combined disaggregation + proximity per year
   pesticide-processing:
-    if: ${{ contains(fromJson('["all", "pesticide_disaggregation"]'), github.event.inputs.source) || (github.event_name == 'schedule') }}
+    if: ${{ contains(fromJson('["all", "pesticide_disaggregation"]'), github.event.inputs.source) }}
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
