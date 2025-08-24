@@ -87,6 +87,8 @@ export default function FieldAnalysisMap({
 
   // Initialize PMTiles protocol
   useEffect(() => {
+    let protocolRegistered = false;
+
     const initializePMTiles = async () => {
       try {
         // Import MapLibre GL dynamically to avoid SSR issues
@@ -95,13 +97,19 @@ export default function FieldAnalysisMap({
           import('pmtiles')
         ]);
 
-        // Register PMTiles protocol with MapLibre
-        const protocol = new Protocol();
-        maplibregl.default.addProtocol('pmtiles', protocol.tile);
+        console.log('✅ MapLibre and PMTiles loaded successfully');
+
+        // Register PMTiles protocol with MapLibre (only once)
+        if (!protocolRegistered) {
+          const protocol = new Protocol();
+          maplibregl.default.addProtocol('pmtiles', protocol.tile);
+          protocolRegistered = true;
+          console.log('✅ PMTiles protocol registered');
+        }
 
         setIsLoading(false);
       } catch (err) {
-        console.error("Failed to initialize PMTiles:", err);
+        console.error("❌ Failed to initialize PMTiles:", err);
         setError("Kunne ikke indlæse kortdata");
         setIsLoading(false);
       }
@@ -278,12 +286,11 @@ export default function FieldAnalysisMap({
       // Add PMTiles sources
       Object.entries(pmtilesUrls).forEach(([layerName, url]) => {
         if (url && !map.getSource(layerName)) {
-          // Remove protocol from URL since PMTiles protocol handler expects just the domain/path
-          const cleanUrl = url.replace(/^https?:\/\//, '');
           map.addSource(layerName, {
             type: "vector",
-            url: `pmtiles://${cleanUrl}`,
+            url: `pmtiles://${url}`,
           });
+          console.log(`✅ Added ${layerName} source:`, url);
         }
       });
 
