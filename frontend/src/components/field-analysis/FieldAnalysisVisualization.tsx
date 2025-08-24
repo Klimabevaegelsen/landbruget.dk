@@ -16,6 +16,8 @@ const FieldAnalysisMap = dynamic(() => import("./FieldAnalysisMap"), {
 
 
 export default function FieldAnalysisVisualization() {
+  const [isClient, setIsClient] = useState(false);
+  
   // State management
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
     fields: true,
@@ -37,17 +39,24 @@ export default function FieldAnalysisVisualization() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // PMTiles URLs (will be served from Cloudflare CDN)
+  // PMTiles URLs from environment variables (Cloudflare R2)
   const pmtilesUrls = {
-    fields: "https://pmtiles.landbruget.dk/field_analysis_2024.pmtiles",
-    bnbo: "https://pmtiles.landbruget.dk/bnbo_all_2024.pmtiles",
-    wetlands: "https://pmtiles.landbruget.dk/wetlands_all_2024.pmtiles",
-    waterProjects: "https://pmtiles.landbruget.dk/water_projects_2024.pmtiles",
-    buildings: "https://pmtiles.landbruget.dk/buildings_proximity_2024.pmtiles",
+    fields: process.env.NEXT_PUBLIC_FIELD_ANALYSIS_PMTILES_URL || '',
+    bnbo: process.env.NEXT_PUBLIC_BNBO_PMTILES_URL || '',
+    wetlands: process.env.NEXT_PUBLIC_WETLANDS_PMTILES_URL || '',
+    waterProjects: process.env.NEXT_PUBLIC_WATER_PROJECTS_PMTILES_URL || '',
+    buildings: '', // Buildings PMTiles not yet generated
   };
+
+  // Ensure client-side only rendering
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Initialize visualization
   useEffect(() => {
+    if (!isClient) return;
+    
     const initializeVisualization = async () => {
       try {
         setIsLoading(true);
@@ -60,7 +69,7 @@ export default function FieldAnalysisVisualization() {
     };
 
     initializeVisualization();
-  }, []);
+  }, [isClient]);
 
   // Handle layer visibility changes
   const handleLayerToggle = useCallback((layerName: keyof LayerVisibility) => {
@@ -95,6 +104,11 @@ export default function FieldAnalysisVisualization() {
         </div>
       </div>
     );
+  }
+
+  // Prevent hydration mismatch by not rendering until client-side
+  if (!isClient) {
+    return <LoadingState message="Indlæser..." />;
   }
 
   return (
