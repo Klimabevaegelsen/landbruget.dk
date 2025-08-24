@@ -8,8 +8,9 @@ import Map, {
   NavigationControl,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { MapChart } from "@/services/supabase/types";
+import { MapChart, GeoJSONLayer } from "@/services/supabase/types";
 import { VizColors } from "@/lib/utils";
+import { MapErrorBoundary } from "./MapErrorBoundary";
 
 const getLayerStyle = (style: string | undefined, index: number) => {
   // if style contains marker, return the default marker style
@@ -84,8 +85,7 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
 }
 
 // https://geojson.io
-export function BlockMapChart({ chart }: { chart: MapChart }) {
-  const { center, zoom, layers } = chart.data;
+function BlockMapChartInner({ chart }: { chart: MapChart }) {
   const [hoverInfo, setHoverInfo] = React.useState<{
     x: number;
     y: number;
@@ -93,13 +93,57 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
     layerName: string;
   } | null>(null);
 
+  // Extract and validate chart data
+  const chartData = React.useMemo(():
+    | { isValid: false; error: string }
+    | { isValid: true; center: [number, number]; zoom: number; validLayers: GeoJSONLayer[] } => {
+    // Validate chart data
+    if (!chart?.data) {
+      console.warn('BlockMapChart: Missing chart data');
+      return { isValid: false, error: 'No map data available' };
+    }
+
+    const { center, zoom, layers } = chart.data;
+
+    if (!center || center.length !== 2 || !Array.isArray(layers)) {
+      console.warn('BlockMapChart: Invalid chart data structure', { center, layers: layers?.length });
+      return { isValid: false, error: 'Invalid map configuration' };
+    }
+
+    // Filter out layers with invalid data
+    const validLayers = layers.filter((layer, index) => {
+      if (!layer?.data) {
+        console.warn(`BlockMapChart: Layer ${index} (${layer?.name || 'unnamed'}) has no data`, layer);
+        return false;
+      }
+
+      // Basic GeoJSON validation
+      const geojsonData = layer.data as GeoJSON.FeatureCollection;
+      if (!geojsonData.type || geojsonData.type !== 'FeatureCollection' || !Array.isArray(geojsonData.features)) {
+        console.warn(`BlockMapChart: Layer ${index} (${layer?.name || 'unnamed'}) has invalid GeoJSON data`, geojsonData);
+        return false;
+      }
+
+      // Log successful validation
+      console.log(`BlockMapChart: Layer ${index} (${layer.name}) validated successfully with ${geojsonData.features.length} features`);
+      return true;
+    });
+
+    if (validLayers.length === 0) {
+      console.warn('BlockMapChart: No valid layers found');
+      return { isValid: false, error: 'No valid map layers available' };
+    }
+
+    return { isValid: true, center: center as [number, number], zoom, validLayers };
+  }, [chart]);
+
   const onHover = React.useCallback(
     (event: MapLayerMouseEvent) => {
       const feature = event.features && event.features[0];
-      if (feature) {
+      if (feature && chartData.isValid) {
         // Find the layer name from the layer ID
         const layerIndex = parseInt(feature.layer.id.split("-")[1]);
-        const layerName = layers[layerIndex].name;
+        const layerName = chartData.validLayers[layerIndex]?.name || 'Unknown Layer';
 
         setHoverInfo({
           x: event.point.x,
@@ -111,31 +155,37 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
         setHoverInfo(null);
       }
     },
-    [layers]
+    [chartData]
   );
+
+  // Return error state if validation failed
+  if (!chartData.isValid) {
+    return <div className="p-4 text-center text-gray-500">{chartData.error}</div>;
+  }
 
   return (
     <div className="rounded overflow-hidden relative">
       <Map
         initialViewState={{
-          longitude: center[0],
-          latitude: center[1],
-          zoom: zoom,
+          longitude: chartData.center[0],
+          latitude: chartData.center[1],
+          zoom: chartData.zoom,
         }}
         style={{ width: "100%", height: 600 }}
         mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
-        interactiveLayerIds={layers.map((_, index) => `layer-${index}`)}
+        interactiveLayerIds={chartData.validLayers.map((_, index) => `layer-${index}`)}
         onMouseMove={onHover}
         onMouseLeave={() => setHoverInfo(null)}
         scrollZoom={false}
       >
         <NavigationControl position="top-right" />
-        {layers.map((layer, index) => {
+        {chartData.validLayers.map((layer, index) => {
           const style = getLayerStyle(layer.style, index);
 
           return (
             <Source
               key={`${layer.name}-${index}`}
+              id={`source-${layer.name}-${index}`}
               type="geojson"
               data={layer.data as GeoJSON.FeatureCollection}
             >
@@ -170,7 +220,7 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
 
       {/* Custom legends */}
       <div className="flex flex-wrap gap-4 mt-2">
-        {layers.map((layer, index) => {
+        {chartData.validLayers.map((layer, index) => {
           const style = getLayerStyle(layer.style, index);
           return (
             <button
@@ -190,5 +240,13 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
         })}
       </div>
     </div>
+  );
+}
+
+export function BlockMapChart({ chart }: { chart: MapChart }) {
+  return (
+    <MapErrorBoundary>
+      <BlockMapChartInner chart={chart} />
+    </MapErrorBoundary>
   );
 }
