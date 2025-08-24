@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Input } from "./ui/input";
 import { cn } from "@/lib/utils";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
@@ -8,6 +8,7 @@ import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "./ui/button";
+import { apiFetch } from "@/services/supabase/config";
 
 export function GlobalSearch({
   className,
@@ -90,9 +91,15 @@ interface SearchResult {
   name: string;
   cvr: string;
   address: string;
-  value: string;
   type: string;
   id: string;
+}
+
+interface SearchResponse {
+  results: SearchResult[];
+  total: number;
+  query: string;
+  searchType?: string;
 }
 
 function SearchOverlay({
@@ -109,21 +116,63 @@ function SearchOverlay({
   // Tabs for categories
   const tabs = ["Alle", "CVR", "Firmanavn", "Person", "Lokation"];
   const [activeTab, setActiveTab] = useState(0);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const searchResults: SearchResult[] = [
-    {
-      name: "Komplet Testfarm ApS",
-      cvr: "99887766",
-      address: "Sønderhøj 14, 8260 Viby J Denmark",
-      value: "1234567890",
-      type: "company",
-      id: "7306b8a2-caad-4db8-a810-d6e58a3cccac",
-    },
-  ];
+  // Debounced search function
+  const performSearch = useCallback(async (query: string) => {
+    if (!query || query.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
 
-  useEffect(() => {
-    console.log(activeTab);
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Map tab index to search type
+      const searchTypeMap: { [key: number]: string } = {
+        0: 'auto', // Alle
+        1: 'cvr',  // CVR
+        2: 'company_name', // Firmanavn
+        3: 'person', // Person (not implemented yet)
+        4: 'location' // Lokation (not implemented yet)
+      };
+
+      const searchType = searchTypeMap[activeTab] || 'auto';
+      const response = await apiFetch(`/functions/v1/search?q=${encodeURIComponent(query.trim())}&type=${searchType}&limit=20`);
+
+      if (!response.ok) {
+        throw new Error('Search failed');
+      }
+
+      const data: SearchResponse = await response.json();
+      setSearchResults(data.results || []);
+    } catch (err) {
+      console.error('Search error:', err);
+      setError('Søgning fejlede. Prøv igen.');
+      setSearchResults([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, [activeTab]);
+
+  // Debounce search
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      performSearch(search);
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [search, performSearch]);
+
+  // Re-search when tab changes
+  useEffect(() => {
+    if (search && search.trim().length >= 2) {
+      performSearch(search);
+    }
+  }, [activeTab, search, performSearch]);
 
   // Close on Escape
   React.useEffect(() => {
@@ -189,7 +238,32 @@ function SearchOverlay({
           ))}
         </div>
         <div className="bg-white rounded-b-lg min-h-[200px] max-h-[400px] overflow-auto">
-          {searchResults.map((result) => (
+          {isLoading && (
+            <div className="flex items-center justify-center p-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="ml-3 text-sm text-gray-600">Søger...</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center justify-center p-8">
+              <div className="text-sm text-red-600">{error}</div>
+            </div>
+          )}
+
+          {!isLoading && !error && searchResults.length === 0 && search.trim().length >= 2 && (
+            <div className="flex items-center justify-center p-8">
+              <div className="text-sm text-gray-500">Ingen resultater fundet for &ldquo;{search}&rdquo;</div>
+            </div>
+          )}
+
+          {!isLoading && !error && search.trim().length < 2 && (
+            <div className="flex items-center justify-center p-8">
+              <div className="text-sm text-gray-500">Indtast mindst 2 tegn for at søge</div>
+            </div>
+          )}
+
+          {!isLoading && !error && searchResults.map((result) => (
             <SearchResultCard
               key={result.id}
               result={result}
