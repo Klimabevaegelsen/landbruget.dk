@@ -69,8 +69,8 @@ function buildSearchQuery(supabase: any, query: string, searchType: string, limi
       break;
 
     case 'cvr_partial':
-      // Partial CVR match (starts with)
-      dbQuery = dbQuery.like('cvr_number', `${trimmedQuery}%`);
+      // Partial CVR match (convert to text and use like)
+      dbQuery = dbQuery.like('cvr_number::text', `${trimmedQuery}%`);
       break;
 
     case 'company_name':
