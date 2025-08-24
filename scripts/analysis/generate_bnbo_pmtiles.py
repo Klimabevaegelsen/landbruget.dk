@@ -46,7 +46,7 @@ def load_bnbo_data(conn: duckdb.DuckDBPyConnection, input_file: str) -> int:
 
     conn.execute(f"""
         CREATE TABLE bnbo_areas AS
-        SELECT 
+        SELECT
             bnbo_id,
             status_category,
             bnbo_area_m2,
@@ -62,9 +62,9 @@ def load_bnbo_data(conn: duckdb.DuckDBPyConnection, input_file: str) -> int:
 
     # Status breakdown
     status_breakdown = conn.execute("""
-        SELECT status_category, COUNT(*) as count, 
+        SELECT status_category, COUNT(*) as count,
                ROUND(SUM(bnbo_area_hectares), 2) as total_hectares
-        FROM bnbo_areas 
+        FROM bnbo_areas
         GROUP BY status_category
         ORDER BY count DESC
     """).fetchall()
@@ -87,7 +87,7 @@ def convert_to_geojson(conn: duckdb.DuckDBPyConnection, output_file: str):
     # Export all data as JSON first
     conn.execute(f"""
         COPY (
-            SELECT 
+            SELECT
                 ST_AsGeoJSON(geometry) as geometry,
                 bnbo_id,
                 status_category,
@@ -186,7 +186,7 @@ def generate_metadata(input_file: str, output_pmtiles: str, total_features: int)
 
     metadata = {
         "name": "Danish BNBO Environmental Areas",
-        "description": "Biodiversity and Nature Restoration (BNBO) environmental areas in Denmark with status categories and water projects",
+        "description": "Biodiversity and Nature Restoration (BNBO) environmental areas in Denmark",
         "version": "1.0.0",
         "source": {
             "input_file": Path(input_file).name,
@@ -297,7 +297,7 @@ def main():
             sys.exit(1)
 
         # Generate metadata
-        metadata = generate_metadata(args.input, args.output, total_features)
+        generate_metadata(args.input, args.output, total_features)
 
         # Validate output
         if validate_pmtiles_output(args.output, total_features):

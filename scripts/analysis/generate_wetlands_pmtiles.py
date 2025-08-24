@@ -13,7 +13,8 @@ Features:
 - Validates output quality and performance
 
 Usage:
-    python generate_wetlands_pmtiles.py --input data_cache/wetlands_2024/data.parquet --output data_cache/wetlands_2024.pmtiles
+    python generate_wetlands_pmtiles.py --input data_cache/wetlands_2024/data.parquet \\
+        --output data_cache/wetlands_2024.pmtiles
 """
 
 import argparse
@@ -46,7 +47,7 @@ def load_wetlands_data(conn: duckdb.DuckDBPyConnection, input_file: str) -> int:
 
     conn.execute(f"""
         CREATE TABLE wetlands_areas AS
-        SELECT 
+        SELECT
             wetland_key,
             wetland_id,
             toerv_pct,
@@ -63,16 +64,16 @@ def load_wetlands_data(conn: duckdb.DuckDBPyConnection, input_file: str) -> int:
 
     # Moisture category breakdown
     moisture_breakdown = conn.execute("""
-        SELECT toerv_pct, COUNT(*) as count, 
+        SELECT toerv_pct, COUNT(*) as count,
                ROUND(SUM(wetland_area_hectares), 2) as total_hectares
-        FROM wetlands_areas 
+        FROM wetlands_areas
         GROUP BY toerv_pct
         ORDER BY count DESC
     """).fetchall()
 
     # Area size distribution
     area_stats = conn.execute("""
-        SELECT 
+        SELECT
             MIN(wetland_area_hectares) as min_ha,
             AVG(wetland_area_hectares) as avg_ha,
             MAX(wetland_area_hectares) as max_ha,
@@ -89,7 +90,8 @@ def load_wetlands_data(conn: duckdb.DuckDBPyConnection, input_file: str) -> int:
         logger.info(f"     {category}%: {count:,} areas ({hectares:,} hectares)")
 
     logger.info(
-        f"   Area distribution: {area_stats[6]:,} very small (<0.1ha), {area_stats[5]:,} small (0.1-1ha), {area_stats[4]:,} medium (1-10ha), {area_stats[3]:,} large (>10ha)"
+        f"   Area distribution: {area_stats[6]:,} very small (<0.1ha), {area_stats[5]:,} small (0.1-1ha), "
+        f"{area_stats[4]:,} medium (1-10ha), {area_stats[3]:,} large (>10ha)"
     )
 
     return total_count
@@ -105,7 +107,7 @@ def convert_to_geojson(conn: duckdb.DuckDBPyConnection, output_file: str):
     # Export all data as JSON first
     conn.execute(f"""
         COPY (
-            SELECT 
+            SELECT
                 ST_AsGeoJSON(geometry) as geometry,
                 wetland_key,
                 wetland_id,
@@ -208,7 +210,7 @@ def generate_metadata(input_file: str, output_pmtiles: str, total_features: int)
 
     metadata = {
         "name": "Danish Wetlands Environmental Areas",
-        "description": "Wetlands environmental areas in Denmark with moisture level categories (toerv_pct) and water projects",
+        "description": "Wetlands environmental areas in Denmark with moisture level categories (toerv_pct)",
         "version": "1.0.0",
         "source": {
             "input_file": Path(input_file).name,
@@ -320,7 +322,7 @@ def main():
             sys.exit(1)
 
         # Generate metadata
-        metadata = generate_metadata(args.input, args.output, total_features)
+        generate_metadata(args.input, args.output, total_features)
 
         # Validate output
         if validate_pmtiles_output(args.output, total_features):

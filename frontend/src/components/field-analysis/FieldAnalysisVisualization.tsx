@@ -17,7 +17,7 @@ const FieldAnalysisMap = dynamic(() => import("./FieldAnalysisMap"), {
 
 export default function FieldAnalysisVisualization() {
   const [isClient, setIsClient] = useState(false);
-  
+
   // State management
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
     fields: true,
@@ -56,7 +56,7 @@ export default function FieldAnalysisVisualization() {
   // Initialize visualization
   useEffect(() => {
     if (!isClient) return;
-    
+
     const initializeVisualization = async () => {
       try {
         setIsLoading(true);
