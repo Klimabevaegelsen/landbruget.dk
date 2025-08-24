@@ -822,13 +822,10 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             self.log.info("Created empty addresses table")
 
         # Save addresses table to GCS using standard CVR enrichment pattern
-        self._save_data(
-            data=table_name,
-            dataset=self.config.dataset,  # cvr_enrichment
-            bucket=self.config.bucket,
-            stage="gold",
-            filename="address_geocoding.parquet",  # Use step name as filename
-        )
+        timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+        gcs_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}/{timestamp}/address_geocoding.parquet"
+        self.gcs_access.upload_from_duckdb_table(table_name, gcs_path)
+        self.log.info(f"✅ Saved to GCS: {gcs_path}")
 
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
@@ -921,11 +918,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     SELECT *,
                         ROW_NUMBER() OVER (
                             PARTITION BY cvr_number
-                            ORDER BY selection_score DESC, address_uuid
+                            ORDER BY selection_score DESC, address_id
                         ) as rank
                     FROM address_scores
                 )
-                SELECT cvr_number, address_uuid, selection_score
+                SELECT cvr_number, address_id, selection_score
                 FROM ranked_addresses
                 WHERE rank = 1
             """)
@@ -953,7 +950,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     a.coordinate_source
                 FROM cvr_addresses a
                 INNER JOIN primary_address_selection p
-                    ON a.cvr_number = p.cvr_number AND a.address_uuid = p.address_uuid
+                    ON a.cvr_number = p.cvr_number AND a.address_id = p.address_id
             """)
 
             # 🔧 FIX: Preserve all existing columns and only update geocoding fields
@@ -1024,13 +1021,12 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_saving) - 10} more columns")
 
             # Save updated company table back to GCS
-            self._save_data(
-                data=company_table,
-                dataset="cvr_enrichment_companies",
-                bucket=self.config.bucket,
-                stage="gold",
-                filename="data.parquet",
+            timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+            gcs_path = (
+                f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/{timestamp}/data.parquet"
             )
+            self.gcs_access.upload_from_duckdb_table(company_table, gcs_path)
+            self.log.info(f"✅ Saved to GCS: {gcs_path}")
 
             self.log.info("Updated company table with geocoding data")
 
@@ -1147,13 +1143,12 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_saving) - 10} more columns")
 
             # Save updated pnumber table back to GCS
-            self._save_data(
-                data=pnumber_table,
-                dataset="cvr_enrichment_pnumbers",
-                bucket=self.config.bucket,
-                stage="gold",
-                filename="data.parquet",
+            timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+            gcs_path = (
+                f"gs://{self.config.bucket}/gold/cvr_enrichment_pnumbers/{timestamp}/data.parquet"
             )
+            self.gcs_access.upload_from_duckdb_table(pnumber_table, gcs_path)
+            self.log.info(f"✅ Saved to GCS: {gcs_path}")
 
             self.log.info("Updated pnumber table with geocoding data")
 
