@@ -9,12 +9,12 @@ export const apiFetch = async (
     cache?: RequestCache;
   }
 ) => {
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}${path}`, {
+  const response = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}${path}`, {
     method: options?.method || "GET",
     body: options?.body,
     headers: {
       ...options?.headers,
-      Authorization: `Bearer ${env.NEXT_PUBLIC_API_KEY}`,
+      Authorization: `Bearer ${env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
     },
     cache: options?.cache || "force-cache",
   });
