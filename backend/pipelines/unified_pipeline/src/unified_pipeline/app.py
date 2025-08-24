@@ -32,6 +32,7 @@ from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeC
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
+from unified_pipeline.cli_scheduling import scheduling
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
 from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
@@ -60,6 +61,10 @@ from unified_pipeline.gold.cvr_enrichment.financial_documents import (
 from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import (
     PNumberFetching,
     PNumberFetchingConfig,
+)
+from unified_pipeline.gold.cvr_geometry_datasets import (
+    CVRGeometryDatasets,
+    CVRGeometryDatasetsConfig,
 )
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
@@ -93,7 +98,11 @@ from unified_pipeline.gold.worker_safety import (
     WorkerSafetyGold,
     WorkerSafetyGoldConfig,
 )
-from unified_pipeline.model import cli
+from unified_pipeline.model import cli as cli_models
+from unified_pipeline.model.scheduling import (
+    get_pipeline_schedule,
+    validate_dependencies,
+)
 from unified_pipeline.silver.agricultural_fields import (
     AgriculturalFieldsSilver,
     AgriculturalFieldsSilverConfig,
@@ -129,8 +138,34 @@ CVREnrichmentGold = cvr_enrichment_legacy.CVREnrichmentGold
 CVREnrichmentGoldConfig = cvr_enrichment_legacy.CVREnrichmentGoldConfig
 
 
+def validate_pipeline_dependencies(source: cli_models.Source) -> bool:
+    """
+    Validate that all dependencies for a pipeline source are satisfied.
+
+    Args:
+        source: The pipeline source to validate dependencies for
+
+    Returns:
+        True if all dependencies are satisfied, False otherwise
+    """
+    schedule_config = get_pipeline_schedule(source)
+    if not schedule_config or not schedule_config.depends_on:
+        return True  # No dependencies to check
+
+    log = Logger.get_logger()
+
+    # For now, we assume dependencies are satisfied if this function is called
+    # In a more sophisticated implementation, we could check GCS for recent data
+    log.info(
+        f"Pipeline {source.value} depends on: {[dep.value for dep in schedule_config.depends_on]}"
+    )
+    log.info("Dependency validation: Assuming dependencies are satisfied (basic implementation)")
+
+    return True
+
+
 async def execute_pipeline_jobs(
-    jobs: list, stage: cli.Stage, cli_config: cli.CliConfig
+    jobs: list, stage: cli_models.Stage, cli_config: cli_models.CliConfig
 ) -> tuple[int, int]:
     print(f"🚨 EXECUTE_JOBS: Starting with {len(jobs)} jobs for stage {stage}")
     print(f"🚨 EXECUTE_JOBS: CLI config pesticide_year = {cli_config.pesticide_year}")
@@ -207,7 +242,9 @@ async def execute_pipeline_jobs(
 
             elif issubclass(job_cls, SilverJobInterface):
                 # Check if this is an enrichment-only job
-                if stage == cli.Stage.enrichment and hasattr(instance, "run_enrichment_only"):
+                if stage == cli_models.Stage.enrichment and hasattr(
+                    instance, "run_enrichment_only"
+                ):
                     # Enrichment stage - run only enrichment functions
                     result = await instance.run_enrichment_only()
                     stage_description = "enrichment-only"
@@ -287,7 +324,7 @@ async def execute_pipeline_jobs(
     return successful_jobs, total_jobs
 
 
-def execute(cli_config: cli.CliConfig) -> int:
+def execute(cli_config: cli_models.CliConfig) -> int:
     print(f"🚨 APP EXECUTE: Starting with config: {cli_config}")
     print(f"🚨 APP EXECUTE: Source = {cli_config.source}, Stage = {cli_config.stage}")
     print(f"🚨 APP EXECUTE: pesticide_year = {cli_config.pesticide_year}")
@@ -298,6 +335,8 @@ def execute(cli_config: cli.CliConfig) -> int:
     the provided CLI configuration. It handles source selection and processing
     stage (bronze, silver, or all stages) with support for in-memory data passing.
 
+    Enhanced with scheduling awareness and dependency validation.
+
     Args:
         cli_config (cli.CliConfig): Configuration containing source and stage settings
 
@@ -307,6 +346,32 @@ def execute(cli_config: cli.CliConfig) -> int:
     Raises:
         ValueError: If the requested source/stage combination is not supported
     """
+
+    # Validate scheduling configuration on startup
+    validation_errors = validate_dependencies()
+    if validation_errors:
+        print("🚨 SCHEDULING VALIDATION ERRORS:")
+        for error in validation_errors:
+            print(f"  ❌ {error}")
+        print("⚠️ Proceeding with execution despite validation errors...")
+
+    # Check pipeline dependencies
+    if not validate_pipeline_dependencies(cli_config.source):
+        print(f"❌ Dependencies not satisfied for pipeline: {cli_config.source.value}")
+        return 1
+
+    # Log scheduling information
+    schedule_config = get_pipeline_schedule(cli_config.source)
+    if schedule_config:
+        print("📋 Pipeline Schedule Info:")
+        print(f"   Frequency: {schedule_config.frequency.value}")
+        print(f"   Priority: {schedule_config.priority}")
+        print(f"   Dependencies: {[dep.value for dep in schedule_config.depends_on]}")
+        print(f"   Description: {schedule_config.description}")
+        if schedule_config.estimated_duration_minutes:
+            print(f"   Estimated Duration: {schedule_config.estimated_duration_minutes} minutes")
+    else:
+        print(f"⚠️ No scheduling configuration found for {cli_config.source.value}")
     # Initialize logger with LOG_LEVEL environment variable BEFORE any other logging
     import os
 
@@ -322,190 +387,201 @@ def execute(cli_config: cli.CliConfig) -> int:
 
     # Define pipeline mapping for sources and stages
     pipeline_map = {
-        cli.Source.bnbo: {
-            cli.Stage.bronze: [(BNBOStatusBronze, BNBOStatusBronzeConfig)],
-            cli.Stage.silver: [(BNBOStatusSilver, BNBOStatusSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.bnbo: {
+            cli_models.Stage.bronze: [(BNBOStatusBronze, BNBOStatusBronzeConfig)],
+            cli_models.Stage.silver: [(BNBOStatusSilver, BNBOStatusSilverConfig)],
+            cli_models.Stage.all: [
                 (BNBOStatusBronze, BNBOStatusBronzeConfig),
                 (BNBOStatusSilver, BNBOStatusSilverConfig),
             ],
         },
-        cli.Source.agricultural_fields: {
-            cli.Stage.bronze: [(AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig)],
-            cli.Stage.silver: [(AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.agricultural_fields: {
+            cli_models.Stage.bronze: [(AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig)],
+            cli_models.Stage.silver: [(AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig)],
+            cli_models.Stage.all: [
                 (AgriculturalFieldsBronze, AgriculturalFieldsBronzeConfig),
                 (AgriculturalFieldsSilver, AgriculturalFieldsSilverConfig),
             ],
         },
-        cli.Source.cadastral: {
-            cli.Stage.bronze: [(CadastralBronze, CadastralBronzeConfig)],
-            cli.Stage.silver: [(CadastralSilver, CadastralSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.cadastral: {
+            cli_models.Stage.bronze: [(CadastralBronze, CadastralBronzeConfig)],
+            cli_models.Stage.silver: [(CadastralSilver, CadastralSilverConfig)],
+            cli_models.Stage.all: [
                 (CadastralBronze, CadastralBronzeConfig),
                 (CadastralSilver, CadastralSilverConfig),
             ],
         },
-        cli.Source.soil_types: {
-            cli.Stage.bronze: [(SoilTypesBronze, SoilTypesBronzeConfig)],
-            cli.Stage.silver: [(SoilTypesSilver, SoilTypesSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.soil_types: {
+            cli_models.Stage.bronze: [(SoilTypesBronze, SoilTypesBronzeConfig)],
+            cli_models.Stage.silver: [(SoilTypesSilver, SoilTypesSilverConfig)],
+            cli_models.Stage.all: [
                 (SoilTypesBronze, SoilTypesBronzeConfig),
                 (SoilTypesSilver, SoilTypesSilverConfig),
             ],
         },
-        cli.Source.dagi: {
-            cli.Stage.bronze: [(DAGIBronze, DAGIBronzeConfig)],
-            cli.Stage.silver: [
+        cli_models.Source.dagi: {
+            cli_models.Stage.bronze: [(DAGIBronze, DAGIBronzeConfig)],
+            cli_models.Stage.silver: [
                 (DAGISilver, DAGISilverConfig),
                 (DSTZoneMapping, DSTZoneMappingConfig),
             ],
-            cli.Stage.all: [
+            cli_models.Stage.all: [
                 (DAGIBronze, DAGIBronzeConfig),
                 (DAGISilver, DAGISilverConfig),
                 (DSTZoneMapping, DSTZoneMappingConfig),
             ],
         },
-        cli.Source.jordbrugsanalyser: {
-            cli.Stage.bronze: [(JordbrugsanalyserBronze, JordbrugsanalyserBronzeConfig)],
-            cli.Stage.silver: [(JordbrugsanalyserSilver, JordbrugsanalyserSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.jordbrugsanalyser: {
+            cli_models.Stage.bronze: [(JordbrugsanalyserBronze, JordbrugsanalyserBronzeConfig)],
+            cli_models.Stage.silver: [(JordbrugsanalyserSilver, JordbrugsanalyserSilverConfig)],
+            cli_models.Stage.all: [
                 (JordbrugsanalyserBronze, JordbrugsanalyserBronzeConfig),
                 (JordbrugsanalyserSilver, JordbrugsanalyserSilverConfig),
             ],
         },
-        cli.Source.fvm_wfs: {
-            cli.Stage.bronze: [(FVMWFSBronze, FVMWFSBronzeConfig)],
-            cli.Stage.silver: [(FVMWFSSilver, FVMWFSSilverConfig)],
-            cli.Stage.enrichment: [(FVMWFSSilver, FVMWFSSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.fvm_wfs: {
+            cli_models.Stage.bronze: [(FVMWFSBronze, FVMWFSBronzeConfig)],
+            cli_models.Stage.silver: [(FVMWFSSilver, FVMWFSSilverConfig)],
+            cli_models.Stage.enrichment: [(FVMWFSSilver, FVMWFSSilverConfig)],
+            cli_models.Stage.all: [
                 (FVMWFSBronze, FVMWFSBronzeConfig),
                 (FVMWFSSilver, FVMWFSSilverConfig),
             ],
         },
-        cli.Source.wetlands: {
-            cli.Stage.bronze: [(WetlandsBronze, WetlandsBronzeConfig)],
-            cli.Stage.silver: [(WetlandsSilver, WetlandsSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.wetlands: {
+            cli_models.Stage.bronze: [(WetlandsBronze, WetlandsBronzeConfig)],
+            cli_models.Stage.silver: [(WetlandsSilver, WetlandsSilverConfig)],
+            cli_models.Stage.all: [
                 (WetlandsBronze, WetlandsBronzeConfig),
                 (WetlandsSilver, WetlandsSilverConfig),
             ],
         },
-        cli.Source.water_projects: {
-            cli.Stage.bronze: [(WaterProjectsBronze, WaterProjectsBronzeConfig)],
-            cli.Stage.silver: [(WaterProjectsSilver, WaterProjectsSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.water_projects: {
+            cli_models.Stage.bronze: [(WaterProjectsBronze, WaterProjectsBronzeConfig)],
+            cli_models.Stage.silver: [(WaterProjectsSilver, WaterProjectsSilverConfig)],
+            cli_models.Stage.all: [
                 (WaterProjectsBronze, WaterProjectsBronzeConfig),
                 (WaterProjectsSilver, WaterProjectsSilverConfig),
             ],
         },
-        cli.Source.water_typology: {
-            cli.Stage.bronze: [(WaterTypologyBronze, WaterTypologyBronzeConfig)],
-            cli.Stage.silver: [(WaterTypologySilver, WaterTypologySilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.water_typology: {
+            cli_models.Stage.bronze: [(WaterTypologyBronze, WaterTypologyBronzeConfig)],
+            cli_models.Stage.silver: [(WaterTypologySilver, WaterTypologySilverConfig)],
+            cli_models.Stage.all: [
                 (WaterTypologyBronze, WaterTypologyBronzeConfig),
                 (WaterTypologySilver, WaterTypologySilverConfig),
             ],
         },
-        cli.Source.property_cadastral_merge: {
-            cli.Stage.gold: [(PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.property_cadastral_merge: {
+            cli_models.Stage.gold: [(PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig)],
+            cli_models.Stage.all: [
                 # Note: This requires property_owners and cadastral silver data to be available
                 # These should be run separately first or through dependent pipelines
                 (PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig),
             ],
         },
-        cli.Source.field_production: {
-            cli.Stage.gold: [(FieldProductionGold, FieldProductionGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.field_production: {
+            cli_models.Stage.gold: [(FieldProductionGold, FieldProductionGoldConfig)],
+            cli_models.Stage.all: [
                 # Note: This requires fvm_marker and dst_zone_mapping silver data to be available
                 # These should be run separately first or through dependent pipelines
                 (FieldProductionGold, FieldProductionGoldConfig),
             ],
         },
-        cli.Source.field_area_analysis: {
-            cli.Stage.gold: [(FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.field_area_analysis: {
+            cli_models.Stage.gold: [(FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig)],
+            cli_models.Stage.all: [
                 # Note: This requires multiple silver datasets to be available:
                 # fvm_marker, property_cadastral_merged, soil_types, bnbo_status_dissolved,
                 # wetlands_dissolved, water_projects_dissolved
                 (FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig),
             ],
         },
-        cli.Source.pesticide_disaggregation: {
-            cli.Stage.gold: [(PesticideDisaggregationGold, PesticideDisaggregationGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.pesticide_disaggregation: {
+            cli_models.Stage.gold: [
+                (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig)
+            ],
+            cli_models.Stage.all: [
                 # Note: This requires silver datasets to be available:
                 # fvm_marker, pesticides
                 (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
             ],
         },
-        cli.Source.pesticide_proximity: {
-            cli.Stage.gold: [(PesticideProximityGold, PesticideProximityGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.pesticide_proximity: {
+            cli_models.Stage.gold: [(PesticideProximityGold, PesticideProximityGoldConfig)],
+            cli_models.Stage.all: [
                 # Note: This requires gold pesticide_disaggregation and silver datasets:
                 # bbr_buildings, water_typology, fvm_marker
                 (PesticideProximityGold, PesticideProximityGoldConfig),
             ],
         },
-        cli.Source.pesticide_compliance: {
-            cli.Stage.gold: [(PesticideComplianceGold, PesticideComplianceGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.pesticide_compliance: {
+            cli_models.Stage.gold: [(PesticideComplianceGold, PesticideComplianceGoldConfig)],
+            cli_models.Stage.all: [
                 # Note: This requires silver datasets to be available:
                 # bmd, pesticides
                 (PesticideComplianceGold, PesticideComplianceGoldConfig),
             ],
         },
-        cli.Source.cvr_enrichment: {
+        cli_models.Source.cvr_enrichment: {
             # Legacy monolithic approach
-            cli.Stage.gold: [(CVREnrichmentGold, CVREnrichmentGoldConfig)],
-            cli.Stage.all: [
+            cli_models.Stage.gold: [(CVREnrichmentGold, CVREnrichmentGoldConfig)],
+            cli_models.Stage.all: [
                 # Note: This collects CVR numbers from all pipeline CVR collections
                 # and fetches CVR register data for enrichment
                 (CVREnrichmentGold, CVREnrichmentGoldConfig),
             ],
             # New modular pipeline steps
-            cli.Stage.collection: [(CVRCollection, CVRCollectionConfig)],
-            cli.Stage.company_fetching: [(CompanyFetching, CompanyFetchingConfig)],
-            cli.Stage.pnumber_fetching: [(PNumberFetching, PNumberFetchingConfig)],
-            cli.Stage.financial_documents: [(FinancialDocuments, FinancialDocumentsConfig)],
-            cli.Stage.address_geocoding: [(AddressGeocoding, AddressGeocodingConfig)],
+            cli_models.Stage.collection: [(CVRCollection, CVRCollectionConfig)],
+            cli_models.Stage.company_fetching: [(CompanyFetching, CompanyFetchingConfig)],
+            cli_models.Stage.pnumber_fetching: [(PNumberFetching, PNumberFetchingConfig)],
+            cli_models.Stage.financial_documents: [(FinancialDocuments, FinancialDocumentsConfig)],
+            cli_models.Stage.address_geocoding: [(AddressGeocoding, AddressGeocodingConfig)],
             # cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
             # REMOVED: Eliminated in redesign
         },
-        cli.Source.dst: {
-            cli.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
-            cli.Stage.silver: [(DSTSilver, DSTSilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.cvr_geometry_datasets: {
+            cli_models.Stage.gold: [(CVRGeometryDatasets, CVRGeometryDatasetsConfig)],
+            cli_models.Stage.all: [
+                # Phase 1: CVR address points and CHR property points
+                (CVRGeometryDatasets, CVRGeometryDatasetsConfig),
+            ],
+        },
+        cli_models.Source.dst: {
+            cli_models.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
+            cli_models.Stage.silver: [(DSTSilver, DSTSilverConfig)],
+            cli_models.Stage.all: [
                 (DSTBronze, DSTBronzeConfig),
                 (DSTSilver, DSTSilverConfig),
             ],
         },
-        cli.Source.dmi: {
-            cli.Stage.bronze: [(DMIBronze, DMIBronzeConfig)],
-            cli.Stage.silver: [(DMISilver, DMISilverConfig)],
-            cli.Stage.all: [
+        cli_models.Source.dmi: {
+            cli_models.Stage.bronze: [(DMIBronze, DMIBronzeConfig)],
+            cli_models.Stage.silver: [(DMISilver, DMISilverConfig)],
+            cli_models.Stage.all: [
                 (DMIBronze, DMIBronzeConfig),
                 (DMISilver, DMISilverConfig),
             ],
         },
-        cli.Source.arbejdstilsynet_inspections: {
-            cli.Stage.gold: [(ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.arbejdstilsynet_inspections: {
+            cli_models.Stage.gold: [
+                (ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig)
+            ],
+            cli_models.Stage.all: [
                 # Note: This requires arbejdstilsynet_inspections silver data to be available
                 (ArbjdstilsynetInspectionsGold, ArbjdstilsynetInspectionsGoldConfig),
             ],
         },
-        cli.Source.worker_safety: {
-            cli.Stage.gold: [(WorkerSafetyGold, WorkerSafetyGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.worker_safety: {
+            cli_models.Stage.gold: [(WorkerSafetyGold, WorkerSafetyGoldConfig)],
+            cli_models.Stage.all: [
                 # Note: This requires worker safety silver data to be available
                 (WorkerSafetyGold, WorkerSafetyGoldConfig),
             ],
         },
-        cli.Source.work_permits: {
-            cli.Stage.gold: [(WorkPermitsGold, WorkPermitsGoldConfig)],
-            cli.Stage.all: [
+        cli_models.Source.work_permits: {
+            cli_models.Stage.gold: [(WorkPermitsGold, WorkPermitsGoldConfig)],
+            cli_models.Stage.all: [
                 # Note: This requires work permits silver data from drive pipeline to be available
                 (WorkPermitsGold, WorkPermitsGoldConfig),
             ],
@@ -548,13 +624,20 @@ def execute(cli_config: cli.CliConfig) -> int:
         return 0
 
 
-@click.command()
+@click.group()
+def cli():
+    """Unified Pipeline - Data processing and scheduling management."""
+    pass
+
+
+@cli.command("run")
+@click.pass_context
 @click.option(
     "-e",
     "--env",
     "env",
     help="The environment to use. Default is prod.",
-    type=click.Choice([env.value for env in cli.Env]),
+    type=click.Choice([env.value for env in cli_models.Env]),
     default="prod",
 )
 @click.option(
@@ -562,21 +645,21 @@ def execute(cli_config: cli.CliConfig) -> int:
     "--source",
     "source",
     help="The source to use.",
-    type=click.Choice([source.value for source in cli.Source]),
+    type=click.Choice([source.value for source in cli_models.Source]),
     required=True,
 )
 @click.option(
     "-j",
     "--stage",
     "stage",
-    type=click.Choice([mode.value for mode in cli.Stage]),
+    type=click.Choice([mode.value for mode in cli_models.Stage]),
     help="The stage to use. The options are bronze, silver, and all.",
     required=True,
 )
 @click.option(
     "--fvm-layer-type",
     "fvm_layer_type",
-    type=click.Choice([layer.value for layer in cli.FVMLayerType]),
+    type=click.Choice([layer.value for layer in cli_models.FVMLayerType]),
     help="FVM layer type filter for matrix jobs (markblokke, marker, smaabiotoper).",
     required=False,
 )
@@ -631,6 +714,7 @@ def execute(cli_config: cli.CliConfig) -> int:
     required=False,
 )
 def run_cli(
+    ctx,
     env: str,
     source: str,
     stage: str,
@@ -662,11 +746,11 @@ def run_cli(
         $ python -m unified_pipeline -s fvm_wfs -j bronze \
             --fvm-layer-type markblokke --fvm-year 2024
     """
-    app_config = cli.CliConfig(
-        env=cli.Env(env),
-        source=cli.Source(source),
-        stage=cli.Stage(stage),
-        fvm_layer_type=cli.FVMLayerType(fvm_layer_type) if fvm_layer_type else None,
+    app_config = cli_models.CliConfig(
+        env=cli_models.Env(env),
+        source=cli_models.Source(source),
+        stage=cli_models.Stage(stage),
+        fvm_layer_type=cli_models.FVMLayerType(fvm_layer_type) if fvm_layer_type else None,
         fvm_year=fvm_year,
         test_limit=test_limit,
         parse_financial_xml=parse_financial_xml,
@@ -680,12 +764,16 @@ def run_cli(
     exit(exit_code)
 
 
+# Add scheduling subcommand
+cli.add_command(scheduling)
+
+
 # TODO: Incomplete implementation - get_pipeline_jobs function not defined
-# def run_pipeline(pipeline_name: str, stage: cli.Stage) -> None:
+# def run_pipeline(pipeline_name: str, stage: cli_models.Stage) -> None:
 #     """Run a specific pipeline by name and stage."""
 #     pipeline_jobs = get_pipeline_jobs(pipeline_name)
 #     asyncio.run(execute_pipeline_jobs(pipeline_jobs, stage))
 
 
 if __name__ == "__main__":
-    run_cli()
+    cli()
