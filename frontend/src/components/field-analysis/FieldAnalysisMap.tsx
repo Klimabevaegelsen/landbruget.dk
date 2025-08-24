@@ -22,7 +22,7 @@ interface FieldAnalysisMapProps {
     fields: string;
     bnbo: string;
     wetlands: string;
-    waterProjects: string;
+    water_projects: string;
     buildings: string;
   };
   layerVisibility: LayerVisibility;
@@ -87,8 +87,6 @@ export default function FieldAnalysisMap({
 
   // Initialize PMTiles protocol
   useEffect(() => {
-    let protocolRegistered = false;
-
     const initializePMTiles = async () => {
       try {
         // Import MapLibre GL dynamically to avoid SSR issues
@@ -99,11 +97,11 @@ export default function FieldAnalysisMap({
 
         console.log('✅ MapLibre and PMTiles loaded successfully');
 
-        // Register PMTiles protocol with MapLibre (only once)
-        if (!protocolRegistered) {
+        // Register PMTiles protocol with MapLibre (only once globally)
+        if (!(window as unknown as { __pmtiles_protocol_registered?: boolean }).__pmtiles_protocol_registered) {
           const protocol = new Protocol();
           maplibregl.default.addProtocol('pmtiles', protocol.tile);
-          protocolRegistered = true;
+          (window as unknown as { __pmtiles_protocol_registered?: boolean }).__pmtiles_protocol_registered = true;
           console.log('✅ PMTiles protocol registered');
         }
 
@@ -256,7 +254,7 @@ export default function FieldAnalysisMap({
           "fill-opacity": 0.7,
         },
         layout: {
-          visibility: layerVisibility.waterProjects ? "visible" : "none",
+          visibility: layerVisibility.water_projects ? "visible" : "none",
         },
       });
 
@@ -270,11 +268,11 @@ export default function FieldAnalysisMap({
           "line-width": 1,
         },
         layout: {
-          visibility: layerVisibility.waterProjects ? "visible" : "none",
+          visibility: layerVisibility.water_projects ? "visible" : "none",
         },
       });
     }
-  }, [layerVisibility.waterProjects]);
+  }, [layerVisibility.water_projects]);
 
   // Handle map load and add sources
   const onMapLoad = useCallback(() => {
@@ -331,8 +329,8 @@ export default function FieldAnalysisMap({
 
     // Update water projects layers
     if (map.getLayer("water-projects-fill")) {
-      map.setLayoutProperty("water-projects-fill", "visibility", layerVisibility.waterProjects ? "visible" : "none");
-      map.setLayoutProperty("water-projects-outline", "visibility", layerVisibility.waterProjects ? "visible" : "none");
+      map.setLayoutProperty("water-projects-fill", "visibility", layerVisibility.water_projects ? "visible" : "none");
+      map.setLayoutProperty("water-projects-outline", "visibility", layerVisibility.water_projects ? "visible" : "none");
     }
   }, [layerVisibility]);
 
