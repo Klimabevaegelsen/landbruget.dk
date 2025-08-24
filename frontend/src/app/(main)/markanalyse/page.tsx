@@ -24,7 +24,7 @@ export default function MarkanalysePage() {
                 Markanalyse
               </h1>
               <p className="mt-2 text-gray-600 max-w-3xl">
-                Omfattende visualisering af danske landbrugsmarker med pesticidforbrug, 
+                Omfattende visualisering af danske landbrugsmarker med pesticidforbrug,
                 miljøområder (BNBO og vådområder), vandprojekter og bygningsnærhed.
               </p>
             </div>

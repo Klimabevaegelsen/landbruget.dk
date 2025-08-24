@@ -13,7 +13,8 @@ Features:
 - Validates output quality and performance
 
 Usage:
-    python generate_water_projects_pmtiles.py --input data_cache/water_projects_2024/data.parquet --output data_cache/water_projects_2024.pmtiles
+    python generate_water_projects_pmtiles.py --input data_cache/water_projects_2024/data.parquet \\
+        --output data_cache/water_projects_2024.pmtiles
 """
 
 import argparse
@@ -46,7 +47,7 @@ def load_water_projects_data(conn: duckdb.DuckDBPyConnection, input_file: str) -
 
     conn.execute(f"""
         CREATE TABLE water_projects AS
-        SELECT 
+        SELECT
             project_id,
             project_area_m2,
             ROUND(project_area_m2 / 10000.0, 4) as project_area_hectares,
@@ -61,7 +62,7 @@ def load_water_projects_data(conn: duckdb.DuckDBPyConnection, input_file: str) -
 
     # Area size distribution
     area_stats = conn.execute("""
-        SELECT 
+        SELECT
             MIN(project_area_hectares) as min_ha,
             AVG(project_area_hectares) as avg_ha,
             MAX(project_area_hectares) as max_ha,
@@ -74,9 +75,9 @@ def load_water_projects_data(conn: duckdb.DuckDBPyConnection, input_file: str) -
 
     # Project ID breakdown
     project_breakdown = conn.execute("""
-        SELECT project_id, COUNT(*) as count, 
+        SELECT project_id, COUNT(*) as count,
                ROUND(SUM(project_area_hectares), 2) as total_hectares
-        FROM water_projects 
+        FROM water_projects
         GROUP BY project_id
         ORDER BY count DESC
     """).fetchall()
@@ -87,7 +88,8 @@ def load_water_projects_data(conn: duckdb.DuckDBPyConnection, input_file: str) -
         logger.info(f"     {project_id}: {count:,} areas ({hectares:,} hectares)")
 
     logger.info(
-        f"   Size distribution: {area_stats[3]:,} very small (<1ha), {area_stats[4]:,} small (1-10ha), {area_stats[5]:,} medium (10-100ha), {area_stats[6]:,} large (>100ha)"
+        f"   Size distribution: {area_stats[3]:,} very small (<1ha), {area_stats[4]:,} small (1-10ha), "
+        f"{area_stats[5]:,} medium (10-100ha), {area_stats[6]:,} large (>100ha)"
     )
 
     return total_count
@@ -103,7 +105,7 @@ def convert_to_geojson(conn: duckdb.DuckDBPyConnection, output_file: str):
     # Export all data as JSON first
     conn.execute(f"""
         COPY (
-            SELECT 
+            SELECT
                 ST_AsGeoJSON(geometry) as geometry,
                 project_id,
                 project_area_m2,
@@ -312,7 +314,7 @@ def main():
             sys.exit(1)
 
         # Generate metadata
-        metadata = generate_metadata(args.input, args.output, total_features)
+        generate_metadata(args.input, args.output, total_features)
 
         # Validate output
         if validate_pmtiles_output(args.output, total_features):
