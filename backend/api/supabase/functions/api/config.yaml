@@ -441,7 +441,7 @@ pageBuilder:
               column: "risk_details"
             - key: "ha_sprayed"
               label: "Antal Ha Sprøjtet"
-              column: "ha_sprayed"
+              column: "treated_area_ha"
             - key: "pfas"
               label: "Indeholder PFAS"
               column: "contains_pfas"
