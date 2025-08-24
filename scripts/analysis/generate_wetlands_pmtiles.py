@@ -97,6 +97,25 @@ def load_wetlands_data(conn: duckdb.DuckDBPyConnection, input_file: str) -> int:
     return total_count
 
 
+def swap_coordinates(geometry):
+    """Swap longitude/latitude coordinates in GeoJSON geometry to fix coordinate inversion."""
+    if geometry["type"] == "Point":
+        geometry["coordinates"] = [geometry["coordinates"][1], geometry["coordinates"][0]]
+    elif geometry["type"] == "LineString":
+        geometry["coordinates"] = [[coord[1], coord[0]] for coord in geometry["coordinates"]]
+    elif geometry["type"] == "Polygon":
+        geometry["coordinates"] = [[[coord[1], coord[0]] for coord in ring] for ring in geometry["coordinates"]]
+    elif geometry["type"] == "MultiPolygon":
+        geometry["coordinates"] = [
+            [[[coord[1], coord[0]] for coord in ring] for ring in polygon] for polygon in geometry["coordinates"]
+        ]
+    elif geometry["type"] == "MultiPoint":
+        geometry["coordinates"] = [[coord[1], coord[0]] for coord in geometry["coordinates"]]
+    elif geometry["type"] == "MultiLineString":
+        geometry["coordinates"] = [[[coord[1], coord[0]] for coord in line] for line in geometry["coordinates"]]
+    return geometry
+
+
 def convert_to_geojson(conn: duckdb.DuckDBPyConnection, output_file: str):
     """Convert wetlands data to GeoJSON format."""
     logger.info("🗺️  Converting wetlands areas to GeoJSON")
@@ -130,6 +149,9 @@ def convert_to_geojson(conn: duckdb.DuckDBPyConnection, output_file: str):
             geometry = json.loads(geometry_str)
         else:
             geometry = geometry_str  # Already a dict
+
+        # Swap coordinates to fix lng/lat inversion (Denmark coordinates were showing in Indian Ocean)
+        geometry = swap_coordinates(geometry)
 
         properties = row
 
