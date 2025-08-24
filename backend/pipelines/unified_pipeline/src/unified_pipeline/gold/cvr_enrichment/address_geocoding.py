@@ -921,11 +921,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     SELECT *,
                         ROW_NUMBER() OVER (
                             PARTITION BY cvr_number
-                            ORDER BY selection_score DESC, address_id
+                            ORDER BY selection_score DESC, address_uuid
                         ) as rank
                     FROM address_scores
                 )
-                SELECT cvr_number, address_id, selection_score
+                SELECT cvr_number, address_uuid, selection_score
                 FROM ranked_addresses
                 WHERE rank = 1
             """)
@@ -953,7 +953,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     a.coordinate_source
                 FROM cvr_addresses a
                 INNER JOIN primary_address_selection p
-                    ON a.cvr_number = p.cvr_number AND a.address_id = p.address_id
+                    ON a.cvr_number = p.cvr_number AND a.address_uuid = p.address_uuid
             """)
 
             # 🔧 FIX: Preserve all existing columns and only update geocoding fields
