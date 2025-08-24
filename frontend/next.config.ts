@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  experimental: {
-    esmExternals: false,
-  },
+  /* config options here */
 };
 
 export default nextConfig;
