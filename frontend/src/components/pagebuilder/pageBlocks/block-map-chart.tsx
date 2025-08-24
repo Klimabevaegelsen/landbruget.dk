@@ -11,9 +11,9 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { MapChart } from "@/services/supabase/types";
 import { VizColors } from "@/lib/utils";
 
-const getLayerStyle = (style: string, index: number) => {
+const getLayerStyle = (style: string | undefined, index: number) => {
   // if style contains marker, return the default marker style
-  if (style.includes("marker")) {
+  if (style && style.includes("marker")) {
     return {
       circleRadius: 6,
       circleColor: "#FF0000",
@@ -139,7 +139,7 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
               type="geojson"
               data={layer.data as GeoJSON.FeatureCollection}
             >
-              {layer.style.includes("marker") ? (
+              {layer.style && layer.style.includes("marker") ? (
                 <Layer
                   id={`layer-${index}`}
                   type="circle"

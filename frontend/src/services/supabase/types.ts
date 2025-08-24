@@ -72,7 +72,7 @@ export interface GeoJSONFeature {
 export interface GeoJSONLayer {
   name: string;
   type: string;
-  style: string;
+  style: string | undefined;
   data: {
     type: "FeatureCollection";
     features: GeoJSONFeature[];
