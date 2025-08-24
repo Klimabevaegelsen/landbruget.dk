@@ -39,7 +39,7 @@ export function LayerControlPanel({
       color: "bg-blue-500",
     },
     {
-      key: "waterProjects" as const,
+      key: "water_projects" as const,
       name: "Vandprojekter",
       description: "2.138 vandprojekter til miljøgenopretning",
       icon: "🌊",

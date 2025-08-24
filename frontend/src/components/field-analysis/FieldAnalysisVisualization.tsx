@@ -23,7 +23,7 @@ export default function FieldAnalysisVisualization() {
     fields: true,
     bnbo: true,
     wetlands: false,
-    waterProjects: false,
+    water_projects: false,
     buildings: false,
   });
 
@@ -44,7 +44,7 @@ export default function FieldAnalysisVisualization() {
     fields: process.env.NEXT_PUBLIC_FIELD_ANALYSIS_PMTILES_URL || '',
     bnbo: process.env.NEXT_PUBLIC_BNBO_PMTILES_URL || '',
     wetlands: process.env.NEXT_PUBLIC_WETLANDS_PMTILES_URL || '',
-    waterProjects: process.env.NEXT_PUBLIC_WATER_PROJECTS_PMTILES_URL || '',
+    water_projects: process.env.NEXT_PUBLIC_WATER_PROJECTS_PMTILES_URL || '',
     buildings: '', // Buildings PMTiles not yet generated
   };
 

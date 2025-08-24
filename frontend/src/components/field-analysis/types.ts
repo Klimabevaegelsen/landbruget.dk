@@ -17,7 +17,7 @@ export interface LayerVisibility {
   fields: boolean;
   bnbo: boolean;
   wetlands: boolean;
-  waterProjects: boolean;
+  water_projects: boolean;
   buildings: boolean;
 }
 
