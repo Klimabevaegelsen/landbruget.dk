@@ -7,7 +7,6 @@ import Map, {
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { LayerVisibility, FilterState, FieldAnalysisData } from "./types";
-import { PMTiles, Protocol } from "pmtiles";
 
 // Type for MapLibre map instance
 interface MapInstance {
@@ -90,16 +89,15 @@ export default function FieldAnalysisMap({
   useEffect(() => {
     const initializePMTiles = async () => {
       try {
+        // Import MapLibre GL dynamically to avoid SSR issues
+        const [maplibregl, { Protocol }] = await Promise.all([
+          import('maplibre-gl'),
+          import('pmtiles')
+        ]);
+
         // Register PMTiles protocol with MapLibre
         const protocol = new Protocol();
-
-        // Add PMTiles sources to the protocol
-        Object.entries(pmtilesUrls).forEach(([, url]) => {
-          if (url) {
-            const pmtiles = new PMTiles(url);
-            protocol.add(pmtiles);
-          }
-        });
+        maplibregl.default.addProtocol('pmtiles', protocol.tile);
 
         setIsLoading(false);
       } catch (err) {
@@ -110,7 +108,7 @@ export default function FieldAnalysisMap({
     };
 
     initializePMTiles();
-  }, [pmtilesUrls]);
+  }, []);
 
   // Add field analysis layers
   const addFieldsLayers = useCallback((map: MapInstance) => {
@@ -280,9 +278,11 @@ export default function FieldAnalysisMap({
       // Add PMTiles sources
       Object.entries(pmtilesUrls).forEach(([layerName, url]) => {
         if (url && !map.getSource(layerName)) {
+          // Remove protocol from URL since PMTiles protocol handler expects just the domain/path
+          const cleanUrl = url.replace(/^https?:\/\//, '');
           map.addSource(layerName, {
             type: "vector",
-            url: `pmtiles://${url}`,
+            url: `pmtiles://${cleanUrl}`,
           });
         }
       });
