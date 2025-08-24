@@ -6,7 +6,7 @@ import Map, {
   NavigationControl,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { LayerVisibility, FilterState, FieldAnalysisData } from "./FieldAnalysisVisualization";
+import { LayerVisibility, FilterState, FieldAnalysisData } from "./types";
 import { PMTiles, Protocol } from "pmtiles";
 
 // Type for MapLibre map instance
@@ -111,34 +111,6 @@ export default function FieldAnalysisMap({
 
     initializePMTiles();
   }, [pmtilesUrls]);
-
-  // Handle map load and add sources
-  const onMapLoad = useCallback(() => {
-    if (!mapRef.current) return;
-
-    const map = mapRef.current.getMap();
-
-    try {
-      // Add PMTiles sources
-      Object.entries(pmtilesUrls).forEach(([layerName, url]) => {
-        if (url && !map.getSource(layerName)) {
-          map.addSource(layerName, {
-            type: "vector",
-            url: `pmtiles://${url}`,
-          });
-        }
-      });
-
-      // Add layers
-      addFieldsLayers(map);
-      addBNBOLayers(map);
-      addWetlandsLayers(map);
-      addWaterProjectsLayers(map);
-
-    } catch (err) {
-      console.error("Error adding map sources/layers:", err);
-    }
-  }, [pmtilesUrls, addFieldsLayers, addBNBOLayers, addWetlandsLayers, addWaterProjectsLayers]);
 
   // Add field analysis layers
   const addFieldsLayers = useCallback((map: MapInstance) => {
@@ -297,6 +269,34 @@ export default function FieldAnalysisMap({
       });
     }
   }, [layerVisibility.waterProjects]);
+
+  // Handle map load and add sources
+  const onMapLoad = useCallback(() => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current.getMap();
+
+    try {
+      // Add PMTiles sources
+      Object.entries(pmtilesUrls).forEach(([layerName, url]) => {
+        if (url && !map.getSource(layerName)) {
+          map.addSource(layerName, {
+            type: "vector",
+            url: `pmtiles://${url}`,
+          });
+        }
+      });
+
+      // Add layers
+      addFieldsLayers(map);
+      addBNBOLayers(map);
+      addWetlandsLayers(map);
+      addWaterProjectsLayers(map);
+
+    } catch (err) {
+      console.error("Error adding map sources/layers:", err);
+    }
+  }, [pmtilesUrls, addFieldsLayers, addBNBOLayers, addWetlandsLayers, addWaterProjectsLayers]);
 
   // Update layer visibility when props change
   useEffect(() => {
