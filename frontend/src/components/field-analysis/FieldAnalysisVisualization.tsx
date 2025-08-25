@@ -33,6 +33,13 @@ export default function FieldAnalysisVisualization() {
     organicOnly: false,
     areaRange: [0, 1000],
     pesticideThreshold: 0,
+    pfasThreshold: 0,
+    diquatThreshold: 0,
+    glyphosateThreshold: 0,
+    chemicalFilter: 'all',
+    visualizationMode: 'total_pesticide_belastning',
+    colorUnit: 'belastning',
+    useDecileColoring: true,
   });
 
   const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(null);

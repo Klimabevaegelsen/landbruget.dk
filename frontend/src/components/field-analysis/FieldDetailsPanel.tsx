@@ -90,12 +90,181 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
           <p className="text-xs text-gray-500 mt-2">{riskLevel.description}</p>
         </div>
 
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-600">PFAS aktivstof:</span>
-            <span className="font-medium">{formatNumber(fieldData.total_pfas_active_ingredient_kg)} kg</span>
+        <div className="space-y-3">
+          {/* PFAS Information */}
+          {fieldData.pfas_applications && (
+            <div className="bg-red-50 rounded-lg p-3">
+              <div className="flex items-center mb-2">
+                <span className="text-red-600 mr-2">🧪</span>
+                <span className="font-medium text-red-800">PFAS Pesticider</span>
+              </div>
+              <div className="space-y-1 text-sm text-red-700">
+                {/* Show actual dosage units used */}
+                {fieldData.total_dosage_liters && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_liters, 1)} L</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_kg && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_kg, 2)} kg</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_grams && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_grams, 0)} g</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_tablets && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{fieldData.total_dosage_tablets} tabletter</span>
+                  </div>
+                )}
+                {fieldData.total_pfas_active_ingredient_kg && (
+                  <div className="flex justify-between">
+                    <span>Aktivstof:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_pfas_active_ingredient_kg, 3)} kg</span>
+                  </div>
+                )}
+                {fieldData.total_pfas_belastning && (
+                  <div className="flex justify-between">
+                    <span>Belastning:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_pfas_belastning)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Applikationer:</span>
+                  <span className="font-medium">{fieldData.pfas_applications}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Diquat Information */}
+          {fieldData.diquat_applications && (
+            <div className="bg-blue-50 rounded-lg p-3">
+              <div className="flex items-center mb-2">
+                <span className="text-blue-600 mr-2">💧</span>
+                <span className="font-medium text-blue-800">Diquat Pesticider</span>
+              </div>
+              <div className="space-y-1 text-sm text-blue-700">
+                {/* Show actual dosage units used */}
+                {fieldData.total_dosage_liters && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_liters, 1)} L</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_kg && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_kg, 2)} kg</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_grams && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_grams, 0)} g</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_tablets && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{fieldData.total_dosage_tablets} tabletter</span>
+                  </div>
+                )}
+                {fieldData.total_diquat_belastning && (
+                  <div className="flex justify-between">
+                    <span>Belastning:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_diquat_belastning)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Applikationer:</span>
+                  <span className="font-medium">{fieldData.diquat_applications}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Glyphosate Information */}
+          {fieldData.glyphosate_applications && (
+            <div className="bg-green-50 rounded-lg p-3">
+              <div className="flex items-center mb-2">
+                <span className="text-green-600 mr-2">🌿</span>
+                <span className="font-medium text-green-800">Glyphosate Pesticider</span>
+              </div>
+              <div className="space-y-1 text-sm text-green-700">
+                {/* Show actual dosage units used */}
+                {fieldData.total_dosage_liters && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_liters, 1)} L</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_kg && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_kg, 2)} kg</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_grams && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_dosage_grams, 0)} g</span>
+                  </div>
+                )}
+                {fieldData.total_dosage_tablets && (
+                  <div className="flex justify-between">
+                    <span>Dosering:</span>
+                    <span className="font-medium">{fieldData.total_dosage_tablets} tabletter</span>
+                  </div>
+                )}
+                {fieldData.total_glyphosate_active_ingredient_kg && (
+                  <div className="flex justify-between">
+                    <span>Aktivstof:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_glyphosate_active_ingredient_kg, 3)} kg</span>
+                  </div>
+                )}
+                {fieldData.total_glyphosate_belastning && (
+                  <div className="flex justify-between">
+                    <span>Belastning:</span>
+                    <span className="font-medium">{formatNumber(fieldData.total_glyphosate_belastning)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>Applikationer:</span>
+                  <span className="font-medium">{fieldData.glyphosate_applications}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Additional pesticide info */}
+          <div className="space-y-2 text-sm">
+            {fieldData.total_pesticide_applications && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total applikationer:</span>
+                <span className="font-medium">{fieldData.total_pesticide_applications}</span>
+              </div>
+            )}
+            {fieldData.unique_pesticide_products && (
+              <div className="flex justify-between">
+                <span className="text-gray-600">Unikke produkter:</span>
+                <span className="font-medium">{fieldData.unique_pesticide_products}</span>
+              </div>
+            )}
+            {fieldData.is_partial_coverage && (
+              <div className="flex items-center space-x-2">
+                <span className="text-orange-600">⚠️</span>
+                <span className="text-sm text-orange-700">Delvis markdækning</span>
+              </div>
+            )}
           </div>
-          {/* Add more pesticide details as needed */}
         </div>
       </div>
 
@@ -135,21 +304,55 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
         </div>
       </div>
 
-      {/* Building Proximity */}
-      {fieldData.residential_buildings_proximity && (
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Bygningsnærhed</h3>
-          <div className="bg-gray-50 rounded-lg p-3">
-            <div className="flex items-center mb-1">
-              <span className="text-gray-600 mr-2">🏠</span>
-              <span className="font-medium text-gray-800">Boliger i nærheden</span>
+      {/* Proximity Information */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">Nærhedsanalyse</h3>
+        <div className="space-y-3">
+          {fieldData.residential_buildings_proximity && (
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="flex items-center mb-1">
+                <span className="text-gray-600 mr-2">🏠</span>
+                <span className="font-medium text-gray-800">Boliger i nærheden</span>
+              </div>
+              <div className="text-sm text-gray-700">
+                {fieldData.residential_buildings_proximity}
+              </div>
             </div>
-            <div className="text-sm text-gray-700">
-              {fieldData.residential_buildings_proximity}
+          )}
+
+          {fieldData.educational_facilities_proximity && (
+            <div className="bg-blue-50 rounded-lg p-3">
+              <div className="flex items-center mb-1">
+                <span className="text-blue-600 mr-2">🏫</span>
+                <span className="font-medium text-blue-800">Uddannelsesinstitutioner</span>
+              </div>
+              <div className="text-sm text-blue-700">
+                {fieldData.educational_facilities_proximity}
+              </div>
             </div>
-          </div>
+          )}
+
+          {fieldData.water_distance_proximity && (
+            <div className="bg-teal-50 rounded-lg p-3">
+              <div className="flex items-center mb-1">
+                <span className="text-teal-600 mr-2">🌊</span>
+                <span className="font-medium text-teal-800">Vandområder</span>
+              </div>
+              <div className="text-sm text-teal-700">
+                {fieldData.water_distance_proximity}
+              </div>
+            </div>
+          )}
+
+          {!fieldData.residential_buildings_proximity &&
+           !fieldData.educational_facilities_proximity &&
+           !fieldData.water_distance_proximity && (
+            <div className="text-sm text-gray-500 italic">
+              Ingen nærhedsdata tilgængelig for denne mark
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Actions */}
       <div className="mt-8 pt-6 border-t">
