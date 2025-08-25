@@ -136,7 +136,9 @@ def is_high_volume_herd(herd_number: int) -> bool:
     return str(herd_number) in _HIGH_VOLUME_HERDS
 
 
-def get_optimal_date_range(herd_number: int, requested_start: date, requested_end: date) -> List[Tuple[date, date]]:
+def get_optimal_date_range(
+    herd_number: int, requested_start: date, requested_end: date, discovery_results: Optional[Dict] = None
+) -> List[Tuple[date, date]]:
     """
     Get optimal date ranges for a herd, splitting into smaller chunks if it's high-volume.
 
@@ -146,6 +148,9 @@ def get_optimal_date_range(herd_number: int, requested_start: date, requested_en
     _load_high_volume_herds()
 
     herd_str = str(herd_number)
+
+    # Simple approach: herds are auto-detected as high-volume when they cause issues
+    # The detection happens in the animal_movements module when timeouts/failures occur
 
     # Pre-configure known problematic herds with reasonable chunking
     if herd_number in [112389, 104641] and herd_str not in _HIGH_VOLUME_HERDS:
@@ -270,7 +275,8 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
             }
 
             logger.info(
-                f"Herd {herd_number} volume detection: {volume_category} ({estimated_5_year:,.0f} estimated 5-year animals)"
+                f"Herd {herd_number} volume detection: {volume_category} "
+                f"({estimated_5_year:,.0f} estimated 5-year animals)"
             )
 
             # Auto-configure high-risk herds

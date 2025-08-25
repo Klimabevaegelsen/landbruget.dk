@@ -83,6 +83,7 @@ class SilverProcessor:
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
         from .transformers.excel_transformer import ExcelTransformer
+        from .transformers.fertiliser_transformer import FertiliserTransformer
         from .transformers.work_permits_transformer import WorkPermitsTransformer
 
         # Initialize transformers map
@@ -92,6 +93,7 @@ class SilverProcessor:
                 use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
                 ocr_language="dan+eng",
             ),
+            "Fertiliser": FertiliserTransformer(),
             "WorkPermits": WorkPermitsTransformer(),
         }
 
@@ -367,7 +369,8 @@ class SilverProcessor:
 
             logger.info(f"Processing file from memory to Silver: {original_filename}")
 
-            # Select transformer based on content type and file specifics (same logic as _process_file)
+            # Select transformer based on content type and file specifics
+            # (same logic as _process_file)
             transformer = None
             file_path = Path(original_filename)  # Create Path object for specialized transformers
 
@@ -437,7 +440,8 @@ class SilverProcessor:
                             logger.info(f"Saved transformed data to: {output_path}")
                         except Exception as e:
                             logger.error(
-                                f"Failed to save transformed data for {original_filename} sheet {sheet_name}: {str(e)}"
+                                f"Failed to save transformed data for {original_filename} "
+                                f"sheet {sheet_name}: {str(e)}"
                             )
                             return False
 
@@ -472,7 +476,8 @@ class SilverProcessor:
                             logger.info(f"Saved transformed data to: {output_path}")
                         except Exception as e:
                             logger.error(
-                                f"Failed to save transformed data for {original_filename} part {i}: {str(e)}"
+                                f"Failed to save transformed data for {original_filename} "
+                                f"part {i}: {str(e)}"
                             )
                             return False
 
@@ -501,7 +506,8 @@ class SilverProcessor:
 
                     # Save the DuckDB table using ParquetManager (handles GCS uploads)
                     try:
-                        # Get the data from transformer's connection and register it in ParquetManager
+                        # Get the data from transformer's connection and register it
+                        # in ParquetManager
                         df = transformer.conn.execute(f"SELECT * FROM {table_name}").df()
                         parquet_table_name = f"temp_parquet_{int(time.time())}"
                         self.parquet_manager.register_dataframe(df, parquet_table_name)
@@ -565,7 +571,8 @@ class SilverProcessor:
 
         except Exception as e:
             logger.error(
-                f"Failed to process file from memory {file_info.get('original_filename', 'unknown')}: {str(e)}"
+                f"Failed to process file from memory "
+                f"{file_info.get('original_filename', 'unknown')}: {str(e)}"
             )
             return False
 
@@ -676,7 +683,8 @@ class SilverProcessor:
 
             if not table_schema:
                 logger.info(
-                    f"No schema found for {metadata.original_subfolder}, skipping schema application"
+                    f"No schema found for {metadata.original_subfolder}, "
+                    f"skipping schema application"
                 )
                 return None
 
@@ -724,42 +732,88 @@ class SilverProcessor:
         """Detect and handle PII in a processed file.
 
         Args:
-            output_path: Path to the processed file
+            output_path: Path to the processed file (can be local or GCS path)
             silver_run_path: Silver layer run directory
 
         Returns:
             Path to the PII-handled file or None if failed
         """
         try:
-            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
-            import duckdb
+            # Check if this is a GCS path or local path
+            output_path_str = str(output_path)
+            is_gcs_path = output_path_str.startswith("gs://")
 
-            # Use DuckDB to read parquet file
-            temp_conn = duckdb.connect()
-            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
-            temp_conn.close()
+            if is_gcs_path:
+                # For GCS files, we need to use GCS access to read the file
+                from unified_pipeline.util.gcs_access import GCSDataAccess
 
-            # Validate for PII
-            validation_result = self.pii_validator.validate(df)
+                gcs_access = GCSDataAccess()
 
-            # If PII is found, handle it
-            if not validation_result.is_valid:
-                # Handle PII according to validator's action
-                df_handled = self.pii_validator.handle_pii(df, validation_result)
+                # Create a temporary table name for validation
+                temp_table = "pii_validation_table"
 
-                # Save to new file
-                pii_output_path = output_path.with_name(
-                    f"{output_path.stem}_pii_handled{output_path.suffix}"
-                )
+                try:
+                    # Load parquet data into DuckDB table
+                    gcs_access.query_parquet_native(output_path_str, "SELECT *", temp_table)
 
-                # Save handled file
-                self.parquet_manager.save_dataframe_to_parquet(
-                    df=df_handled,
-                    output_path=pii_output_path,
-                )
+                    # Validate for PII using the table name instead of dataframe
+                    validation_result = self.pii_validator.validate(temp_table)
 
-                logger.info(f"Handled PII in file: {pii_output_path}")
-                return pii_output_path
+                    # If PII is found, handle it
+                    if not validation_result.is_valid:
+                        # Handle PII according to validator's action
+                        handled_table = self.pii_validator.handle_pii(temp_table, validation_result)
+
+                        # Generate new GCS path for handled file
+                        path_parts = output_path_str.split("/")
+                        filename = path_parts[-1]
+                        filename_stem = filename.rsplit(".", 1)[0] if "." in filename else filename
+                        filename_ext = "." + filename.rsplit(".", 1)[1] if "." in filename else ""
+                        new_filename = f"{filename_stem}_pii_handled{filename_ext}"
+
+                        pii_output_path_str = "/".join(path_parts[:-1] + [new_filename])
+
+                        # Export handled table back to GCS
+                        gcs_access.export_table_to_gcs_direct(handled_table, pii_output_path_str)
+
+                        logger.info(f"Handled PII in file: {pii_output_path_str}")
+                        return Path(pii_output_path_str)
+
+                except Exception as gcs_e:
+                    logger.warning(f"GCS PII handling failed: {gcs_e}, skipping PII processing")
+                    return None
+
+            else:
+                # Original local file handling
+                # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
+                import duckdb
+
+                # Use DuckDB to read parquet file
+                temp_conn = duckdb.connect()
+                df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
+                temp_conn.close()
+
+                # Validate for PII
+                validation_result = self.pii_validator.validate(df)
+
+                # If PII is found, handle it
+                if not validation_result.is_valid:
+                    # Handle PII according to validator's action
+                    df_handled = self.pii_validator.handle_pii(df, validation_result)
+
+                    # Save to new file
+                    pii_output_path = output_path.with_name(
+                        f"{output_path.stem}_pii_handled{output_path.suffix}"
+                    )
+
+                    # Save handled file
+                    self.parquet_manager.save_dataframe_to_parquet(
+                        df=df_handled,
+                        output_path=pii_output_path,
+                    )
+
+                    logger.info(f"Handled PII in file: {pii_output_path}")
+                    return pii_output_path
 
             # If no PII found or just reporting, return None
             return None

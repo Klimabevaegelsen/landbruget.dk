@@ -26,6 +26,13 @@ from typing import Any, Dict, List, Optional
 
 import duckdb
 import gcsfs
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from unified_pipeline.util.log_util import Logger
 
@@ -35,8 +42,26 @@ logger = Logger.get_logger()
 
 @lru_cache(maxsize=1)
 def get_gcs_filesystem() -> gcsfs.GCSFileSystem:
-    """Get cached gcsfs filesystem instance."""
-    return gcsfs.GCSFileSystem()
+    """
+    Get cached gcsfs filesystem instance with optimal authentication.
+    
+    Priority order:
+    1. HMAC credentials (fastest, no OAuth required)
+    2. Service account authentication (fallback)
+    """
+    # Try HMAC authentication first (no OAuth required)
+    gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+    gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+    
+    if gcs_access_key and gcs_secret_key:
+        logger.info("✅ Using HMAC authentication for gcsfs (no OAuth required)")
+        return gcsfs.GCSFileSystem(
+            access_key_id=gcs_access_key,
+            secret_access_key=gcs_secret_key
+        )
+    else:
+        logger.info("ℹ️ Using service account authentication for gcsfs (requires OAuth)")
+        return gcsfs.GCSFileSystem()
 
 
 @lru_cache(maxsize=1)
@@ -52,9 +77,20 @@ def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
         try:
             from fsspec import filesystem
 
-            fs = filesystem("gs")
+            # Use HMAC credentials if available for fsspec as well
+            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+            
+            if gcs_access_key and gcs_secret_key:
+                fs = filesystem("gs", 
+                               access_key_id=gcs_access_key,
+                               secret_access_key=gcs_secret_key)
+                logger.info("✅ DuckDB configured with gcsfs integration using HMAC (no OAuth)")
+            else:
+                fs = filesystem("gs")
+                logger.info("✅ DuckDB configured with gcsfs integration using service account")
+            
             conn.register_filesystem(fs)
-            logger.info("✅ DuckDB configured with gcsfs integration (fallback)")
         except Exception as e:
             logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
 
@@ -196,7 +232,17 @@ class GCSDataAccess:
             # This approach is 5x faster than httpfs according to benchmarks
             from fsspec import filesystem
 
-            fs = filesystem("gs")  # Uses gcsfs under the hood
+            # Use HMAC authentication if available
+            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+            
+            if gcs_access_key and gcs_secret_key:
+                fs = filesystem("gs", 
+                               access_key_id=gcs_access_key,
+                               secret_access_key=gcs_secret_key)
+            else:
+                fs = filesystem("gs")  # Uses gcsfs under the hood
+            
             self.duckdb_conn.register_filesystem(fs)
 
             logger.info("✅ DuckDB configured with spatial and gcsfs filesystem integration")
@@ -591,7 +637,8 @@ class GCSDataAccess:
 
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             self.log.info(
-                f"✅ Created combined table {table_name} with {count:,} rows from {len(gcs_paths)} files"
+                f"✅ Created combined table {table_name} with {count:,} rows "
+                f"from {len(gcs_paths)} files"
             )
 
         finally:
@@ -635,19 +682,34 @@ class GCSDataAccess:
 
         self.monitor.check_resources("post_upload")
 
+    @retry(
+        retry=retry_if_exception_type((
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            Exception  # Catch-all for network-related issues
+        )),
+        wait=wait_exponential(multiplier=2, min=4, max=60),
+        stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, "WARNING"),
+    )
     def upload_json(self, data: Dict[str, Any] | List[Any], gcs_path: str, **kwargs):
         """
-        ✅ OPTIMIZED: Upload JSON data with streaming via gcsfs.
+        ✅ OPTIMIZED: Upload JSON data with streaming via gcsfs with retry logic.
 
         Uses streaming approach for optimal performance:
         - No temp file creation
         - Direct streaming to GCS
         - Memory efficient for large JSON objects
+        - Robust retry logic for network failures
 
         Args:
             data: Dictionary or list to upload as JSON
             gcs_path: GCS path (gs://bucket/path/file.json)
             **kwargs: Additional options for json.dumps (indent, ensure_ascii, etc.)
+        
+        Raises:
+            Exception: After 5 retry attempts with exponential backoff
         """
         self.monitor.check_resources("start_json_upload")
 
@@ -671,6 +733,10 @@ class GCSDataAccess:
 
         except Exception as e:
             self.log.error(f"Failed to upload JSON to {gcs_path}: {e}")
+            # Check if it's a network-related error that should be retried
+            if any(error_type in str(type(e).__name__).lower() or error_type in str(e).lower() 
+                   for error_type in ['network', 'connection', 'timeout', 'unreachable', 'oauth2']):
+                self.log.warning(f"Network-related error detected, will retry: {e}")
             raise
 
     def upload_json_string(self, json_string: str, gcs_path: str):
@@ -858,8 +924,8 @@ class GCSDataAccess:
 
                 # Handle different mtime types from gcsfs
                 if isinstance(mtime, datetime.datetime):
-                    # mtime is already a datetime object
-                    timestamp = mtime
+                    # mtime is already a datetime object, normalize to timezone-naive
+                    timestamp = mtime.replace(tzinfo=None) if mtime.tzinfo else mtime
                 elif isinstance(mtime, (int, float)) and mtime > 0:
                     # mtime is a numeric timestamp
                     timestamp = datetime.datetime.fromtimestamp(mtime)
@@ -870,7 +936,7 @@ class GCSDataAccess:
                 files_with_timestamps.append((f"gs://{file_path}", timestamp))
             except Exception as e:
                 self.log.warning(f"Could not get timestamp for {file_path}: {e}")
-                # Fall back to current time if timestamp unavailable
+                # Fall back to current time if timestamp unavailable (timezone-naive)
                 files_with_timestamps.append((f"gs://{file_path}", datetime.datetime.now()))
 
         return files_with_timestamps

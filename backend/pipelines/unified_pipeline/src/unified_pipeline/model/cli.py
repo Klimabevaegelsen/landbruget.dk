@@ -100,8 +100,7 @@ class Stage(Enum):
         company_fetching: Company data fetching step
         pnumber_fetching: P-number data fetching step
         financial_documents: Financial documents fetching step
-        address_geocoding: Address geocoding step
-        data_consolidation: Data consolidation step
+        address_geocoding: Address geocoding step (final step)
     """
 
     bronze = "bronze"
@@ -116,7 +115,6 @@ class Stage(Enum):
     pnumber_fetching = "pnumber_fetching"
     financial_documents = "financial_documents"
     address_geocoding = "address_geocoding"
-    data_consolidation = "data_consolidation"
 
 
 class FVMLayerType(Enum):

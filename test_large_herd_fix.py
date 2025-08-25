@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
-def test_large_herd_processing():
+def test_large_herd_processing() -> bool:
     """Test that large herds (>100k animals) are processed instead of skipped."""
 
     # Import the fixed function
@@ -74,7 +74,7 @@ def test_large_herd_processing():
     return True
 
 
-def test_volume_management_integration():
+def test_volume_management_integration() -> bool:
     """Test that volume management system is properly configured for large herds."""
 
     sys.path.insert(0, "backend/pipelines/chr_pipeline")
@@ -109,7 +109,7 @@ def test_volume_management_integration():
     return True
 
 
-def main():
+def main() -> bool:
     """Run all tests."""
     logger.info("🚀 Starting CHR large herd fix verification tests...")
 

@@ -14,6 +14,10 @@ on:
         - WARNING
         - ERROR
 
+env:
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
 jobs:
   run-migration:
     runs-on: ubuntu-latest

@@ -81,9 +81,15 @@ class FieldAreaValidator:
 
             # Create validation message
             if is_valid:
-                message = f"✅ Area validation PASSED for {stage_name}: {area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+                message = (
+                    f"✅ Area validation PASSED for {stage_name}: "
+                    f"{area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+                )
             else:
-                message = f"❌ Area validation FAILED for {stage_name}: {area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+                message = (
+                    f"❌ Area validation FAILED for {stage_name}: "
+                    f"{area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+                )
 
             # Detailed validation info
             validation_time = time.time() - validation_start
@@ -114,10 +120,12 @@ class FieldAreaValidator:
 
             self.log.info(message)
             self.log.info(
-                f"📊 Before: {before_stats['field_count']:,} fields, {before_stats['total_area']:,.0f} m²"
+                f"📊 Before: {before_stats['field_count']:,} fields, "
+                f"{before_stats['total_area']:,.0f} m²"
             )
             self.log.info(
-                f"📊 After:  {after_stats['field_count']:,} fields, {after_stats['total_area']:,.0f} m²"
+                f"📊 After:  {after_stats['field_count']:,} fields, "
+                f"{after_stats['total_area']:,.0f} m²"
             )
             self.log.info(
                 f"📊 Difference: {area_difference:+,.0f} m² ({area_difference_pct:+.3f}%)"
@@ -148,8 +156,8 @@ class FieldAreaValidator:
 
         # Check if table exists
         table_exists = self.conn.execute(f"""
-            SELECT COUNT(*) 
-            FROM information_schema.tables 
+            SELECT COUNT(*)
+            FROM information_schema.tables
             WHERE table_name = '{table_name}'
         """).fetchone()[0]
 
@@ -158,9 +166,9 @@ class FieldAreaValidator:
 
         # Check if field area column exists
         column_exists = self.conn.execute(f"""
-            SELECT COUNT(*) 
-            FROM information_schema.columns 
-            WHERE table_name = '{table_name}' 
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_name = '{table_name}'
             AND column_name = '{field_area_column}'
         """).fetchone()[0]
 
@@ -169,11 +177,11 @@ class FieldAreaValidator:
 
         # First check if we have fragments (multiple records per field)
         fragment_check = self.conn.execute(f"""
-            SELECT 
+            SELECT
                 COUNT(*) as total_records,
                 COUNT(DISTINCT field_uuid) as unique_fields
             FROM {table_name}
-            WHERE {field_area_column} IS NOT NULL 
+            WHERE {field_area_column} IS NOT NULL
             AND {field_area_column} > 0
         """).fetchone()
 
@@ -181,14 +189,15 @@ class FieldAreaValidator:
 
         if has_fragments:
             self.log.info(
-                f"🔍 Fragment mode detected for {table_name}: {fragment_check[0]} records, {fragment_check[1]} unique fields"
+                f"🔍 Fragment mode detected for {table_name}: "
+                f"{fragment_check[0]} records, {fragment_check[1]} unique fields"
             )
 
         # Get statistics - handle fragments correctly to avoid double-counting
         if has_fragments:
             # FRAGMENT MODE: Use DISTINCT to avoid double-counting field areas across fragments
             stats = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as field_count,
                     COALESCE(SUM({field_area_column}), 0) as total_area_with_fragments,
                     COALESCE(AVG({field_area_column}), 0) as avg_area,
@@ -196,13 +205,13 @@ class FieldAreaValidator:
                     COALESCE(MAX({field_area_column}), 0) as max_area,
                     COUNT(DISTINCT field_uuid) as unique_fields,
                     -- Correct total area using distinct fields to avoid double-counting
-                    (SELECT COALESCE(SUM({field_area_column}), 0) 
-                     FROM (SELECT DISTINCT field_uuid, {field_area_column} 
-                           FROM {table_name} 
+                    (SELECT COALESCE(SUM({field_area_column}), 0)
+                     FROM (SELECT DISTINCT field_uuid, {field_area_column}
+                           FROM {table_name}
                            WHERE {field_area_column} IS NOT NULL AND {field_area_column} > 0)
                     ) as total_area_distinct
                 FROM {table_name}
-                WHERE {field_area_column} IS NOT NULL 
+                WHERE {field_area_column} IS NOT NULL
                 AND {field_area_column} > 0
             """).fetchone()
 
@@ -212,7 +221,7 @@ class FieldAreaValidator:
         else:
             # AGGREGATED MODE: Direct sum is correct (no fragments)
             stats = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as field_count,
                     COALESCE(SUM({field_area_column}), 0) as total_area,
                     COALESCE(AVG({field_area_column}), 0) as avg_area,
@@ -220,7 +229,7 @@ class FieldAreaValidator:
                     COALESCE(MAX({field_area_column}), 0) as max_area,
                     COUNT(DISTINCT field_uuid) as unique_fields
                 FROM {table_name}
-                WHERE {field_area_column} IS NOT NULL 
+                WHERE {field_area_column} IS NOT NULL
                 AND {field_area_column} > 0
             """).fetchone()
 
@@ -274,9 +283,15 @@ class FieldAreaValidator:
 
             # Create validation message
             if is_valid:
-                message = f"✅ Area validation PASSED for {stage_name}: {area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+                message = (
+                    f"✅ Area validation PASSED for {stage_name}: "
+                    f"{area_difference_pct:+.2f}% change (within {self.tolerance_pct}% tolerance)"
+                )
             else:
-                message = f"❌ Area validation FAILED for {stage_name}: {area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+                message = (
+                    f"❌ Area validation FAILED for {stage_name}: "
+                    f"{area_difference_pct:+.2f}% change (exceeds {self.tolerance_pct}% tolerance)"
+                )
 
             validation_time = time.time() - validation_start
             details = {
@@ -312,7 +327,8 @@ class FieldAreaValidator:
                 f"📊 Reference: {reference_field_count:,} fields, {reference_total_area:,.0f} m²"
             )
             self.log.info(
-                f"📊 Output:    {output_stats['field_count']:,} fields, {output_stats['total_area']:,.0f} m²"
+                f"📊 Output:    {output_stats['field_count']:,} fields, "
+                f"{output_stats['total_area']:,.0f} m²"
             )
             self.log.info(
                 f"📊 Difference: {area_difference:+,.0f} m² ({area_difference_pct:+.3f}%)"
@@ -363,12 +379,12 @@ class FieldAreaValidator:
                 self.log.info(f"  Checking: {description}")
 
                 violation_query = f"""
-                    SELECT 
+                    SELECT
                         COUNT(*) as violation_count,
                         MAX({child_col} / NULLIF({parent_col}, 0)) as max_ratio,
                         AVG({child_col} / NULLIF({parent_col}, 0)) as avg_ratio
                     FROM {table_name}
-                    WHERE {parent_col} > 0 
+                    WHERE {parent_col} > 0
                         AND {child_col} > {parent_col} * (1 + {self.tolerance_pct}/100.0)
                 """
 
@@ -399,9 +415,15 @@ class FieldAreaValidator:
             is_valid = total_violations == 0
 
             if is_valid:
-                message = f"✅ Area hierarchy validation PASSED for {stage_name}: All hierarchy constraints satisfied"
+                message = (
+                    f"✅ Area hierarchy validation PASSED for {stage_name}: "
+                    f"All hierarchy constraints satisfied"
+                )
             else:
-                message = f"❌ Area hierarchy validation FAILED for {stage_name}: {total_violations:,} total violations found"
+                message = (
+                    f"❌ Area hierarchy validation FAILED for {stage_name}: "
+                    f"{total_violations:,} total violations found"
+                )
 
             validation_time = time.time() - validation_start
             details = {
@@ -480,13 +502,20 @@ class FieldAreaValidator:
             join_conditions = " AND ".join([f"d.{col} = a.{col}" for col in group_columns])
 
             validation_query = f"""
-                SELECT 
+                SELECT
                     COUNT(*) as total_groups,
-                    COUNT(*) FILTER (WHERE ABS(detail_sum - aggregate_total) > aggregate_total * {self.tolerance_pct}/100.0) as inconsistent_groups,
-                    MAX(ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)) as max_difference_ratio,
-                    AVG(ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)) as avg_difference_ratio
+                    COUNT(*) FILTER (
+                        WHERE ABS(detail_sum - aggregate_total) > 
+                              aggregate_total * {self.tolerance_pct}/100.0
+                    ) as inconsistent_groups,
+                    MAX(
+                        ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)
+                    ) as max_difference_ratio,
+                    AVG(
+                        ABS(detail_sum - aggregate_total) / NULLIF(aggregate_total, 0)
+                    ) as avg_difference_ratio
                 FROM (
-                    SELECT 
+                    SELECT
                         {group_by_clause_detail},
                         SUM(d.{detail_area_column}) as detail_sum,
                         FIRST(a.{aggregate_area_column}) as aggregate_total
@@ -506,9 +535,15 @@ class FieldAreaValidator:
             is_valid = inconsistent_groups == 0
 
             if is_valid:
-                message = f"✅ Fragment sum consistency validation PASSED for {stage_name}: All {total_groups:,} groups consistent"
+                message = (
+                    f"✅ Fragment sum consistency validation PASSED for {stage_name}: "
+                    f"All {total_groups:,} groups consistent"
+                )
             else:
-                message = f"❌ Fragment sum consistency validation FAILED for {stage_name}: {inconsistent_groups:,}/{total_groups:,} groups inconsistent"
+                message = (
+                    f"❌ Fragment sum consistency validation FAILED for {stage_name}: "
+                    f"{inconsistent_groups:,}/{total_groups:,} groups inconsistent"
+                )
 
             validation_time = time.time() - validation_start
             details = {

@@ -9,7 +9,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def test_code_changes():
+def test_code_changes() -> bool:
     """Test that the problematic code has been removed."""
 
     logger.info("🧪 Testing that the hardcoded skip logic has been removed...")
@@ -60,7 +60,7 @@ def test_code_changes():
     return True
 
 
-def test_volume_management_exists():
+def test_volume_management_exists() -> bool:
     """Test that volume management functionality exists."""
 
     logger.info("🔧 Testing that volume management system exists...")
@@ -90,7 +90,7 @@ def test_volume_management_exists():
         return False
 
 
-def test_chunking_integration():
+def test_chunking_integration() -> bool:
     """Test that chunking is integrated in animal_movements.py."""
 
     logger.info("🔄 Testing chunking integration...")
@@ -124,7 +124,7 @@ def test_chunking_integration():
         return False
 
 
-def main():
+def main() -> bool:
     """Run all tests."""
     logger.info("🚀 Starting simple verification of CHR large herd fix...")
 

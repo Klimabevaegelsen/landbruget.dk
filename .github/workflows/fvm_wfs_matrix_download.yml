@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      enrichment_years: ${{ steps.set-matrix.outputs.enrichment_years }}
     steps:
       - name: Generate matrix
         id: set-matrix
@@ -41,6 +42,7 @@ jobs:
           
           # Generate matrix based on layer types and years
           matrix_items=()
+          enrichment_years_set=()
           
           for layer_type in $(echo $layer_types | tr ',' ' '); do
             case $layer_type in
@@ -96,41 +98,61 @@ jobs:
             esac
             
             for year in $years; do
-              # Validate year ranges
+              # Validate year ranges and collect enrichment years
               case $layer_type in
                 "markblokke")
                   if [ $year -ge 2005 ] && [ $year -le 2026 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Markblokke contributes to enrichment for years 2012-2024
+                    if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
+                      enrichment_years_set+=("$year")
+                    fi
                   fi
                   ;;
                 "marker")
                   if [ $year -ge 2008 ] && [ $year -le 2025 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Marker contributes to enrichment for years 2012-2024
+                    if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
+                      enrichment_years_set+=("$year")
+                    fi
                   fi
                   ;;
                 "smaabiotoper")
                   if [ $year -ge 2023 ] && [ $year -le 2025 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Smaabiotoper contributes to enrichment for years 2023-2024
+                    if [ $year -ge 2023 ] && [ $year -le 2024 ]; then
+                      enrichment_years_set+=("$year")
+                    fi
                   fi
                   ;;
                 "organic_areas")
                   if [ $year -ge 2012 ] && [ $year -le 2024 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Organic areas contributes to enrichment for all its years
+                    enrichment_years_set+=("$year")
                   fi
                   ;;
                 "organic_subsidies")
                   if [ $year -ge 2019 ] && [ $year -le 2024 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Organic subsidies contributes to enrichment for all its years
+                    enrichment_years_set+=("$year")
                   fi
                   ;;
                 "grassland_subsidies")
                   if [ $year -ge 2019 ] && [ $year -le 2024 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Grassland subsidies contributes to enrichment for all its years
+                    enrichment_years_set+=("$year")
                   fi
                   ;;
                 "environmental_subsidies")
                   if [ $year -ge 2019 ] && [ $year -le 2023 ]; then
                     matrix_items+=("{\"layer_type\":\"$layer_type\",\"year\":$year}")
+                    # Environmental subsidies contributes to enrichment for all its years
+                    enrichment_years_set+=("$year")
                   fi
                   ;;
               esac
@@ -142,11 +164,23 @@ jobs:
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
           echo "Generated matrix with ${#matrix_items[@]} jobs:"
           echo "$matrix_json" | jq '.'
+          
+          # Generate unique enrichment years and output as JSON array
+          unique_years=($(printf '%s\n' "${enrichment_years_set[@]}" | sort -nu))
+          enrichment_json="[$(IFS=','; echo "${unique_years[*]}")]"
+          echo "enrichment_years=$enrichment_json" >> $GITHUB_OUTPUT
+          echo "Generated enrichment years: ${unique_years[*]}"
+          echo "Enrichment matrix will run for ${#unique_years[@]} years instead of all 13 years"
 
   process:
     needs: generate-matrix
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.stage == 'bronze' || github.event.inputs.stage == 'all' || github.event.inputs.stage == '' }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    
     strategy:
       fail-fast: false
       max-parallel: 10  # Limit concurrent jobs to avoid overwhelming the FVM server
@@ -160,34 +194,51 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: |
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Process FVM WFS Layer
+        env:
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/unified_pipeline
           STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
           echo "Processing ${{ matrix.layer_type }} for year ${{ matrix.year }} (stage: $STAGE)"
+          
+          # Set up signal handling for graceful cancellation
+          trap 'echo "Received cancellation signal, stopping..."; kill -TERM $PID 2>/dev/null; wait $PID 2>/dev/null; exit 130' SIGINT SIGTERM
+          
           python -m unified_pipeline \
             -s fvm_wfs \
             -j "$STAGE" \
             --fvm-layer-type ${{ matrix.layer_type }} \
-            --fvm-year ${{ matrix.year }}
-        # timeout-minutes: 30  # Removed timeout to allow organic areas processing to complete
+            --fvm-year ${{ matrix.year }} &
+          
+          PID=$!
+          wait $PID
 
       - name: Report completion
         if: success()
@@ -204,14 +255,19 @@ jobs:
           exit 1
 
   enrichment-matrix:
-    needs: process
+    needs: [generate-matrix, process]
     runs-on: ubuntu-latest
-    if: ${{ (github.event.inputs.stage == 'silver' || github.event.inputs.stage == 'all') && always() && !failure() }}
+    if: ${{ (github.event.inputs.stage == 'silver' || github.event.inputs.stage == 'all') && success() }}
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    
     strategy:
       fail-fast: false
       max-parallel: 5  # Limit concurrent enrichment jobs
       matrix:
-        year: [2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024]
+        year: ${{ fromJson(needs.generate-matrix.outputs.enrichment_years) }}
     
     name: Enrich Fields ${{ matrix.year }}
     
@@ -220,31 +276,49 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: |
           cd backend/pipelines/unified_pipeline
-          pip install -e .
+          uv pip install --system -e .
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - id: 'auth'
+        name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
 
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Run Field Enrichment for ${{ matrix.year }}
+        env:
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/unified_pipeline
           echo "🌱 Running enrichment for year ${{ matrix.year }}..."
+          
+          # Set up signal handling for graceful cancellation
+          trap 'echo "Received cancellation signal, stopping enrichment..."; kill -TERM $PID 2>/dev/null; wait $PID 2>/dev/null; exit 130' SIGINT SIGTERM
+          
           python -m unified_pipeline \
             -s fvm_wfs \
             -j enrichment \
-            --fvm-year ${{ matrix.year }}
+            --fvm-year ${{ matrix.year }} &
+          
+          PID=$!
+          wait $PID
 
       - name: Report enrichment completion
         if: success()
@@ -265,21 +339,24 @@ jobs:
       - name: Processing Summary
         run: |
           STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
+          ENRICHMENT_YEARS="${{ needs.generate-matrix.outputs.enrichment_years }}"
+          ENRICHMENT_COUNT=$(echo "$ENRICHMENT_YEARS" | jq 'length')
+          
           echo "## FVM WFS Processing Summary" >> $GITHUB_STEP_SUMMARY
           echo "| Layer Type | Years | Stage | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------------|-------|-------|--------|" >> $GITHUB_STEP_SUMMARY
           
           # This would need to be enhanced to show actual results
           # For now, just show that the workflow completed
-          echo "| All layers | As requested | $STAGE | Completed |" >> $GITHUB_STEP_SUMMARY
+          echo "| As requested | ${{ github.event.inputs.years || 'all' }} | $STAGE | Completed |" >> $GITHUB_STEP_SUMMARY
           
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Performance Notes" >> $GITHUB_STEP_SUMMARY
-          echo "- Processing: 73 layer/year matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
+          echo "- Processing: Matrix jobs run in parallel (max 10 concurrent)" >> $GITHUB_STEP_SUMMARY
           echo "- Each layer processes ~400k-600k features in 60-120 seconds" >> $GITHUB_STEP_SUMMARY
-          echo "- Total processing time for all 73 layers: ~25-30 minutes (vs 70+ minutes sequential)" >> $GITHUB_STEP_SUMMARY
-          echo "- Enrichment: 13 year matrix jobs run in parallel (max 5 concurrent)" >> $GITHUB_STEP_SUMMARY  
-          echo "- Each enrichment job processes only its specific year (2012-2024)" >> $GITHUB_STEP_SUMMARY
+          echo "- Enrichment: $ENRICHMENT_COUNT year matrix jobs run in parallel (max 5 concurrent)" >> $GITHUB_STEP_SUMMARY  
+          echo "- Enrichment years: $(echo "$ENRICHMENT_YEARS" | jq -r 'join(", ")')" >> $GITHUB_STEP_SUMMARY
+          echo "- Each enrichment job processes only its specific year" >> $GITHUB_STEP_SUMMARY
           echo "- Organic enrichment adds ~92% organic field coverage to marker data" >> $GITHUB_STEP_SUMMARY
           echo "- Subsidy UUID enrichment enables direct field linkage for analysis" >> $GITHUB_STEP_SUMMARY
           echo "- Data stored in: \`gs://landbrugsdata-raw-data/$STAGE/fvm_*\`" >> $GITHUB_STEP_SUMMARY 

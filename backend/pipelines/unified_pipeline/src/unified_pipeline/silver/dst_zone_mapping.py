@@ -1,8 +1,9 @@
 """
 DST Zone Mapping silver layer component for DAGI pipeline.
 
-This module creates a spatial lookup table that maps field geometries to DST (Danmarks Statistik) zones
-by combining DAGI administrative data with DST regional classifications.
+This module creates a spatial lookup table that maps field geometries
+to DST (Danmarks Statistik) zones by combining DAGI administrative
+data with DST regional classifications.
 
 The module contains:
 - DSTZoneMappingConfig: Configuration for DST zone mapping processing
@@ -175,7 +176,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                         f"INSERT INTO {layer}_raw VALUES ({placeholders})", values
                                     )
 
-                            # Create standardized table with spatial geometry - use layer-specific column mapping
+                            # Create standardized table with spatial geometry
+                            # - use layer-specific column mapping
                             if layer == "kommuner":
                                 code_column = "kode"
                             elif layer == "regioner":
@@ -223,7 +225,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                             self.conn.execute(f"""
                                 CREATE TABLE {layer} AS
-                                SELECT 
+                                SELECT
                                     {select_clause},
                                     ST_GeomFromText(geometry_wkt) as geometry,
                                     geometry_wkt,
@@ -369,7 +371,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                                     ) as tmp_file:
                                         temp_path = tmp_file.name
 
-                                    # Create a temporary view with the selected columns in the GCS connection
+                                    # Create a temporary view with the selected columns
+                                    # in the GCS connection
                                     conn.execute(f"""
                                         CREATE OR REPLACE VIEW temp_layer_view AS
                                         SELECT {select_clause}
@@ -379,13 +382,13 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                                     # Export to temporary file
                                     conn.execute(f"""
-                                        COPY temp_layer_view TO '{temp_path}' 
+                                        COPY temp_layer_view TO '{temp_path}'
                                         (FORMAT PARQUET, COMPRESSION zstd)
                                     """)
 
                                     # Import into main connection
                                     self.conn.execute(f"""
-                                        CREATE OR REPLACE TABLE {layer} AS 
+                                        CREATE OR REPLACE TABLE {layer} AS
                                         SELECT * FROM read_parquet('{temp_path}')
                                     """)
 
@@ -400,7 +403,8 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
                                 except Exception as e:
                                     self.log.warning(
-                                        f"Failed optimized transfer for {layer}, falling back to row-by-row: {e}"
+                                        f"Failed optimized transfer for {layer}, "
+                                        f"falling back to row-by-row: {e}"
                                     )
                                     # Fallback to row-by-row copying
                                     rows = conn.execute(f"""
@@ -506,13 +510,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             # Use the standardized table names that were created in the base connection
             conn.execute("""
                 CREATE TABLE dst_zone_lookup AS
-                SELECT 
+                SELECT
                     l.code as landsdel_code,
                     l.name as landsdel_name,
                     '' as landsdel_dagi_id,
                     l.region_code as dagi_region_code,
-                    l.name as dagi_region_name,  -- Use name as region_name since we don't have separate region names
-                    '' as dagi_region_nuts2,     -- Empty for now since regioner table might not be available
+                    l.name as dagi_region_name,
+                    -- Use name as region_name since we don't have separate region names
+                    '' as dagi_region_nuts2,
+                    -- Empty for now since regioner table might not be available
                     STRING_AGG(dm.dst_region, '|' ORDER BY dm.dst_region) as dst_regions,
                     l.geometry_wkt as geometry,
                     l.area_m2,
@@ -524,7 +530,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                 FROM landsdele l
                 LEFT JOIN dst_mappings_raw dm ON l.code = dm.landsdel_code
                 WHERE dm.landsdel_code IS NOT NULL
-                GROUP BY l.code, l.name, l.region_code, 
+                GROUP BY l.code, l.name, l.region_code,
                          l.geometry_wkt, l.area_m2, l.centroid_x, l.centroid_y
             """)
 
@@ -556,7 +562,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
 
             conn.execute("""
                 CREATE TABLE dst_zone_reference AS
-                SELECT 
+                SELECT
                     landsdel_code,
                     landsdel_name,
                     landsdel_dagi_id,
@@ -580,7 +586,7 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
             self.log.error(f"Error creating reference table: {e}")
             raise
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
         """
         Run the DST zone mapping processing using DuckDB.
 
@@ -630,6 +636,15 @@ class DSTZoneMapping(BaseSource[DSTZoneMappingConfig], SilverJobInterface):
                     f"Created lookup table with {lookup_count} records covering "
                     f"{len(self.config.dst_mappings)} DST regions"
                 )
+
+                # ✅ FIXED: Return success information to prevent "no data returned" error
+                return {
+                    "status": "completed",
+                    "lookup_table_records": lookup_count,
+                    "dst_regions_covered": len(self.config.dst_mappings),
+                    "processing_time_seconds": timer.elapsed(),
+                    "tables_created": ["dst_zone_lookup", "dst_zone_reference"],
+                }
 
         except Exception as e:
             self.log.error(f"Critical error in DST zone mapping processing: {e}")

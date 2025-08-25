@@ -157,7 +157,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
                         f"Error getting count for {url}: {response.status} - {response_text}"
                     )
         except Exception as e:
-            raise Exception(f"Error getting total count for {url}: {str(e)}")
+            raise Exception(f"Error getting total count for {url}: {str(e)}") from e
 
     @retry(
         retry=retry_if_exception_type(Exception),
@@ -293,7 +293,7 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
             self.conn.execute(
                 f"""
                 CREATE OR REPLACE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     payload,
                     ? as source,
                     ? as year,
@@ -331,8 +331,8 @@ class AgriculturalFieldsBronze(BaseSource[AgriculturalFieldsBronzeConfig], Bronz
         historical analysis and trend identification.
 
         Returns:
-            Optional[dict]: Dictionary containing all processed table names organized by dataset and year,
-                           or None if processing fails
+            Optional[dict]: Dictionary containing all processed table names organized 
+                           by dataset and year, or None if processing fails
 
         Note:
             This is the main entry point for the bronze layer processing of

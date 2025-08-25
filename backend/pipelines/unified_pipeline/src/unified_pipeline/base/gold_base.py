@@ -1,5 +1,6 @@
 """Base class for gold layer processing."""
 
+import time
 from typing import List
 
 from .duckdb_processor import DuckDBProcessor
@@ -43,7 +44,7 @@ class GoldBase(DuckDBProcessor):
 
         self.conn.execute(f"""
             CREATE TABLE {agg_table} AS
-            SELECT 
+            SELECT
                 {group_clause},
                 {metric_clause}
             FROM {table_name}
@@ -74,7 +75,7 @@ class GoldBase(DuckDBProcessor):
             stats_queries = []
             for col in numeric_columns:
                 stats_queries.append(f"""
-                    SELECT 
+                    SELECT
                         '{col}' as column_name,
                         COUNT({col}) as count,
                         AVG({col}) as mean,

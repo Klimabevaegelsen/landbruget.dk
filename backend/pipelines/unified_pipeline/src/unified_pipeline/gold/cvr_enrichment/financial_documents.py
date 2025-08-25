@@ -7,6 +7,7 @@ for the companies, processing them in batches for parallel execution.
 
 import json
 import os
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -138,7 +139,15 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             # Step 3: Process and parse financial data
             processed_data = self._process_financial_data(financial_data)
 
-            # Step 4: Save financial data
+            # Step 4: Process financial employment data separately
+            # (different from CVR register employment)
+            self.log.info(
+                "⚙️ Step 4a/5: Processing employment data from financial documents "
+                "(separate from CVR register employment)"
+            )
+            self._process_employment_data_directly(company_batch)
+
+            # Step 5: Save financial data
             table_name = self._save_financial_data(processed_data)
 
             self.log.info(
@@ -180,7 +189,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         if not input_paths:
             if self.config.shared_config.enable_independent_execution:
                 raise ValueError(
-                    f"No company data found within {self.config.shared_config.max_days_back_for_inputs} days. "
+                    f"No company data found within "
+                    f"{self.config.shared_config.max_days_back_for_inputs} days. "
                     f"Please run the company fetching step first or disable independent execution."
                 )
             else:
@@ -506,7 +516,10 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 "profit_loss_before_tax": "ProfitLossFromOrdinaryActivitiesBeforeTax",
                 "employee_benefits_expense": "EmployeeBenefitsExpense",
                 "average_number_of_employees": "AverageNumberOfEmployees",
-                "depreciation_expense": "DepreciationAmortisationExpenseAndImpairmentLossesOfPropertyPlantAndEquipmentAndIntangibleAssetsRecognisedInProfitOrLoss",
+                "depreciation_expense": (
+                    "DepreciationAmortisationExpenseAndImpairmentLossesOfPropertyPlantAnd"
+                    "EquipmentAndIntangibleAssetsRecognisedInProfitOrLoss"
+                ),
                 "other_finance_income": "OtherFinanceIncome",
                 "other_finance_expenses": "OtherFinanceExpenses",
                 "tax_expense": "TaxExpense",
@@ -521,8 +534,12 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 "contributed_capital": "ContributedCapital",
                 "cash_and_cash_equivalents": "CashAndCashEquivalents",
                 "liabilities_other_than_provisions": "LiabilitiesOtherThanProvisions",
-                "shortterm_liabilities_other_than_provisions": "ShorttermLiabilitiesOtherThanProvisions",
-                "longterm_liabilities_other_than_provisions": "LongtermLiabilitiesOtherThanProvisions",
+                "shortterm_liabilities_other_than_provisions": (
+                    "ShorttermLiabilitiesOtherThanProvisions"
+                ),
+                "longterm_liabilities_other_than_provisions": (
+                    "LongtermLiabilitiesOtherThanProvisions"
+                ),
                 "provisions": "Provisions",
                 "property_plant_equipment": "PropertyPlantAndEquipment",
             }
@@ -668,7 +685,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
     @timed(name="Saving financial data")
     def _save_financial_data(self, processed_data: Dict[str, Any]) -> str:
         """
-        Save processed financial documents data to GCS using batch processing to avoid memory issues.
+        Save processed financial documents data to GCS using batch processing to avoid memory
+        issues. Now creates both document metadata table AND comprehensive financial table.
 
         Args:
             processed_data: Processed financial data
@@ -676,33 +694,32 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         Returns:
             Table name where data was saved
         """
-        self.log.info("Saving financial documents data")
+        self.log.info("Saving financial documents data with comprehensive financial metrics")
 
-        # Create table name
-        table_name = "cvr_financial"
+        # Create table names
+        metadata_table = "cvr_financial_documents"  # Document metadata (for compatibility)
+        financial_table = "cvr_financial_statements"  # Comprehensive financial data (NEW!)
 
         financial_data = processed_data["financial_documents"]
 
-        # Create DuckDB table
-        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+        # Create DuckDB tables
+        self.conn.execute(f"DROP TABLE IF EXISTS {metadata_table}")
+        self.conn.execute(f"DROP TABLE IF EXISTS {financial_table}")
 
         if financial_data:
             self.log.info(
-                f"🔄 Processing {len(financial_data)} companies in batches to avoid memory issues"
+                f"🔄 Processing {len(financial_data)} companies in batches to save "
+                f"both metadata and comprehensive financial data"
             )
 
-            # Process in batches to avoid memory issues (similar to data_consolidation.py)
-            batch_size = 50  # Process 50 companies at a time
+            # Process in smaller batches for memory efficiency
+            batch_size = 25  # Reduced from 50 due to additional financial data
             total_companies = len(financial_data)
             num_batches = (total_companies + batch_size - 1) // batch_size
 
-            self.log.info(
-                f"📦 Processing {total_companies} companies in {num_batches} batches of {batch_size}"
-            )
-
-            # Create empty table with correct schema first
+            # Create document metadata table (existing functionality)
             self.conn.execute(f"""
-                CREATE TABLE {table_name} (
+                CREATE TABLE {metadata_table} (
                     cvr_number INTEGER,
                     company_name VARCHAR,
                     document_count INTEGER,
@@ -710,9 +727,53 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     total_xml_size_bytes INTEGER,
                     latest_reporting_date VARCHAR,
                     has_financial_metrics BOOLEAN,
-                    financial_data_json VARCHAR,
                     processing_timestamp VARCHAR,
                     batch_number INTEGER
+                )
+            """)
+
+            # Create comprehensive financial statements table (NEW!)
+            self.conn.execute(f"""
+                CREATE TABLE {financial_table} (
+                    company_uuid VARCHAR,
+                    cvr_number INTEGER,
+                    publication_type VARCHAR,
+                    publication_time VARCHAR,
+                    case_number VARCHAR,
+                    reporting_period_start VARCHAR,
+                    reporting_period_end VARCHAR,
+                    document_count INTEGER,
+                    xml_size_bytes INTEGER,
+                    download_success BOOLEAN,
+                    duration_context VARCHAR,
+                    instant_context VARCHAR,
+                    income_statement_start_date VARCHAR,
+                    income_statement_end_date VARCHAR,
+                    balance_sheet_date VARCHAR,
+                    net_profit_loss DOUBLE,
+                    gross_profit_loss DOUBLE,
+                    operating_profit_loss DOUBLE,
+                    profit_loss_before_tax DOUBLE,
+                    employee_benefits_expense DOUBLE,
+                    average_number_of_employees DOUBLE,
+                    depreciation_expense DOUBLE,
+                    other_finance_income DOUBLE,
+                    other_finance_expenses DOUBLE,
+                    tax_expense DOUBLE,
+                    total_assets DOUBLE,
+                    total_equity DOUBLE,
+                    noncurrent_assets DOUBLE,
+                    current_assets DOUBLE,
+                    cash_and_cash_equivalents DOUBLE,
+                    liabilities_other_than_provisions DOUBLE,
+                    shortterm_liabilities_other_than_provisions DOUBLE,
+                    longterm_liabilities_other_than_provisions DOUBLE,
+                    provisions DOUBLE,
+                    property_plant_equipment DOUBLE,
+                    contributed_capital DOUBLE,
+                    equity_ratio DOUBLE,
+                    profit_per_employee DOUBLE,
+                    return_on_assets DOUBLE
                 )
             """)
 
@@ -722,34 +783,455 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 end_idx = min(start_idx + batch_size, total_companies)
                 batch_data = financial_data[start_idx:end_idx]
 
-                self.log.info(
-                    f"📦 Processing batch {batch_idx + 1}/{num_batches}: companies {start_idx}-{end_idx - 1}"
-                )
-
                 try:
                     # Convert batch to JSON strings for DuckDB
                     json_strings = [json.dumps(financial) for financial in batch_data]
 
-                    # Insert batch data into table
+                    # Insert into document metadata table (existing functionality)
                     self.conn.execute(
                         f"""
-                        INSERT INTO {table_name}
-                        SELECT 
+                        INSERT INTO {metadata_table}
+                        SELECT
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                            json_extract(json_data, '$.company_name')::VARCHAR as company_name,
+                            json_extract_string(json_data, '$.company_name') as company_name,
                             json_extract(json_data, '$.document_count')::INTEGER as document_count,
-                            json_extract(json_data, '$.xml_document_count')::INTEGER as xml_document_count,
-                            json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as total_xml_size_bytes,
-                            json_extract(json_data, '$.latest_reporting_date')::VARCHAR as latest_reporting_date,
-                            CASE 
-                                WHEN json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL 
-                                THEN true 
-                                ELSE false 
+                            json_extract(json_data, '$.xml_document_count')::INTEGER as
+                                xml_document_count,
+                            json_extract(json_data, '$.total_xml_size_bytes')::INTEGER as
+                                total_xml_size_bytes,
+                            json_extract_string(json_data, '$.latest_reporting_date') as
+                                latest_reporting_date,
+                            CASE
+                                WHEN json_extract(json_data, '$.latest_financial_metrics')
+                             IS NOT NULL
+                                THEN true
+                                ELSE false
                             END as has_financial_metrics,
-                            json_data as financial_data_json,
-                            json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
+                            json_extract_string(json_data, '$.processing_timestamp') as
+                                processing_timestamp,
                             json_extract(json_data, '$.batch_number')::INTEGER as batch_number
                         FROM unnest($1) as t(json_data)
+                    """,
+                        [json_strings],
+                    )
+
+                    # Insert into comprehensive financial statements table (NEW!)
+                    self.conn.execute(
+                        f"""
+                        INSERT INTO {financial_table}
+                        SELECT
+                            md5(
+                                json_extract_string(json_data, '$.cvr_number')
+                            )::VARCHAR as company_uuid,
+                            json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                            'Annual Report' as publication_type,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as publication_time,
+                            NULL as case_number,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as reporting_period_start,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as reporting_period_end,
+                            json_extract(
+                                json_data, '$.document_count'
+                            )::INTEGER as document_count,
+                            json_extract(
+                                json_data, '$.total_xml_size_bytes'
+                            )::INTEGER as xml_size_bytes,
+                            true as download_success,
+                            'duration' as duration_context,
+                            'instant' as instant_context,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as income_statement_start_date,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as income_statement_end_date,
+                            json_extract(
+                                json_data, '$.latest_reporting_date'
+                            )::VARCHAR as balance_sheet_date,
+                            -- Extract financial metrics from parsed XBRL data
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data, '$.latest_financial_metrics.net_profit_loss'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data, '$.latest_financial_metrics.ResultatEfterSkat'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(json_data, '$.latest_financial_metrics.ProfitLoss')
+                                    AS DOUBLE
+                                )
+                            ) as net_profit_loss,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data, '$.latest_financial_metrics.gross_profit_loss'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data, '$.latest_financial_metrics.BruttoResultat'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as gross_profit_loss,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.operating_profit_loss'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.ResultatAfPrimæreDrift'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as operating_profit_loss,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.profit_loss_before_tax'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.ResultatFørSkat'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as profit_loss_before_tax,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.employee_benefits_expense'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.PersonaleOmkostninger'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as employee_benefits_expense,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.average_number_of_employees'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.GennemsnitligtAntalMedarbejdere'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as average_number_of_employees,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.depreciation_expense'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Afskrivninger'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as depreciation_expense,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.other_finance_income'
+                                )
+                                AS DOUBLE
+                            ) as other_finance_income,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.other_finance_expenses'
+                                )
+                                AS DOUBLE
+                            ) as other_finance_expenses,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.tax_expense'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Skat'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as tax_expense,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.AktiverIAlt'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Assets'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as total_assets,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_equity'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.EgenkapitalIAlt'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Equity'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as total_equity,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.noncurrent_assets'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.AnlægsAktiver'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as noncurrent_assets,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.current_assets'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.OmsætningsAktiver'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as current_assets,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.cash_and_cash_equivalents'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.LikvideBehold'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.Cash'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as cash_and_cash_equivalents,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.liabilities_other_than_provisions'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.GældIAlt'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as liabilities_other_than_provisions,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.shortterm_liabilities_other_than_provisions'
+                                )
+                                AS DOUBLE
+                            ) as shortterm_liabilities_other_than_provisions,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.longterm_liabilities_other_than_provisions'
+                                )
+                                AS DOUBLE
+                            ) as longterm_liabilities_other_than_provisions,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.provisions'
+                                )
+                                AS DOUBLE
+                            ) as provisions,
+                            COALESCE(
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.property_plant_equipment'
+                                    )
+                                    AS DOUBLE
+                                ),
+                                TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.MaterialeAktiver'
+                                    )
+                                    AS DOUBLE
+                                )
+                            ) as property_plant_equipment,
+                            TRY_CAST(
+                                json_extract(
+                                    json_data,
+                                    '$.latest_financial_metrics.contributed_capital'
+                                )
+                                AS DOUBLE
+                            ) as contributed_capital,
+                            -- Calculate ratios from available data
+                            CASE
+                                WHEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                    AS DOUBLE
+                                ) > 0
+                                THEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_equity'
+                                    )
+                                    AS DOUBLE
+                                ) /
+                                     TRY_CAST(
+                                        json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                        AS DOUBLE
+                                    )
+                                ELSE NULL
+                            END as equity_ratio,
+                            CASE
+                                WHEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.average_number_of_employees'
+                                    )
+                                    AS DOUBLE
+                                ) > 0
+                                THEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.net_profit_loss'
+                                    )
+                                    AS DOUBLE
+                                ) /
+                                     TRY_CAST(
+                                        json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.average_number_of_employees'
+                                    )
+                                        AS DOUBLE
+                                    )
+                                ELSE NULL
+                            END as profit_per_employee,
+                            CASE
+                                WHEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                    AS DOUBLE
+                                ) > 0
+                                THEN TRY_CAST(
+                                    json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.net_profit_loss'
+                                    )
+                                    AS DOUBLE
+                                ) /
+                                     TRY_CAST(
+                                        json_extract(
+                                        json_data,
+                                        '$.latest_financial_metrics.total_assets'
+                                    )
+                                        AS DOUBLE
+                                    )
+                                ELSE NULL
+                            END as return_on_assets
+                        FROM unnest($1) as t(json_data)
+                        WHERE json_extract(json_data, '$.latest_financial_metrics') IS NOT NULL
                     """,
                         [json_strings],
                     )
@@ -761,6 +1243,8 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     # Memory cleanup after each batch
                     self._cleanup_memory_after_batch()
 
+                    self.log.info(f"✅ Processed batch {batch_idx + 1}/{num_batches}")
+
                 except Exception as e:
                     self.log.error(f"Error processing batch {batch_idx + 1}: {e}")
                     if "Out of Memory" in str(e) or "memory" in str(e).lower():
@@ -768,13 +1252,10 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                         break
                     raise
 
-            self.log.info(
-                f"✅ Created table {table_name} with {len(financial_data)} companies using batch processing"
-            )
         else:
-            # Create empty table with schema
+            # Create empty tables with schema
             self.conn.execute(f"""
-                CREATE TABLE {table_name} (
+                CREATE TABLE {metadata_table} (
                     cvr_number INTEGER,
                     company_name VARCHAR,
                     document_count INTEGER,
@@ -782,20 +1263,73 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                     total_xml_size_bytes INTEGER,
                     latest_reporting_date VARCHAR,
                     has_financial_metrics BOOLEAN,
-                    financial_data_json VARCHAR,
                     processing_timestamp VARCHAR,
                     batch_number INTEGER
                 )
             """)
-            self.log.info(f"Created empty table {table_name}")
 
-        # Save to GCS
+            self.conn.execute(f"""
+                CREATE TABLE {financial_table} (
+                    company_uuid VARCHAR,
+                    cvr_number INTEGER,
+                    publication_type VARCHAR,
+                    publication_time VARCHAR,
+                    case_number VARCHAR,
+                    reporting_period_start VARCHAR,
+                    reporting_period_end VARCHAR,
+                    document_count INTEGER,
+                    xml_size_bytes INTEGER,
+                    download_success BOOLEAN,
+                    duration_context VARCHAR,
+                    instant_context VARCHAR,
+                    income_statement_start_date VARCHAR,
+                    income_statement_end_date VARCHAR,
+                    balance_sheet_date VARCHAR,
+                    net_profit_loss DOUBLE,
+                    gross_profit_loss DOUBLE,
+                    operating_profit_loss DOUBLE,
+                    profit_loss_before_tax DOUBLE,
+                    employee_benefits_expense DOUBLE,
+                    average_number_of_employees DOUBLE,
+                    depreciation_expense DOUBLE,
+                    other_finance_income DOUBLE,
+                    other_finance_expenses DOUBLE,
+                    tax_expense DOUBLE,
+                    total_assets DOUBLE,
+                    total_equity DOUBLE,
+                    noncurrent_assets DOUBLE,
+                    current_assets DOUBLE,
+                    cash_and_cash_equivalents DOUBLE,
+                    liabilities_other_than_provisions DOUBLE,
+                    shortterm_liabilities_other_than_provisions DOUBLE,
+                    longterm_liabilities_other_than_provisions DOUBLE,
+                    provisions DOUBLE,
+                    property_plant_equipment DOUBLE,
+                    contributed_capital DOUBLE,
+                    equity_ratio DOUBLE,
+                    profit_per_employee DOUBLE,
+                    return_on_assets DOUBLE
+                )
+            """)
+            self.log.info(f"Created empty tables {metadata_table} and {financial_table}")
+
+        # Save both tables to GCS
+        # Save document metadata table (for compatibility)
         self._save_data(
-            data=table_name,
+            data=metadata_table,
             dataset=self.config.dataset,
             bucket=self.config.bucket,
             stage="gold",
             filename="financial_documents.parquet",
+        )
+
+        # Save comprehensive financial statements table (NEW!)
+        self._save_data(
+            data=financial_table,
+            dataset=f"{self.config.dataset}_statements",  # Different dataset name
+            bucket=self.config.bucket,
+            stage="gold",
+            filename="financial_statements.parquet",
         )
 
         # Also save locally for GitHub Actions artifact sharing
@@ -805,14 +1339,31 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             self.log.info(
                 "GitHub Actions detected - saving financial data locally for artifact sharing"
             )
-            local_path = "/tmp/cvr_financial_data.parquet"
-            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
-            self.log.info(f"Saved financial data locally to {local_path}")
+            # Save both tables locally
+            local_metadata_path = "/tmp/cvr_financial_documents.parquet"
+            local_statements_path = "/tmp/cvr_financial_statements.parquet"
+
+            self.conn.execute(f"COPY {metadata_table} TO '{local_metadata_path}' (FORMAT PARQUET)")
+            self.conn.execute(
+                f"COPY {financial_table} TO '{local_statements_path}' (FORMAT PARQUET)"
+            )
+
+            self.log.info(
+                f"Saved financial data locally: {local_metadata_path} and {local_statements_path}"
+            )
+
+        # Log final statistics
+        metadata_count = self.conn.execute(f"SELECT COUNT(*) FROM {metadata_table}").fetchone()[0]
+        financial_count = self.conn.execute(f"SELECT COUNT(*) FROM {financial_table}").fetchone()[0]
+
+        self.log.info("✅ Created financial tables:")
+        self.log.info(f"   • Document metadata: {metadata_count:,} companies")
+        self.log.info(f"   • Comprehensive financial data: {financial_count:,} companies")
 
         # Save summary data separately
         self._save_summary_data(processed_data["summary"])
 
-        return table_name
+        return metadata_table  # Return metadata table for compatibility
 
     def _save_summary_data(self, summary: Dict[str, Any]) -> None:
         """Save processing summary data."""
@@ -825,8 +1376,254 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
 
         self.log.info(f"Saved processing summary to {summary_path}")
 
+    def _process_employment_data_directly(self, companies_data: List[Dict]) -> None:
+        """
+        Process employment data directly to parquet files.
+        Moved from data_consolidation.py to eliminate memory bottleneck.
+
+        This processes 1.25M employment records in batches and saves them directly
+        to separate parquet files, avoiding the memory accumulation that caused
+        the 7.4GB memory usage in data_consolidation.
+        """
+        self.log.info(f"🔄 Processing employment data for {len(companies_data)} companies")
+
+        if not companies_data:
+            self.log.info("No companies to process for employment data")
+            return
+
+        # Set up crypto extension for UUID generation
+        try:
+            self.conn.execute("INSTALL crypto FROM community")
+            self.conn.execute("LOAD crypto")
+        except Exception as e:
+            self.log.warning(f"Crypto extension already loaded: {e}")
+
+        # Create company UUID function
+        self.conn.execute("""
+            CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
+                SELECT CASE
+                    WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
+                         OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
+                    THEN NULL
+                    ELSE CONCAT(
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                                      TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                                               TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                    )
+                END
+            )
+        """)
+
+        employment_types = [
+            ("annual_employment", "annual"),
+            ("quarterly_employment", "quarterly"),
+            ("monthly_employment", "monthly"),
+            ("replacement_monthly_employment", "replacement_monthly"),
+        ]
+
+        for employment_field, table_suffix in employment_types:
+            self.log.info(f"📊 Processing {employment_field} data...")
+            # Process in small batches to avoid memory issues
+            self._process_employment_type_batched(companies_data, employment_field, table_suffix)
+
+    def _process_employment_type_batched(
+        self, companies_data: List[Dict], employment_field: str, table_suffix: str
+    ):
+        """Process one employment type in batches and save directly."""
+        batch_size = 500  # Small batches to avoid memory accumulation
+        table_name = f"cvr_financial_employment_{table_suffix}"
+
+        # Drop existing table
+        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+        total_companies = len(companies_data)
+        num_batches = (total_companies + batch_size - 1) // batch_size
+        total_records = 0
+
+        # Process companies in batches
+        for batch_idx in range(num_batches):
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, total_companies)
+            batch_companies = companies_data[start_idx:end_idx]
+
+            try:
+                employment_records = self._extract_employment_records(
+                    batch_companies, employment_field
+                )
+                if employment_records:
+                    batch_record_count = self._save_employment_batch(
+                        employment_records, table_name, batch_idx == 0
+                    )
+                    total_records += batch_record_count
+                    self.log.info(
+                        f"✅ Batch {batch_idx + 1}: {batch_record_count} {employment_field} records"
+                    )
+
+                # Clear batch data from memory
+                employment_records = None
+                batch_companies = None
+
+                # Memory cleanup after each batch
+                self._cleanup_memory_after_batch()
+
+            except Exception as e:
+                self.log.error(f"Error processing employment batch {batch_idx + 1}: {e}")
+                if "Out of Memory" in str(e) or "memory" in str(e).lower():
+                    self.log.warning(
+                        "⚠️ Memory exhaustion detected - stopping employment processing"
+                    )
+                    break
+                continue
+
+        # Save employment table to GCS
+        if total_records > 0:
+            self._save_employment_table_to_gcs(table_name, table_suffix, total_records)
+        else:
+            self.log.info(f"No {employment_field} records found")
+
+    def _extract_employment_records(
+        self, companies: List[Dict], employment_field: str
+    ) -> List[Dict]:
+        """Extract employment records from company data for a specific employment type."""
+        employment_records = []
+
+        for company in companies:
+            cvr_number = company.get("cvr_number")
+            if not cvr_number:
+                continue
+
+            # Extract employment data from company JSON
+            employment_data = company.get("employment_data", {})
+            employment_list = employment_data.get(employment_field, [])
+
+            if not employment_list:
+                continue
+
+            # Process each employment record
+            for emp_record in employment_list:
+                if not emp_record:
+                    continue
+
+                # Create employment record with UUID and proper field mapping
+                employment_record = {
+                    "employment_uuid": str(uuid.uuid4()),
+                    "cvr_number": cvr_number,
+                    "company_uuid": None,  # Will be calculated in SQL
+                    # Map fields from raw employment data to expected schema
+                    "year": emp_record.get("year"),
+                    "month": emp_record.get("month"),
+                    "quarter": emp_record.get("quarter"),
+                    "employee_count": emp_record.get(
+                        "total_employees"
+                    ),  # Map total_employees -> employee_count
+                    "full_time_employee_count": emp_record.get(
+                        "full_time_equivalent"
+                    ),  # Map full_time_equivalent -> full_time_employee_count
+                    "fte_interval_code": emp_record.get("fte_interval_code"),
+                    "employees_interval_code": emp_record.get("employees_interval_code"),
+                    "owners_interval_code": emp_record.get("owners_interval_code"),
+                    "last_updated": emp_record.get("last_updated"),
+                    "employees_including_owners": emp_record.get("employees_including_owners"),
+                    "employment_type": employment_field,  # Use the field type as employment_type
+                    "unit": emp_record.get("unit"),
+                    "reporting_period": emp_record.get("reporting_period"),
+                }
+                employment_records.append(employment_record)
+
+        return employment_records
+
+    def _save_employment_batch(
+        self, employment_records: List[Dict], table_name: str, is_first_batch: bool
+    ) -> int:
+        """Save employment records batch to DuckDB table."""
+        if not employment_records:
+            return 0
+
+        # Convert to JSON strings for DuckDB
+        json_strings = [json.dumps(record) for record in employment_records]
+
+        if is_first_batch:
+            # Create table on first batch
+            self.conn.execute(
+                f"""
+                CREATE TABLE {table_name} AS
+                SELECT
+                    json_extract_string(json_data, '$.employment_uuid') as employment_uuid,
+                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    json_extract(json_data, '$.year')::INTEGER as year,
+                    json_extract(json_data, '$.employee_count')::INTEGER as employee_count,
+                    json_extract(json_data, '$.full_time_employee_count')::INTEGER as
+                        full_time_employee_count,
+                    json_extract_string(json_data, '$.unit') as unit,
+                    json_extract(json_data, '$.quarter')::INTEGER as quarter,
+                    json_extract(json_data, '$.month')::INTEGER as month,
+                    json_extract_string(json_data, '$.reporting_period') as reporting_period,
+                    json_extract_string(json_data, '$.employment_type') as employment_type,
+                    '{self.date_pattern}' as processing_timestamp
+                FROM unnest($1) as t(json_data)
+            """,
+                [json_strings],
+            )
+        else:
+            # Insert into existing table
+            self.conn.execute(
+                f"""
+                INSERT INTO {table_name}
+                SELECT
+                    json_extract_string(json_data, '$.employment_uuid') as employment_uuid,
+                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    json_extract(json_data, '$.year')::INTEGER as year,
+                    json_extract(json_data, '$.employee_count')::INTEGER as employee_count,
+                    json_extract(json_data, '$.full_time_employee_count')::INTEGER as
+                        full_time_employee_count,
+                    json_extract_string(json_data, '$.unit') as unit,
+                    json_extract(json_data, '$.quarter')::INTEGER as quarter,
+                    json_extract(json_data, '$.month')::INTEGER as month,
+                    json_extract_string(json_data, '$.reporting_period') as reporting_period,
+                    json_extract_string(json_data, '$.employment_type') as employment_type,
+                    '{self.date_pattern}' as processing_timestamp
+                FROM unnest($1) as t(json_data)
+            """,
+                [json_strings],
+            )
+
+        return len(employment_records)
+
+    def _save_employment_table_to_gcs(
+        self, table_name: str, table_suffix: str, total_records: int
+    ) -> None:
+        """Save employment table to GCS."""
+        self.log.info(f"💾 Saving {total_records} {table_suffix} employment records to GCS")
+
+        # Save to GCS
+        self._save_data(
+            data=table_name,
+            dataset=f"cvr_financial_employment_{table_suffix}",
+            bucket=self.config.bucket,
+            stage="gold",
+            filename="data.parquet",
+        )
+
+        # Also save locally for GitHub Actions artifact sharing
+        import os
+
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            local_path = f"/tmp/cvr_financial_employment_{table_suffix}_data.parquet"
+            self.conn.execute(f"COPY {table_name} TO '{local_path}' (FORMAT PARQUET)")
+            self.log.info(f"Saved {table_suffix} employment data locally to {local_path}")
+
     def _cleanup_memory_after_batch(self) -> None:
-        """Aggressive memory cleanup after processing a batch (copied from data_consolidation.py)."""
+        """Aggressive memory cleanup after processing a batch (copied from
+        data_consolidation.py)."""
         try:
             # DuckDB-specific cleanup
             self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL

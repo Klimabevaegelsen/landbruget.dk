@@ -315,7 +315,7 @@ class CVRCollection(BaseSource[CVRCollectionConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     unnest($1) as cvr_number,
                     $2 as collection_metadata
             """,

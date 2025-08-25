@@ -91,8 +91,6 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         self.log = logger
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
-        print("🚨 PESTICIDE PROXIMITY RUN METHOD: Starting execution")
-        print(f"🚨 CONFIG: pesticide_year = {self.config.pesticide_year}")
         """Main execution method for pesticide proximity analysis."""
 
         # Initialize DuckDB spatial extension
@@ -107,7 +105,6 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Matrix job mode: process only specified year
             years = [self.config.pesticide_year]
             self.log.info(f"🎯 Matrix job mode: Processing only year {self.config.pesticide_year}")
-            print(f"🎯 PROXIMITY MATRIX JOB: Processing only year {self.config.pesticide_year}")
         else:
             # Regular mode: process all available years
             years = await self._get_available_years(datasets["disaggregation"])
@@ -133,7 +130,7 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
             except Exception as e:
                 self.log.error(f"❌ Year {year} failed: {e}")
-                continue
+                raise  # Re-raise the exception to ensure pipeline fails
 
         self.log.info("🏁 Pesticide proximity analysis completed successfully!")
 
@@ -290,8 +287,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         # Get unique fields from current disaggregation data
         unique_fields = self.conn.execute("""
-            SELECT COUNT(DISTINCT field_uuid) 
-            FROM current_disaggregation 
+            SELECT COUNT(DISTINCT field_uuid)
+            FROM current_disaggregation
             WHERE field_uuid IS NOT NULL
         """).fetchone()[0]
 
@@ -301,7 +298,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             self.log.warning("No fields with valid field_uuid found")
             return 0
 
-        # Create proximity analysis results table by breaking into steps to avoid DuckDB CTE alias issues
+        # Create proximity analysis results table by breaking into steps to avoid
+        # DuckDB CTE alias issues
 
         # Step 1: Create fields with geometry
         self.conn.execute(f"""
@@ -338,19 +336,22 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             total=total_fields,
             desc="🏠 Residential proximity",
             unit="fields",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]",
+            bar_format=(
+                "{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+            ),
         )
 
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
             self.log.info(
-                f"🔄 Processing residential batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
+                f"🔄 Processing residential batch {chunk_num}/{total_chunks} "
+                f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
             # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
-                SELECT * FROM fields_with_geometry 
+                SELECT * FROM fields_with_geometry
                 ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
@@ -358,11 +359,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 2: Pre-filter buildings to residential only
             self.conn.execute("""
                 CREATE OR REPLACE TABLE residential_buildings AS
-                SELECT 
+                SELECT
                     address,
                     ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
-                FROM data_bbr_buildings_silver 
-                WHERE category_group = 'residential' 
+                FROM data_bbr_buildings_silver
+                WHERE category_group = 'residential'
                   AND address IS NOT NULL
                   AND geometry IS NOT NULL
             """)
@@ -370,12 +371,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO residential_proximity
-                SELECT 
+                SELECT
                     f.field_uuid,
-                    CASE 
+                    CASE
                         WHEN COUNT(b.address) > 0 THEN
                             string_agg(
-                                b.address || ':' || 
+                                b.address || ':' ||
                                 ROUND(ST_Distance(f.field_geom_utm, b.building_geom_utm), 1) || 'm',
                                 chr(10)
                                 ORDER BY ST_Distance(f.field_geom_utm, b.building_geom_utm)
@@ -404,7 +405,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             )
 
             self.log.info(
-                f"✅ Residential batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed / chunk_time:.0f} fields/s"
+                f"✅ Residential batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - "
+                f"Rate: {batch_processed / chunk_time:.0f} fields/s"
             )
 
         residential_pbar.close()
@@ -428,19 +430,22 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             total=total_fields,
             desc="🏫 Educational proximity",
             unit="fields",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]",
+            bar_format=(
+                "{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+            ),
         )
 
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
             self.log.info(
-                f"🔄 Processing educational batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
+                f"🔄 Processing educational batch {chunk_num}/{total_chunks} "
+                f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
             # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
-                SELECT * FROM fields_with_geometry 
+                SELECT * FROM fields_with_geometry
                 ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
@@ -448,11 +453,11 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 2: Pre-filter buildings to educational only
             self.conn.execute("""
                 CREATE OR REPLACE TABLE educational_buildings AS
-                SELECT 
+                SELECT
                     address,
                     ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
-                FROM data_bbr_buildings_silver 
-                WHERE category_group = 'publicServices' 
+                FROM data_bbr_buildings_silver
+                WHERE category_group = 'publicServices'
                   AND address IS NOT NULL
                   AND geometry IS NOT NULL
             """)
@@ -460,12 +465,12 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO educational_proximity
-                SELECT 
+                SELECT
                     f.field_uuid,
-                    CASE 
+                    CASE
                         WHEN COUNT(b.address) > 0 THEN
                             string_agg(
-                                b.address || ':' || 
+                                b.address || ':' ||
                                 ROUND(ST_Distance(f.field_geom_utm, b.building_geom_utm), 1) || 'm',
                                 chr(10)
                                 ORDER BY ST_Distance(f.field_geom_utm, b.building_geom_utm)
@@ -494,7 +499,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             )
 
             self.log.info(
-                f"✅ Educational batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed / chunk_time:.0f} fields/s"
+                f"✅ Educational batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - "
+                f"Rate: {batch_processed / chunk_time:.0f} fields/s"
             )
 
         educational_pbar.close()
@@ -518,19 +524,22 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             total=total_fields,
             desc="💧 Water proximity",
             unit="fields",
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]",
+            bar_format=(
+                "{l_bar}{bar}| {n_fmt}/{total_fmt} fields [{elapsed}<{remaining}, {rate_fmt}]"
+            ),
         )
 
         for chunk_num, offset in enumerate(range(0, total_fields, self.config.batch_size), 1):
             chunk_start = time.time()
             self.log.info(
-                f"🔄 Processing water batch {chunk_num}/{total_chunks} (fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
+                f"🔄 Processing water batch {chunk_num}/{total_chunks} "
+                f"(fields {offset:,}-{min(offset + self.config.batch_size, total_fields):,})"
             )
 
             # Step 1: Create current batch of fields with consistent ordering
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE current_field_batch AS
-                SELECT * FROM fields_with_geometry 
+                SELECT * FROM fields_with_geometry
                 ORDER BY field_uuid
                 LIMIT {self.config.batch_size} OFFSET {offset}
             """)
@@ -538,18 +547,20 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             # Step 2: Pre-filter water features
             self.conn.execute("""
                 CREATE OR REPLACE TABLE water_features AS
-                SELECT 
-                    ST_Transform(geometry_spatial, 'EPSG:4326', 'EPSG:25832') as water_geom_utm
-                FROM data_water_typology_silver 
-                WHERE geometry_spatial IS NOT NULL
+                SELECT
+                    ST_Transform(
+                        ST_GeomFromText(geometry), 'EPSG:4326', 'EPSG:25832'
+                    ) as water_geom_utm
+                FROM data_water_typology_silver
+                WHERE geometry IS NOT NULL AND geometry != ''
             """)
 
             # Step 3: Simple spatial join with distance calculation
             self.conn.execute(f"""
                 INSERT INTO water_proximity
-                SELECT 
+                SELECT
                     f.field_uuid,
-                    CASE 
+                    CASE
                         WHEN MIN(ST_Distance(f.field_geom_utm, w.water_geom_utm)) IS NOT NULL
                         THEN ROUND(MIN(ST_Distance(f.field_geom_utm, w.water_geom_utm)), 1) || 'm'
                         ELSE ''
@@ -576,7 +587,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             )
 
             self.log.info(
-                f"✅ Water batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - Rate: {batch_processed / chunk_time:.0f} fields/s"
+                f"✅ Water batch {chunk_num}/{total_chunks} completed in {chunk_time:.2f}s - "
+                f"Rate: {batch_processed / chunk_time:.0f} fields/s"
             )
 
         water_pbar.close()
@@ -589,7 +601,8 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
             SELECT DISTINCT
                 cd.*,
                 COALESCE(rp.residential_buildings_formatted, '') as residential_buildings_formatted,
-                COALESCE(ep.educational_facilities_formatted, '') as educational_facilities_formatted,
+                COALESCE(ep.educational_facilities_formatted, '')
+                    as educational_facilities_formatted,
                 COALESCE(wp.water_distance_formatted, '') as water_distance_formatted
             FROM current_disaggregation cd
             LEFT JOIN residential_proximity rp ON cd.field_uuid = rp.field_uuid
@@ -606,18 +619,22 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
         # CRITICAL VALIDATION: Ensure no duplication occurred
         if result_count != unique_disaggregated_ids:
             self.log.error(
-                f"❌ DUPLICATION DETECTED: {result_count:,} records but only {unique_disaggregated_ids:,} unique DisaggregatedIDs"
+                f"❌ DUPLICATION DETECTED: {result_count:,} records but only "
+                f"{unique_disaggregated_ids:,} unique DisaggregatedIDs"
             )
             self.log.error(f"❌ Duplication ratio: {result_count / unique_disaggregated_ids:.1f}x")
             raise ValueError(
-                f"Data duplication detected in proximity results: {result_count:,} records vs {unique_disaggregated_ids:,} unique IDs"
+                f"Data duplication detected in proximity results: {result_count:,} records vs "
+                f"{unique_disaggregated_ids:,} unique IDs"
             )
 
         self.log.info(
-            f"✅ Proximity analysis complete: {result_count:,} records with proximity data (no duplication)"
+            f"✅ Proximity analysis complete: {result_count:,} records with proximity data "
+            f"(no duplication)"
         )
         self.log.info(
-            f"✅ Data quality check passed: {result_count:,} records = {unique_disaggregated_ids:,} unique DisaggregatedIDs"
+            f"✅ Data quality check passed: {result_count:,} records = "
+            f"{unique_disaggregated_ids:,} unique DisaggregatedIDs"
         )
         return result_count
 
@@ -628,7 +645,10 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         dataset_name = f"{self.config.dataset}_{year}_{year + 1}"
-        output_path = f"gs://{self.config.bucket}/gold/{dataset_name}/{timestamp}/pesticide_proximity_{year}_{year + 1}.parquet"
+        output_path = (
+            f"gs://{self.config.bucket}/gold/{dataset_name}/{timestamp}/"
+            f"pesticide_proximity_{year}_{year + 1}.parquet"
+        )
 
         self.log.info(f"💾 Saving {record_count:,} proximity records to: {output_path}")
 
@@ -637,16 +657,16 @@ class PesticideProximityGold(BaseSource[PesticideProximityGoldConfig], GoldJobIn
 
         self.log.info(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
         self.log.info(f"📁 Proximity GCS Path: {output_path}")
-        print(f"✅ PROXIMITY OUTPUT: Year {year} results saved to: {output_path}")
-        print(f"📁 Proximity GCS Path: {output_path}")
 
     def get_schema_info(self) -> Dict[str, Any]:
         """Return schema information for the proximity analysis output."""
         return {
             "output_columns": [
                 "All columns from disaggregated pesticide data",
-                "residential_buildings_formatted: VARCHAR (newline-separated addresses with distances)",
-                "educational_facilities_formatted: VARCHAR (newline-separated addresses with distances)",
+                "residential_buildings_formatted: VARCHAR "
+                "(newline-separated addresses with distances)",
+                "educational_facilities_formatted: VARCHAR "
+                "(newline-separated addresses with distances)",
                 "water_distance_formatted: VARCHAR (closest water distance in meters)",
             ],
             "spatial_analysis": {

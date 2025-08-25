@@ -11,7 +11,7 @@ logger = get_logger()
 
 
 # Try to import optimized GCS access with fallback
-def _get_gcs_access():
+def _get_gcs_access() -> type | None:
     """
     Get GCSDataAccess with robust import handling for different environments.
 
@@ -49,7 +49,8 @@ def _get_gcs_access():
             logger.warning(f"⚠️ Alternative import also failed: {e2}")
 
         logger.warning(
-            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed "
+            "for optimal performance"
         )
         return None
 
@@ -85,7 +86,8 @@ class DriveStorageManager:
                     self.gcs_access = GCSDataAccess()
                     self.use_optimized = True
                     logger.info(
-                        f"✅ DriveStorageManager: Initialized with optimized GCS access for bucket: {bucket_name}"
+                        f"✅ DriveStorageManager: Initialized with optimized GCS access "
+                        f"for bucket: {bucket_name}"
                     )
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to initialize optimized GCS access: {e}")
@@ -115,10 +117,12 @@ class DriveStorageManager:
             logger.info(
                 f"✅ DriveStorageManager: Initialized with fallback GCS for bucket: {bucket_name}"
             )
-        except ImportError:
-            raise ImportError("google-cloud-storage is required for GCS storage but not available")
+        except ImportError as e:
+            raise ImportError(
+                "google-cloud-storage is required for GCS storage but not available"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
     def save_file(self, data: bytes | BinaryIO, path: str | Path) -> None:
         """Save file data to the given path.
@@ -171,7 +175,8 @@ class DriveStorageManager:
                     blob = self.gcs_bucket.blob(gcs_relative_path)
                     blob.upload_from_string(file_bytes)
                     logger.info(
-                        f"✅ Saved file to GCS (fallback): gs://{self.bucket_name}/{gcs_relative_path} ({len(file_bytes)} bytes)"
+                        f"✅ Saved file to GCS (fallback): "
+                        f"gs://{self.bucket_name}/{gcs_relative_path} ({len(file_bytes)} bytes)"
                     )
             else:
                 # Local storage

@@ -64,12 +64,16 @@ class AgriculturalFieldsSilverConfig(BaseJobConfig):
         "CVR": "cvr_number",
         "Afgkode": "crop_code",
         "Afgroede": "crop_name",
-        "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling" (basic payment) eligibility, NOT organic farming
+        "GB": "grundbetaling_eligible",  # GB is yes/no for "grundbetaling"
+        # (basic payment) eligibility, NOT organic farming
         "GBanmeldt": "grundbetaling_area_ha",  # Actual grundbetaling area reported
         "Markblok": "block_id",
         "MB_NR": "block_id",
         "BLOKAREAL": "block_area_ha",
         "MARKBLOKTY": "block_type",
+        # Map the problematic SHAPE columns to clean names
+        "SHAPE.STArea()": "shape_area",
+        "SHAPE.STLength()": "shape_length",
     }
 
 
@@ -184,7 +188,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     if "*" in table_pattern:
                         # Get all tables matching pattern
                         tables = self.conn.execute(
-                            f"SELECT table_name FROM information_schema.tables WHERE table_name LIKE '{table_pattern.replace('*', '%')}'"
+                            f"SELECT table_name FROM information_schema.tables WHERE "
+                            f"table_name LIKE '{table_pattern.replace('*', '%')}'"
                         ).fetchall()
                         for table_row in tables:
                             self.conn.execute(f"DROP TABLE IF EXISTS {table_row[0]}")
@@ -265,7 +270,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
             year: Year of the data being processed
 
         Returns:
-            A tuple (table_name, connection) containing all processed features with validated geometries,
+            A tuple (table_name, connection) containing all processed features with validated
+            geometries,
             or (None, None) if processing fails
         """
         async with AsyncTimer("Processing data with DuckDB-spatial"):
@@ -303,11 +309,23 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                                 # Convert ArcGIS geometry to GeoJSON format
                                 geojson_geom = {"type": "Polygon", "coordinates": geometry["rings"]}
 
+                                # Clean up property names immediately to avoid SQL issues
+                                cleaned_properties = {}
+                                for key, value in properties.items():
+                                    # Clean column names with problematic characters
+                                    clean_key = (
+                                        key.replace(".", "_")
+                                        .replace("()", "_")
+                                        .replace("(", "_")
+                                        .replace(")", "_")
+                                    )
+                                    cleaned_properties[clean_key] = value
+
                                 # Add properties with geometry
                                 feature_record = {
                                     "payload_id": i,
                                     "geometry_json": json.dumps(geojson_geom),
-                                    **properties,
+                                    **cleaned_properties,
                                 }
                                 all_features.append(feature_record)
 
@@ -321,7 +339,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 # ✅ MIGRATION: Create temporary table using DuckDB directly
                 processing_conn.execute(
-                    "CREATE OR REPLACE TABLE temp_features AS SELECT * FROM (VALUES (1)) t(dummy) WHERE false"
+                    "CREATE OR REPLACE TABLE temp_features AS SELECT * FROM (VALUES (1)) "
+                    "t(dummy) WHERE false"
                 )
 
                 # Get column names from first feature
@@ -329,7 +348,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     first_feature = all_features[0]
                     columns = list(first_feature.keys())
 
-                    # Create table with proper column types
+                    # Create table with proper column types (column names are already cleaned)
                     column_defs = []
                     for col in columns:
                         if col == "geometry_json":
@@ -352,7 +371,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         batch_end = min(batch_start + batch_size, total_features)
                         batch_features = all_features[batch_start:batch_end]
 
-                        # Prepare batch insert
+                        # Prepare batch insert (column names are already cleaned)
                         placeholders = ", ".join(["?" for _ in columns])
                         values = []
                         for feature in batch_features:
@@ -360,7 +379,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                         # Insert batch
                         processing_conn.executemany(
-                            f"INSERT INTO temp_features ({', '.join(columns)}) VALUES ({placeholders})",
+                            f"INSERT INTO temp_features ({', '.join(columns)}) "
+                            f"VALUES ({placeholders})",
                             values,
                         )
 
@@ -374,36 +394,11 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     # Clear the full features list from memory
                     del all_features
 
-                # First, create a mapping of problematic column names to cleaned names
-                temp_columns_info = processing_conn.execute("DESCRIBE temp_features").fetchall()
-                temp_column_names = [row[0] for row in temp_columns_info]
-
-                # Build column mapping for renaming problematic columns
-                column_renames = {}
-                clean_select_parts = []
-
-                for col in temp_column_names:
-                    # Clean column name
-                    clean_col = (
-                        col.replace(".", "_").replace("()", "_").replace("(", "_").replace(")", "_")
-                    )
-
-                    if col != clean_col:  # Only rename if different
-                        column_renames[col] = clean_col
-                        clean_select_parts.append(f'"{col}" as {clean_col}')
-                    else:
-                        clean_select_parts.append(f'"{col}"')
-
-                # Create features_raw with cleaned column names
-                if clean_select_parts:
-                    clean_select_clause = ", ".join(clean_select_parts)
-                    processing_conn.execute(
-                        f"CREATE OR REPLACE TABLE features_raw AS SELECT {clean_select_clause} FROM temp_features"
-                    )
-                else:
-                    processing_conn.execute(
-                        "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
-                    )
+                # Column names are already cleaned, so we can use temp_features directly
+                # as features_raw
+                processing_conn.execute(
+                    "CREATE OR REPLACE TABLE features_raw AS SELECT * FROM temp_features"
+                )
 
                 # ✅ MIGRATION: Get column info from the cleaned table
                 columns_info = processing_conn.execute("DESCRIBE features_raw").fetchall()
@@ -417,31 +412,44 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                 select_columns = []
 
                 for old_col, new_col in self.config.column_mapping.items():
-                    # Check if the original column exists, or if its cleaned version exists
-                    actual_col = old_col
-                    if old_col not in available_columns:
-                        # Try the cleaned version of the column name
-                        cleaned_old_col = (
-                            old_col.replace(".", "_")
-                            .replace("()", "_")
-                            .replace("(", "_")
-                            .replace(")", "_")
-                        )
-                        if cleaned_old_col in available_columns:
-                            actual_col = cleaned_old_col
+                    # Since column names are already cleaned, we need to look for the
+                    # cleaned version
+                    cleaned_old_col = (
+                        old_col.replace(".", "_")
+                        .replace("()", "_")
+                        .replace("(", "_")
+                        .replace(")", "_")
+                    )
+                    
+                    # Check if the cleaned column exists
+                    if cleaned_old_col in available_columns:
+                        # Apply proper type casting for area columns
+                        if new_col in [
+                            "area_ha",
+                            "block_area_ha",
+                            "applied_area_ha",
+                            "reported_area_ha",
+                            "shape_area",
+                            "shape_length",
+                        ]:
+                            select_columns.append(f'CAST({cleaned_old_col} AS DOUBLE) as {new_col}')
                         else:
-                            continue  # Skip if neither version exists
-
-                    # Apply proper type casting for area columns
-                    if new_col in [
-                        "area_ha",
-                        "block_area_ha",
-                        "applied_area_ha",
-                        "reported_area_ha",
-                    ]:
-                        select_columns.append(f'CAST("{actual_col}" AS DOUBLE) as {new_col}')
-                    else:
-                        select_columns.append(f'"{actual_col}" as {new_col}')
+                            select_columns.append(f'{cleaned_old_col} as {new_col}')
+                    # Also check if the original column name exists (for columns without
+                    # special chars)
+                    elif old_col in available_columns:
+                        # Apply proper type casting for area columns
+                        if new_col in [
+                            "area_ha",
+                            "block_area_ha",
+                            "applied_area_ha",
+                            "reported_area_ha",
+                            "shape_area",
+                            "shape_length",
+                        ]:
+                            select_columns.append(f'CAST({old_col} AS DOUBLE) as {new_col}')
+                        else:
+                            select_columns.append(f'{old_col} as {new_col}')
 
                 # Add unmapped columns (except geometry_json and payload_id)
                 mapped_columns = set()
@@ -462,22 +470,30 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         "payload_id",
                     ]:
                         # Column names are already cleaned, so use them as-is
-                        select_columns.append(f'"{col}"')
+                        select_columns.append(f'{col}')
 
                 # DEBUG: Log what columns will be selected
                 self.log.info(f"Select columns built: {select_columns}")
 
-                # Ensure we have at least some columns to select, fallback to all columns except special ones
+                # Ensure we have at least some columns to select, fallback to all columns
+                # except special ones
                 if not select_columns:
                     self.log.warning(
-                        "No columns mapped, using all available columns except geometry_json and payload_id"
+                        "No columns mapped, using all available columns except geometry_json "
+                        "and payload_id"
                     )
                     for col in available_columns:
                         if col not in ["geometry_json", "payload_id"]:
                             # Column names are already cleaned, so use them as-is
-                            select_columns.append(f'"{col}"')
+                            select_columns.append(f'{col}')
 
-                select_clause = ", ".join(select_columns) if select_columns else "payload_id"
+                # Ensure we have a valid select clause
+                if select_columns:
+                    select_clause = ", ".join(select_columns)
+                else:
+                    # Absolute fallback - use a literal value to prevent empty SELECT
+                    select_clause = "'no_data' as status"
+                    self.log.warning("No valid columns found, using fallback select clause")
 
                 # DEBUG: Log the final select clause
                 self.log.info(f"Final select clause: {select_clause}")
@@ -493,7 +509,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 sql_query = f"""
                     CREATE OR REPLACE TABLE {final_table_name} AS
-                    SELECT 
+                    SELECT
                         {select_clause},
                         {year} as year,
                         ST_GeomFromGeoJSON(geometry_json) as geometry,
@@ -507,7 +523,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
 
                 processing_conn.execute(sql_query)
 
-                # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
+                # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate
+                # transformation
                 validate_and_transform_geometries_duckdb(
                     processing_conn,
                     final_table_name,
@@ -574,7 +591,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         # Read data with support for in-memory passing
                         if bronze_data is not None:
                             self.log.info("Using bronze data from memory (in-memory data passing)")
-                            # ✅ MIGRATION: Bronze data structure: {"fields": {year: raw_data_list}, "blocks": {year: raw_data_list}}
+                            # ✅ MIGRATION: Bronze data structure:
+                            # {"fields": {year: raw_data_list}, "blocks": {year: raw_data_list}}
                             if isinstance(bronze_data, dict):
                                 # Map dataset names to bronze data keys
                                 bronze_key = "fields" if "fields" in dataset else "blocks"
@@ -582,10 +600,12 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                                     # Bronze data should contain raw data lists now
                                     raw_data_table = bronze_data[bronze_key][year]
                                     if isinstance(raw_data_table, list):
-                                        # List of JSON strings - create table in silver layer's connection
+                                        # List of JSON strings - create table in silver layer's
+                        # connection
                                         table_name = f"bronze_raw_{dataset}_{year}"
                                         self.conn.execute(
-                                            f"CREATE OR REPLACE TABLE {table_name} (payload VARCHAR)"
+                                            f"CREATE OR REPLACE TABLE {table_name} "
+                                            f"(payload VARCHAR)"
                                         )
                                         for json_str in raw_data_table:
                                             self.conn.execute(
@@ -594,7 +614,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                                         raw_data = table_name
                                     else:
                                         self.log.error(
-                                            f"Expected list of JSON strings from bronze, got {type(raw_data_table)}"
+                                            f"Expected list of JSON strings from bronze, got "
+                                            f"{type(raw_data_table)}"
                                         )
                                         continue
                                 else:
@@ -650,7 +671,8 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         continue
 
             self.log.info(
-                "Agricultural Fields silver job completed for all available years using DuckDB-spatial"
+                "Agricultural Fields silver job completed for all available years "
+                "using DuckDB-spatial"
             )
 
             # Final cleanup after all processing

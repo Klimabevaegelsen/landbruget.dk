@@ -48,7 +48,8 @@ def load_species_usage_combinations(client: Client, username: str) -> Optional[A
         "GLRCHRWSInfoInbound": create_base_request(username),
         "Request": {},  # Empty request gets all combinations according to WSDL
     }
-    # Note: WSDL confirms Request key is needed, containing CHR_stamdataListDyrearterMedBrugsarterRequestType (which takes optional DyreArtKode)
+    # Note: WSDL confirms Request key is needed, containing
+    # CHR_stamdataListDyrearterMedBrugsarterRequestType (which takes optional DyreArtKode)
     response = fetch_raw_soap_response(client, "ListDyrearterMedBrugsarter", request)
     if not response:
         logger.warning("No response received for ListDyrearterMedBrugsarter")

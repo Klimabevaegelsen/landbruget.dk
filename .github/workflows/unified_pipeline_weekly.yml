@@ -1,0 +1,121 @@
+# Unified Pipeline - Weekly Schedule
+# Runs weekly pipelines including CVR enrichment
+
+name: Unified Pipeline - Weekly
+
+on:
+  schedule:
+    - cron: "0 2 * * 1" # Every Monday at 2 AM UTC
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Specific weekly source to run (optional - runs all weekly sources if not specified)"
+        required: false
+        type: choice
+        options:
+          - "all_weekly"
+          - "cvr_enrichment"
+      stage:
+        description: "Pipeline stage to run"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - bronze
+          - silver
+          - gold
+
+jobs:
+  weekly-pipelines:
+    name: Weekly Pipelines
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    strategy:
+      matrix:
+        include: >-
+          ${{
+            (github.event.inputs.source == 'all_weekly' || github.event_name == 'schedule') &&
+            fromJson('[
+              {"source":"cvr_enrichment","priority":1,"description":"CVR company data enrichment"}
+            ]') ||
+            fromJson(format('[{{"source":"{0}","priority":1}}]', github.event.inputs.source))
+          }}
+      fail-fast: false
+      max-parallel: 1 # Run weekly pipelines sequentially for better resource management
+    env:
+      ENVIRONMENT: production
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      CVR_USERID: ${{ secrets.CVR_USERID }}
+      CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
+      SAVE_LOCAL: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Weekly Pipeline - ${{ matrix.source }}
+        run: |
+          echo "🗓️ Running weekly pipeline: ${{ matrix.source }}"
+          echo "📝 Description: ${{ matrix.description }}"
+          echo "⏰ Started at: $(date)"
+
+          cd backend/pipelines/unified_pipeline
+
+          # Resource monitoring for long-running jobs
+          if [ "${{ matrix.source }}" = "cvr_enrichment" ]; then
+            echo "🔍 Starting resource monitoring for CVR enrichment"
+            (while true; do
+              sleep 120  # Check every 2 minutes
+              echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
+              echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+
+              MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+              if [ $MEMORY_USED_PCT -gt 85 ]; then
+                echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+              fi
+            done) &
+            MONITOR_PID=$!
+          fi
+
+          # Run the pipeline
+          echo "🚀 Executing: python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
+          python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+
+          # Stop monitoring
+          if [ -n "$MONITOR_PID" ]; then
+            kill $MONITOR_PID 2>/dev/null || true
+            echo "Resource monitoring stopped"
+          fi
+
+          echo "✅ Weekly pipeline completed: ${{ matrix.source }}"
+          echo "⏰ Finished at: $(date)"
+
+      - name: Cleanup temporary files
+        if: always()
+        run: |
+          echo "🧹 Cleaning up temporary files..."
+          sudo rm -rf /tmp/duckdb* || true
+          find /tmp -type f -size +50M -delete 2>/dev/null || true
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          echo "✅ Cleanup completed"

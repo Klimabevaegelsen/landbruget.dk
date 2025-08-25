@@ -72,4 +72,9 @@ ignore = ["E501", "N806", "N803"]
 
 [tool.ruff.format]
 quote-style = "double"
-indent-style = "space" 
+indent-style = "space"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3.0",
+]

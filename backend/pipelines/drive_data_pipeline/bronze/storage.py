@@ -16,6 +16,23 @@ logger = get_logger()
 class BronzeStorageManager:
     """Storage manager for the Bronze layer."""
 
+    def _sanitize_dataset_name(self, name: str) -> str:
+        """Sanitize a folder name to be used as a dataset name.
+        
+        Args:
+            name: Raw folder name
+            
+        Returns:
+            Sanitized dataset name
+        """
+        # Replace special characters and spaces with underscores
+        dataset_name = re.sub(r'[<>:"/\\|?*\s]', "_", name)
+        # Clean up multiple consecutive underscores
+        dataset_name = re.sub(r'_+', "_", dataset_name)
+        # Strip dots, spaces, and underscores from edges, then lowercase
+        dataset_name = dataset_name.strip(". _").lower()
+        return dataset_name if dataset_name else "unknown"
+
     def __init__(
         self,
         storage_manager: DriveStorageManager,
@@ -62,7 +79,10 @@ class BronzeStorageManager:
         return run_dir
 
     def create_folder_structure(self, run_dir: Path, folder_path: str) -> Path:
-        """Create a folder structure using the new path organization.
+        """Create a folder structure using harmonized pipeline organization.
+
+        Each Google Drive folder becomes its own dataset directory following the pattern:
+        bronze/{dataset_name}/{timestamp}/
 
         Args:
             run_dir: Base run directory (bronze/)
@@ -77,39 +97,42 @@ class BronzeStorageManager:
         # Get the timestamp from the stored value
         timestamp = getattr(self, "_current_timestamp", generate_timestamp())
 
-        # Structure: bronze/{subfolder_name}/{timestamp}/{remaining_path}
+        # Extract the subfolder name (skip the root Drive folder)
         if folder_path:
-            # Split the path and sanitize each component
+            # Split the path - expect format like "landbruget.dk_static_files/Fertiliser/2023_Data" 
+            # We want "Fertiliser" as the dataset name, preserve "2023_Data" as internal structure
             path_parts = folder_path.split("/")
-            sanitized_parts = []
-
-            for part in path_parts:
-                # Sanitize each part of the path
-                sanitized_part = re.sub(r'[<>:"/\\|?*]', "_", part)
-                sanitized_part = sanitized_part.strip(". ")
-                if sanitized_part:
-                    sanitized_parts.append(sanitized_part)
-
-            if sanitized_parts:
-                # First part is the subfolder name, rest is remaining path
-                subfolder_name = sanitized_parts[0]
-                remaining_path = "/".join(sanitized_parts[1:]) if len(sanitized_parts) > 1 else ""
-
-                # Create path: bronze/{subfolder_name}/{timestamp}/{remaining_path}
-                folder_structure = run_dir / subfolder_name.lower() / timestamp
-                if remaining_path:
-                    folder_structure = folder_structure / remaining_path
+            
+            if len(path_parts) >= 2:
+                # Use the first subfolder as dataset name (skip root folder)
+                subfolder = path_parts[1]
+                dataset_name = self._sanitize_dataset_name(subfolder)
+                
+                # Preserve any nested subfolders within the dataset
+                if len(path_parts) > 2:
+                    nested_path = "/".join(path_parts[2:])
+                    folder_structure = run_dir / dataset_name / timestamp / nested_path
+                else:
+                    folder_structure = run_dir / dataset_name / timestamp
+            elif len(path_parts) == 1:
+                # Only root folder, use it as dataset name
+                main_folder = path_parts[0]
+                dataset_name = self._sanitize_dataset_name(main_folder)
+                folder_structure = run_dir / dataset_name / timestamp
             else:
-                # Fallback if no valid parts
-                folder_structure = run_dir / "unknown" / timestamp
+                dataset_name = "unknown"
+                folder_structure = run_dir / dataset_name / timestamp
         else:
             # No folder path provided
-            folder_structure = run_dir / "root" / timestamp
+            dataset_name = "root"
+            folder_structure = run_dir / dataset_name / timestamp
 
         # Ensure the directory exists
         self.storage_manager.ensure_directory_exists(folder_structure)
 
-        logger.info(f"Created folder structure: {folder_structure}")
+        logger.info(
+            f"Created harmonized folder structure: {folder_structure} (dataset: {dataset_name})"
+        )
         return folder_structure
 
     def save_file(self, content: bytes, run_dir: Path, source_path: str, filename: str) -> Path:
@@ -147,7 +170,8 @@ class BronzeStorageManager:
                 file_exists = self.storage_manager.file_exists(file_path)
                 if not file_exists:
                     logger.error(
-                        f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage backend at {file_path}"
+                        f"IMMEDIATE VERIFICATION FAILED: File does not exist in storage "
+                        f"backend at {file_path}"
                     )
                     # For GCS, try a brief retry since there might be eventual consistency issues
                     if self.storage_manager.storage_type.lower() == "gcs":
@@ -163,7 +187,7 @@ class BronzeStorageManager:
                             )
             except Exception as verify_error:
                 logger.error(f"File verification failed: {verify_error}")
-                raise StorageError(f"Could not verify file save: {verify_error}")
+                raise StorageError(f"Could not verify file save: {verify_error}") from verify_error
 
             logger.info(f"Saved file to {file_path}")
             return file_path
@@ -222,30 +246,38 @@ class BronzeStorageManager:
         else:
             folder_path = os.path.dirname(source_path) if source_path else ""
 
-        # Use the same logic as create_folder_structure to build the path
+        # Extract the subfolder name (skip the root Drive folder)
+        # Same logic as create_folder_structure
+        folder_path = folder_path.strip("/")
+        
         if folder_path:
-            folder_path = folder_path.strip("/")
+            # Split the path - expect format like "landbruget.dk_static_files/Fertiliser/2023_Data" 
+            # We want "Fertiliser" as the dataset name, preserve "2023_Data" as internal structure
             path_parts = folder_path.split("/")
-            sanitized_parts = []
-
-            for part in path_parts:
-                sanitized_part = re.sub(r'[<>:"/\\|?*]', "_", part)
-                sanitized_part = sanitized_part.strip(". ")
-                if sanitized_part:
-                    sanitized_parts.append(sanitized_part)
-
-            if sanitized_parts:
-                subfolder_name = sanitized_parts[0]
-                remaining_path = "/".join(sanitized_parts[1:]) if len(sanitized_parts) > 1 else ""
-
-                # Create path: bronze/{subfolder_name}/{timestamp}/{remaining_path}
-                folder_structure = run_dir / subfolder_name.lower() / timestamp
-                if remaining_path:
-                    folder_structure = folder_structure / remaining_path
+            
+            if len(path_parts) >= 2:
+                # Use the first subfolder as dataset name (skip root folder)
+                subfolder = path_parts[1]
+                dataset_name = self._sanitize_dataset_name(subfolder)
+                
+                # Preserve any nested subfolders within the dataset
+                if len(path_parts) > 2:
+                    nested_path = "/".join(path_parts[2:])
+                    folder_structure = run_dir / dataset_name / timestamp / nested_path
+                else:
+                    folder_structure = run_dir / dataset_name / timestamp
+            elif len(path_parts) == 1:
+                # Only root folder, use it as dataset name
+                main_folder = path_parts[0]
+                dataset_name = self._sanitize_dataset_name(main_folder)
+                folder_structure = run_dir / dataset_name / timestamp
             else:
-                folder_structure = run_dir / "unknown" / timestamp
+                dataset_name = "unknown"
+                folder_structure = run_dir / dataset_name / timestamp
         else:
-            folder_structure = run_dir / "root" / timestamp
+            # No folder path provided
+            dataset_name = "root"
+            folder_structure = run_dir / dataset_name / timestamp
 
         # Check if file exists in this structure
         file_path = folder_structure / filename

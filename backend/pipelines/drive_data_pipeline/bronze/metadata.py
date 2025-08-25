@@ -5,11 +5,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from ..utils.error_handling import StorageError
 from ..utils.helpers import calculate_content_checksum, calculate_file_checksum
 from ..utils.logging import get_logger
+from ..utils.storage import DriveStorageManager
 
 # Get logger
 logger = get_logger()
@@ -50,8 +51,9 @@ class FileMetadata(BaseModel):
     is_valid: bool = Field(True, description="Whether the file is valid")
     validation_errors: list[str] = Field(default_factory=list, description="Validation errors")
 
-    @validator("file_extension")
-    def validate_file_extension(self, v: str) -> str:
+    @field_validator("file_extension")
+    @classmethod
+    def validate_file_extension(cls, v: str) -> str:
         """Ensure file extension starts with a dot."""
         if v and not v.startswith("."):
             v = f".{v}"
@@ -61,7 +63,7 @@ class FileMetadata(BaseModel):
 class MetadataManager:
     """Manager for file metadata."""
 
-    def __init__(self, base_path: Path, storage_manager=None) -> None:
+    def __init__(self, base_path: Path, storage_manager: DriveStorageManager | None = None) -> None:
         """Initialize the metadata manager.
 
         Args:

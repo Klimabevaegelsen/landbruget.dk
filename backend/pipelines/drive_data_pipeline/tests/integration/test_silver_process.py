@@ -2,6 +2,7 @@
 
 import json
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +13,7 @@ from drive_data_pipeline.utils.storage import LocalStorageManager
 
 
 @pytest.fixture
-def test_settings():
+def test_settings() -> Generator[Settings, None, None]:
     """Create test settings with temporary directories."""
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -36,7 +37,7 @@ def test_settings():
 
 
 @pytest.fixture
-def mock_bronze_data(test_settings):
+def mock_bronze_data(test_settings: Settings) -> Generator[LocalStorageManager, None, None]:
     """Create mock bronze data for testing."""
     # Create a mock bronze run directory
     bronze_run_dir = Path(test_settings.bronze_path) / "20230101_000000"
@@ -89,7 +90,7 @@ def mock_bronze_data(test_settings):
 
 
 @pytest.mark.integration
-def test_silver_processor(test_settings, mock_bronze_data) -> None:
+def test_silver_processor(test_settings: Settings, mock_bronze_data: LocalStorageManager) -> None:
     """Test silver processor end-to-end functionality."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -109,7 +110,7 @@ def test_silver_processor(test_settings, mock_bronze_data) -> None:
         mock_excel_transformer.return_value = excel_transformer
         mock_pdf_transformer.return_value = pdf_transformer
 
-        def mock_transform(file_path, output_dir):
+        def mock_transform(file_path: Path, output_dir: Path) -> Path:
             # Create a mock transformed file
             output_file = Path(output_dir) / f"{Path(file_path).stem}.parquet"
             with open(output_file, "w") as f:
@@ -148,7 +149,9 @@ def test_silver_processor(test_settings, mock_bronze_data) -> None:
 
 
 @pytest.mark.integration
-def test_silver_specific_subfolders(test_settings, mock_bronze_data) -> None:
+def test_silver_specific_subfolders(
+    test_settings: Settings, mock_bronze_data: LocalStorageManager
+) -> None:
     """Test silver processor with specific subfolders filter."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -168,7 +171,7 @@ def test_silver_specific_subfolders(test_settings, mock_bronze_data) -> None:
         mock_excel_transformer.return_value = excel_transformer
         mock_pdf_transformer.return_value = pdf_transformer
 
-        def mock_transform(file_path, output_dir):
+        def mock_transform(file_path: Path, output_dir: Path) -> Path:
             # Create a mock transformed file
             output_file = Path(output_dir) / f"{Path(file_path).stem}.parquet"
             with open(output_file, "w") as f:
@@ -197,7 +200,9 @@ def test_silver_specific_subfolders(test_settings, mock_bronze_data) -> None:
 
 
 @pytest.mark.integration
-def test_silver_specific_file_types(test_settings, mock_bronze_data) -> None:
+def test_silver_specific_file_types(
+    test_settings: Settings, mock_bronze_data: LocalStorageManager
+) -> None:
     """Test silver processor with specific file types filter."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -217,7 +222,7 @@ def test_silver_specific_file_types(test_settings, mock_bronze_data) -> None:
         mock_excel_transformer.return_value = excel_transformer
         mock_pdf_transformer.return_value = pdf_transformer
 
-        def mock_transform(file_path, output_dir):
+        def mock_transform(file_path: Path, output_dir: Path) -> Path:
             # Create a mock transformed file
             output_file = Path(output_dir) / f"{Path(file_path).stem}.parquet"
             with open(output_file, "w") as f:
@@ -244,7 +249,9 @@ def test_silver_specific_file_types(test_settings, mock_bronze_data) -> None:
 
 
 @pytest.mark.integration
-def test_silver_error_handling(test_settings, mock_bronze_data) -> None:
+def test_silver_error_handling(
+    test_settings: Settings, mock_bronze_data: LocalStorageManager
+) -> None:
     """Test silver processor error handling capabilities."""
     # Create storage manager
     storage_manager = LocalStorageManager()
@@ -264,7 +271,7 @@ def test_silver_error_handling(test_settings, mock_bronze_data) -> None:
         mock_excel_transformer.return_value = excel_transformer
         mock_pdf_transformer.return_value = pdf_transformer
 
-        def mock_pdf_transform(file_path, output_dir):
+        def mock_pdf_transform(file_path: Path, output_dir: Path) -> Path:
             # Create a mock transformed file
             output_file = Path(output_dir) / f"{Path(file_path).stem}.parquet"
             with open(output_file, "w") as f:

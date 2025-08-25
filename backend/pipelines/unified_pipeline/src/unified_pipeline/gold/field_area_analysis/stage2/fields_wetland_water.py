@@ -42,7 +42,8 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         stage0_wetlands_path = self._get_latest_gold_path(stage0_wetlands_dataset)
         self.gcs_access.query_parquet_direct(
             stage0_wetlands_path,
-            "SELECT wetland_key, wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, geometry, wetland_area_m2",
+            "SELECT wetland_key, wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, "
+            "geometry, wetland_area_m2",
             "wetlands_prefiltered",
         )
 
@@ -52,7 +53,9 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         stage1b_path = self._get_latest_gold_path(stage1b_dataset)
         self.gcs_access.query_parquet_direct(
             stage1b_path,
-            "SELECT wetland_key, wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, project_id, intersection_geometry, intersection_area_m2, wetland_area_m2, project_area_m2",
+            "SELECT wetland_key, wetland_id, CAST(toerv_pct AS VARCHAR) as toerv_pct, "
+            "project_id, intersection_geometry, intersection_area_m2, "
+            "wetland_area_m2, project_area_m2",
             "water_projects_wetlands_intersections",
         )
 
@@ -105,7 +108,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         self.log.info("📦 Step 1: Creating field_wetland_intersections (2-way total wetlands)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_intersections AS
-            SELECT 
+            SELECT
                 f.field_uuid,
                 f.field_id,
                 f.block_id,
@@ -119,13 +122,16 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             JOIN wetlands_prefiltered w ON ST_Intersects(f.geometry, w.geometry)
         """)
 
-        # Step 2: Create 3-way field × wetland × water intersections (Water-covered wetlands in fields)
-        # ALGORITHMIC FIX: Compute triple intersection directly instead of intersecting two separate intersection geometries
-        # Problem was: field∩wetland might not spatially intersect with water∩wetland even for the same wetland
+        # Step 2: Create 3-way field × wetland × water intersections
+        # (Water-covered wetlands in fields)
+        # ALGORITHMIC FIX: Compute triple intersection directly instead of intersecting
+        # two separate intersection geometries
+        # Problem was: field∩wetland might not spatially intersect with water∩wetland
+        # even for the same wetland
         self.log.info("📦 Step 2: Creating field_wetland_water_intersections (3-way water-covered)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_wetland_water_intersections AS
-            SELECT 
+            SELECT
                 f.field_uuid,
                 f.field_id,
                 f.block_id,
@@ -135,13 +141,22 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 w.wetland_id,
                 w.toerv_pct,
                 wpwi.project_id,
-                ST_Intersection(ST_Intersection(f.geometry, w.geometry), wpwi.intersection_geometry) as field_wetland_water_geometry
+                ST_Intersection(
+                    ST_Intersection(f.geometry, w.geometry), 
+                    wpwi.intersection_geometry
+                ) as field_wetland_water_geometry
             FROM agricultural_fields f
             JOIN wetlands_prefiltered w ON ST_Intersects(f.geometry, w.geometry)
-            JOIN water_projects_wetlands_intersections wpwi 
+            JOIN water_projects_wetlands_intersections wpwi
                 ON w.wetland_key = wpwi.wetland_key
-                AND ST_Intersects(f.geometry, wpwi.intersection_geometry)  -- Field must intersect water-covered part
-            WHERE ST_Area_Spheroid(ST_Intersection(ST_Intersection(f.geometry, w.geometry), wpwi.intersection_geometry)) > 0
+                AND ST_Intersects(f.geometry, wpwi.intersection_geometry)
+                -- Field must intersect water-covered part
+            WHERE ST_Area_Spheroid(
+                ST_Intersection(
+                    ST_Intersection(f.geometry, w.geometry), 
+                    wpwi.intersection_geometry
+                )
+            ) > 0
         """)
 
         # Get result statistics
@@ -204,29 +219,31 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
         # Check field_wetland_intersections geometry validity
         invalid_wetland = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_wetland_intersections 
+            SELECT COUNT(*)
+            FROM field_wetland_intersections
             WHERE field_wetland_geometry IS NULL OR NOT ST_IsValid(field_wetland_geometry)
         """).fetchone()[0]
 
         # Check field_wetland_water_intersections geometry validity
         invalid_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_wetland_water_intersections 
-            WHERE field_wetland_water_geometry IS NULL OR NOT ST_IsValid(field_wetland_water_geometry)
+            SELECT COUNT(*)
+            FROM field_wetland_water_intersections
+            WHERE field_wetland_water_geometry IS NULL 
+               OR NOT ST_IsValid(field_wetland_water_geometry)
         """).fetchone()[0]
 
         # Check for empty geometries
         empty_wetland = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_wetland_intersections 
+            SELECT COUNT(*)
+            FROM field_wetland_intersections
             WHERE field_wetland_geometry IS NOT NULL AND ST_IsEmpty(field_wetland_geometry)
         """).fetchone()[0]
 
         empty_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_wetland_water_intersections 
-            WHERE field_wetland_water_geometry IS NOT NULL AND ST_IsEmpty(field_wetland_water_geometry)
+            SELECT COUNT(*)
+            FROM field_wetland_water_intersections
+            WHERE field_wetland_water_geometry IS NOT NULL 
+               AND ST_IsEmpty(field_wetland_water_geometry)
         """).fetchone()[0]
 
         # Report geometry validation results
@@ -239,7 +256,8 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
         if invalid_wetland > 0:
             self.log.error(
-                f"❌ Found {invalid_wetland:,}/{total_wetland:,} invalid/NULL geometries in field_wetland_intersections"
+                f"❌ Found {invalid_wetland:,}/{total_wetland:,} invalid/NULL geometries "
+                f"in field_wetland_intersections"
             )
         else:
             self.log.info(
@@ -248,7 +266,8 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
         if invalid_water > 0:
             self.log.error(
-                f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries in field_wetland_water_intersections"
+                f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries "
+                f"in field_wetland_water_intersections"
             )
         else:
             self.log.info(
@@ -294,13 +313,16 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
         # Log validation results
         self.log.info(
-            f"📊 Input data: {fields_count:,} fields, {wetland_count:,} wetland features, {water_wetland_count:,} water×wetland intersections"
+            f"📊 Input data: {fields_count:,} fields, {wetland_count:,} wetland features, "
+            f"{water_wetland_count:,} water×wetland intersections"
         )
         self.log.info(
-            f"📊 Output data: {field_wetland_count:,} field×wetland intersections, {field_wetland_water_count:,} field×wetland×water intersections"
+            f"📊 Output data: {field_wetland_count:,} field×wetland intersections, "
+            f"{field_wetland_water_count:,} field×wetland×water intersections"
         )
         self.log.info(
-            f"📊 Field coverage: {unique_fields_with_wetland:,} fields with wetlands, {unique_fields_with_water:,} fields with water-covered wetlands"
+            f"📊 Field coverage: {unique_fields_with_wetland:,} fields with wetlands, "
+            f"{unique_fields_with_water:,} fields with water-covered wetlands"
         )
 
         # Sanity checks
@@ -308,12 +330,14 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             self.log.error("❌ CRITICAL: No field×wetland intersections produced!")
         elif field_wetland_count > fields_count * wetland_count:
             self.log.warning(
-                f"⚠️ Very high intersection count: {field_wetland_count:,} (check for data explosion)"
+                f"⚠️ Very high intersection count: {field_wetland_count:,} "
+                f"(check for data explosion)"
             )
 
         if unique_fields_with_wetland > fields_count:
             self.log.error(
-                f"❌ CRITICAL: More unique fields with wetlands ({unique_fields_with_wetland:,}) than total fields ({fields_count:,})"
+                f"❌ CRITICAL: More unique fields with wetlands ({unique_fields_with_wetland:,}) "
+                f"than total fields ({fields_count:,})"
             )
 
     def _validate_data_consistency(self):
@@ -330,11 +354,13 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
         if water_only_fields > 0:
             self.log.error(
-                f"❌ CRITICAL: {water_only_fields:,} fields have water-covered wetlands but no total wetland (data inconsistency)"
+                f"❌ CRITICAL: {water_only_fields:,} fields have water-covered wetlands "
+                f"but no total wetland (data inconsistency)"
             )
         else:
             self.log.info(
-                "✅ Data consistency: All water-covered wetland fields also have total wetland records"
+                "✅ Data consistency: All water-covered wetland fields also have "
+                "total wetland records"
             )
 
         # Validate field UUIDs consistency
@@ -347,7 +373,8 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
 
         if invalid_field_uuids > 0:
             self.log.error(
-                f"❌ CRITICAL: {invalid_field_uuids:,} intersection records have invalid field_uuid references"
+                f"❌ CRITICAL: {invalid_field_uuids:,} intersection records have "
+                f"invalid field_uuid references"
             )
         else:
             self.log.info("✅ All intersection records have valid field_uuid references")

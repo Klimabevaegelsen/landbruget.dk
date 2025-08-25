@@ -14,8 +14,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Direct imports from the codebase
-from silver.duckdb_helper import DuckDBHelper
-from utils.logging import get_logger
+from silver.duckdb_helper import DuckDBHelper  # noqa: E402
+from utils.logging import get_logger  # noqa: E402
 
 logger = get_logger()
 
@@ -28,7 +28,7 @@ def test_duckdb_helper() -> bool:
     helper = DuckDBHelper()
 
     # Create a test DataFrame
-    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
+    df = helper.conn.execute("CREATE TABLE temp_table AS SELECT 1 as id, 'test' as name").fetchdf()
 
     print("Created test DataFrame:")
     print(df.head())

@@ -20,6 +20,8 @@ import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
+from queue import Queue
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
@@ -54,7 +56,7 @@ class InspireBBRFetcher:
         sample_size: int | None = None,
         return_data: bool = False,
         pipeline_start_time: datetime = None,
-    ):
+    ) -> dict | None:
         """
         Fetch INSPIRE BBR data and enrich with GraphQL API.
 
@@ -145,10 +147,10 @@ class InspireBBRFetcher:
     def fetch_data_streaming(
         self,
         output_dir: Path,
-        building_queue,
+        building_queue: Queue[tuple[list[str], list[dict[str, Any]]]],
         sample_size: int | None = None,
         pipeline_start_time: datetime = None,
-    ):
+    ) -> dict | None:
         """
         Fetch INSPIRE BBR data and stream building IDs to queue as they are processed.
 
@@ -202,7 +204,9 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to fetch INSPIRE BBR data in streaming mode: {e}")
             raise
 
-    def _extract_and_process_with_graphql(self, zip_path: Path, sample_size: int | None):
+    def _extract_and_process_with_graphql(
+        self, zip_path: Path, sample_size: int | None
+    ) -> dict[str, Any]:
         """
         Extract GPKG and process it with GraphQL API enrichment.
         """
@@ -231,7 +235,9 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to extract and process with GraphQL: {e}")
             raise
 
-    def _load_and_enrich_with_graphql(self, gpkg_path: Path, sample_size: int | None):
+    def _load_and_enrich_with_graphql(
+        self, gpkg_path: Path, sample_size: int | None
+    ) -> dict[str, Any]:
         """
         Load INSPIRE BBR data and enrich with GraphQL API for detailed BBR codes.
 
@@ -272,7 +278,9 @@ class InspireBBRFetcher:
             self.logger.error(f"Failed to load and enrich with GraphQL: {e}")
             raise
 
-    def _extract_sample_buildings(self, conn, gpkg_path: Path, sample_size: int):
+    def _extract_sample_buildings(
+        self, conn: Any, gpkg_path: Path, sample_size: int
+    ) -> dict[str, list[dict[str, Any]]]:
         """Extract sample buildings for testing"""
 
         # Define target categories
@@ -290,7 +298,7 @@ class InspireBBRFetcher:
             category_sql = "'" + "','".join(categories) + "'"
 
             query = f"""
-            SELECT 
+            SELECT
                 inspireId_localId as building_uuid,
                 externalReference_reference1 as external_ref,
                 currentUse,
@@ -329,12 +337,12 @@ class InspireBBRFetcher:
 
         return all_buildings
 
-    def _extract_all_buildings(self, conn, gpkg_path: Path):
+    def _extract_all_buildings(self, conn: Any, gpkg_path: Path) -> dict[str, list[dict[str, Any]]]:
         """Extract all relevant buildings for production"""
 
         # Extract all residential, agriculture, and publicServices buildings
         query = f"""
-        SELECT 
+        SELECT
             inspireId_localId as building_uuid,
             externalReference_reference1 as external_ref,
             currentUse,
@@ -344,14 +352,18 @@ class InspireBBRFetcher:
             numberOfFloorsAboveGround as floors,
             numberOfDwellings as dwellings,
             addressRepresentation as address,
-            CASE 
-                WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings') THEN 'residential'
+            CASE
+                WHEN currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings')
+                    THEN 'residential'
                 WHEN currentUse = 'agriculture' THEN 'agriculture'
                 WHEN currentUse = 'publicServices' THEN 'publicServices'
                 ELSE 'other'
             END as category_group
         FROM ST_Read('{gpkg_path}', layer='building')
-        WHERE currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings', 'agriculture', 'publicServices')
+        WHERE currentUse IN (
+            'individualResidence', 'collectiveResidence', 'twoDwellings',
+            'agriculture', 'publicServices'
+        )
         """
 
         result = conn.execute(query).fetchall()
@@ -386,7 +398,9 @@ class InspireBBRFetcher:
 
         return buildings
 
-    def _enrich_with_graphql_api(self, buildings_data):
+    def _enrich_with_graphql_api(
+        self, buildings_data: dict[str, list[dict[str, Any]]]
+    ) -> dict[str, list[dict[str, Any]]]:
         """
         Enrich building data with detailed BBR codes from GraphQL API.
 
@@ -452,7 +466,12 @@ class InspireBBRFetcher:
         # Return the list of buildings directly - no DataFrame conversion needed
         return {"attributes_df": final_buildings, "building_ids": building_ids}
 
-    def _enrich_buildings_with_graphql(self, buildings, category_name, filter_codes=None):
+    def _enrich_buildings_with_graphql(
+        self,
+        buildings: list[dict[str, Any]],
+        category_name: str,
+        filter_codes: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Enrich buildings with GraphQL API data and optionally filter by BBR codes.
         """
@@ -513,7 +532,8 @@ class InspireBBRFetcher:
 
         if filter_codes:
             self.logger.info(
-                f"Filtered {category_name}: kept {len(enriched_buildings)}, filtered out {filtered_count}"
+                f"Filtered {category_name}: kept {len(enriched_buildings)}, "
+                f"filtered out {filtered_count}"
             )
         else:
             self.logger.info(
@@ -522,11 +542,16 @@ class InspireBBRFetcher:
 
         return enriched_buildings
 
-    def _query_graphql_for_bbr_codes(self, uuids, category_name, batch_size=50):
+    def _query_graphql_for_bbr_codes(
+        self, uuids: list[str], category_name: str, batch_size: int = 50
+    ) -> dict[str, dict[str, Any]]:
         """
         Query GraphQL API to get BBR usage codes for building UUIDs using proper batch queries.
         """
-        graphql_url = f"https://graphql.datafordeler.dk/BBR/v1?apikey={self.settings.datafordeler_graphql_api_key}"
+        graphql_url = (
+            f"https://graphql.datafordeler.dk/BBR/v1?"
+            f"apikey={self.settings.datafordeler_graphql_api_key}"
+        )
 
         all_results = []
         total_batches = (len(uuids) + batch_size - 1) // batch_size
@@ -567,9 +592,9 @@ class InspireBBRFetcher:
                       id_lokalId: {{ in: {uuids_list} }}
                     }}
                   ) {{
-                    nodes {{ 
-                      id_lokalId 
-                      byg021BygningensAnvendelse 
+                    nodes {{
+                      id_lokalId
+                      byg021BygningensAnvendelse
                     }}
                   }}
                 }}
@@ -684,7 +709,8 @@ class InspireBBRFetcher:
                 return
 
             self.logger.info(
-                f"💾 Saving {len(building_ids):,} building attributes for GitHub Actions compatibility..."
+                f"💾 Saving {len(building_ids):,} building attributes "
+                f"for GitHub Actions compatibility..."
             )
 
             # Save building attributes as JSON for GitHub Actions
@@ -741,7 +767,8 @@ class InspireBBRFetcher:
                 if href and "DK_INSPIRE_BBR" in href and "download" in href:
                     # Convert relative URL to absolute
                     if href.startswith("/"):
-                        base_url = f"{urlparse(self.settings.sdfe_ftp_base_url).scheme}://{urlparse(self.settings.sdfe_ftp_base_url).netloc}"
+                        parsed_url = urlparse(self.settings.sdfe_ftp_base_url)
+                        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
                         download_link = urljoin(base_url, href)
                     elif href.startswith("main.html"):
                         base_url = self.settings.sdfe_ftp_base_url.rsplit("/", 1)[0]
@@ -779,7 +806,10 @@ class InspireBBRFetcher:
                             href = link.get("href")
                             if href and "download" in href:
                                 if href.startswith("/"):
-                                    base_url = f"{urlparse(self.settings.sdfe_ftp_base_url).scheme}://{urlparse(self.settings.sdfe_ftp_base_url).netloc}"
+                                    parsed_url = urlparse(
+                                        self.settings.sdfe_ftp_base_url
+                                    )
+                                    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
                                     download_link = urljoin(base_url, href)
                                 elif href.startswith("main.html"):
                                     base_url = self.settings.sdfe_ftp_base_url.rsplit("/", 1)[0]
@@ -789,7 +819,8 @@ class InspireBBRFetcher:
                                 break
                         break
 
-            # If we still don't have a download link, try extracting from JavaScript or other sources
+            # If we still don't have a download link, try extracting from
+            # JavaScript or other sources
             if not download_link:
                 # Look for any links containing the weblink parameter
                 script_tags = soup.find_all("script")
@@ -800,7 +831,10 @@ class InspireBBRFetcher:
                         if weblink_match:
                             weblink = weblink_match.group(1)
                             base_url = self.settings.sdfe_ftp_base_url.rsplit("?", 1)[0]
-                            download_link = f"{base_url}?download&weblink={weblink}&realfilename=DK_INSPIRE_BBR.zip"
+                            download_link = (
+                                f"{base_url}?download&weblink={weblink}"
+                                f"&realfilename=DK_INSPIRE_BBR.zip"
+                            )
                             break
 
             # Last resort: use the base URL structure we know works
@@ -934,7 +968,10 @@ class InspireBBRFetcher:
             raise
 
     def _extract_and_process_streaming(
-        self, zip_path: Path, sample_size: int | None, building_queue
+        self,
+        zip_path: Path,
+        sample_size: int | None,
+        building_queue: Queue[tuple[list[str], list[dict[str, Any]]]],
     ) -> None:
         """
         Extract GPKG and process it with streaming to building queue.
@@ -963,7 +1000,10 @@ class InspireBBRFetcher:
             raise
 
     def _load_and_stream_with_graphql(
-        self, gpkg_path: Path, sample_size: int | None, building_queue
+        self,
+        gpkg_path: Path,
+        sample_size: int | None,
+        building_queue: Queue[tuple[list[str], list[dict[str, Any]]]],
     ) -> None:
         """
         Load INSPIRE BBR data and stream building IDs to queue as they are processed.
@@ -983,17 +1023,20 @@ class InspireBBRFetcher:
             # Load the GPKG data
             self.logger.info("Loading building data from GPKG...")
             conn.execute(f"""
-                CREATE TABLE buildings AS 
+                CREATE TABLE buildings AS
                 SELECT * FROM ST_Read('{gpkg_path}')
             """)
 
             # Get building counts for each category
             total_counts = conn.execute("""
-                SELECT 
+                SELECT
                     currentUse,
                     COUNT(*) as count
-                FROM buildings 
-                WHERE currentUse IN ('individualResidence', 'collectiveResidence', 'twoDwellings', 'agriculture', 'publicServices')
+                FROM buildings
+                WHERE currentUse IN (
+                    'individualResidence', 'collectiveResidence', 'twoDwellings',
+                    'agriculture', 'publicServices'
+                )
                 GROUP BY currentUse
                 ORDER BY currentUse
             """).fetchall()
@@ -1019,7 +1062,7 @@ class InspireBBRFetcher:
                     conn.execute(f"""
                         CREATE OR REPLACE TABLE category_buildings AS
                         SELECT inspireId_localId as building_uuid
-                        FROM buildings 
+                        FROM buildings
                         WHERE currentUse IN ('{use_filter}')
                         LIMIT {sample_size}
                     """)
@@ -1027,7 +1070,7 @@ class InspireBBRFetcher:
                     conn.execute(f"""
                         CREATE OR REPLACE TABLE category_buildings AS
                         SELECT inspireId_localId as building_uuid
-                        FROM buildings 
+                        FROM buildings
                         WHERE currentUse IN ('{use_filter}')
                     """)
 
@@ -1056,7 +1099,8 @@ class InspireBBRFetcher:
                                 {
                                     "building_uuid": uuid,
                                     "category": "residential",
-                                    "bbr_usage_code": None,  # Residential doesn't need detailed codes
+                                    "bbr_usage_code": None,  # Residential doesn't
+                                    # need detailed codes
                                     "detailed_usage": None,
                                 }
                             )
@@ -1081,7 +1125,11 @@ class InspireBBRFetcher:
             raise
 
     def _enrich_and_stream_category(
-        self, building_uuids, category_name, building_queue, conn
+        self,
+        building_uuids: list[str],
+        category_name: str,
+        building_queue: Queue[tuple[list[str], list[dict[str, Any]]]],
+        conn: Any,
     ) -> None:
         """
         Enrich buildings with GraphQL data and stream to queue in batches.

@@ -18,6 +18,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+try:
+    import pandas as pd
+
+    DataFrame = pd.DataFrame
+except ImportError:
+    DataFrame = Any
+
 # Updated imports for bulk approach
 from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 from config import Settings, get_settings
@@ -48,10 +55,12 @@ def check_memory_usage() -> None:
     disk = psutil.disk_usage(".")
 
     print(
-        f"Memory: {memory.percent:.1f}% used ({memory.used / 1024**3:.1f}GB/{memory.total / 1024**3:.1f}GB)"
+        f"Memory: {memory.percent:.1f}% used "
+        f"({memory.used / 1024**3:.1f}GB/{memory.total / 1024**3:.1f}GB)"
     )
     print(
-        f"Disk: {100 - disk.free / disk.total * 100:.1f}% used ({disk.used / 1024**3:.1f}GB/{disk.total / 1024**3:.1f}GB)"
+        f"Disk: {100 - disk.free / disk.total * 100:.1f}% used "
+        f"({disk.used / 1024**3:.1f}GB/{disk.total / 1024**3:.1f}GB)"
     )
 
     if memory.percent > 90:
@@ -64,7 +73,7 @@ def perform_uuid_join_optimized(
     building_ids: list[str],
     geodanmark_path: str,
     output_dir: Path,
-    attributes_df=None,  # Optional INSPIRE attributes to include
+    attributes_df: DataFrame | None = None,  # Optional INSPIRE attributes to include
 ) -> dict[str, Any]:
     """
     Perform efficient UUID-based join between INSPIRE BBR and GeoDanmark data.
@@ -122,7 +131,7 @@ def perform_uuid_join_optimized(
         print("🎯 Using all GeoDanmark buildings directly (no expensive aggregation)...")
         conn.execute("""
             CREATE OR REPLACE TABLE geodanmark_buildings AS
-            SELECT 
+            SELECT
                 BBRUUID,
                 bygningstype,
                 geometri as geometry,
@@ -159,7 +168,7 @@ def perform_uuid_join_optimized(
             print("🔧 Pre-computing UUID strings for faster join...")
             conn.execute("""
                 CREATE OR REPLACE TABLE inspire_attributes_with_uuid AS
-                SELECT 
+                SELECT
                     *,
                     LOWER(CONCAT(
                         SUBSTR(hex(building_uuid), 1, 8), '-',
@@ -174,7 +183,7 @@ def perform_uuid_join_optimized(
             # Fast direct join using pre-computed UUID strings
             uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
-            SELECT 
+            SELECT
                 g.BBRUUID,
                 g.geometry,
                 g.bygningstype,
@@ -200,7 +209,7 @@ def perform_uuid_join_optimized(
             # Basic table with all GeoDanmark buildings (no attributes join needed)
             uuid_join_query = """
             CREATE OR REPLACE TABLE joined_results AS
-            SELECT 
+            SELECT
                 g.BBRUUID,
                 g.geometry,
                 g.bygningstype,
@@ -215,7 +224,7 @@ def perform_uuid_join_optimized(
 
         # Get results with spatial statistics
         final_stats = conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT BBRUUID) as unique_buildings,
                 AVG(building_area_m2) as avg_building_area,
@@ -294,10 +303,10 @@ def perform_uuid_join_optimized(
                 try:
                     # Check if it's a table or view by querying information schema
                     result = conn.execute(f"""
-                        SELECT table_type FROM information_schema.tables 
+                        SELECT table_type FROM information_schema.tables
                         WHERE table_name = '{object_name}'
                         UNION ALL
-                        SELECT 'VIEW' as table_type FROM information_schema.views 
+                        SELECT 'VIEW' as table_type FROM information_schema.views
                         WHERE table_name = '{object_name}'
                     """).fetchall()
 
@@ -382,7 +391,7 @@ def perform_true_spatial_join_example(
     try:
         # This query structure will trigger the SPATIAL_JOIN operator
         spatial_join_query = f"""
-        EXPLAIN SELECT 
+        EXPLAIN SELECT
             b.BBRUUID,
             b.geometry as building_geometry,
             f.field_id,
@@ -390,9 +399,10 @@ def perform_true_spatial_join_example(
             ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) as intersection_area_m2
         FROM {buildings_table} b
         INNER JOIN {spatial_features_table} f ON ST_Intersects(b.geometry, f.geometry)
-        WHERE ST_IsValid(b.geometry) 
+        WHERE ST_IsValid(b.geometry)
         AND ST_IsValid(f.geometry)
-        AND ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) > 10  -- Minimum 10m² intersection
+        AND ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) > 10
+        -- Minimum 10m² intersection
         """
 
         # Check if SPATIAL_JOIN operator would be used
@@ -400,7 +410,8 @@ def perform_true_spatial_join_example(
         spatial_join_detected = any("SPATIAL_JOIN" in str(row) for row in explain_result)
 
         print(
-            f"🔍 SPATIAL_JOIN operator would be used: {'✅ YES' if spatial_join_detected else '❌ NO'}"
+            f"🔍 SPATIAL_JOIN operator would be used: "
+            f"{'✅ YES' if spatial_join_detected else '❌ NO'}"
         )
 
         if spatial_join_detected:
@@ -480,7 +491,7 @@ def perform_chunked_spatial_join(
     # This prevents duplicate rows for buildings with complex geometries
     conn.execute("""
         CREATE OR REPLACE TABLE geodanmark_buildings AS
-        SELECT 
+        SELECT
             BBRUUID,
             bygningstype,
             ST_Union_Agg(geometri) as geometry,
@@ -508,7 +519,8 @@ def perform_chunked_spatial_join(
     total_chunks = (len(building_ids) + chunk_size - 1) // chunk_size
 
     print(
-        f"📊 Processing {len(building_ids):,} building IDs in {total_chunks} chunks of {chunk_size:,}"
+        f"📊 Processing {len(building_ids):,} building IDs in "
+        f"{total_chunks} chunks of {chunk_size:,}"
     )
 
     # GitHub Actions timeout monitoring (6-hour limit)
@@ -521,7 +533,7 @@ def perform_chunked_spatial_join(
     # Initialize results table with proper schema
     conn.execute("""
         CREATE OR REPLACE TABLE joined_results AS
-        SELECT 
+        SELECT
             CAST(NULL AS VARCHAR) as BBRUUID,
             CAST(NULL AS GEOMETRY) as geometry,
             CAST(NULL AS VARCHAR) as bygningstype,
@@ -540,7 +552,8 @@ def perform_chunked_spatial_join(
                 elapsed_hours = (datetime.now() - start_time).total_seconds() / 3600
                 if elapsed_hours > timeout_hours:
                     print(
-                        f"⏰ GitHub Actions timeout approaching ({elapsed_hours:.1f}h), stopping gracefully"
+                        f"⏰ GitHub Actions timeout approaching "
+                        f"({elapsed_hours:.1f}h), stopping gracefully"
                     )
                     break
 
@@ -551,7 +564,8 @@ def perform_chunked_spatial_join(
             progress_pct = ((chunk_idx + 1) / total_chunks) * 100
             elapsed_time = datetime.now() - start_time
             print(
-                f"🔄 Chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_ids):,} IDs) - {progress_pct:.1f}% complete - {elapsed_time}"
+                f"🔄 Chunk {chunk_idx + 1}/{total_chunks} ({len(chunk_ids):,} IDs) - "
+                f"{progress_pct:.1f}% complete - {elapsed_time}"
             )
             check_memory_usage()
 
@@ -562,7 +576,7 @@ def perform_chunked_spatial_join(
             # DuckDB Spatial v1.2.2 SPATIAL_JOIN compliance (PR #545)
             join_query = f"""
             INSERT INTO joined_results
-            SELECT 
+            SELECT
                 g.BBRUUID,
                 g.geometry,
                 g.bygningstype,
@@ -616,7 +630,7 @@ def perform_chunked_spatial_join(
 
         # Get final results with spatial statistics
         final_stats = conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT BBRUUID) as unique_buildings,
                 AVG(building_area_m2) as avg_building_area,
@@ -639,7 +653,7 @@ def perform_chunked_spatial_join(
             output_file = output_dir / "joined_buildings.geoparquet"
             conn.execute(f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         BBRUUID,
                         geometry,
                         bygningstype,
@@ -667,7 +681,9 @@ def perform_chunked_spatial_join(
                 "chunks_processed": successful_chunks,
                 "avg_building_area_m2": avg_area,
                 "total_building_area_m2": total_area,
-                "optimization_used": "ST_Dump + minimum area filtering + spatial functions (fallback)",
+                "optimization_used": (
+                    "ST_Dump + minimum area filtering + spatial functions (fallback)"
+                ),
             }
         else:
             print("❌ No matching buildings found in any chunk")
@@ -782,7 +798,7 @@ def run_bronze_layer_bulk(
     logger: logging.Logger,
     pipeline_start_time: datetime,
     return_data: bool = False,
-):
+) -> dict | None:
     """
     Execute bronze layer processing - raw data collection and upload to GCS.
 
@@ -867,7 +883,7 @@ def run_bronze_layer_bulk(
 
 
 def _upload_bronze_data_to_gcs(
-    building_ids: list, attributes_df, timestamp: str, logger: logging.Logger
+    building_ids: list, attributes_df: DataFrame | None, timestamp: str, logger: logging.Logger
 ) -> None:
     """Upload bronze data to GCS for silver layer consumption."""
     if not GCS_AVAILABLE:
@@ -1065,9 +1081,9 @@ def run_silver_layer(
     args: argparse.Namespace,
     settings: Settings,
     logger: logging.Logger,
-    bronze_data=None,
-    bronze_timestamp: str = None,
-):
+    bronze_data: dict[str, Any] | None = None,
+    bronze_timestamp: str | None = None,
+) -> dict:
     """
     Execute silver layer processing - joins, transformations, and final output.
 
@@ -1140,7 +1156,7 @@ def run_silver_layer(
             temp_conn.execute("INSTALL spatial")
             temp_conn.execute("LOAD spatial")
             temp_conn.execute(f"""
-                COPY (SELECT * FROM read_parquet('{main_joined_file}')) 
+                COPY (SELECT * FROM read_parquet('{main_joined_file}'))
                 TO '{temp_joined_file}' (FORMAT PARQUET)
             """)
             temp_conn.close()
@@ -1188,7 +1204,9 @@ def run_silver_layer(
     }
 
 
-def _load_bronze_data(bronze_data, bronze_timestamp: str, logger: logging.Logger):
+def _load_bronze_data(
+    bronze_data: dict[str, Any] | None, bronze_timestamp: str, logger: logging.Logger
+) -> tuple[list, DataFrame | None]:
     """Load bronze data from various sources (in-memory, GCS, artifacts)."""
     building_ids = []
     attributes_df = None
@@ -1237,7 +1255,8 @@ def _load_bronze_data(bronze_data, bronze_timestamp: str, logger: logging.Logger
 
                         attributes_df = pd.read_parquet(attr_location)
                         logger.info(
-                            f"✅ Loaded {len(attributes_df):,} attribute records from {attr_location}"
+                            f"✅ Loaded {len(attributes_df):,} attribute records "
+                            f"from {attr_location}"
                         )
                         break
 
@@ -1251,7 +1270,9 @@ def _load_bronze_data(bronze_data, bronze_timestamp: str, logger: logging.Logger
     return [], None
 
 
-def _load_bronze_data_from_gcs(timestamp: str, logger: logging.Logger):
+def _load_bronze_data_from_gcs(
+    timestamp: str, logger: logging.Logger
+) -> tuple[list, DataFrame | None]:
     """Load bronze data from GCS."""
     if not GCS_AVAILABLE:
         logger.warning("⚠️ GCS not available - cannot load from GCS")
@@ -1301,8 +1322,35 @@ def _upload_silver_data_to_gcs(
         gcs_access = GCSDataAccess()
         bucket_name = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
-        # Upload all files in silver output directory
+        # Upload processed files (with coordinate fixes) if available
+        processed_dir = silver_output_dir / "processed"
+
+        if processed_dir.exists() and any(processed_dir.glob("*.parquet")):
+            # Upload processed files (with coordinate fixes applied)
+            logger.info("📤 Uploading processed files with coordinate fixes...")
+            for file_path in processed_dir.glob("*.parquet"):
+                # Map processed file names to expected names for compatibility
+                if file_path.name == "buildings_processed.parquet":
+                    target_name = "joined_buildings.parquet"
+                else:
+                    target_name = file_path.name
+
+                gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{target_name}"
+
+                with open(file_path, "rb") as src:
+                    with gcs_access.fs.open(gcs_path, "wb") as dst:
+                        import shutil
+
+                        shutil.copyfileobj(src, dst)
+
+                logger.info(f"✅ Uploaded {file_path.name} -> {target_name} to {gcs_path}")
+
+        # Also upload any remaining files from main directory (like inspire_attributes.parquet)
         for file_path in silver_output_dir.glob("*.parquet"):
+            # Skip if we already uploaded a processed version
+            if processed_dir.exists() and file_path.name == "joined_buildings.parquet":
+                continue
+
             gcs_path = f"gs://{bucket_name}/silver/bbr_buildings/{timestamp}/{file_path.name}"
 
             with open(file_path, "rb") as src:

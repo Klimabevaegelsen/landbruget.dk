@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def test_discovery_step_integration():
+def test_discovery_step_integration() -> bool:
     """Test that the discovery step is properly integrated in main.py"""
 
     logger.info("🧪 Testing discovery step integration...")
@@ -27,7 +27,10 @@ def test_discovery_step_integration():
         expected_deps = ["stamdata", "herds"]
 
         if discovery_deps != expected_deps:
-            logger.error(f"❌ Discovery dependencies wrong: got {discovery_deps}, expected {expected_deps}")
+            logger.error(
+                f"❌ Discovery dependencies wrong: got {discovery_deps}, "
+                f"expected {expected_deps}"
+            )
             return False
 
         # Test that animal_movements depends on discovery
@@ -48,7 +51,9 @@ def test_discovery_step_integration():
         try:
             args = parse_arguments()
             if args.get("discovery_year") != 2023:
-                logger.error(f"❌ Discovery year not parsed correctly: {args.get('discovery_year')}")
+                logger.error(
+                    f"❌ Discovery year not parsed correctly: {args.get('discovery_year')}"
+                )
                 return False
 
             logger.info("✅ Argument parsing works")
@@ -64,7 +69,7 @@ def test_discovery_step_integration():
         return False
 
 
-def test_discovery_imports():
+def test_discovery_imports() -> bool:
     """Test that all discovery modules can be imported."""
 
     logger.info("🧪 Testing discovery module imports...")
@@ -72,9 +77,9 @@ def test_discovery_imports():
     try:
         sys.path.insert(0, "backend/pipelines/chr_pipeline")
 
-        # Test imports
-        from bronze.herd_discovery import classify_herd_volume, discover_herd_volumes_for_year
-        from bronze.volume_management import add_high_volume_herd, get_optimal_date_range
+        # Test imports - verify modules can be imported
+        import bronze.herd_discovery  # noqa: F401
+        import bronze.volume_management  # noqa: F401
 
         logger.info("✅ All discovery modules imported successfully")
         return True
@@ -87,7 +92,7 @@ def test_discovery_imports():
         return False
 
 
-def test_workflow_integration():
+def test_workflow_integration() -> bool:
     """Test that workflow files contain the discovery step."""
 
     logger.info("🧪 Testing GitHub Actions workflow integration...")
@@ -97,7 +102,10 @@ def test_workflow_integration():
         with open(".github/workflows/chr_pipeline.yml", "r") as f:
             workflow_content = f.read()
 
-        required_elements = ["herd_discovery", "discovery_year:", "--discovery-year", "Year for herd volume discovery"]
+        required_elements = [
+            "herd_discovery", "discovery_year:", "--discovery-year",
+            "Year for herd volume discovery"
+        ]
 
         missing_elements = []
         for element in required_elements:
@@ -116,7 +124,7 @@ def test_workflow_integration():
         return False
 
 
-def main():
+def main() -> bool:
     """Run all integration tests."""
 
     logger.info("🚀 Starting discovery system integration tests...")

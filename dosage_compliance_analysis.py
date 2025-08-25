@@ -60,7 +60,9 @@ class PlanteITAPI:
     def get_product_detail(self, product_id: int, crop_id: int) -> Optional[Dict]:
         """Get detailed information for a specific product on a specific crop."""
         try:
-            response = self.session.get(f"{self.base_url}/Products/{product_id}?CropId={crop_id}", timeout=30)
+            response = self.session.get(
+                f"{self.base_url}/Products/{product_id}?CropId={crop_id}", timeout=30
+            )
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -86,7 +88,9 @@ class DosageComplianceAnalyzer:
     def load_data(self):
         """Load pesticide data and crop mapping."""
         logger.info("Loading pesticide data...")
-        self.conn.execute(f"CREATE TABLE pesticides AS SELECT * FROM read_parquet('{self.pesticide_data_path}')")
+        self.conn.execute(
+            f"CREATE TABLE pesticides AS SELECT * FROM read_parquet('{self.pesticide_data_path}')"
+        )
 
         logger.info("Loading crop mapping...")
         self.crop_mapping = pd.read_csv(self.crop_mapping_path)
@@ -103,7 +107,7 @@ class DosageComplianceAnalyzer:
         matched_codes_str = ",".join([f"'{code}'" for code in matched_codes])
 
         query = f"""
-        SELECT 
+        SELECT
             crop_code,
             pesticide_registration_number,
             pesticide_name,
@@ -111,22 +115,22 @@ class DosageComplianceAnalyzer:
             dosage_unit,
             area_ha,
             dosage_quantity / area_ha as dosage_per_ha,
-            CASE 
+            CASE
                 WHEN dosage_unit = 2 THEN 'kg'
-                WHEN dosage_unit = 4 THEN 'l' 
+                WHEN dosage_unit = 4 THEN 'l'
                 WHEN dosage_unit = 5 THEN 'tablets'
                 ELSE 'unknown'
             END as unit_name,
             COUNT(*) as application_count
-        FROM pesticides 
-        WHERE aar = '2024' 
+        FROM pesticides
+        WHERE aar = '2024'
           AND crop_code IN ({matched_codes_str})
-          AND pesticide_registration_number IS NOT NULL 
+          AND pesticide_registration_number IS NOT NULL
           AND pesticide_registration_number != ''
-          AND area_ha > 0 
+          AND area_ha > 0
           AND dosage_quantity > 0
           AND dosage_unit IN (2, 4, 5)
-        GROUP BY crop_code, pesticide_registration_number, pesticide_name, 
+        GROUP BY crop_code, pesticide_registration_number, pesticide_name,
                  total_dosage, dosage_unit, area_ha, dosage_per_ha, unit_name
         ORDER BY dosage_per_ha DESC
         """
@@ -207,11 +211,17 @@ class DosageComplianceAnalyzer:
 
             result = {
                 "our_crop_code": row["crop_code"],
-                "our_crop_name": self.crop_mapping[self.crop_mapping["our_crop_code"] == row["crop_code"]][
-                    "our_crop_name"
-                ].iloc[0]
-                if len(self.crop_mapping[self.crop_mapping["our_crop_code"] == row["crop_code"]]) > 0
-                else "",
+                "our_crop_name": (
+                    self.crop_mapping[
+                        self.crop_mapping["our_crop_code"] == row["crop_code"]
+                    ]["our_crop_name"].iloc[0]
+                    if len(
+                        self.crop_mapping[
+                            self.crop_mapping["our_crop_code"] == row["crop_code"]
+                        ]
+                    ) > 0
+                    else ""
+                ),
                 "api_crop_id": api_crop_id,
                 "api_crop_name": row["api_crop_name"],
                 "pesticide_registration_number": reg_number,
@@ -263,7 +273,9 @@ class DosageComplianceAnalyzer:
 
         return results_df
 
-    def _assess_compliance(self, our_dosage: float, our_unit: str, api_max: Optional[float], api_unit: str) -> str:
+    def _assess_compliance(
+        self, our_dosage: float, our_unit: str, api_max: Optional[float], api_unit: str
+    ) -> str:
         """Assess compliance status."""
         if api_max is None:
             return "NO_API_LIMIT"
@@ -321,7 +333,9 @@ class DosageComplianceAnalyzer:
         summary = {
             "total_applications_analyzed": total_applications,
             "api_matches_found": api_found,
-            "api_match_rate_pct": round(api_found / total_applications * 100, 1) if total_applications > 0 else 0,
+            "api_match_rate_pct": (
+                round(api_found / total_applications * 100, 1) if total_applications > 0 else 0
+            ),
             "compliance_breakdown": compliance_stats,
             "dosage_ratio_stats": {
                 "mean": float(compliant_ratios.mean()) if len(compliant_ratios) > 0 else None,
@@ -368,10 +382,17 @@ For applications where API limits are available:
 ### Major Excesses (>2x API limit)
 """
 
-        major_excesses = results[results["compliance_status"] == "MAJOR_EXCESS"].nlargest(10, "dosage_ratio")
+        major_excesses = results[
+            results["compliance_status"] == "MAJOR_EXCESS"
+        ].nlargest(10, "dosage_ratio")
         if len(major_excesses) > 0:
             for _, row in major_excesses.iterrows():
-                report += f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: {row['dosage_ratio']:.1f}x limit ({row['our_dosage_per_ha']:.2f} {row['our_unit']}/ha vs {row['api_max_dosage_app']:.2f} {row['api_dosage_unit']}/ha)\n"
+                report += (
+                    f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: "
+                    f"{row['dosage_ratio']:.1f}x limit "
+                    f"({row['our_dosage_per_ha']:.2f} {row['our_unit']}/ha vs "
+                    f"{row['api_max_dosage_app']:.2f} {row['api_dosage_unit']}/ha)\n"
+                )
         else:
             report += "None found.\n"
 
@@ -382,26 +403,35 @@ For applications where API limits are available:
         unit_mismatches = results[results["compliance_status"] == "UNIT_MISMATCH"]
         if len(unit_mismatches) > 0:
             for _, row in unit_mismatches.head(10).iterrows():
-                report += f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: Our unit: {row['our_unit']}, API unit: {row['api_dosage_unit']}\n"
+                report += (
+                    f"- **{row['our_pesticide_name']}** on **{row['our_crop_name']}**: "
+                    f"Our unit: {row['our_unit']}, API unit: {row['api_dosage_unit']}\n"
+                )
         else:
             report += "None found.\n"
 
         report += f"""
 ## Methodology Notes
 
-1. **Dosage Calculation**: Our data contains total dosage per application, converted to per-hectare by dividing by area_ha
+1. **Dosage Calculation**: Our data contains total dosage per application,
+   converted to per-hectare by
+   dividing by area_ha
 2. **Unit Mapping**: 2=kg, 4=l, 5=tablets (based on codebase analysis)
-3. **Crop Matching**: Used comprehensive crop code mapping with {len(self.crop_mapping)} validated matches
+3. **Crop Matching**: Used comprehensive crop code mapping with
+   {len(self.crop_mapping)} validated matches
 4. **API Source**: Plante IT Pesticide Service (pesticideservice.dlbr.dk)
-5. **Tolerance Levels**: 
+5. **Tolerance Levels**:
    - Compliant: ≤ API limit
-   - Minor excess: 1.0-1.1x API limit  
+   - Minor excess: 1.0-1.1x API limit
    - Moderate excess: 1.1-2.0x API limit
    - Major excess: >2.0x API limit
 
 ## Data Quality Assessment
 
-This analysis validates **{summary["api_match_rate_pct"]}%** of our pesticide applications against official API dosage recommendations, providing strong regulatory compliance insights for Danish agricultural pesticide usage.
+This analysis validates **{summary["api_match_rate_pct"]}%** of our pesticide
+applications against official
+API dosage recommendations, providing strong regulatory compliance insights for Danish agricultural
+pesticide usage.
 """
 
         with open(output_path, "w") as f:

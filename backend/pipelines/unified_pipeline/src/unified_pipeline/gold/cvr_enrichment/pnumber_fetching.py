@@ -112,7 +112,8 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         self.log.info("   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Fetch all fields: {self.config.fetch_all_fields}")
         self.log.info(
-            f"   • Address geocoding: {'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}"
+            f"   • Address geocoding: "
+            f"{'enabled' if self.config.enable_address_geocoding else 'disabled (separate step)'}"
         )
 
     @timed(name="P-number fetching processing")
@@ -436,31 +437,82 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             self.conn.execute(
                 f"""
                 CREATE TABLE {table_name} AS
-                SELECT 
+                SELECT
                     json_extract(json_data, '$.p_number')::INTEGER as p_number,
-                    json_extract(json_data, '$.unit_name')::VARCHAR as unit_name,
+                    md5(json_extract_string(json_data, '$.p_number'))::VARCHAR as pnumber_uuid,
+                    json_extract_string(json_data, '$.unit_name') as unit_name,
                     json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
                     json_array_length(json_extract(json_data, '$.addresses')) as address_count,
-                    json_data as pnumber_data_json,
-                    json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
-                    NULL::INTEGER as batch_number  -- No batching
+                    -- Extract primary address (algorithmically selected by
+                    -- primary_address_selector.py)
+                    -- Priority: 1) Current addresses, 2) Beliggenhedsadresse > Postadresse >
+                    -- Kontaktadresse, 3) Best coordinate quality
+                    json_extract_string(json_data, '$.primary_address.full_address')
+                        as current_full_address,
+                    json_extract_string(json_data, '$.primary_address.street_name')
+                        as current_street_name,
+                    json_extract_string(json_data, '$.primary_address.house_number')
+                        as current_house_number,
+                    json_extract_string(json_data, '$.primary_address.floor') as current_floor,
+                    json_extract_string(json_data, '$.primary_address.door') as current_door,
+                    TRY_CAST(json_extract(json_data, '$.primary_address.postal_code') AS INTEGER)
+                        as current_postal_code,
+                    json_extract_string(json_data, '$.primary_address.city') as current_city,
+                    TRY_CAST(
+                        json_extract(json_data, '$.primary_address.municipality_code') AS INTEGER
+                    ) as current_municipality_code,
+                    json_extract_string(json_data, '$.primary_address.municipality_name')
+                        as current_municipality_name,
+                    json_extract_string(json_data, '$.primary_address.address_type')
+                        as current_address_type,
+                    TRY_CAST(json_extract(json_data, '$.primary_address.latitude') AS DOUBLE)
+                        as latitude,
+                    TRY_CAST(json_extract(json_data, '$.primary_address.longitude') AS DOUBLE)
+                        as longitude,
+                    json_extract_string(json_data, '$.primary_address.coordinate_quality')
+                        as coordinate_quality,
+                    json_extract_string(json_data, '$.primary_address.coordinate_source')
+                        as coordinate_source,
+                    json_extract(json_data, '$.primary_address.dawa_enriched')::BOOLEAN
+                        as dawa_enriched,
+                    json_data as pnumber_data_json,  -- Kept for dependencies
+                    json_extract_string(json_data, '$.processing_timestamp')
+                        as processing_timestamp
                 FROM unnest($1) as t(json_data)
             """,
                 [json_strings],
             )
 
             self.log.info(f"Created table {table_name} with {len(pnumbers_data)} P-numbers")
+
+            # Create P-number employment tables
+            self._create_pnumber_employment_tables(json_strings, table_name)
         else:
-            # Create empty table with schema
+            # Create empty table with schema matching our full SELECT
             self.conn.execute(f"""
                 CREATE TABLE {table_name} (
                     p_number INTEGER,
+                    pnumber_uuid VARCHAR,
                     unit_name VARCHAR,
                     parent_cvr_number INTEGER,
                     address_count INTEGER,
+                    current_full_address VARCHAR,
+                    current_street_name VARCHAR,
+                    current_house_number VARCHAR,
+                    current_floor VARCHAR,
+                    current_door VARCHAR,
+                    current_postal_code INTEGER,
+                    current_city VARCHAR,
+                    current_municipality_code INTEGER,
+                    current_municipality_name VARCHAR,
+                    current_address_type VARCHAR,
+                    latitude DOUBLE,
+                    longitude DOUBLE,
+                    coordinate_quality VARCHAR,
+                    coordinate_source VARCHAR,
+                    dawa_enriched BOOLEAN,
                     pnumber_data_json VARCHAR,
-                    processing_timestamp VARCHAR,
-                    batch_number INTEGER
+                    processing_timestamp VARCHAR
                 )
             """)
             self.log.info(f"Created empty table {table_name}")
@@ -468,10 +520,10 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         # Save to GCS
         self._save_data(
             data=table_name,
-            dataset=self.config.dataset,
+            dataset="cvr_enrichment_pnumbers",
             bucket=self.config.bucket,
             stage="gold",
-            filename="pnumber_fetching.parquet",
+            filename="data.parquet",
         )
 
         # Also save locally for GitHub Actions artifact sharing
@@ -500,3 +552,278 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         )
 
         self.log.info(f"Saved processing summary to {summary_path}")
+
+    def _create_pnumber_employment_tables(self, json_strings: list, base_table_name: str) -> None:
+        """
+        Create normalized P-number employment table from P-number data.
+
+        Args:
+            json_strings: List of P-number JSON strings
+            base_table_name: Base table name for P-number data
+        """
+        self.log.info("Creating normalized P-number employment table from employment data")
+
+        # Create single normalized P-number employment table
+        employment_table = "cvr_pnumber_employment"
+        self.conn.execute(f"DROP TABLE IF EXISTS {employment_table}")
+
+        self.conn.execute(
+            f"""
+            CREATE TABLE {employment_table} AS
+            WITH employment_flattened AS (
+                -- Annual employment
+                SELECT
+                    json_extract(json_data, '$.p_number')::INTEGER as p_number,
+                    json_extract_string(json_data, '$.unit_name') as unit_name,
+                    json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
+                    idx as employment_idx,
+                    'annual' as employment_type
+                FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
+                        WHEN json_array_length(
+                            json_extract(json_data, '$.employment_data.annual_employment')
+                        ) > 0
+                        THEN (
+                            json_array_length(
+                                json_extract(json_data, '$.employment_data.annual_employment')
+                            ) - 1
+                        )::BIGINT
+                        ELSE 0::BIGINT
+                    END) as t(idx)
+                WHERE json_extract(json_data, '$.employment_data.annual_employment') IS NOT NULL
+                AND json_array_length(
+                    json_extract(json_data, '$.employment_data.annual_employment')
+                ) > 0
+
+                UNION ALL
+
+                -- Quarterly employment
+                SELECT
+                    json_extract(json_data, '$.p_number')::INTEGER as p_number,
+                    json_extract_string(json_data, '$.unit_name') as unit_name,
+                    json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
+                    idx as employment_idx,
+                    'quarterly' as employment_type
+                FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
+                        WHEN json_array_length(
+                            json_extract(json_data, '$.employment_data.quarterly_employment')
+                        ) > 0
+                        THEN (
+                            json_array_length(
+                                json_extract(json_data, '$.employment_data.quarterly_employment')
+                            ) - 1
+                        )::BIGINT
+                        ELSE 0::BIGINT
+                    END) as t(idx)
+                WHERE json_extract(json_data, '$.employment_data.quarterly_employment') IS NOT NULL
+                AND json_array_length(
+                    json_extract(json_data, '$.employment_data.quarterly_employment')
+                ) > 0
+
+                UNION ALL
+
+                -- Monthly employment
+                SELECT
+                    json_extract(json_data, '$.p_number')::INTEGER as p_number,
+                    json_extract_string(json_data, '$.unit_name') as unit_name,
+                    json_extract(json_data, '$.parent_cvr_number')::INTEGER as parent_cvr_number,
+                    idx as employment_idx,
+                    'monthly' as employment_type
+                FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
+                        WHEN json_array_length(
+                            json_extract(json_data, '$.employment_data.monthly_employment')
+                        ) > 0
+                        THEN (
+                            json_array_length(
+                                json_extract(json_data, '$.employment_data.monthly_employment')
+                            ) - 1
+                        )::BIGINT
+                        ELSE 0::BIGINT
+                    END) as t(idx)
+                WHERE json_extract(json_data, '$.employment_data.monthly_employment') IS NOT NULL
+                AND json_array_length(
+                    json_extract(json_data, '$.employment_data.monthly_employment')
+                ) > 0
+
+
+            )
+            SELECT
+                -- Generate employment UUID for each record
+                md5(CONCAT(ef.p_number::VARCHAR, '_', ef.parent_cvr_number::VARCHAR, '_',
+                           ef.employment_type, '_',
+                          COALESCE(
+                            CASE ef.employment_type
+                                WHEN 'annual' THEN json_extract(t.json_data,
+                                    '$.employment_data.annual_employment[' ||
+                                    ef.employment_idx || '].year')::VARCHAR
+                                WHEN 'quarterly' THEN json_extract(t.json_data,
+                                    '$.employment_data.quarterly_employment[' ||
+                                    ef.employment_idx || '].year')::VARCHAR
+                                WHEN 'monthly' THEN json_extract(t.json_data,
+                                    '$.employment_data.monthly_employment[' ||
+                                    ef.employment_idx || '].year')::VARCHAR
+                            END, ''), '_',
+                          COALESCE(
+                            CASE ef.employment_type
+                                WHEN 'quarterly' THEN json_extract(t.json_data,
+                                    '$.employment_data.quarterly_employment[' ||
+                                    ef.employment_idx || '].quarter')::VARCHAR
+                                ELSE ''
+                            END, ''), '_',
+                          COALESCE(
+                            CASE ef.employment_type
+                                WHEN 'monthly' THEN json_extract(t.json_data,
+                                    '$.employment_data.monthly_employment[' ||
+                                    ef.employment_idx || '].month')::VARCHAR
+                                ELSE ''
+                            END, '')))::VARCHAR as pnumber_employment_uuid,
+                -- Generate company UUID for consistency with other tables
+                md5(ef.parent_cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                ef.parent_cvr_number as cvr_number,
+                ef.p_number,
+                ef.unit_name,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'annual' THEN json_extract(t.json_data,
+                            '$.employment_data.annual_employment[' || ef.employment_idx || '].year')
+                        WHEN 'quarterly' THEN json_extract(t.json_data,
+                            '$.employment_data.quarterly_employment[' ||
+                            ef.employment_idx || '].year')
+                        WHEN 'monthly' THEN json_extract(t.json_data,
+                            '$.employment_data.monthly_employment[' ||
+                            ef.employment_idx || '].year')
+                    END AS INTEGER) as year,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'quarterly' THEN json_extract(t.json_data,
+                            '$.employment_data.quarterly_employment[' ||
+                            ef.employment_idx || '].quarter')
+                        ELSE NULL
+                    END AS INTEGER) as quarter,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'monthly' THEN json_extract(t.json_data,
+                            '$.employment_data.monthly_employment[' ||
+                            ef.employment_idx || '].month')
+                        ELSE NULL
+                    END AS INTEGER) as month,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'annual' THEN json_extract(t.json_data,
+                            '$.employment_data.annual_employment[' ||
+                            ef.employment_idx || '].total_employees')
+                        WHEN 'quarterly' THEN json_extract(t.json_data,
+                            '$.employment_data.quarterly_employment[' ||
+                            ef.employment_idx || '].total_employees')
+                        WHEN 'monthly' THEN json_extract(t.json_data,
+                            '$.employment_data.monthly_employment[' ||
+                            ef.employment_idx || '].total_employees')
+                    END AS INTEGER) as total_employees,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'annual' THEN json_extract(t.json_data,
+                            '$.employment_data.annual_employment[' ||
+                            ef.employment_idx || '].full_time_equivalent')
+                        WHEN 'quarterly' THEN json_extract(t.json_data,
+                            '$.employment_data.quarterly_employment[' ||
+                            ef.employment_idx || '].full_time_equivalent')
+                        WHEN 'monthly' THEN json_extract(t.json_data,
+                            '$.employment_data.monthly_employment[' ||
+                            ef.employment_idx || '].full_time_equivalent')
+                    END AS DOUBLE) as full_time_equivalent,
+                TRY_CAST(
+                    CASE ef.employment_type
+                        WHEN 'annual' THEN json_extract(t.json_data,
+                            '$.employment_data.annual_employment[' ||
+                            ef.employment_idx || '].employees_including_owners')
+                        ELSE NULL
+                    END AS INTEGER) as employees_including_owners,
+                CASE ef.employment_type
+                    WHEN 'annual' THEN json_extract(t.json_data,
+                        '$.employment_data.annual_employment[' ||
+                        ef.employment_idx || '].fte_interval_code')::VARCHAR
+                    WHEN 'quarterly' THEN json_extract(t.json_data,
+                        '$.employment_data.quarterly_employment[' ||
+                        ef.employment_idx || '].fte_interval_code')::VARCHAR
+                    WHEN 'monthly' THEN json_extract(t.json_data,
+                        '$.employment_data.monthly_employment[' ||
+                        ef.employment_idx || '].fte_interval_code')::VARCHAR
+                END as fte_interval_code,
+                CASE ef.employment_type
+                    WHEN 'annual' THEN json_extract(t.json_data,
+                        '$.employment_data.annual_employment[' ||
+                        ef.employment_idx || '].employees_interval_code')::VARCHAR
+                    WHEN 'quarterly' THEN json_extract(t.json_data,
+                        '$.employment_data.quarterly_employment[' ||
+                        ef.employment_idx || '].employees_interval_code')::VARCHAR
+                    WHEN 'monthly' THEN json_extract(t.json_data,
+                        '$.employment_data.monthly_employment[' ||
+                        ef.employment_idx || '].employees_interval_code')::VARCHAR
+                END as employees_interval_code,
+                CASE ef.employment_type
+                    WHEN 'annual' THEN json_extract(t.json_data,
+                        '$.employment_data.annual_employment[' ||
+                        ef.employment_idx || '].owners_interval_code')::VARCHAR
+                    ELSE NULL
+                END as owners_interval_code,
+                CASE ef.employment_type
+                    WHEN 'annual' THEN json_extract(t.json_data,
+                        '$.employment_data.annual_employment[' ||
+                        ef.employment_idx || '].last_updated')::VARCHAR
+                    WHEN 'quarterly' THEN json_extract(t.json_data,
+                        '$.employment_data.quarterly_employment[' ||
+                        ef.employment_idx || '].last_updated')::VARCHAR
+                    WHEN 'monthly' THEN json_extract(t.json_data,
+                        '$.employment_data.monthly_employment[' ||
+                        ef.employment_idx || '].last_updated')::VARCHAR
+                END as last_updated,
+                ef.employment_type,
+                NOW()::VARCHAR as processing_timestamp
+            FROM employment_flattened ef
+            JOIN unnest($1) as t(json_data) ON
+                json_extract(t.json_data, '$.p_number')::INTEGER = ef.p_number
+                AND json_extract(t.json_data, '$.parent_cvr_number')::INTEGER = ef.parent_cvr_number
+        """,
+            [json_strings],
+        )
+
+        # Get count for logging
+        employment_count = self.conn.execute(f"SELECT COUNT(*) FROM {employment_table}").fetchone()[
+            0
+        ]
+        unique_pnumbers = self.conn.execute(
+            f"SELECT COUNT(DISTINCT p_number) FROM {employment_table}"
+        ).fetchone()[0]
+        unique_companies = self.conn.execute(
+            f"SELECT COUNT(DISTINCT cvr_number) FROM {employment_table}"
+        ).fetchone()[0]
+
+        # Get counts by type
+        type_counts = self.conn.execute(f"""
+            SELECT employment_type, COUNT(*) as count
+            FROM {employment_table}
+            GROUP BY employment_type
+            ORDER BY count DESC
+        """).fetchall()
+
+        self.log.info(
+            f"Created P-number employment table with {employment_count} employment records"
+        )
+        self.log.info(f"Covering {unique_pnumbers} P-numbers from {unique_companies} companies")
+
+        for emp_type, count in type_counts:
+            self.log.info(f"  {emp_type}: {count} records")
+
+        # Save P-number employment table to GCS
+        self._save_data(
+            data=employment_table,
+            dataset="cvr_pnumber_employment",
+            bucket=self.config.bucket,
+            stage="gold",
+            filename="data.parquet",
+        )

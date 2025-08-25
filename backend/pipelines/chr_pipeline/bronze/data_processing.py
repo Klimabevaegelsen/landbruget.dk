@@ -87,7 +87,8 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
         # Auto-detect and configure high-volume herds for chunking (but don't skip them!)
         if animals_count > 100000:
             logger.warning(
-                f"Herd {reporting_herd}: Very large dataset ({animals_count} animals) - will process using volume management chunking"
+                f"Herd {reporting_herd}: Very large dataset ({animals_count} animals) - "
+                f"will process using volume management chunking"
             )
 
         # Auto-detect high-volume herds
@@ -102,7 +103,8 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 suggested_days = 90
 
             logger.warning(
-                f"Herd {reporting_herd}: Large dataset ({animals_count} animals) detected - suggesting {suggested_days}-day chunks"
+                f"Herd {reporting_herd}: Large dataset ({animals_count} animals) detected - "
+                f"suggesting {suggested_days}-day chunks"
             )
 
             if not is_high_volume_herd(reporting_herd):
@@ -146,7 +148,8 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                     if i > 0 and i % 5000 == 0:
                         elapsed_time = time.time() - aggregation_start_time
                         logger.info(
-                            f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals ({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
+                            f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals "
+                            f"({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
                         )
 
                     # Extract key movement information

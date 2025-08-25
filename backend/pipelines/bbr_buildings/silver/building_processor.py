@@ -1,14 +1,46 @@
 """BBR Building processor for silver layer processing."""
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import duckdb
 
+# Robust import handling for Settings
+try:
+    from ..config.settings import Settings
+except ImportError:
+    # Fallback for when module is imported directly
+    try:
+        from config.settings import Settings
+    except ImportError:
+        # Last resort - create a minimal settings class
+        class Settings:
+            def __init__(self) -> None:
+                pass
+
+
+# Try to import comprehensive geo validator
+def _get_geo_validator() -> Callable | None:
+    """Get comprehensive geo validator with robust import handling."""
+    try:
+        from unified_pipeline.common.geometry_validator import (
+            validate_and_transform_geometries_duckdb,
+        )
+
+        logging.info("✅ Successfully imported comprehensive geo validator for BBR buildings")
+        return validate_and_transform_geometries_duckdb
+    except ImportError as e:
+        logging.warning(f"⚠️ Could not import comprehensive geo validator: {e}")
+        return None
+
+
+ComprehensiveGeoValidator = _get_geo_validator()
+
 
 # Try to import optimized GCS access with fallback
-def _get_optimized_gcs_access():
+def _get_optimized_gcs_access() -> type | None:
     """Get optimized GCS access with robust import handling."""
     try:
         from unified_pipeline.util.gcs_access import GCSDataAccess
@@ -26,13 +58,13 @@ OptimizedGCSDataAccess = _get_optimized_gcs_access()
 class BuildingProcessor:
     """Process BBR building data in the silver layer."""
 
-    def __init__(self, settings, logger: logging.Logger) -> None:
+    def __init__(self, settings: Settings, logger: logging.Logger) -> None:
         """Initialize the building processor."""
         self.settings = settings
         self.logger = logger
         self.conn = None
 
-    def _get_connection(self):
+    def _get_connection(self) -> duckdb.DuckDBPyConnection:
         """Get or create a DuckDB connection with spatial extension."""
         if self.conn is None:
             self.conn = duckdb.connect(":memory:")
@@ -97,7 +129,7 @@ class BuildingProcessor:
             # Fix: Cast both UUID types to VARCHAR for proper join
             conn.execute("""
                 CREATE OR REPLACE TABLE enriched_buildings AS
-                SELECT 
+                SELECT
                     jb.*,
                     ia.current_use,
                     ia.building_nature,
@@ -117,22 +149,56 @@ class BuildingProcessor:
             self.logger.warning("INSPIRE attributes file not found, processing without enrichment")
             processing_table = "joined_buildings"
 
+        # Apply comprehensive geo validation before transformations
+        self.logger.info("Applying comprehensive geo validation...")
+
+        if ComprehensiveGeoValidator:
+            try:
+                # Apply comprehensive geo validation to the processing table
+                ComprehensiveGeoValidator(
+                    conn=conn,
+                    table_name=processing_table,
+                    dataset_name="BBR Buildings",
+                    geometry_column="geometry",
+                )
+                self.logger.info("✅ Comprehensive geo validation completed successfully")
+            except Exception as e:
+                self.logger.warning(
+                    f"⚠️ Comprehensive geo validation failed, using basic validation: {e}"
+                )
+                # Fallback to basic validation
+                conn.execute(f"""
+                    DELETE FROM {processing_table}
+                    WHERE geometry IS NULL OR NOT ST_IsValid(geometry)
+                """)
+        else:
+            self.logger.warning(
+                "⚠️ Comprehensive geo validator not available, using basic validation"
+            )
+            # Fallback to basic validation
+            conn.execute(f"""
+                DELETE FROM {processing_table}
+                WHERE geometry IS NULL OR NOT ST_IsValid(geometry)
+            """)
+
         # Apply silver layer transformations
         self.logger.info("Applying silver layer transformations...")
 
         conn.execute(f"""
             CREATE OR REPLACE TABLE processed_buildings AS
-            SELECT 
+            SELECT
                 BBRUUID as building_uuid,
                 geometry as geo_building_polygon,
                 ST_Centroid(geometry) as geo_building_centroid,
                 bygningstype as building_type,
                 building_area_m2 as building_floor_area_sqm,
                 join_status,
-                CASE 
-                    WHEN current_use IN ('individualResidence', 'collectiveResidence', 'twoDwellings') THEN 'residential'
+                CASE
+                    WHEN current_use IN (
+                        'individualResidence', 'collectiveResidence', 'twoDwellings'
+                    ) THEN 'residential'
                     WHEN current_use = 'agriculture' THEN 'agricultural'
-                    WHEN current_use = 'publicServices' THEN 'educational'
+                    WHEN current_use = 'publicServices' THEN 'publicServices'
                     ELSE 'other'
                 END as building_usage_category,
                 current_use as inspire_current_use,
@@ -142,8 +208,17 @@ class BuildingProcessor:
                 floors as inspire_floors,
                 dwellings as inspire_dwellings,
                 address as address_full,
-                -- Pesticide proximity pipeline compatibility
-                address as inspire_address,
+                -- Pesticide proximity pipeline compatibility columns
+                address,
+                geometry,
+                CASE
+                    WHEN current_use IN (
+                        'individualResidence', 'collectiveResidence', 'twoDwellings'
+                    ) THEN 'residential'
+                    WHEN current_use = 'agriculture' THEN 'agricultural'
+                    WHEN current_use = 'publicServices' THEN 'publicServices'
+                    ELSE 'other'
+                END as category_group,
                 bbr_usage_code,
                 category_group as inspire_category_group,
                 CURRENT_DATE as last_updated
@@ -154,12 +229,16 @@ class BuildingProcessor:
 
         # Get processing statistics
         stats = conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT building_uuid) as unique_buildings,
                 AVG(building_floor_area_sqm) as avg_floor_area,
-                COUNT(*) FILTER (WHERE building_usage_category = 'residential') as residential_count,
-                COUNT(*) FILTER (WHERE building_usage_category = 'agricultural') as agricultural_count,
+                COUNT(*) FILTER (
+                    WHERE building_usage_category = 'residential'
+                ) as residential_count,
+                COUNT(*) FILTER (
+                    WHERE building_usage_category = 'agricultural'
+                ) as agricultural_count,
                 COUNT(*) FILTER (WHERE building_usage_category = 'educational') as educational_count
             FROM processed_buildings
         """).fetchone()
@@ -174,7 +253,7 @@ class BuildingProcessor:
 
         # Save processed buildings
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / "buildings_processed.geoparquet"
+        output_file = output_dir / "buildings_processed.parquet"
 
         # 🚀 ENHANCED: Try native GCS export first if available
         gcs_export_success = False
@@ -182,7 +261,7 @@ class BuildingProcessor:
             try:
                 gcs_access = OptimizedGCSDataAccess()
                 timestamp = Path(output_dir).name  # Extract timestamp from output directory
-                gcs_path = f"gs://landbrugsdata-raw-data/silver/bbr_buildings/{timestamp}/buildings_processed.geoparquet"
+                gcs_path = f"gs://landbrugsdata-raw-data/silver/bbr_buildings/{timestamp}/buildings_processed.parquet"
 
                 # Use native GCS export with server-side compression
                 gcs_access.export_to_gcs_native(

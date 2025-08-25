@@ -29,7 +29,10 @@ def _get_optimized_gcs_access():
         return GCSDataAccess
     except ImportError as e:
         logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
-        logger.warning("⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance")
+        logger.warning(
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed "
+            "for optimal performance"
+        )
         return None
 
 
@@ -65,10 +68,10 @@ class OptimizedGCSStorage:
             self.gcs_client = storage.Client()
             self.gcs_bucket = self.gcs_client.bucket(bucket_name)
             logger.info(f"✅ BMD Silver: Using fallback GCS for bucket: {bucket_name}")
-        except ImportError:
-            raise ImportError("google-cloud-storage is required but not available")
+        except ImportError as e:
+            raise ImportError("google-cloud-storage is required but not available") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
     def upload_file(self, local_path: Path, gcs_path: str = None) -> bool:
         """Upload file to GCS with optimized or fallback method."""
@@ -91,7 +94,9 @@ class OptimizedGCSStorage:
                 # Use fallback upload
                 blob = self.gcs_bucket.blob(gcs_path)
                 blob.upload_from_filename(str(local_path))
-                logger.info(f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+                logger.info(
+                    f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)"
+                )
 
             return True
 
@@ -538,19 +543,20 @@ class BMDTransformer:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pfas_enhanced AS
                 SELECT *,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN {pfas_check_sql} THEN true
                         ELSE false
                     END AS contains_pfas,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN LOWER({active_ingredient_col}) LIKE '%diquat%' THEN true
                         ELSE false
                     END AS contains_diquat,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
-                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%' OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
+                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%'
+                            OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
                         ELSE false
                     END AS contains_glyphosate
                 FROM {table_name};
@@ -558,33 +564,36 @@ class BMDTransformer:
 
             # Log detection statistics
             pfas_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_pfas = true
             """).fetchone()[0]
 
             diquat_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_diquat = true
             """).fetchone()[0]
 
             glyphosate_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_glyphosate = true
             """).fetchone()[0]
 
             total_count = self.conn.execute("SELECT COUNT(*) FROM pfas_enhanced").fetchone()[0]
 
             logger.info(
-                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS ({pfas_count / total_count:.1%})"
+                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS "
+                f"({pfas_count / total_count:.1%})"
             )
             logger.info(
-                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat ({diquat_count / total_count:.1%})"
+                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat "
+                f"({diquat_count / total_count:.1%})"
             )
             logger.info(
-                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate ({glyphosate_count / total_count:.1%})"
+                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate "
+                f"({glyphosate_count / total_count:.1%})"
             )
 
             # Store detection metadata

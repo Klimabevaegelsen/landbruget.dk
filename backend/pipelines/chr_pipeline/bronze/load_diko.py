@@ -58,7 +58,8 @@ def load_diko_flytninger(client: Client, username: str, herd_number: int, specie
         return None
 
     logger.info(
-        f"Fetching DIKO movements (besaetningListFlytninger) for Herd: {herd_number}, Species: {species_code} ({VALID_DIKO_SPECIES[species_code]})..."
+        f"Fetching DIKO movements (besaetningListFlytninger) for Herd: {herd_number}, "
+        f"Species: {species_code} ({VALID_DIKO_SPECIES[species_code]})..."
     )
 
     # --- WSDL Confirmed ---

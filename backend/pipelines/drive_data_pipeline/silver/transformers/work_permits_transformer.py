@@ -18,7 +18,8 @@ except ImportError:
     pdfplumber = None
 
 from ...utils.logging import get_logger
-from ..transformers.base import BaseTransformer
+from ...utils.storage import DriveStorageManager
+from ..transformers.base import BaseTransformer, TransformResult
 
 logger = get_logger()
 
@@ -96,12 +97,13 @@ class WorkPermitsTransformer(BaseTransformer):
         can_handle_result = any(indicator in filename_lower for indicator in work_permit_indicators)
 
         logger.info(
-            f"WorkPermitsTransformer: filename='{filename_lower}', matches={matches}, can_handle={can_handle_result}"
+            f"WorkPermitsTransformer: filename='{filename_lower}', matches={matches}, "
+            f"can_handle={can_handle_result}"
         )
 
         return can_handle_result
 
-    def transform(self, file_path: Path, metadata, output_dir: Path):
+    def transform(self, file_path: Path, metadata: Any, output_dir: Path) -> TransformResult:
         """
         Transform work permits PDF into structured data.
 
@@ -174,7 +176,9 @@ class WorkPermitsTransformer(BaseTransformer):
             logger.error(f"Error processing work permits PDF {file_path}: {e}")
             return TransformResult(success=False, error=str(e))
 
-    def _extract_text_from_pdf(self, pdf_path: Path, storage_manager=None) -> str:
+    def _extract_text_from_pdf(
+        self, pdf_path: Path, storage_manager: DriveStorageManager | None = None
+    ) -> str:
         """Extract raw text from PDF using pdfplumber."""
         logger.debug("Extracting text from PDF...")
 
@@ -310,7 +314,8 @@ class WorkPermitsTransformer(BaseTransformer):
                                         }
                                     )
                                     logger.debug(
-                                        f"Added record: {current_cvr} - {country} - {year}: {count} permits"
+                                        f"Added record: {current_cvr} - {country} - {year}: "
+                                        f"{count} permits"
                                     )
 
                     break  # Found country match, don't check other countries for this line

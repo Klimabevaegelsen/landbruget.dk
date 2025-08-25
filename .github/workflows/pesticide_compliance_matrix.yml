@@ -1,0 +1,268 @@
+name: Pesticide Compliance Matrix Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Years to process (comma-separated, e.g., "2020,2021,2022" or "all")'
+        type: string
+        default: "all"
+        required: true
+      max_parallel_jobs:
+        description: "Maximum number of parallel jobs"
+        type: string
+        default: "3"
+        required: true
+      stage:
+        description: "Processing stage"
+        type: choice
+        required: true
+        options:
+          - gold
+          - all
+        default: "gold"
+      dry_run:
+        description: "Dry run mode (discover years only)"
+        type: boolean
+        default: false
+
+env:
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+jobs:
+  discover-years:
+    runs-on: ubuntu-latest
+    outputs:
+      years: ${{ steps.discover.outputs.years }}
+      year_count: ${{ steps.discover.outputs.year_count }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Discover Available Years for Compliance Analysis
+        id: discover
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+
+          # Create discovery script for compliance analysis
+          cat > discover_compliance_years.py << 'EOF'
+          import json
+          import sys
+          import os
+          import re
+          from pathlib import Path
+
+          # Add unified pipeline to path
+          sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+          from unified_pipeline.util.gcs_access import GCSDataAccess
+          import duckdb
+
+          def discover_pesticide_disaggregation_years():
+              """Discover years with pesticide disaggregation data (compliance input)."""
+              try:
+                  gcs_access = GCSDataAccess()
+
+                  # Look for pesticide disaggregation data
+                  pattern = f"gs://{os.getenv('GCS_BUCKET')}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
+                  files = gcs_access.list_files_with_timestamps(pattern)
+
+                  years = set()
+                  for file_path, timestamp in files:
+                      # Extract year from path like: pesticide_disaggregation_2015_2016
+                      match = re.search(r'pesticide_disaggregation_(\d{4})_(\d{4})', file_path)
+                      if match:
+                          start_year = int(match.group(1))
+                          years.add(start_year)
+
+                  return sorted(list(years))
+
+              except Exception as e:
+                  print(f"Error discovering pesticide disaggregation years: {e}", file=sys.stderr)
+                  return []
+
+          # Main discovery logic
+          try:
+              requested_years = "${{ inputs.years }}"
+
+              if requested_years == "all":
+                  print("Discovering all available years with pesticide disaggregation data...")
+                  available_years = discover_pesticide_disaggregation_years()
+
+                  print(f"Available pesticide disaggregation years: {available_years}")
+                  years_to_process = available_years
+              else:
+                  # Parse requested years
+                  years_to_process = [int(y.strip()) for y in requested_years.split(",")]
+                  print(f"Requested years: {years_to_process}")
+
+              print(f"Final years to process: {years_to_process}")
+              print(json.dumps(years_to_process))
+
+          except Exception as e:
+              print(f"Error in discovery: {e}", file=sys.stderr)
+              import traceback
+              traceback.print_exc(file=sys.stderr)
+              sys.exit(1)
+          EOF
+
+          # Run the discovery script and check exit code
+          python discover_compliance_years.py > discovery_output.txt
+          discovery_exit_code=$?
+
+          if [ $discovery_exit_code -ne 0 ]; then
+            echo "❌ Discovery script failed with exit code $discovery_exit_code"
+            cat discovery_output.txt
+            exit $discovery_exit_code
+          fi
+
+          years=$(tail -n 1 discovery_output.txt)
+          year_count=$(echo "$years" | jq '. | length')
+
+          echo "years=$years" >> $GITHUB_OUTPUT
+          echo "year_count=$year_count" >> $GITHUB_OUTPUT
+
+          echo "Discovered $year_count years for compliance analysis: $years"
+
+  process-years:
+    if: ${{ !inputs.dry_run && needs.discover-years.outputs.years != '[]' && needs.discover-years.outputs.years != '' }}
+    needs: discover-years
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false # Don't stop other jobs if one fails
+      matrix:
+        year: ${{ fromJson(needs.discover-years.outputs.years) }}
+
+    name: Compliance Analysis Year ${{ matrix.year }}
+
+    env:
+      ENVIRONMENT: production
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      SAVE_LOCAL: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Pesticide Compliance Analysis for Year ${{ matrix.year }}
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
+          PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+
+          echo "🚀 Starting pesticide compliance analysis for year ${{ matrix.year }}"
+          echo "📊 Analyzing pesticide compliance for agricultural year ${{ matrix.year }}_$((${{ matrix.year }} + 1))"
+
+          # Create a year-specific configuration script
+          cat > run_compliance_year_${{ matrix.year }}.py << 'EOF'
+          import asyncio
+          import os
+          import sys
+          from unified_pipeline.gold.pesticide_compliance import (
+              PesticideComplianceGold,
+              PesticideComplianceGoldConfig
+          )
+
+          async def main():
+              print(f"🎯 Running pesticide compliance analysis for year ${{ matrix.year }}")
+
+              # Configure for specific year
+              config = PesticideComplianceGoldConfig(
+                  pesticide_year=${{ matrix.year }},
+                  enable_dosage_compliance=True,
+                  enable_unit_sanitization=True
+              )
+
+              print(f"📋 Configuration: pesticide_year={config.pesticide_year}")
+
+              try:
+                  # Initialize and run compliance analysis
+                  processor = PesticideComplianceGold(config)
+                  results = await processor.run()
+
+                  print(f"✅ Compliance analysis completed for year ${{ matrix.year }}")
+                  print(f"📊 Results: {results.get('total_issues', 0)} issues across {results.get('companies_with_issues', 0)} companies")
+
+                  return results
+
+              except Exception as e:
+                  print(f"❌ Error in compliance analysis for year ${{ matrix.year }}: {e}")
+                  import traceback
+                  traceback.print_exc()
+                  raise
+
+          if __name__ == "__main__":
+              asyncio.run(main())
+          EOF
+
+          # Run the compliance analysis
+          python run_compliance_year_${{ matrix.year }}.py
+
+          echo "✅ Completed pesticide compliance analysis for year ${{ matrix.year }}"
+
+  summary:
+    if: always()
+    needs: [discover-years, process-years]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Job Summary
+        run: |
+          echo "## Pesticide Compliance Matrix Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Years discovered:** ${{ needs.discover-years.outputs.year_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Years to process:** ${{ needs.discover-years.outputs.years }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.process-years.result }}" == "success" ]; then
+            echo "✅ **Status:** All compliance analysis jobs completed successfully" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.process-years.result }}" == "failure" ]; then
+            echo "❌ **Status:** Some compliance analysis jobs failed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.process-years.result }}" == "skipped" ]; then
+            echo "⏭️ **Status:** Processing skipped (dry run or no years found)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Status:** Processing status unknown" >> $GITHUB_STEP_SUMMARY
+          fi

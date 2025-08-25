@@ -59,7 +59,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
         self.log.info("✅ STAGE 0 OPTIMIZATION: Using pre-filtered wetlands and water projects!")
         self.log.info(
-            "🚀 PERFORMANCE: 8x faster than original (1.6M → 200K wetlands, 2.4K → 500 water projects)"
+            "🚀 PERFORMANCE: 8x faster than original "
+            "(1.6M → 200K wetlands, 2.4K → 500 water projects)"
         )
 
         # Proper SPATIAL_JOIN optimization: Water projects (build side) + ALL wetlands (probe side)
@@ -69,7 +70,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         self.log.info("Decomposing water projects with ST_Dump for optimal spatial indexing...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects AS
-            SELECT 
+            SELECT
                 project_id,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM water_projects_raw
@@ -79,7 +80,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         cols = [
             r[0]
             for r in self.conn.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name = 'wetlands_raw'"
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = 'wetlands_raw'"
             ).fetchall()
         ]
         if "wetland_key" not in [c.lower() for c in cols]:
@@ -91,7 +93,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
-            SELECT 
+            SELECT
                 wetland_key, -- Deterministic fragment key for stable joins
                 wetland_id,  -- Legacy numeric ID retained for compatibility
                 toerv_pct,   -- Keep wetland type for analysis
@@ -103,10 +105,12 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         wetlands_count = self.conn.execute("SELECT COUNT(*) FROM wetlands").fetchone()[0]
         projects_count = self.conn.execute("SELECT COUNT(*) FROM water_projects").fetchone()[0]
         self.log.info(
-            f"✅ Loaded {projects_count:,} water projects (build) and {wetlands_count:,} wetlands (probe)"
+            f"✅ Loaded {projects_count:,} water projects (build) and "
+            f"{wetlands_count:,} wetlands (probe)"
         )
         self.log.info(
-            f"🎯 Processing SPATIAL_JOIN with {wetlands_count * projects_count:,} potential combinations"
+            f"🎯 Processing SPATIAL_JOIN with "
+            f"{wetlands_count * projects_count:,} potential combinations"
         )
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
@@ -129,7 +133,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         num_batches = (total_wetlands + batch_size - 1) // batch_size
 
         self.log.info(
-            f"Creating wetland-water project foundation data from {total_wetlands:,} wetlands in {num_batches} batches"
+            f"Creating wetland-water project foundation data from "
+            f"{total_wetlands:,} wetlands in {num_batches} batches"
         )
 
         # Create intersection results table
@@ -139,7 +144,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 wetland_id BIGINT,    -- Legacy numeric ID for compatibility/metrics
                 toerv_pct VARCHAR,  -- Wetland type for analysis
                 project_id VARCHAR,
-                intersection_geometry GEOMETRY,  -- Intersection geometry for Stage 2 to use directly
+                intersection_geometry GEOMETRY,  -- Intersection geometry for Stage 2
                 intersection_area_m2 DOUBLE,
                 wetland_area_m2 DOUBLE,
                 project_area_m2 DOUBLE
@@ -164,7 +169,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             # Create wetlands batch (ST_Dump already applied in wetlands table)
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE wetlands_batch_raw AS
-                SELECT 
+                SELECT
                     wetland_key,
                     wetland_id,
                     toerv_pct,
@@ -177,7 +182,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             # Calculate areas (wetland_id already exists from main wetlands table)
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetlands_batch AS
-                SELECT 
+                SELECT
                     wetland_key,
                     wetland_id,  -- Use existing wetland_id from decomposed wetlands table
                     toerv_pct,  -- Keep wetland type for analysis
@@ -202,26 +207,26 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
                 # Sample a few geometries to check validity and CRS
             sample_wetland = self.conn.execute("""
-                SELECT 
-                    ST_IsValid(geometry), 
+                SELECT
+                    ST_IsValid(geometry),
                     ST_Area_Spheroid(geometry),
                     'unknown' as srid,
                     ST_GeometryType(geometry),
                     ST_X(ST_Centroid(geometry)),
                     ST_Y(ST_Centroid(geometry))
-                FROM wetlands_batch 
+                FROM wetlands_batch
                 LIMIT 1
             """).fetchone()
 
             sample_water = self.conn.execute("""
-                SELECT 
-                    ST_IsValid(geometry), 
+                SELECT
+                    ST_IsValid(geometry),
                     ST_Area_Spheroid(geometry),
                     'unknown' as srid,
                     ST_GeometryType(geometry),
                     ST_X(ST_Centroid(geometry)),
                     ST_Y(ST_Centroid(geometry))
-                FROM water_projects 
+                FROM water_projects
                 LIMIT 1
             """).fetchone()
 
@@ -231,27 +236,31 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 )
                 water_valid, water_area, water_srid, water_type, water_x, water_y = sample_water
                 self.log.info(
-                    f"  🔍 Wetland - valid={wetland_valid}, area={wetland_area}, SRID={wetland_srid}, type={wetland_type}, center=({wetland_x:.2f}, {wetland_y:.2f})"
+                    f"  🔍 Wetland - valid={wetland_valid}, area={wetland_area}, "
+                    f"SRID={wetland_srid}, type={wetland_type}, "
+                    f"center=({wetland_x:.2f}, {wetland_y:.2f})"
                 )
                 self.log.info(
-                    f"  🔍 Water project - valid={water_valid}, area={water_area:.1f}m², SRID={water_srid}, type={water_type}, center=({water_x:.2f}, {water_y:.2f})"
+                    f"  🔍 Water project - valid={water_valid}, area={water_area:.1f}m², "
+                    f"SRID={water_srid}, type={water_type}, "
+                    f"center=({water_x:.2f}, {water_y:.2f})"
                 )
 
             # Create intersection records for this batch
             batch_query = """
             CREATE OR REPLACE TABLE batch_intersections AS
-            SELECT 
+            SELECT
                 wb.wetland_key,
                 wb.wetland_id,
                 wb.toerv_pct,  -- Wetland type for analysis
                 wp.project_id,
-                ST_Intersection(wb.geometry, wp.geometry) as intersection_geometry,  -- Save intersection geometry for Stage 2
+                ST_Intersection(wb.geometry, wp.geometry) as intersection_geometry,
                 ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) as intersection_area_m2,
                 wb.wetland_area_m2,
                 ST_Area_Spheroid(wp.geometry) as project_area_m2
             FROM wetlands_batch wb
             JOIN water_projects wp ON ST_Intersects(wb.geometry, wp.geometry)
-            WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 0  -- Keep all intersections
+            WHERE ST_Area_Spheroid(ST_Intersection(wb.geometry, wp.geometry)) > 0
             """
 
             self.conn.execute(batch_query)
@@ -270,7 +279,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
 
             # Log batch progress
             batch_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     SUM(w.wetland_area_m2) / 1000000 as total_area_km2,
                     COUNT(*) as wetland_pieces_processed
                 FROM wetlands_batch w
@@ -279,7 +288,8 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             if batch_stats:
                 area_km2, processed_count = batch_stats
                 self.log.info(
-                    f"  ✅ Batch {batch_num + 1}: {area_km2:.1f} km², {processed_count:,} wetland pieces, {batch_intersections:,} intersections"
+                    f"  ✅ Batch {batch_num + 1}: {area_km2:.1f} km², "
+                    f"{processed_count:,} wetland pieces, {batch_intersections:,} intersections"
                 )
 
             total_intersections += batch_intersections
@@ -314,7 +324,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.log.info("No intersection files found - creating empty intersection table")
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetland_water_intersections AS
-                SELECT 
+                SELECT
                     CAST(NULL AS VARCHAR) as wetland_key,  -- Missing column that caused the error!
                     CAST(NULL AS BIGINT) as wetland_id,
                     CAST(NULL AS VARCHAR) as toerv_pct,
@@ -355,7 +365,7 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         try:
             # Check water projects CRS and area
             wp_sample = conn.execute("""
-                SELECT 
+                SELECT
                     ST_XMin(geometry) as min_x,
                     ST_XMax(geometry) as max_x,
                     ST_YMin(geometry) as min_y,
@@ -364,17 +374,19 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     ST_Area(geometry) as area_planar,
                     ST_IsValid(geometry) as is_valid,
                     ST_GeometryType(geometry) as geom_type
-                FROM water_projects 
-                WHERE geometry IS NOT NULL 
+                FROM water_projects
+                WHERE geometry IS NOT NULL
                 LIMIT 1
             """).fetchone()
 
             if wp_sample:
                 self.log.info(
-                    f"Water Projects - X: {wp_sample[0]:.6f} to {wp_sample[1]:.6f}, Y: {wp_sample[2]:.6f} to {wp_sample[3]:.6f}"
+                    f"Water Projects - X: {wp_sample[0]:.6f} to {wp_sample[1]:.6f}, "
+                    f"Y: {wp_sample[2]:.6f} to {wp_sample[3]:.6f}"
                 )
                 self.log.info(
-                    f"Water Projects - Area (spheroid): {wp_sample[4]:.2f}m², Area (planar): {wp_sample[5]:.2f}m²"
+                    f"Water Projects - Area (spheroid): {wp_sample[4]:.2f}m², "
+                    f"Area (planar): {wp_sample[5]:.2f}m²"
                 )
                 self.log.info(f"Water Projects - Valid: {wp_sample[6]}, Type: {wp_sample[7]}")
 
@@ -382,12 +394,13 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 x_looks_like_lon = 7 <= wp_sample[0] <= 16 and 7 <= wp_sample[1] <= 16
                 y_looks_like_lat = 54 <= wp_sample[2] <= 58 and 54 <= wp_sample[3] <= 58
                 self.log.info(
-                    f"Water Projects - Coordinates look like WGS84: {x_looks_like_lon and y_looks_like_lat}"
+                    f"Water Projects - Coordinates look like WGS84: "
+                    f"{x_looks_like_lon and y_looks_like_lat}"
                 )
 
             # Check wetlands CRS and area
             w_sample = conn.execute("""
-                SELECT 
+                SELECT
                     ST_XMin(geometry) as min_x,
                     ST_XMax(geometry) as max_x,
                     ST_YMin(geometry) as min_y,
@@ -396,17 +409,19 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                     ST_Area(geometry) as area_planar,
                     ST_IsValid(geometry) as is_valid,
                     ST_GeometryType(geometry) as geom_type
-                FROM wetlands_raw 
-                WHERE geometry IS NOT NULL 
+                FROM wetlands_raw
+                WHERE geometry IS NOT NULL
                 LIMIT 1
             """).fetchone()
 
             if w_sample:
                 self.log.info(
-                    f"Wetlands - X: {w_sample[0]:.6f} to {w_sample[1]:.6f}, Y: {w_sample[2]:.6f} to {w_sample[3]:.6f}"
+                    f"Wetlands - X: {w_sample[0]:.6f} to {w_sample[1]:.6f}, "
+                    f"Y: {w_sample[2]:.6f} to {w_sample[3]:.6f}"
                 )
                 self.log.info(
-                    f"Wetlands - Area (spheroid): {w_sample[4]:.2f}m², Area (planar): {w_sample[5]:.2f}m²"
+                    f"Wetlands - Area (spheroid): {w_sample[4]:.2f}m², "
+                    f"Area (planar): {w_sample[5]:.2f}m²"
                 )
                 self.log.info(f"Wetlands - Valid: {w_sample[6]}, Type: {w_sample[7]}")
 
@@ -421,15 +436,18 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 )
 
                 self.log.info(
-                    f"Wetlands - Coordinates look like WGS84: {x_looks_like_lon and y_looks_like_lat}"
+                    f"Wetlands - Coordinates look like WGS84: "
+                    f"{x_looks_like_lon and y_looks_like_lat}"
                 )
                 self.log.info(
-                    f"Wetlands - Coordinates look like UTM (EPSG:25832): {x_looks_like_utm and y_looks_like_utm}"
+                    f"Wetlands - Coordinates look like UTM (EPSG:25832): "
+                    f"{x_looks_like_utm and y_looks_like_utm}"
                 )
 
                 if x_looks_like_utm and y_looks_like_utm:
                     self.log.error(
-                        "🚨 PROBLEM: Wetlands still in UTM coordinates! Geometry validator failed to transform to WGS84"
+                        "🚨 PROBLEM: Wetlands still in UTM coordinates! "
+                        "Geometry validator failed to transform to WGS84"
                     )
                     self.log.error(
                         "   ST_Area_Spheroid() expects WGS84 coordinates, but got UTM → returns NaN"
@@ -445,10 +463,13 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             self.log.info("🧪 Testing manual coordinate transformation:")
             try:
                 test_result = conn.execute("""
-                    SELECT 
-                        ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326') as transformed_point,
-                        ST_X(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) as lon,
-                        ST_Y(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) as lat
+                    SELECT
+                        ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326') 
+                            as transformed_point,
+                        ST_X(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) 
+                            as lon,
+                        ST_Y(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) 
+                            as lat
                 """).fetchone()
 
                 if test_result:
@@ -458,10 +479,12 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                         self.log.info("✅ Manual transformation working correctly")
                     else:
                         self.log.warning(
-                            "⚠️ Manual transformation result outside Denmark bounds (lon: 7-16, lat: 54-58)"
+                            "⚠️ Manual transformation result outside Denmark bounds "
+                            "(lon: 7-16, lat: 54-58)"
                         )
                         self.log.info(
-                            "🔧 DuckDB coordinate transformation is working, coordinates are just outside Denmark"
+                            "🔧 DuckDB coordinate transformation is working, "
+                            "coordinates are just outside Denmark"
                         )
 
             except Exception as transform_e:

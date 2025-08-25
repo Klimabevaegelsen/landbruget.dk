@@ -99,13 +99,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info("✅ Spatial extension is working (loaded by BaseSource)")
         except Exception as e:
             self.log.error(f"❌ Spatial extension not available from BaseSource: {e}")
-            raise RuntimeError("Spatial extension is required but not available from BaseSource")
+            raise RuntimeError(
+                "Spatial extension is required but not available from BaseSource"
+            ) from e
 
         # Apply memory optimizations
         self._configure_memory_optimizations()
 
     def _configure_memory_optimizations(self):
-        """Configure DuckDB memory optimizations for GitHub Actions environment with aggressive resource management."""
+        """Configure DuckDB memory optimizations for GitHub Actions environment with
+        aggressive resource management."""
         if not self.config.enable_memory_optimizations:
             return
 
@@ -159,7 +162,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info(f"   Checkpoint threshold: {checkpoint_threshold} (aggressive cleanup)")
             self.log.info(f"   Emergency threshold: {self.config.emergency_memory_threshold:.0%}")
             self.log.info(
-                f"   Spatial join batching: {self.config.enable_batched_spatial_joins} (batch size: {self.config.spatial_join_batch_size:,})"
+                f"   Spatial join batching: {self.config.enable_batched_spatial_joins} "
+                f"(batch size: {self.config.spatial_join_batch_size:,})"
             )
 
         except Exception as e:
@@ -225,7 +229,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             try:
                 memory = psutil.virtual_memory()
                 self.log.info(
-                    f"   Memory after cleanup: {memory.used / (1024**3):.1f}GB ({memory.percent:.1f}%)"
+                    f"   Memory after cleanup: {memory.used / (1024**3):.1f}GB "
+                    f"({memory.percent:.1f}%)"
                 )
                 self.log.info(f"   Python objects collected: {collected}")
             except ImportError:
@@ -326,13 +331,15 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             )
                             self.log.warning(f"Reducing batch size: {original_batch} → {new_batch}")
                             # Note: This requires modifying the config object, which is frozen
-                            # In practice, we'd pass the reduced batch size to the processing function
+                            # In practice, we'd pass the reduced batch size to the
+                            # processing function
 
                         self._emergency_resource_cleanup()
                         continue
                     else:
                         self.log.error(
-                            f"Memory fallback failed after {self.config.max_memory_retries} attempts"
+                            f"Memory fallback failed after {self.config.max_memory_retries} "
+                            f"attempts"
                         )
                         raise
                 else:
@@ -346,7 +353,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
         try:
             test_query = """
-                EXPLAIN SELECT COUNT(*) 
+                EXPLAIN SELECT COUNT(*)
                 FROM current_year_fields f
                 JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
                 LIMIT 1
@@ -360,7 +367,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 return True
             else:
                 self.log.warning(
-                    f"❌ SPATIAL_JOIN operator NOT detected for {query_description} - check join conditions"
+                    f"❌ SPATIAL_JOIN operator NOT detected for {query_description} - "
+                    f"check join conditions"
                 )
                 self.log.debug(f"Query plan: {plan_text}")
                 return False
@@ -432,7 +440,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"🧹 Memory cleanup: freed {memory_freed:.1f}GB, collected {collected} objects"
             )
             self.log.info(
-                f"   Memory now: {memory_after.used / (1024**3):.1f}GB ({memory_after.percent:.1f}%)"
+                f"   Memory now: {memory_after.used / (1024**3):.1f}GB "
+                f"({memory_after.percent:.1f}%)"
             )
 
         except Exception as e:
@@ -477,7 +486,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             if estimated_memory_gb > available_memory_gb:
                 self.log.warning(f"⚠️ Insufficient memory for {years_count} years batch processing")
                 self.log.warning(
-                    f"   Estimated need: {estimated_memory_gb:.1f}GB, Available: {available_memory_gb:.1f}GB"
+                    f"   Estimated need: {estimated_memory_gb:.1f}GB, "
+                    f"Available: {available_memory_gb:.1f}GB"
                 )
                 return False
 
@@ -494,7 +504,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         raise NotImplementedError("This method has been replaced by year-by-year processing")
 
     def _get_latest_silver_path(self, dataset: str) -> str:
-        """Override base method to handle both data.parquet and {dataset}.parquet naming patterns."""
+        """Override base method to handle both data.parquet and {dataset}.parquet
+        naming patterns."""
         try:
             all_files = []
 
@@ -517,7 +528,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return latest_file
 
         except Exception as e:
-            raise FileNotFoundError(f"No silver data found for {dataset}: {e}")
+            raise FileNotFoundError(f"No silver data found for {dataset}: {e}") from e
 
     def _load_silver_data_to_table(
         self, dataset: str, table_name: str, silver_data: Optional[Dict[str, Any]]
@@ -550,7 +561,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return False
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
-        """Run field production estimation gold processing with aggressive resource management for GitHub Actions."""
+        """Run field production estimation gold processing with aggressive resource
+        management for GitHub Actions."""
 
         self.log.info(
             "🚀 Starting field production gold layer processing (GitHub Actions optimized)"
@@ -611,12 +623,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.execute("DROP TABLE IF EXISTS final_production_estimates")
             self.conn.execute("""
                 CREATE TABLE final_production_estimates AS
-                SELECT * FROM (VALUES 
-                    ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy', 
+                SELECT * FROM (VALUES
+                    ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy',
                      0.0, 'dummy', 0.0, 'dummy', 'dummy', current_timestamp, 'dummy', 'dummy')
-                ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming, 
-                       landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha, 
-                       yield_estimation_method, production_estimate_hkg, production_unit, geometry_wkt, created_at,
+                ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming,
+                       landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha,
+                       yield_estimation_method, production_estimate_hkg, production_unit,
+                       geometry_wkt, created_at,
                        field_uuid, primary_field_id)
                 WHERE false
             """)
@@ -664,7 +677,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 elapsed_hours = (time.time() - total_start) / 3600
                 if elapsed_hours > 5.5:
                     self.log.warning(
-                        f"Approaching GitHub Actions time limit ({elapsed_hours:.1f}h) - stopping processing"
+                        f"Approaching GitHub Actions time limit ({elapsed_hours:.1f}h) - "
+                        f"stopping processing"
                     )
                     break
 
@@ -791,7 +805,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             else:
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE year_fields_with_zones AS
-                    SELECT 
+                    SELECT
                         f.field_id,
                         f.block_id,
                         f.cvr_number,
@@ -825,7 +839,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             self.conn.execute("""
                 CREATE OR REPLACE TABLE year_production_estimates AS
-                SELECT 
+                SELECT
                     -- JOIN KEYS
                     f.field_id,
                     f.block_id,
@@ -847,19 +861,28 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         halm1.straw_value,
                         hst77_national.harvest_value
                     ) as yield_estimate_hkg_ha,
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                    CASE
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
+                                     fro.seed_value, halm1.straw_value,
+                                     hst77_national.harvest_value) IS NOT NULL
                         THEN 'dst_region_match'
                         ELSE 'no_yield_data'
                     END as yield_estimation_method,
                     -- PRODUCTION ESTIMATE
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
-                        THEN f.area_ha * COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value)
+                    CASE
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
+                                     fro.seed_value, halm1.straw_value,
+                                     hst77_national.harvest_value) IS NOT NULL
+                        THEN f.area_ha * COALESCE(
+                            hst77.harvest_value, gartn1.horticulture_value,
+                            fro.seed_value, halm1.straw_value, hst77_national.harvest_value
+                        )
                         ELSE NULL
                     END as production_estimate_hkg,
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
+                    CASE
+                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
+                                     fro.seed_value, halm1.straw_value,
+                                     hst77_national.harvest_value) IS NOT NULL
                         THEN 'hkg'
                         ELSE NULL
                     END as production_unit,
@@ -871,19 +894,20 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.field_uuid,
                     f.primary_field_id
                 FROM year_fields_with_zones f
-                LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions 
-                    AND hst77.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions
+                    AND hst77.time_period = CAST(f.year AS VARCHAR)
                     AND hst77.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions 
-                    AND gartn1.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions
+                    AND gartn1.time_period = CAST(f.year AS VARCHAR)
                     AND gartn1.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR)
                     AND fro.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions 
-                    AND halm1.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions
+                    AND halm1.time_period = CAST(f.year AS VARCHAR)
                     AND halm1.unit_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_hst77 hst77_national ON hst77_national.area_name ILIKE '%Hele landet%' 
-                    AND hst77_national.time_period = CAST(f.year AS VARCHAR) 
+                LEFT JOIN dst_dst_hst77 hst77_national
+                    ON hst77_national.area_name ILIKE '%Hele landet%'
+                    AND hst77_national.time_period = CAST(f.year AS VARCHAR)
                     AND hst77_national.measure_name ILIKE '%udbytte%'
             """)
 
@@ -911,7 +935,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             year_duration = time.time() - year_start
             self.log.info(
-                f"  ✅ Year {year} processing completed in {year_duration:.1f}s: {processed_count:,} fields"
+                f"  ✅ Year {year} processing completed in {year_duration:.1f}s: "
+                f"{processed_count:,} fields"
             )
 
             return processed_count
@@ -940,14 +965,15 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Get total count of fields to process
         total_fields = self.conn.execute("SELECT COUNT(*) FROM current_year_fields").fetchone()[0]
         self.log.info(
-            f"  📊 Processing {total_fields:,} fields in batches of {self.config.spatial_join_batch_size:,}"
+            f"  📊 Processing {total_fields:,} fields in batches of "
+            f"{self.config.spatial_join_batch_size:,}"
         )
 
         # Create result table
         self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
         self.conn.execute("""
             CREATE TABLE year_fields_with_zones AS
-            SELECT 
+            SELECT
                 NULL::VARCHAR as field_id,
                 NULL::VARCHAR as block_id,
                 NULL::VARCHAR as cvr_number,
@@ -986,7 +1012,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Perform spatial join for this batch
             self.conn.execute("""
                 INSERT INTO year_fields_with_zones
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
@@ -1047,7 +1073,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Create table based on year (block_id available from 2008+)
         create_query = f"""
             CREATE OR REPLACE TABLE current_year_fields AS
-            SELECT 
+            SELECT
                 {field_id_select},
                 {block_id_select},
                 {cvr_number_select},
@@ -1096,7 +1122,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Create table based on year (block_id available from 2008+)
         create_query = f"""
             CREATE OR REPLACE TABLE current_year_fields AS
-            SELECT 
+            SELECT
                 {field_id_select},
                 {block_id_select},
                 {cvr_number_select},
@@ -1128,7 +1154,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.error(f"❌ Spatial extension not available: {spatial_e}")
                 raise RuntimeError(
                     "Spatial extension is required but not available from BaseSource"
-                )
+                ) from spatial_e
 
             # Debug: Check the structure and sample data of dst_zones_raw table
             try:
@@ -1151,16 +1177,17 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.warning(f"Debug info failed: {debug_e}")
 
             # Create optimized DST zones table with spatial geometry
-            # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText for spatial indexing
+            # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText
+            # for spatial indexing
             self.conn.execute("""
                 CREATE OR REPLACE TABLE dst_zones AS
-                SELECT 
+                SELECT
                     landsdel_code,
                     landsdel_name,
                     dst_regions,
                     ST_GeomFromText(geometry) as geometry
                 FROM dst_zones_raw
-                WHERE geometry IS NOT NULL 
+                WHERE geometry IS NOT NULL
                 AND geometry != ''
                 AND geometry != 'NULL'
             """)
@@ -1198,7 +1225,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         try:
             # Get summary statistics
             summary = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
                     COUNT(DISTINCT year) as years_covered,
                     COUNT(DISTINCT crop_type) as crops_covered,
@@ -1230,12 +1257,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"  Fields with yield estimates: {fields_with_yields:,} ({yield_coverage:.1%})"
             )
             self.log.info(
-                f"  Fields with production estimates: {fields_with_production:,} ({production_coverage:.1%})"
+                f"  Fields with production estimates: {fields_with_production:,} "
+                f"({production_coverage:.1%})"
             )
 
             # Summary by year
             year_summary = self.conn.execute("""
-                SELECT 
+                SELECT
                     year,
                     COUNT(*) as year_count,
                     COUNT(production_estimate_hkg) as year_with_production,
@@ -1247,13 +1275,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             for year, year_count, year_with_production, year_coverage in year_summary:
                 self.log.info(
-                    f"    Year {year}: {year_count:,} fields, {year_with_production:,} with production ({year_coverage:.1f}%)"
+                    f"    Year {year}: {year_count:,} fields, {year_with_production:,} "
+                    f"with production "
+                    f"({year_coverage:.1f}%)"
                 )
 
             # Check quality thresholds
             if yield_coverage < self.config.min_yield_coverage:
                 self.log.warning(
-                    f"Yield coverage {yield_coverage:.1%} below minimum threshold {self.config.min_yield_coverage:.1%}"
+                    f"Yield coverage {yield_coverage:.1%} below minimum threshold "
+                    f"{self.config.min_yield_coverage:.1%}"
                 )
 
         except Exception as e:

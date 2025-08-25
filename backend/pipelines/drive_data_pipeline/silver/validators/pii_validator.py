@@ -11,7 +11,7 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    def get_logger():
+    def get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
     from silver.duckdb_base import DuckDBProcessor
@@ -205,8 +205,8 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
                     try:
                         # Count total non-null values
                         total_count = self.conn.execute(f"""
-                            SELECT COUNT(*) 
-                            FROM {table_name} 
+                            SELECT COUNT(*)
+                            FROM {table_name}
                             WHERE {col_name} IS NOT NULL AND {col_name} != ''
                         """).fetchone()[0]
 
@@ -215,8 +215,8 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
 
                         # Count values that match the pattern
                         match_count = self.conn.execute(f"""
-                            SELECT COUNT(*) 
-                            FROM {table_name} 
+                            SELECT COUNT(*)
+                            FROM {table_name}
                             WHERE {col_name} ~ '{pattern}'
                         """).fetchone()[0]
 

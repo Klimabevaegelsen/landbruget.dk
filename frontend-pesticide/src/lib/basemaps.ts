@@ -15,12 +15,12 @@ const DENMARK_BOUNDS = {
 }
 
 // Denmark PMTiles URL on GCS
-const DENMARK_PMTILES_URL = 'pmtiles://https://storage.googleapis.com/landbrugsdata-raw-data/pmtiles/protomaps_denmark.pmtiles'
+const DENMARK_PMTILES_URL = 'pmtiles://https://data.pesticidkortet.dk/pmtiles/protomaps_denmark.pmtiles'
 
 // Create basemap styles using the actual Denmark PMTiles
 function createDenmarkBasemapStyle(flavor: 'light' | 'black') {
   const isDark = flavor === 'black'
-  
+
   return {
     version: 8,
     name: `Denmark ${flavor}`,
@@ -112,7 +112,7 @@ export const BASEMAPS: Record<string, BasemapConfig> = {
     flavor: 'light'
   },
   dark: {
-    id: 'dark', 
+    id: 'dark',
     name: 'Dark',
     style: createDenmarkBasemapStyle('black'),
     attribution: '© Protomaps © OpenStreetMap',
@@ -126,7 +126,7 @@ export function getBasemapForTheme(theme: 'light' | 'dark' | 'system'): BasemapC
     const isDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
     return isDark ? BASEMAPS.dark : BASEMAPS.light
   }
-  
+
   return BASEMAPS[theme] || BASEMAPS.light
 }
 
@@ -137,7 +137,7 @@ export function getBasemapStyleForTheme(theme: 'light' | 'dark' | 'system') {
 // Optimized style for Denmark-focused data visualization
 export function getDenmarkOptimizedStyle(theme: 'light' | 'dark' | 'system') {
   const baseStyle = getBasemapStyleForTheme(theme)
-  
+
   // Enhance the style for better data visualization
   return {
     ...baseStyle,
@@ -148,4 +148,4 @@ export function getDenmarkOptimizedStyle(theme: 'light' | 'dark' | 'system') {
       [DENMARK_BOUNDS.east, DENMARK_BOUNDS.north]
     ]
   }
-} 
+}

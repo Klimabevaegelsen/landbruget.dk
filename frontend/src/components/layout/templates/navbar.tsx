@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 const links = [
   { href: "/?section=overview", label: "Oversigt" },
   { href: "/?section=explore", label: "Udforsk" },
+  { href: "/markanalyse", label: "Markanalyse" },
   { href: "/?section=blog", label: "Blog" },
 ];
 
