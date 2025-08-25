@@ -77,6 +77,7 @@ jobs:
           """
           import json
           import os
+          import re
           import sys
           from pathlib import Path
 
@@ -84,41 +85,32 @@ jobs:
           sys.path.insert(0, str(Path(__file__).parent / "src"))
 
           from unified_pipeline.util.gcs_access import GCSDataAccess
-          from unified_pipeline.util.logging_utils import get_pipeline_logger
+          from unified_pipeline.util.log_util import Logger
 
           def discover_fvm_marker_years():
               """Discover available fvm_marker years from silver data."""
-              logger = get_pipeline_logger()
+              import re
+              logger = Logger.get_logger()
               gcs_access = GCSDataAccess()
               bucket = os.getenv('GCS_BUCKET', 'landbrugsdata-raw-data')
 
               try:
-                  # List all fvm_marker datasets in silver layer
-                  pattern = f"gs://{bucket}/silver/fvm_marker_*/"
-                  logger.info(f"Searching for fvm_marker datasets: {pattern}")
+                  # List all parquet files in silver layer to find fvm_marker directories (recursive)
+                  files = gcs_access.list_files(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
+                  years = set()
 
-                  directories = gcs_access.list_directories(pattern)
-                  years = []
+                  for file_path in files:
+                      # Look for directory names like "fvm_marker_2021" in the path
+                      match = re.search(r"/fvm_marker_(\d{4})/", file_path)
+                      if match:
+                          year = int(match.group(1))
+                          if 2005 <= year <= 2030:  # Reasonable year range
+                              years.add(year)
+                              logger.info(f"Found fvm_marker data for year: {year}")
 
-                  for directory in directories:
-                      # Extract year from directory name like "fvm_marker_2020"
-                      parts = directory.rstrip('/').split('/')
-                      dataset_name = parts[-1] if parts else ''
-
-                      if dataset_name.startswith('fvm_marker_'):
-                          try:
-                              year_str = dataset_name.replace('fvm_marker_', '')
-                              year = int(year_str)
-                              if 2005 <= year <= 2030:  # Reasonable year range
-                                  years.append(year)
-                                  logger.info(f"Found fvm_marker data for year: {year}")
-                          except ValueError:
-                              logger.warning(f"Could not parse year from: {dataset_name}")
-                              continue
-
-                  years.sort()
-                  logger.info(f"Discovered {len(years)} years with fvm_marker data: {years}")
-                  return years
+                  years_list = sorted(list(years))
+                  logger.info(f"Discovered {len(years_list)} years with fvm_marker data: {years_list}")
+                  return years_list
 
               except Exception as e:
                   logger.error(f"Error discovering years: {e}")
@@ -126,7 +118,7 @@ jobs:
 
           def main():
               """Main discovery function."""
-              logger = get_pipeline_logger()
+              logger = Logger.get_logger()
 
               # Get input years
               input_years = "${{ github.event.inputs.years }}"
@@ -323,12 +315,12 @@ jobs:
           sys.path.insert(0, str(Path(__file__).parent / "src"))
 
           from unified_pipeline.util.gcs_access import GCSDataAccess
-          from unified_pipeline.util.logging_utils import get_pipeline_logger
+          from unified_pipeline.util.log_util import Logger
           import duckdb
 
           def consolidate_field_production():
               """Consolidate all year-specific field production estimates."""
-              logger = get_pipeline_logger()
+              logger = Logger.get_logger()
               gcs_access = GCSDataAccess()
               bucket = os.getenv('GCS_BUCKET', 'landbrugsdata-raw-data')
 
