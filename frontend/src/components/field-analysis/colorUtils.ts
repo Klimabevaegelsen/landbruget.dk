@@ -5,26 +5,39 @@ import { FieldAnalysisData, VisualizationMode, ColorUnit } from './types';
  */
 
 // Color schemes for different chemicals
+// Unified pesticide color scheme - white to red gradient for all pesticide types
+const UNIFIED_PESTICIDE_COLORS = ['#ffffff', '#fef2f2', '#fecaca', '#fca5a5', '#f87171', '#ef4444', '#dc2626', '#b91c1c', '#991b1b', '#7f1d1d'];
+
 export const COLOR_SCHEMES = {
   pfas: {
     name: 'PFAS',
-    colors: ['#fef2f2', '#fecaca', '#fca5a5', '#f87171', '#ef4444', '#dc2626', '#b91c1c', '#991b1b', '#7f1d1d', '#450a0a'],
-    description: 'Red scale for PFAS compounds'
+    colors: UNIFIED_PESTICIDE_COLORS,
+    description: 'Unified scale for PFAS compounds'
   },
   diquat: {
     name: 'Diquat',
-    colors: ['#eff6ff', '#dbeafe', '#bfdbfe', '#93c5fd', '#60a5fa', '#3b82f6', '#2563eb', '#1d4ed8', '#1e40af', '#1e3a8a'],
-    description: 'Blue scale for Diquat compounds'
+    colors: UNIFIED_PESTICIDE_COLORS,
+    description: 'Unified scale for Diquat compounds'
   },
   glyphosate: {
     name: 'Glyphosate',
-    colors: ['#f0fdf4', '#dcfce7', '#bbf7d0', '#86efac', '#4ade80', '#22c55e', '#16a34a', '#15803d', '#166534', '#14532d'],
-    description: 'Green scale for Glyphosate compounds'
+    colors: UNIFIED_PESTICIDE_COLORS,
+    description: 'Unified scale for Glyphosate compounds'
   },
   general: {
     name: 'General',
     colors: ['#fafafa', '#f4f4f5', '#e4e4e7', '#d4d4d8', '#a1a1aa', '#71717a', '#52525b', '#3f3f46', '#27272a', '#18181b'],
-    description: 'Gray scale for general pesticide data'
+    description: 'Gray scale for non-pesticide data'
+  },
+  pesticide: {
+    name: 'Pesticide',
+    colors: UNIFIED_PESTICIDE_COLORS,
+    description: 'Unified scale for total pesticide data'
+  },
+  applications: {
+    name: 'Applications',
+    colors: UNIFIED_PESTICIDE_COLORS,
+    description: 'Unified scale for pesticide applications'
   },
   organic: {
     name: 'Organic',
@@ -124,6 +137,8 @@ export function getColorScheme(mode: VisualizationMode): typeof COLOR_SCHEMES[ke
   if (mode.includes('diquat')) return COLOR_SCHEMES.diquat;
   if (mode.includes('glyphosate')) return COLOR_SCHEMES.glyphosate;
   if (mode === 'organic_status') return COLOR_SCHEMES.organic;
+  if (mode === 'total_pesticide_belastning') return COLOR_SCHEMES.pesticide;
+  if (mode === 'applications_count') return COLOR_SCHEMES.applications;
   return COLOR_SCHEMES.general;
 }
 
