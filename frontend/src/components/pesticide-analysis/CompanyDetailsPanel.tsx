@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Building2, MapPin, Calendar, Beaker, TrendingUp, Eye, Loader2 } from 'lucide-react';
-import { CompanySummary, CompanyDetailsResponse } from './types';
+import { CompanySummary, CompanyDetailsResponse, PesticideProduct } from './types';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -63,10 +63,10 @@ export default function CompanyDetailsPanel({ company, onViewFields }: CompanyDe
     });
   };
 
-  const getTopProducts = (yearData: { applications_by_product: Array<{ registration_number: string; product_name: string; total_belastning: number; applications: number }> }) => {
+  const getTopProducts = (yearData: { applications_by_product: PesticideProduct[] }) => {
     return yearData.applications_by_product
       .slice(0, 5)
-      .map((product: { registration_number: string; product_name: string; total_belastning: number; applications: number }) => (
+      .map((product: PesticideProduct) => (
         <div key={product.registration_number} className="flex justify-between items-center py-1">
           <div className="flex-1">
             <div className="text-xs font-medium truncate">

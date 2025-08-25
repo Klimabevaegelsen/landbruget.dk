@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Search, Filter, BarChart3 } from 'lucide-react';
@@ -30,7 +30,7 @@ export default function PesticideAnalysisVisualization() {
   const [error, setError] = useState<string | null>(null);
 
   // Fetch data from API
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!SUPABASE_URL) {
       setError('Supabase URL not configured');
       return;
@@ -66,7 +66,7 @@ export default function PesticideAnalysisVisualization() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
 
   // Fetch data when filters change
   useEffect(() => {
