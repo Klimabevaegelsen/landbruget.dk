@@ -224,7 +224,9 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                     parameter_id,
                     valid_time,
                     created,
-                    ST_Transform(geometry, '{self.config.source_crs}', '{self.config.target_crs}') as geometry
+                    ST_Transform(
+                        geometry, '{self.config.source_crs}', '{self.config.target_crs}'
+                    ) as geometry
                 FROM extracted_data
             """)
 
@@ -277,7 +279,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             """)
 
             self.log.info(
-                f"Successfully transformed {len(raw_data['features'])} monthly records for parameter {parameter_id}"
+                f"Successfully transformed {len(raw_data['features'])} monthly records "
+                f"for parameter {parameter_id}"
             )
             return processed_result
 
@@ -323,7 +326,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                 # Check if there was an error in bronze data
                 if "error" in raw_data:
                     self.log.warning(
-                        f"Bronze data contains error for parameter {parameter_id}: {raw_data['error']}"
+                        f"Bronze data contains error for parameter {parameter_id}: "
+                        f"{raw_data['error']}"
                     )
                     continue
 
@@ -374,7 +378,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
 
                         all_processed_data[parameter_id] = final_table_name
                         self.log.info(
-                            f"Successfully processed {row_count} monthly records for parameter {parameter_id}"
+                            f"Successfully processed {row_count} monthly records "
+                            f"for parameter {parameter_id}"
                         )
                     else:
                         self.log.warning(

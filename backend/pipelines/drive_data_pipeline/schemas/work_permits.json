@@ -1,0 +1,72 @@
+{
+  "name": "work_permits",
+  "description": "Schema for agricultural work permits data extracted from Danish Landbrugsvisum PDFs",
+  "version": "1.0",
+  "source_type": "PDF",
+  "columns": [
+    {
+      "name": "company_id",
+      "data_type": "VARCHAR",
+      "nullable": false,
+      "description": "CVR number of the company",
+      "pattern": "^[0-9]{8}$"
+    },
+    {
+      "name": "year",
+      "data_type": "INTEGER",
+      "nullable": false,
+      "description": "Year of the work permit",
+      "min_value": 2019,
+      "max_value": 2030
+    },
+    {
+      "name": "nationality",
+      "data_type": "VARCHAR",
+      "nullable": false,
+      "description": "Nationality/country of origin for the work permit holders"
+    },
+    {
+      "name": "first_permits_count",
+      "data_type": "INTEGER",
+      "nullable": false,
+      "description": "Number of first-time work permits issued",
+      "min_value": 0
+    },
+    {
+      "name": "source_file",
+      "data_type": "VARCHAR",
+      "nullable": false,
+      "description": "Name of the source PDF file"
+    },
+    {
+      "name": "extracted_at",
+      "data_type": "TIMESTAMP",
+      "nullable": false,
+      "description": "Timestamp when data was extracted from the PDF"
+    },
+    {
+      "name": "created_at",
+      "data_type": "TIMESTAMP",
+      "nullable": false,
+      "description": "Record creation timestamp"
+    },
+    {
+      "name": "updated_at",
+      "data_type": "TIMESTAMP",
+      "nullable": false,
+      "description": "Record last update timestamp"
+    }
+  ],
+  "primary_key": ["company_id", "year", "nationality"],
+  "partition_by": ["year"],
+  "metadata": {
+    "expected_countries": [
+      "Ukraine", "Indien", "Brasilien", "Vietnam", "Uganda", "Bangladesh",
+      "Filippinerne", "Tanzania", "Thailand", "Kirgizstan", "Usbekistan",
+      "Hviderusland", "Sydafrika", "Kina", "Ghana", "Marokko", "Polen",
+      "Rumænien", "Tyrkiet", "Etiopien", "Kenya", "Pakistan", "Albanien",
+      "Nordmakedonien"
+    ],
+    "expected_years": [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+  }
+}

@@ -48,7 +48,7 @@ class CadastralBronzeConfig(BaseJobConfig):
     url: str = "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS"
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()
-    save_local: bool = os.getenv("SAVE_LOCAL", False)
+    save_local: bool = os.getenv("SAVE_LOCAL", "False").lower() == "true"
 
 
 class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
@@ -273,19 +273,22 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
                     valid_count = len(features)
                     self.log.info(
-                        f"Chunk {start_index}: parsed {valid_count} valid features out of {len(feature_elements)} elements"
+                        f"Chunk {start_index}: parsed {valid_count} valid features "
+                        f"out of {len(feature_elements)} elements"
                     )
 
                     # Validate that we're getting reasonable numbers
                     if valid_count == 0 and len(feature_elements) > 0:
                         self.log.warning(
-                            f"No valid features parsed from {len(feature_elements)} elements - possible parsing issue"
+                            f"No valid features parsed from {len(feature_elements)} elements - "
+                            "possible parsing issue"
                         )
                     elif (
                         valid_count < len(feature_elements) * 0.5
                     ):  # If we're losing more than 50% of features
                         self.log.warning(
-                            f"Low feature parsing success rate: {valid_count}/{len(feature_elements)}"
+                            f"Low feature parsing success rate: "
+                            f"{valid_count}/{len(feature_elements)}"
                         )
 
                     return features
@@ -314,7 +317,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                             # Log progress every 10,000 features
                             if total_processed % 10000 == 0:
                                 logger.info(
-                                    f"Progress: {total_processed:,}/{total_features:,} features ({(total_processed / total_features) * 100:.1f}%)"
+                                    f"Progress: {total_processed:,}/{total_features:,} features "
+                                    f"({(total_processed / total_features) * 100:.1f}%)"
                                 )
 
                     except Exception as e:
@@ -357,7 +361,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 number_returned = root.get("numberReturned", "0")
 
                 self.log.info(
-                    f"WFS response metadata - numberMatched: {number_matched}, numberReturned: {number_returned}"
+                    f"WFS response metadata - numberMatched: {number_matched}, "
+                    f"numberReturned: {number_returned}"
                 )
 
                 if number_matched == "*":
@@ -385,7 +390,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 # Add sanity check for unreasonable numbers
                 if total_available > 5000000:  # Adjust threshold as needed
                     self.log.warning(
-                        f"Unusually high feature count: {total_available:,}. This may indicate an issue."
+                        f"Unusually high feature count: {total_available:,}. "
+                        "This may indicate an issue."
                     )
                 self.log.info(f"Total available features: {total_available:,}")
                 return total_available
@@ -422,8 +428,11 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
             return None
         self.log.info("Fetched raw data successfully")
 
-        # Save using existing method (already uses timestamped structure)
-        self._save_data(features_data, self.config.dataset, self.config.bucket, "bronze")
+        # Save raw JSON data to bronze layer with explicit JSON filename
+        self._save_data(
+            features_data, self.config.dataset, self.config.bucket, "bronze", 
+            filename="data.json"
+        )
         self.log.info("Saved raw data successfully")
 
         # Return data for in-memory passing

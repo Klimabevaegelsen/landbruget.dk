@@ -52,7 +52,8 @@ class DuckDBProcessor:
                 print("✅ DuckDB GCS HMAC authentication configured")
             else:
                 print(
-                    "ℹ️  GCS HMAC credentials not found (set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY)"
+                    "ℹ️  GCS HMAC credentials not found "
+                    "(set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY)"
                 )
         except Exception as e:
             print(f"Warning: Could not setup GCS HMAC authentication: {e}")
@@ -89,7 +90,7 @@ class DuckDBProcessor:
             table_name = f"{self.dataset_name}_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM read_parquet('{parquet_path}')
         """)
         return table_name
@@ -102,7 +103,7 @@ class DuckDBProcessor:
             table_name = f"{self.dataset_name}_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM read_csv('{csv_path}', AUTO_DETECT=TRUE, HEADER=TRUE)
         """)
         return table_name
@@ -115,7 +116,7 @@ class DuckDBProcessor:
             table_name = f"{self.dataset_name}_geo_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM ST_Read('{geospatial_path}')
         """)
         return table_name
@@ -147,7 +148,7 @@ class DuckDBProcessor:
             table_name = f"{self.dataset_name}_gcs_{int(time.time())}"
 
         self.conn.execute(f"""
-            CREATE TABLE {table_name} AS 
+            CREATE TABLE {table_name} AS
             SELECT * FROM read_parquet('{gcs_path}')
         """)
         return table_name

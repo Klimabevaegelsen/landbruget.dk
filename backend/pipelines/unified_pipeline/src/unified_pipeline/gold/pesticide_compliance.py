@@ -12,7 +12,8 @@ detect violations across the entire agricultural sector.
 
 THE BUSINESS PROBLEM:
 ====================
-- BMD database contains restriction dates for pesticide products (frist_for_anvendelse_og_besiddelse)
+- BMD database contains restriction dates for pesticide products
+  (frist_for_anvendelse_og_besiddelse)
 - Agricultural companies report pesticide applications with dates
 - We need to identify: "Which companies used restricted pesticides after the restriction date?"
 
@@ -59,6 +60,7 @@ from pydantic import ConfigDict, Field
 from requests.auth import HTTPBasicAuth
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+from unified_pipeline.gold.pesticide_unit_sanitization import PesticideUnitSanitizer
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
@@ -95,8 +97,34 @@ class PlanteITAPI:
         """Get all pesticide products approved for a specific crop."""
         try:
             response = self.session.get(f"{self.base_url}/Products?CropId={crop_id}", timeout=30)
+
+            # Check for authentication issues
+            if response.status_code == 401:
+                raise ValueError(
+                    f"Authentication failed for Plante IT API. "
+                    f"Please check credentials. Status: {response.status_code}"
+                )
+            elif response.status_code == 403:
+                raise ValueError(
+                    f"Access forbidden for Plante IT API. "
+                    f"Please check permissions. Status: {response.status_code}"
+                )
+
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+
+            # Validate response structure
+            if not isinstance(result, list):
+                logger.warning(
+                    f"Unexpected API response format for crop {crop_id}: "
+                    f"expected list, got {type(result)}"
+                )
+                logger.warning(f"Response content: {result}")
+
+            return result
+        except ValueError:
+            # Re-raise authentication/permission errors
+            raise
         except Exception as e:
             logger.error(f"Error fetching products for crop {crop_id}: {e}")
             return []
@@ -107,8 +135,34 @@ class PlanteITAPI:
             response = self.session.get(
                 f"{self.base_url}/Products/{product_id}?CropId={crop_id}", timeout=30
             )
+
+            # Check for authentication issues
+            if response.status_code == 401:
+                raise ValueError(
+                    f"Authentication failed for Plante IT API. "
+                    f"Please check credentials. Status: {response.status_code}"
+                )
+            elif response.status_code == 403:
+                raise ValueError(
+                    f"Access forbidden for Plante IT API. "
+                    f"Please check permissions. Status: {response.status_code}"
+                )
+
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+
+            # Validate response structure for product details
+            if result and not isinstance(result, dict):
+                logger.warning(
+                    f"Unexpected API response format for product {product_id}: "
+                    f"expected dict, got {type(result)}"
+                )
+                logger.warning(f"Response content: {result}")
+
+            return result
+        except ValueError:
+            # Re-raise authentication/permission errors
+            raise
         except Exception as e:
             logger.error(f"Error fetching product {product_id} for crop {crop_id}: {e}")
             return None
@@ -155,6 +209,11 @@ class PesticideComplianceGoldConfig(BaseJobConfig):
         default=True, description="Enable dosage compliance checking against API limits"
     )
 
+    # Enable unit sanitization
+    enable_unit_sanitization: bool = Field(
+        default=True, description="Enable statistical unit sanitization to fix unit mismatches"
+    )
+
     model_config = ConfigDict(extra="forbid")
 
     def apply_cli_filters(self, cli_config) -> None:
@@ -180,14 +239,20 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         super().__init__(config)
         self.logger = Logger.get_logger()
         self.conn = duckdb.connect()
-        self.gcs_access = GCSDataAccess()
+        self.gcs_access = GCSDataAccess(connection=self.conn)
 
         # Initialize API client for dosage compliance checking
         self.api_client = PlanteITAPI() if config.enable_dosage_compliance else None
         self.dosage_cache = {}  # Cache API dosage data to avoid repeated requests
 
         # Agricultural year mappings (August 1 - July 31)
+        # Includes years where we have pesticide application data available
         self.agricultural_years = {
+            "2015_2016": {"start": "2015-08-01", "end": "2016-07-31", "year": 2015},
+            "2016_2017": {"start": "2016-08-01", "end": "2017-07-31", "year": 2016},
+            "2017_2018": {"start": "2017-08-01", "end": "2018-07-31", "year": 2017},
+            "2018_2019": {"start": "2018-08-01", "end": "2019-07-31", "year": 2018},
+            "2019_2020": {"start": "2019-08-01", "end": "2020-07-31", "year": 2019},
             "2020_2021": {"start": "2020-08-01", "end": "2021-07-31", "year": 2020},
             "2021_2022": {"start": "2021-08-01", "end": "2022-07-31", "year": 2021},
             "2022_2023": {"start": "2022-08-01", "end": "2023-07-31", "year": 2022},
@@ -248,6 +313,14 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             await self._load_bmd_data()
             await self._load_pesticide_data()
             await self._load_agricultural_fields_data()
+
+            # Apply unit sanitization before compliance analysis
+            if self.config.enable_unit_sanitization:
+                await self._sanitize_pesticide_units()
+
+            # Create registration mismatch detection table
+            await self._create_registration_mismatch_table()
+
             await self._load_dosage_limits()
 
             # Determine years to analyze
@@ -265,6 +338,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                 total_issues += (
                     year_results.get("timing_violations", 0)
                     + year_results.get("withdrawn_product_uses", 0)
+                    + year_results.get("potential_registration_errors", 0)
                     + year_results.get("dosage_violations", 0)
                 )
                 total_companies.update(
@@ -284,7 +358,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             await self._save_results(all_results, summary_stats)
 
             self.logger.info(
-                f"✅ Compliance analysis completed: {total_issues} issues across {len(total_companies)} companies"
+                f"✅ Compliance analysis completed: {total_issues} issues "
+                f"across {len(total_companies)} companies"
             )
 
             return {
@@ -321,19 +396,22 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             self.gcs_access.query_parquet_native(
                 latest_path,
                 """
-                SELECT 
-                    registrerings_nr as registration_number,
-                    produktnavn as product_name,
-                    aktivstofnavn_e as active_substances,
-                    produktstatus as product_status,
-                    godkendelsesdato as approval_date,
-                    udløbsdato as expiry_date,
-                    frist_for_anvendelse_og_besiddelse as restriction_date,
+                SELECT
+                    registrerings_nr,
+                    produktnavn,
+                    aktivstofnavn_e,
+                    produktstatus,
+                    godkendelsesdato,
+                    udløbsdato,
+                    frist_for_anvendelse_og_besiddelse,
                     -- Parse restriction date for comparison
                     TRY_CAST(frist_for_anvendelse_og_besiddelse AS DATE) as restriction_date_parsed,
                     -- Additional fields for analysis
-                    formulering as formulation,
-                    anvendelse as application_area
+                    formulering,
+                    anvendelse,
+                    -- Unit sanitization columns (CRITICAL: Required for unit analysis)
+                    enhed_er,
+                    koncentration_er
                 WHERE registrerings_nr IS NOT NULL
                     AND registrerings_nr != ''
             """,
@@ -345,19 +423,24 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             with self.gcs_access._temp_download(latest_path) as temp_file:
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE bmd_data AS
-                    SELECT 
-                        registrerings_nr as registration_number,
-                        produktnavn as product_name,
-                        aktivstofnavn_e as active_substances,
-                        produktstatus as product_status,
-                        godkendelsesdato as approval_date,
-                        udløbsdato as expiry_date,
-                        frist_for_anvendelse_og_besiddelse as restriction_date,
+                    SELECT
+                        registrerings_nr,
+                        produktnavn,
+                        aktivstofnavn_e,
+                        produktstatus,
+                        godkendelsesdato,
+                        udløbsdato,
+                        frist_for_anvendelse_og_besiddelse,
                         -- Parse restriction date for comparison
-                        TRY_CAST(frist_for_anvendelse_og_besiddelse AS DATE) as restriction_date_parsed,
+                        TRY_CAST(
+                            frist_for_anvendelse_og_besiddelse AS DATE
+                        ) as restriction_date_parsed,
                         -- Additional fields for analysis
-                        formulering as formulation,
-                        verwendelse as application_area
+                        formulering,
+                        anvendelse,
+                        -- Unit sanitization columns (CRITICAL: Required for unit analysis)
+                        enhed_er,
+                        koncentration_er
                     FROM read_parquet('{temp_file}')
                     WHERE registrerings_nr IS NOT NULL
                     AND registrerings_nr != ''
@@ -376,14 +459,33 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         """Load pesticide disaggregation data from latest gold layer."""
         self.logger.info("📥 Loading pesticide disaggregation data (field-level allocations)")
 
-        # Find latest pesticide disaggregation gold data with year-specific pattern
-        pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
+        # Determine which year's data to load
+        if self.config.pesticide_year is not None:
+            # Matrix job mode: load specific year's data
+            target_agricultural_year = (
+                f"{self.config.pesticide_year}_{self.config.pesticide_year + 1}"
+            )
+            pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_{target_agricultural_year}/*/pesticide_disaggregation_{target_agricultural_year}.parquet"
+            self.logger.info(
+                f"🎯 Matrix job mode: Loading data for agricultural year {target_agricultural_year}"
+            )
+        else:
+            # Single job mode: load most recent data
+            pattern = f"gs://{self.config.bucket}/gold/pesticide_disaggregation_*/*/pesticide_disaggregation_*.parquet"
+            self.logger.info("📊 Single job mode: Loading most recent pesticide data")
+
         files = self.gcs_access.list_files_with_timestamps(pattern)
 
         if not files:
-            raise Exception("Pesticide disaggregation data not found in gold layer")
+            if self.config.pesticide_year is not None:
+                raise Exception(
+                    f"Pesticide disaggregation data not found for agricultural year "
+                    f"{target_agricultural_year}"
+                )
+            else:
+                raise Exception("Pesticide disaggregation data not found in gold layer")
 
-        # Sort by timestamp to get the most recent file
+        # Sort by timestamp to get the most recent file for the target year
         files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
         latest_path, timestamp = files_sorted[0]
 
@@ -401,14 +503,28 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         self.logger.info(f"📄 Loading disaggregated pesticide data from: {latest_path}")
         self.logger.info(
-            f"📅 Agricultural year from path: {agricultural_year_from_path} (application year: {application_year})"
+            f"📅 Agricultural year from path: {agricultural_year_from_path} "
+            f"(application year: {application_year})"
         )
+
+        # Verify we loaded the expected year in matrix job mode
+        if self.config.pesticide_year is not None:
+            expected_ag_year = f"{self.config.pesticide_year}_{self.config.pesticide_year + 1}"
+            if agricultural_year_from_path != expected_ag_year:
+                self.logger.warning(
+                    f"⚠️ Expected agricultural year {expected_ag_year} "
+                    f"but loaded {agricultural_year_from_path}"
+                )
+            else:
+                self.logger.info(
+                    f"✅ Successfully loaded expected agricultural year {expected_ag_year}"
+                )
 
         # Load disaggregated pesticide data using proper GCS access pattern
         with self.gcs_access._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pesticide_applications AS
-                SELECT 
+                SELECT
                     -- Use CVR from disaggregated data (standardized)
                     cvr_number,
                     PesticideName as pesticide_name,
@@ -441,7 +557,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         app_count = self.conn.execute("SELECT COUNT(*) FROM pesticide_applications").fetchone()[0]
         years_available = self.conn.execute(
-            "SELECT DISTINCT agricultural_year FROM pesticide_applications WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
+            "SELECT DISTINCT agricultural_year FROM pesticide_applications "
+            "WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
         ).fetchall()
 
         field_count = self.conn.execute(
@@ -453,32 +570,73 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         self.logger.info(f"📅 Agricultural years available: {[y[0] for y in years_available]}")
 
     async def _load_agricultural_fields_data(self) -> None:
-        """Load agricultural fields data to get crop information for mapping."""
-        self.logger.info("📥 Loading agricultural fields data for crop mapping")
+        """Load FVM marker data to get crop information for mapping using Y+1 temporal pattern."""
+        self.logger.info("📥 Loading FVM marker data for crop mapping")
 
-        # Find latest agricultural fields data
-        pattern = (
-            f"gs://{self.config.bucket}/gold/agricultural_fields_*/*/agricultural_fields_*.parquet"
-        )
-        files = self.gcs_access.list_files_with_timestamps(pattern)
+        # Get the application years from pesticide data to determine correct field years
+        application_years = self.conn.execute("""
+            SELECT DISTINCT application_year
+            FROM pesticide_applications
+            ORDER BY application_year
+        """).fetchall()
 
-        if not files:
+        if not application_years:
             self.logger.warning(
-                "⚠️ Agricultural fields data not found - crop mapping will be limited"
+                "⚠️ No pesticide application data found - cannot determine field years"
             )
             return
 
-        # Sort by timestamp to get the most recent file
-        files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
-        latest_path, timestamp = files_sorted[0]
+        # Use Y+1 temporal pattern: pesticide year X uses field year X+1
+        # This matches the proven logic from pesticide disaggregation
+        field_years = [year[0] + 1 for year in application_years]
+        pesticide_years = [y[0] for y in application_years]
+        self.logger.info(
+            f"🗓️ Using Y+1 temporal pattern: pesticide years {pesticide_years} → "
+            f"field years {field_years}"
+        )
 
-        self.logger.info(f"📄 Loading agricultural fields data from: {latest_path}")
+        # Try to find the best matching FVM marker data for each field year
+        agricultural_fields_loaded = False
 
-        # Load agricultural fields data using proper GCS access pattern
+        for field_year in sorted(field_years, reverse=True):  # Try newest first
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{field_year}/*/data.parquet"
+            files = self.gcs_access.list_files_with_timestamps(pattern)
+
+            if files:
+                # Sort by timestamp to get the most recent file for this year
+                files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
+                latest_path, timestamp = files_sorted[0]
+
+                self.logger.info(
+                    f"📄 Loading FVM marker data from: {latest_path} (field year {field_year})"
+                )
+                agricultural_fields_loaded = True
+                break
+
+        if not agricultural_fields_loaded:
+            # Fallback to latest available if no exact year match found
+            self.logger.warning(
+                f"⚠️ No FVM marker data found for field years {field_years}, "
+                "falling back to latest available"
+            )
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_*/*/data.parquet"
+            files = self.gcs_access.list_files_with_timestamps(pattern)
+
+            if not files:
+                self.logger.warning("⚠️ FVM marker data not found - crop mapping will be limited")
+                return
+
+            files_sorted = sorted(files, key=lambda x: x[1], reverse=True)
+            latest_path, timestamp = files_sorted[0]
+            self.logger.info(
+                f"📄 Loading FVM marker data from: {latest_path} (fallback - latest available)"
+            )
+
+        # Load FVM marker data using proper GCS access pattern
         with self.gcs_access._temp_download(latest_path) as temp_file:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE agricultural_fields AS
-                SELECT 
+                SELECT
                     field_uuid,
                     field_id,
                     CAST(crop_code AS VARCHAR) as crop_code,
@@ -499,8 +657,194 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         ).fetchone()[0]
 
         self.logger.info(
-            f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes"
+            f"📊 Loaded {field_count:,} agricultural fields with {crop_count:,} unique crop codes "
+            f"from FVM marker data"
         )
+
+    async def _sanitize_pesticide_units(self) -> None:
+        """Apply statistical unit sanitization to fix unit mismatches."""
+        self.logger.info("🧹 Applying statistical unit sanitization to pesticide data")
+
+        try:
+            # Initialize sanitizer
+            sanitizer = PesticideUnitSanitizer(self.conn)
+
+            # Apply sanitization
+            sanitized_table = sanitizer.sanitize_pesticide_units(
+                pesticide_table="pesticide_applications", bmd_table="bmd_data"
+            )
+
+            # Get sanitization summary
+            summary = sanitizer.get_sanitization_summary(sanitized_table)
+
+            # Replace original table with sanitized version
+            self.conn.execute(f"""
+                DROP TABLE IF EXISTS pesticide_applications_original;
+                ALTER TABLE pesticide_applications RENAME TO pesticide_applications_original;
+                ALTER TABLE {sanitized_table} RENAME TO pesticide_applications;
+            """)
+
+            # Log sanitization results
+            self.logger.info("✅ Unit sanitization completed successfully")
+            self.logger.info(f"   📊 Total records: {summary['total_records']:,}")
+            self.logger.info(f"   ⚠️ Unit mismatches detected: {summary['mismatches_detected']:,}")
+            self.logger.info(
+                f"   🔧 Auto-corrected: {summary['auto_corrected']:,} "
+                f"({summary['correction_rate']:.1f}%)"
+            )
+            self.logger.info(
+                f"   🏷️ Manual review required: {summary['manual_review_required']:,} "
+                f"({summary['manual_review_rate']:.1f}%)"
+            )
+            self.logger.info(f"   🧪 Products corrected: {summary['products_corrected']:,}")
+            self.logger.info(
+                f"   ⚠️ Products needing review: {summary['products_needing_review']:,}"
+            )
+
+            # Store sanitization summary for reporting
+            self.sanitization_summary = summary
+
+        except Exception as e:
+            self.logger.error(f"❌ Unit sanitization failed: {e}")
+            self.logger.warning("⚠️ Continuing with unsanitized data")
+            # Continue without sanitization rather than failing the entire pipeline
+
+    async def _create_registration_mismatch_table(self) -> None:
+        """Create table to detect registration number mismatches for identical products."""
+        self.logger.info("🔍 Creating registration mismatch detection table")
+
+        try:
+            # Create a table that identifies potential registration mismatches
+            # where farmers used expired registrations but valid alternatives exist
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE registration_mismatch_detection AS
+                WITH expired_products AS (
+                    SELECT
+                        LOWER(TRIM(produktnavn)) as normalized_name,
+                        LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))) as normalized_ingredients,
+                        COALESCE(
+                            TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE),
+                            0.0
+                        ) as concentration,
+                        COALESCE(enhed_er, '') as concentration_unit,
+                        registrerings_nr as expired_registration,
+                        produktstatus as expired_status,
+                        udløbsdato as expired_expiry,
+                        frist_for_anvendelse_og_besiddelse as expired_restriction
+                    FROM bmd_data
+                    WHERE produktstatus IN (
+                        'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
+                    )
+                    AND produktnavn IS NOT NULL
+                    AND produktnavn != ''
+                    AND registrerings_nr IS NOT NULL
+                    AND registrerings_nr != ''
+                ),
+                valid_products AS (
+                    SELECT
+                        LOWER(TRIM(produktnavn)) as normalized_name,
+                        LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))) as normalized_ingredients,
+                        COALESCE(
+                            TRY_CAST(REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE),
+                            0.0
+                        ) as concentration,
+                        COALESCE(enhed_er, '') as concentration_unit,
+                        registrerings_nr as valid_registration,
+                        produktstatus as valid_status,
+                        udløbsdato as valid_expiry,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY
+                                LOWER(TRIM(produktnavn)),
+                                LOWER(TRIM(COALESCE(aktivstofnavn_e, ''))),
+                                COALESCE(
+                                    TRY_CAST(
+                                        REPLACE(COALESCE(koncentration_er, '0'), ',', '.') AS DOUBLE
+                                    ),
+                                    0.0
+                                ),
+                                COALESCE(enhed_er, '')
+                            ORDER BY
+                                CASE WHEN produktstatus = 'Produkt godkendt' THEN 1 ELSE 2 END,
+                                registrerings_nr
+                        ) as rank
+                    FROM bmd_data
+                    WHERE produktstatus NOT IN (
+                        'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
+                    )
+                    AND produktnavn IS NOT NULL
+                    AND produktnavn != ''
+                    AND registrerings_nr IS NOT NULL
+                    AND registrerings_nr != ''
+                )
+                SELECT
+                    e.normalized_name,
+                    e.normalized_ingredients,
+                    e.concentration,
+                    e.concentration_unit,
+                    e.expired_registration,
+                    e.expired_status,
+                    e.expired_expiry,
+                    e.expired_restriction,
+                    v.valid_registration as suggested_valid_registration,
+                    v.valid_status,
+                    v.valid_expiry
+                FROM expired_products e
+                INNER JOIN valid_products v ON (
+                    e.normalized_name = v.normalized_name
+                    AND e.normalized_ingredients = v.normalized_ingredients
+                    AND e.concentration = v.concentration
+                    AND e.concentration_unit = v.concentration_unit
+                    AND v.rank = 1  -- Get the best valid alternative
+                )
+            """)
+
+            # Get statistics
+            mismatch_count = self.conn.execute(
+                "SELECT COUNT(*) FROM registration_mismatch_detection"
+            ).fetchone()[0]
+            product_groups = self.conn.execute(
+                "SELECT COUNT(DISTINCT normalized_name) FROM registration_mismatch_detection"
+            ).fetchone()[0]
+
+            self.logger.info("📊 Created registration mismatch detection table:")
+            self.logger.info(f"   - {mismatch_count:,} potential mismatch mappings")
+            self.logger.info(f"   - {product_groups:,} product groups with alternatives")
+
+            # Log some examples for verification
+            examples = self.conn.execute("""
+                SELECT
+                    normalized_name,
+                    expired_registration,
+                    suggested_valid_registration,
+                    concentration,
+                    concentration_unit
+                FROM registration_mismatch_detection
+                ORDER BY normalized_name
+                LIMIT 5
+            """).fetchall()
+
+            self.logger.info("📋 Example mismatch mappings:")
+            for name, expired, valid, conc, unit in examples:
+                self.logger.info(f"   {name}: {expired} → {valid} ({conc} {unit})")
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to create registration mismatch detection table: {e}")
+            # Create empty table to avoid errors downstream
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE registration_mismatch_detection (
+                    normalized_name VARCHAR,
+                    normalized_ingredients VARCHAR,
+                    concentration DOUBLE,
+                    concentration_unit VARCHAR,
+                    expired_registration VARCHAR,
+                    expired_status VARCHAR,
+                    expired_expiry DATE,
+                    expired_restriction DATE,
+                    suggested_valid_registration VARCHAR,
+                    valid_status VARCHAR,
+                    valid_expiry DATE
+                )
+            """)
 
     async def _load_dosage_limits(self) -> None:
         """Load dosage limits from API for compliance checking."""
@@ -528,7 +872,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         # Get unique crop-pesticide combinations that need dosage limits
         combinations = self.conn.execute("""
-            SELECT DISTINCT 
+            SELECT DISTINCT
                 COALESCE(f.crop_code, 'UNKNOWN') as crop_code,
                 a.pesticide_registration_number
             FROM pesticide_applications a
@@ -564,16 +908,41 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             # Fetch from API
             products = self.api_client.get_products_for_crop(api_crop_id)
 
+            # Check if we're getting empty responses (could indicate auth issues)
+            if processed == 1 and not products:
+                self.logger.warning(
+                    f"⚠️ First API call returned no products for crop {api_crop_id}. "
+                    f"This might indicate authentication issues."
+                )
+            elif processed <= 10 and not products:
+                self.logger.warning(
+                    f"⚠️ No products returned for crop {api_crop_id} (call #{processed})"
+                )
+
             for product in products:
                 if str(product.get("RegNumber", "")).strip() == str(reg_number).strip():
+                    # Get product ID - try different possible field names
+                    product_id = (
+                        product.get("Id")
+                        or product.get("id")
+                        or product.get("ID")
+                        or product.get("ProductId")
+                    )
+                    if not product_id:
+                        self.logger.warning(
+                            f"⚠️ No product ID found for reg_number {reg_number}. "
+                            f"Available fields: {list(product.keys())}"
+                        )
+                        continue
+
                     # Get detailed product info
-                    detail = self.api_client.get_product_detail(product["Id"], api_crop_id)
+                    detail = self.api_client.get_product_detail(product_id, api_crop_id)
                     if detail:
                         dosage_info = {
                             "crop_code": crop_code,
                             "api_crop_id": api_crop_id,
                             "api_crop_name": api_crop_names.get(api_crop_id, ""),
-                            "registration_number": reg_number,
+                            "registrerings_nr": reg_number,
                             "product_name": detail.get("Name", ""),
                             "max_dosage_app": detail.get("MaxDosageApp"),
                             "product_unit": detail.get("ProductUnit", ""),
@@ -585,14 +954,48 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         # Store dosage limits in DuckDB table
         if dosage_data:
-            self.conn.execute(
-                "CREATE OR REPLACE TABLE dosage_limits AS SELECT * FROM ?", [dosage_data]
-            )
+            # Create table schema first
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE dosage_limits (
+                    crop_code VARCHAR,
+                    api_crop_id INTEGER,
+                    api_crop_name VARCHAR,
+                    registrerings_nr VARCHAR,
+                    product_name VARCHAR,
+                    max_dosage_app DOUBLE,
+                    product_unit VARCHAR,
+                    max_applications INTEGER
+                )
+            """)
+
+            # Insert data using prepared statement
+            insert_sql = """
+                INSERT INTO dosage_limits VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """
+
+            for item in dosage_data:
+                self.conn.execute(
+                    insert_sql,
+                    [
+                        item.get("crop_code"),
+                        item.get("api_crop_id"),
+                        item.get("api_crop_name"),
+                        item.get("registrerings_nr"),
+                        item.get("product_name"),
+                        item.get("max_dosage_app"),
+                        item.get("product_unit"),
+                        item.get("max_applications"),
+                    ],
+                )
+
             limit_count = len(dosage_data)
             self.logger.info(f"📊 Loaded {limit_count} dosage limits from API")
         else:
             self.conn.execute(
-                "CREATE OR REPLACE TABLE dosage_limits (crop_code VARCHAR, api_crop_id INTEGER, api_crop_name VARCHAR, registration_number VARCHAR, product_name VARCHAR, max_dosage_app DOUBLE, product_unit VARCHAR, max_applications INTEGER)"
+                "CREATE OR REPLACE TABLE dosage_limits ("
+                "crop_code VARCHAR, api_crop_id INTEGER, api_crop_name VARCHAR, "
+                "registrerings_nr VARCHAR, product_name VARCHAR, max_dosage_app DOUBLE, "
+                "product_unit VARCHAR, max_applications INTEGER)"
             )
             self.logger.warning("⚠️ No dosage limits found from API")
 
@@ -621,22 +1024,67 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             return None
         return our_dosage / api_max if api_max > 0 else None
 
+    def _check_corrected_dosage_unit_exists(self) -> bool:
+        """
+        Check if the corrected_dosage_unit column exists in the pesticide_applications table.
+        This column is added by the unit sanitization process.
+
+        Returns:
+            True if the column exists, False otherwise
+        """
+        try:
+            # Try to query the column to see if it exists
+            self.conn.execute("""
+                SELECT corrected_dosage_unit
+                FROM pesticide_applications
+                LIMIT 1
+            """)
+            return True
+        except Exception:
+            # Column doesn't exist
+            return False
+
     def _get_years_to_analyze(self) -> List[str]:
-        """Determine which agricultural years to analyze."""
+        """Determine which agricultural years to analyze based on available pesticide data."""
         if self.config.pesticide_year is not None:
-            # Analyze specific year
+            # Matrix job mode: analyze specific year
             target_year = f"{self.config.pesticide_year}_{self.config.pesticide_year + 1}"
-            if target_year in self.agricultural_years:
+            self.logger.info(f"🎯 Matrix job mode: analyzing specific year {target_year}")
+
+            # Check if the year exists in the pesticide applications data
+            year_exists = (
+                self.conn.execute(
+                    "SELECT COUNT(*) FROM pesticide_applications WHERE agricultural_year = ?",
+                    [target_year],
+                ).fetchone()[0]
+                > 0
+            )
+
+            if year_exists:
+                self.logger.info(f"✅ Found pesticide data for {target_year}")
                 return [target_year]
             else:
-                self.logger.warning(f"Specified year {self.config.pesticide_year} not available")
+                self.logger.warning(f"❌ No pesticide data found for {target_year}")
                 return []
         else:
-            # Analyze all available years
+            # Single job mode: analyze all available years (mainly for testing/development)
+            self.logger.info("📊 Single job mode: discovering all available years")
             available_years = self.conn.execute(
-                "SELECT DISTINCT agricultural_year FROM pesticide_applications WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
+                "SELECT DISTINCT agricultural_year FROM pesticide_applications "
+                "WHERE agricultural_year IS NOT NULL ORDER BY agricultural_year"
             ).fetchall()
-            return [year[0] for year in available_years if year[0] in self.agricultural_years]
+
+            available_years_list = [year[0] for year in available_years]
+            self.logger.info(
+                f"📅 Agricultural years found in pesticide data: {available_years_list}"
+            )
+
+            if available_years_list:
+                self.logger.info(f"✅ Will analyze all available years: {available_years_list}")
+                return available_years_list
+            else:
+                self.logger.warning("❌ No agricultural years found in pesticide data")
+                return []
 
     async def _analyze_agricultural_year(self, ag_year: str) -> Dict[str, Any]:
         """
@@ -652,13 +1100,26 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 
         year_info = self.agricultural_years[ag_year]
 
-        # Detect potential compliance issues by comparing restriction dates with agricultural year period
+        # Check if corrected_dosage_unit column exists (from unit sanitization)
+        has_corrected_units = self._check_corrected_dosage_unit_exists()
+
+        # Determine the dosage unit expression based on whether unit sanitization was applied
+        if has_corrected_units:
+            dosage_unit_expr = "COALESCE(a.corrected_dosage_unit, a.dosage_unit)"
+            self.logger.debug("Using corrected dosage units from sanitization process")
+        else:
+            dosage_unit_expr = "a.dosage_unit"
+            self.logger.debug("Using original dosage units (no sanitization applied)")
+
+        # Detect potential compliance issues by comparing restriction dates with
+        # agricultural year period
         # Using disaggregated data which has field-level allocations with field_uuid
         # Issues occur when:
-        # 1. POTENTIAL_VIOLATION: Restriction date is before the agricultural year (already restricted when applied)
+        # 1. POTENTIAL_VIOLATION: Restriction date is before the agricultural year
+        #    (already restricted when applied)
         # 2. WITHDRAWN_PRODUCT_USE: Product status indicates withdrawal/expiry
         compliance_query = f"""
-        SELECT 
+        SELECT
             -- Essential field and pesticide information only
             a.field_uuid,
             a.agricultural_year,
@@ -672,49 +1133,75 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             COALESCE(d.api_crop_name, NULL) as api_crop_name_from_plante_it,
             -- BMD regulatory information
             b.restriction_date_parsed,
-            b.product_status,
+            b.produktstatus,
+            -- Registration mismatch detection
+            rm.suggested_valid_registration,
+            rm.valid_status as suggested_registration_status,
+            rm.valid_expiry as suggested_registration_expiry,
+            CASE
+                WHEN rm.expired_registration IS NOT NULL THEN TRUE
+                ELSE FALSE
+            END as is_potential_registration_error,
             -- Dosage compliance information
             COALESCE(d.max_dosage_app, NULL) as api_max_dosage_per_ha,
             COALESCE(d.product_unit, NULL) as api_dosage_unit,
             -- Calculate dosage per hectare for comparison
-            CASE 
-                WHEN a.allocated_area_ha > 0 THEN a.dosage_quantity / a.allocated_area_ha
+            CASE
+                WHEN a.area_ha > 0 THEN a.dosage_quantity / a.area_ha
                 ELSE NULL
             END as actual_dosage_per_ha,
-            -- Dosage compliance status
-            CASE 
+            -- Dosage compliance status (using corrected units if available)
+            CASE
                 WHEN d.max_dosage_app IS NULL THEN 'NO_API_LIMIT'
-                WHEN a.dosage_unit != d.product_unit THEN 'UNIT_MISMATCH'
-                WHEN a.allocated_area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
-                WHEN (a.dosage_quantity / a.allocated_area_ha) <= d.max_dosage_app THEN 'DOSAGE_COMPLIANT'
-                WHEN (a.dosage_quantity / a.allocated_area_ha) <= d.max_dosage_app * 2.0 THEN 'MODERATE_OVERDOSE'
+                WHEN {dosage_unit_expr} != d.product_unit
+                    THEN 'UNIT_MISMATCH'
+                WHEN a.area_ha <= 0 OR a.dosage_quantity IS NULL THEN 'NO_DOSAGE_DATA'
+                WHEN (
+                    a.dosage_quantity / a.area_ha
+                ) <= d.max_dosage_app THEN 'DOSAGE_COMPLIANT'
+                WHEN (
+                    a.dosage_quantity / a.area_ha
+                ) <= d.max_dosage_app * 2.0 THEN 'MODERATE_OVERDOSE'
                 ELSE 'MAJOR_OVERDOSE'
             END as dosage_compliance_status,
-            -- Dosage ratio (actual / allowed)
-            CASE 
-                WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0 AND a.allocated_area_ha > 0 
-                     AND a.dosage_unit = d.product_unit THEN 
-                    (a.dosage_quantity / a.allocated_area_ha) / d.max_dosage_app
+            -- Dosage ratio (actual / allowed) using corrected units
+            CASE
+                WHEN d.max_dosage_app IS NOT NULL AND d.max_dosage_app > 0
+                     AND a.area_ha > 0
+                     AND {dosage_unit_expr} = d.product_unit THEN
+                    (a.dosage_quantity / a.area_ha) / d.max_dosage_app
                 ELSE NULL
             END as dosage_ratio,
-            -- Categorize compliance status
-            CASE 
+            -- Categorize compliance status (enhanced with registration mismatch detection)
+            CASE
                 WHEN b.restriction_date_parsed < DATE '{year_info["start"]}' THEN 'TIMING_VIOLATION'
-                WHEN b.product_status = 'Tilbagekaldt' OR b.product_status = 'Udløbet' THEN 'WITHDRAWN_PRODUCT_USE'
-                WHEN d.max_dosage_app IS NOT NULL AND a.allocated_area_ha > 0 AND a.dosage_quantity IS NOT NULL
-                     AND a.dosage_unit = d.product_unit 
-                     AND (a.dosage_quantity / a.allocated_area_ha) > d.max_dosage_app THEN 'DOSAGE_VIOLATION'
+                WHEN (b.produktstatus IN (
+            'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
+        ))
+                     AND rm.expired_registration IS NOT NULL THEN 'POTENTIAL_REGISTRATION_ERROR'
+                WHEN b.produktstatus IN (
+            'Tilbagekaldt', 'Udløbet', 'Produkt udløbet', 'Produkt afmeldt'
+        ) THEN 'WITHDRAWN_PRODUCT_USE'
+                WHEN d.max_dosage_app IS NOT NULL AND a.area_ha > 0
+                     AND a.dosage_quantity IS NOT NULL
+                     AND {dosage_unit_expr} = d.product_unit
+                     AND (
+                         a.dosage_quantity / a.area_ha
+                     ) > d.max_dosage_app THEN 'DOSAGE_VIOLATION'
                 ELSE 'COMPLIANT'
             END as compliance_status,
             -- Analysis metadata
             '{ag_year}' as agricultural_year_analyzed,
             CURRENT_TIMESTAMP as analysis_timestamp
         FROM pesticide_applications a
-        INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registration_number
+        INNER JOIN bmd_data b ON a.pesticide_registration_number = b.registrerings_nr
         LEFT JOIN agricultural_fields f ON a.field_uuid = f.field_uuid
         LEFT JOIN dosage_limits d ON (
-            f.crop_code = d.crop_code 
-            AND a.pesticide_registration_number = d.registration_number
+            f.crop_code = d.crop_code
+            AND a.pesticide_registration_number = d.registrerings_nr
+        )
+        LEFT JOIN registration_mismatch_detection rm ON (
+            a.pesticide_registration_number = rm.expired_registration
         )
         WHERE a.agricultural_year = '{ag_year}'
         """
@@ -734,6 +1221,9 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         )
         withdrawn_uses = len(
             compliance_df[compliance_df["compliance_status"] == "WITHDRAWN_PRODUCT_USE"]
+        )
+        potential_registration_errors = len(
+            compliance_df[compliance_df["compliance_status"] == "POTENTIAL_REGISTRATION_ERROR"]
         )
         dosage_violations = len(
             compliance_df[compliance_df["compliance_status"] == "DOSAGE_VIOLATION"]
@@ -775,6 +1265,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "agricultural_year": ag_year,
             "timing_violations": timing_violations,
             "withdrawn_product_uses": withdrawn_uses,
+            "potential_registration_errors": potential_registration_errors,
             "dosage_violations": dosage_violations,
             "compliant_applications": compliant_applications,
             "total_applications": total_applications,
@@ -792,16 +1283,24 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "analysis_date": datetime.now().isoformat(),
         }
 
+        # Note: Table cleanup moved to _save_results to avoid dropping before export
+
         total_violations = timing_violations + withdrawn_uses + dosage_violations
         compliance_rate = (
             (compliant_applications / total_applications * 100) if total_applications > 0 else 0
         )
 
         self.logger.info(
-            f"📊 {ag_year}: {total_violations} total violations ({timing_violations} timing, {withdrawn_uses} withdrawn, {dosage_violations} dosage)"
+            f"📊 {ag_year}: {total_violations} total violations "
+            f"({timing_violations} timing, {withdrawn_uses} withdrawn, {dosage_violations} dosage)"
         )
         self.logger.info(
-            f"✅ Compliance rate: {compliance_rate:.1f}% ({compliant_applications}/{total_applications} applications)"
+            f"🔍 {potential_registration_errors} potential registration errors detected "
+            f"(may be input mistakes rather than real violations)"
+        )
+        self.logger.info(
+            f"✅ Compliance rate: {compliance_rate:.1f}% "
+            f"({compliant_applications}/{total_applications} applications)"
         )
         self.logger.info(
             f"🏢 Companies analyzed: {companies_analyzed}, Fields analyzed: {fields_analyzed}"
@@ -849,7 +1348,7 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         "fields_affected": set(),
                     }
                 all_companies[cvr]["total_issues"] += 1
-                all_companies[cvr]["total_area_ha"] += issue["allocated_area_ha"]
+                all_companies[cvr]["total_area_ha"] += issue["area_ha"]
                 all_companies[cvr]["products_used"].add(issue["pesticide_registration_number"])
                 all_companies[cvr]["fields_affected"].add(issue["field_uuid"])
 
@@ -879,7 +1378,10 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
             "top_companies_with_issues": top_companies_with_issues,
             "analysis_date": datetime.now().isoformat(),
             "methodology": {
-                "issue_detection": "Field-level applications of products with restriction dates before agricultural year",
+                "issue_detection": (
+                    "Field-level applications of products with restriction dates "
+                    "before agricultural year"
+                ),
                 "data_sources": [
                     "BMD pesticide database",
                     "Pesticide disaggregation (field-level allocations)",
@@ -932,7 +1434,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     f"🔗 API crop name column present: {'api_crop_name' in column_names}"
                 )
                 self.logger.info(
-                    f"🌐 Plante IT crop name column present: {'api_crop_name_from_plante_it' in column_names}"
+                    f"🌐 Plante IT crop name column present: "
+                    f"{'api_crop_name_from_plante_it' in column_names}"
                 )
                 self.logger.info(
                     f"🧪 Pesticide name column present: {'pesticide_name' in column_names}"
@@ -941,13 +1444,23 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                     f"💊 API max dosage column present: {'api_max_dosage_per_ha' in column_names}"
                 )
                 self.logger.info(
-                    f"📊 Actual dosage per ha column present: {'actual_dosage_per_ha' in column_names}"
+                    f"📊 Actual dosage per ha column present: "
+                    f"{'actual_dosage_per_ha' in column_names}"
                 )
                 self.logger.info(
-                    f"⚖️ Dosage compliance status column present: {'dosage_compliance_status' in column_names}"
+                    f"⚖️ Dosage compliance status column present: "
+                    f"{'dosage_compliance_status' in column_names}"
                 )
                 self.logger.info(
                     f"📈 Dosage ratio column present: {'dosage_ratio' in column_names}"
+                )
+                self.logger.info(
+                    f"🔍 Registration error flag present: "
+                    f"{'is_potential_registration_error' in column_names}"
+                )
+                self.logger.info(
+                    f"💡 Suggested valid registration present: "
+                    f"{'suggested_valid_registration' in column_names}"
                 )
 
                 if record_count > 0:
@@ -968,15 +1481,8 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
                         f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}"
                     )
                     self.logger.info(f"📁 Compliance GCS Path: {compliance_path}")
-                    print(
-                        f"✅ COMPLIANCE OUTPUT: {record_count} records saved to {compliance_path}"
-                    )
-                    print(f"📁 Compliance GCS Path: {compliance_path}")
                 else:
                     self.logger.info(f"ℹ️ No compliance issues found for {ag_year}")
-
-                # Clean up temporary table
-                self.conn.execute(f"DROP TABLE IF EXISTS {compliance_table_name}")
 
             # Save year summary
             year_summary_path = f"gs://{self.config.bucket}/{base_path}/summary_{ag_year}.json"
@@ -989,6 +1495,13 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # Upload text content using gcsfs filesystem
         with self.gcs_access.fs.open(report_path, "w", encoding="utf-8") as f:
             f.write(report_content)
+
+        # Clean up temporary tables after all exports are complete
+        for ag_year, year_results in all_results.items():
+            if year_results.get("compliance_table_name"):
+                compliance_table_name = year_results["compliance_table_name"]
+                self.conn.execute(f"DROP TABLE IF EXISTS {compliance_table_name}")
+                self.logger.debug(f"🧹 Cleaned up temporary table: {compliance_table_name}")
 
         self.logger.info(f"✅ Results saved to GCS: {base_path}")
 
@@ -1014,28 +1527,33 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
 """
 
         for i, company in enumerate(summary["top_companies_with_issues"][:10], 1):
-            report += f"{i}. **{company['company_name']}** (CVR: {company['cvr_number']})\n"
-            report += f"   - Issues: {company['total_issues']:,}\n"
-            report += f"   - Area affected: {company['total_area_ha']:,.1f} ha\n"
-            report += f"   - Products used: {company['products_used']:,}\n\n"
+            report += f"{i}. **{company['company_name']}** (CVR: {company['cvr_number']}) "
+            report += f"   - Issues: {company['total_issues']:,} "
+            report += f"   - Area affected: {company['total_area_ha']:,.1f} ha "
+            report += f"   - Products used: {company['products_used']:,}  "
 
         report += f"""
 ## Methodology
 
-- **Violation Detection**: Applications after BMD restriction date (frist_for_anvendelse_og_besiddelse)
+- **Violation Detection**: Applications after BMD restriction date
+  (frist_for_anvendelse_og_besiddelse)
 - **Data Sources**: BMD pesticide database + Agricultural pesticide applications
 - **Temporal Alignment**: Agricultural years (August 1 - July 31)
 - **Analysis Focus**: Clear violations only (no speculation about edge cases)
 
 ## Violation Types
 
-- **CLEAR_VIOLATION**: Pesticide used after official restriction date
-- **USE_IN_RESTRICTION_YEAR**: Pesticide used during the year of restriction
-- **USE_OF_WITHDRAWN_PRODUCT**: Use of products with withdrawn/expired approval
+- **TIMING_VIOLATION**: Pesticide used after official restriction date
+- **DOSAGE_VIOLATION**: Pesticide used in excessive dosage compared to approved limits
+- **WITHDRAWN_PRODUCT_USE**: Use of products with withdrawn/expired approval (confirmed violations)
+- **POTENTIAL_REGISTRATION_ERROR**: Use of expired registration number where valid
+  alternative exists (likely input errors)
 
 ## Data Quality
 
-This analysis provides comprehensive regulatory compliance monitoring for Danish agricultural pesticide usage, identifying definitive violations for regulatory enforcement.
+This analysis provides comprehensive regulatory compliance monitoring for Danish
+agricultural pesticide usage, identifying definitive violations for regulatory
+enforcement.
 
 Analysis completed: {summary["analysis_date"]}
 """

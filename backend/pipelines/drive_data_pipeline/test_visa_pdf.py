@@ -27,7 +27,7 @@ except ImportError as e:
     sys.exit(1)
 
 
-def extract_tables_with_tabula(pdf_path: Path):
+def extract_tables_with_tabula(pdf_path: Path) -> list[pd.DataFrame]:
     """Extract tables using tabula-py."""
     print("🔍 Extracting tables with tabula...")
     try:
@@ -58,7 +58,7 @@ def extract_tables_with_tabula(pdf_path: Path):
         return []
 
 
-def extract_tables_with_pdfplumber(pdf_path: Path):
+def extract_tables_with_pdfplumber(pdf_path: Path) -> list[pd.DataFrame]:
     """Extract tables using pdfplumber."""
     print("🔍 Extracting tables with pdfplumber...")
     tables = []

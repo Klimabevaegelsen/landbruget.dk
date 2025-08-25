@@ -110,7 +110,8 @@ def parse_args() -> Dict[str, Any]:
         "--steps",
         type=str,
         default="all",
-        help="Pipeline steps to run (all, stamdata, herds, herd_details, diko, animal_movements, ejendom, vetstat, silver_*)",
+        help="Pipeline steps to run (all, stamdata, herds, herd_details, "
+        "diko, animal_movements, ejendom, vetstat, silver_*)",
     )
     parser.add_argument("--test-species-codes", type=str, help="Comma-separated list of species codes for testing")
     parser.add_argument("--limit-total-herds", type=int, help="Limit total number of herds to process")
@@ -136,21 +137,21 @@ def parse_args() -> Dict[str, Any]:
     if args.test_species_codes:
         try:
             test_species_codes = [int(code.strip()) for code in args.test_species_codes.split(",")]
-        except ValueError:
-            raise ValueError("test_species_codes must be comma-separated integers")
+        except ValueError as e:
+            raise ValueError("test_species_codes must be comma-separated integers") from e
 
     # Parse dates if provided
     start_date, end_date = get_default_dates()
     if args.start_date:
         try:
             start_date = datetime.strptime(args.start_date, "%Y-%m-%d").date()
-        except ValueError:
-            raise ValueError("start_date must be in YYYY-MM-DD format")
+        except ValueError as e:
+            raise ValueError("start_date must be in YYYY-MM-DD format") from e
     if args.end_date:
         try:
             end_date = datetime.strptime(args.end_date, "%Y-%m-%d").date()
-        except ValueError:
-            raise ValueError("end_date must be in YYYY-MM-DD format")
+        except ValueError as e:
+            raise ValueError("end_date must be in YYYY-MM-DD format") from e
 
     return {
         "steps": args.steps,
@@ -264,14 +265,16 @@ def fetch_herds(
                             ):
                                 logger.info(f"Total herd limit ({limit_total}) reached.")
                                 logger.info(
-                                    f"Found {len(herd_to_species)} unique herds across {len(herds_count_per_species)} species."
+                                    f"Found {len(herd_to_species)} unique herds across "
+                                    f"{len(herds_count_per_species)} species."
                                 )
                                 for species, count in herds_count_per_species.items():
                                     logger.info(f"  Species {species}: {count} herds")
                                 return herd_to_species
 
                 logger.debug(
-                    f"Processed batch for species {species_code}, usage {usage_code}. Added {herds_added_this_batch} new herds."
+                    f"Processed batch for species {species_code}, usage {usage_code}. "
+                    f"Added {herds_added_this_batch} new herds."
                 )
 
                 # Check if we need to continue pagination
@@ -289,7 +292,8 @@ def fetch_herds(
                 break  # Stop processing this combo on error
 
         logger.info(
-            f"Finished fetching herds. Found {len(herd_to_species)} unique herds across {len(herds_count_per_species)} species."
+            f"Finished fetching herds. Found {len(herd_to_species)} unique herds "
+            f"across {len(herds_count_per_species)} species."
         )
     for species, count in herds_count_per_species.items():
         logger.info(f"  Species {species}: {count} herds")
@@ -373,14 +377,12 @@ def get_required_steps(target_step: str) -> List[str]:
         # Bronze steps
         "stamdata": [],
         "herds": ["stamdata"],
-        "herd_discovery": ["stamdata", "herds"],  # Discovery needs to know which herds exist
         "herd_details": ["stamdata", "herds"],
         "diko": ["stamdata", "herds"],  # Assuming diko depends on knowing the herds
         "animal_movements": [
             "stamdata",
             "herds",
-            "herd_discovery",
-        ],  # CHR_dyr animal movements now use discovery results
+        ],  # CHR_dyr animal movements with integrated discovery
         "ejendom": ["stamdata", "herds", "herd_details"],  # Assuming ejendom depends on CHR numbers from details
         "vetstat": ["stamdata", "herds", "herd_details"],  # Assuming vetstat depends on CHR numbers from details
         "spf_su": ["stamdata", "herds", "herd_details"],  # SPF-SU depends on CHR numbers from details
@@ -492,71 +494,6 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if context["args"]["progress"]:
             logging.info(f"Found {len(context['herd_to_species'])} herds")
 
-    elif step == "herd_discovery":
-        if "herd_to_species" not in context:
-            raise ValueError("Cannot run 'herd_discovery' step without first running 'herds'")
-
-        # Import discovery functionality
-        from bronze.herd_discovery import discover_herd_volumes_for_year, load_previous_discovery_results
-
-        logger.info("🔍 Starting intelligent herd volume discovery...")
-
-        # Determine year range for discovery
-        current_year = datetime.now().year
-        discovery_year = context["args"].get("discovery_year", current_year)
-
-        # Get list of herds to analyze (cattle herds only for CHR_dyr)
-        cattle_herds = [
-            herd_num
-            for herd_num, species_code in context["herd_to_species"].items()
-            if species_code == 12  # Cattle only
-        ]
-
-        if not cattle_herds:
-            logger.warning("⚠️ No cattle herds found for discovery")
-            context["discovery_results"] = {"large_herds": [], "normal_herds": []}
-            return
-
-        logger.info(f"🐄 Analyzing {len(cattle_herds)} cattle herds for year {discovery_year}")
-
-        # Check for cached discovery results first
-        cached_results = load_previous_discovery_results(discovery_year)
-        if cached_results:
-            large_herds, normal_herds = cached_results
-            logger.info(f"📋 Using cached discovery: {len(large_herds)} large herds, {len(normal_herds)} normal herds")
-        else:
-            # Perform fresh discovery
-            logger.info("🔍 Performing fresh herd volume discovery...")
-            large_herds, normal_herds = discover_herd_volumes_for_year(
-                get_client(context, "chr_dyr"),
-                context["username"],
-                cattle_herds,
-                discovery_year,
-                sample_weeks=3,  # Smart 3-week sampling
-                sample_strategy="seasonal",  # Seasonal sampling for best estimates
-            )
-
-        # Store results in context for later use
-        context["discovery_results"] = {
-            "large_herds": large_herds,
-            "normal_herds": normal_herds,
-            "discovery_year": discovery_year,
-            "total_cattle_herds": len(cattle_herds),
-        }
-
-        # Log discovery summary
-        logger.info("✅ Discovery phase completed:")
-        logger.info(f"  🐄 Large herds requiring chunking: {len(large_herds)}")
-        logger.info(f"  🐄 Normal herds (standard processing): {len(normal_herds)}")
-
-        if large_herds:
-            logger.info("📊 Large herds identified:")
-            for herd_info in large_herds:
-                logger.info(
-                    f"  - Herd {herd_info['herd']}: {herd_info['volume_category']} "
-                    f"(~{herd_info['estimated_yearly']:,.0f}/year, {herd_info['suggested_chunk_days']}-day chunks)"
-                )
-
     elif step == "herd_details":
         if "herd_to_species" not in context:
             raise ValueError("Cannot run 'herd_details' step without first running 'herds'")
@@ -593,7 +530,8 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
         if context["args"]["progress"]:
             logging.info(
-                f"Processed {len(context['herd_details'])} herd details, found {len(context['chr_to_species'])} unique CHR numbers"
+                f"Processed {len(context['herd_details'])} herd details, "
+                f"found {len(context['chr_to_species'])} unique CHR numbers"
             )
 
     elif step == "diko":
@@ -642,113 +580,79 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             successful_opl = sum(1 for r in oplysninger_results if r)
             successful_vet = sum(1 for r in vet_events_results if r)
             logging.info(
-                f"Completed Ejendom tasks. Oplysninger success: {successful_opl}/{len(ejendom_tasks)}, Vet events success: {successful_vet}/{len(ejendom_tasks)}"
+                f"Completed Ejendom tasks. Oplysninger success: {successful_opl}/{len(ejendom_tasks)}, "
+                f"Vet events success: {successful_vet}/{len(ejendom_tasks)}"
             )
 
     elif step == "animal_movements":
         if "herd_to_species" not in context:
             raise ValueError("Cannot run 'animal_movements' step without first running 'herds'")
 
-        # Get discovery results for intelligent processing
-        discovery_results = context.get("discovery_results", {"large_herds": [], "normal_herds": []})
-        large_herds_info = discovery_results.get("large_herds", [])
-        normal_herds = discovery_results.get("normal_herds", [])
+        # Get all cattle herds for processing
+        cattle_herds = [herd_num for herd_num, species_code in context["herd_to_species"].items() if species_code == 12]
 
-        # If no discovery was run, fall back to all cattle herds
-        if not large_herds_info and not normal_herds:
-            logger.warning("⚠️ No discovery results found, processing all cattle herds with standard method")
-            cattle_herds = [
-                herd_num for herd_num, species_code in context["herd_to_species"].items() if species_code == 12
-            ]
-            normal_herds = cattle_herds
-            large_herds_info = []
-
-        if not (large_herds_info or normal_herds):
+        if not cattle_herds:
             logging.warning("No cattle herds found for animal movements")
             context["animal_movements_results"] = []
             return context
 
-        # Import the smart aggregation function
+        # Import the smart aggregation function with integrated discovery
         from bronze.animal_movements import load_cattle_movement_summaries
+        from bronze.load_chr_dyr import initialize_consolidated_processing
 
-        logger.info("🚀 Starting intelligent animal movements processing:")
-        logger.info(f"  📊 Normal herds (batch processing): {len(normal_herds)}")
-        logger.info(f"  🐄 Large herds (individual chunked processing): {len(large_herds_info)}")
+        # Initialize consolidated processing for CHR_dyr movement summaries
+        logger.info("🚀 Initializing consolidated CHR_dyr processing...")
+        if not initialize_consolidated_processing():
+            logger.error("❌ Failed to initialize consolidated processing")
+            context["animal_movements_results"] = []
+            return context
 
-        # Phase 1: Process normal herds in batch (efficient)
-        normal_results = []
-        if normal_herds:
-            logger.info(f"🔄 Processing {len(normal_herds)} normal herds in batch...")
+        logger.info(
+            f"🚀 Starting animal movements processing with integrated discovery for {len(cattle_herds)} cattle herds"
+        )
 
-            normal_movement_tasks = [
-                (
-                    get_client(context, "chr_dyr"),
-                    context["username"],
-                    herd_num,
-                    context["args"]["start_date"],
-                    context["args"]["end_date"],
-                )
-                for herd_num in normal_herds
-            ]
-
-            # Process normal herds in batches (efficient parallel processing)
-            normal_results = process_parallel(
-                load_cattle_movement_summaries,
-                normal_movement_tasks,
-                context["args"]["workers"],
-                "Processing Normal Herds",
+        # Process all herds - discovery and volume management will happen inline as needed
+        movement_tasks = [
+            (
+                get_client(context, "chr_dyr"),
+                context["username"],
+                herd_num,
+                context["args"]["start_date"],
+                context["args"]["end_date"],
             )
+            for herd_num in cattle_herds
+        ]
 
-            if context["args"]["progress"]:
-                successful_normal = sum(1 for r in normal_results if r)
-                logger.info(f"  ✅ Normal herds batch completed: {successful_normal}/{len(normal_herds)} successful")
+        if context["args"]["progress"]:
+            logging.info(f"Processing {len(movement_tasks)} herd movement tasks with integrated discovery")
 
-        # Phase 2: Process large herds individually with chunking (special handling)
-        large_results = []
-        if large_herds_info:
-            logger.info(f"🐄 Processing {len(large_herds_info)} large herds individually...")
+        results = process_parallel(
+            load_cattle_movement_summaries,
+            movement_tasks,
+            context["args"]["workers"],
+            "Animal movements with discovery",
+        )
 
-            for herd_info in large_herds_info:
-                herd_num = herd_info["herd"]
-                chunk_days = herd_info["suggested_chunk_days"]
+        # Filter successful results
+        successful_results = [r for r in results if r is not None]
+        context["animal_movements_results"] = successful_results
 
-                logger.info(f"  🔄 Processing large herd {herd_num} with {chunk_days}-day chunking...")
+        if context["args"]["progress"]:
+            logger.info(f"Animal movements completed: {len(successful_results)}/{len(results)} herds successful")
 
-                # Process large herd individually to avoid overwhelming the system
-                try:
-                    result = load_cattle_movement_summaries(
-                        get_client(context, "chr_dyr"),
-                        context["username"],
-                        herd_num,
-                        context["args"]["start_date"],
-                        context["args"]["end_date"],
-                    )
+        # CRITICAL FIX: Finalize consolidated processing to save animal movements data to GCS
+        try:
+            from bronze.load_chr_dyr import finalize_consolidated_processing
 
-                    if result:
-                        large_results.append(result)
-                        logger.info(f"    ✅ Large herd {herd_num} processed successfully")
-                    else:
-                        logger.warning(f"    ⚠️ Large herd {herd_num} returned no results")
-
-                except Exception as e:
-                    logger.error(f"    ❌ Large herd {herd_num} failed: {e}")
-                    large_results.append(None)
-
-        # Combine all results and log final summary
-        all_results = (normal_results if normal_herds else []) + large_results
-        total_successful = sum(1 for r in all_results if r)
-        total_processed = len(normal_herds) + len(large_herds_info)
-
-        logger.info("✅ Intelligent animal movements processing completed:")
-        logger.info(f"  📊 Total herds processed: {total_processed}")
-        logger.info(f"  ✅ Successful: {total_successful}")
-        logger.info(f"  ❌ Failed: {total_processed - total_successful}")
-
-        if large_herds_info:
-            logger.info(f"  🐄 Large herds processed with chunking: {len(large_herds_info)}")
-
-        # Store results in context
-        context["animal_movements_results"] = all_results
+            logger.info("🚀 Finalizing consolidated animal movements processing...")
+            success = finalize_consolidated_processing()
+            if success:
+                logger.info("✅ Animal movements data successfully saved to GCS")
+            else:
+                logger.warning("⚠️ Consolidated processing finalization returned False")
+        except Exception as e:
+            logger.error(f"❌ Failed to finalize consolidated processing: {e}", exc_info=True)
+            # Don't raise - let the pipeline continue, but log the error
 
     elif step == "vetstat":
         if "chr_to_species" not in context:
@@ -886,12 +790,18 @@ def main():
 
             if has_buffer_data or has_context_import or has_bronze_files or (can_use_streaming and bronze_timestamp):
                 logging.warning(
-                    f"Silver-only operation detected with existing data. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, Override: {bronze_dir_override}"
+                    f"Silver-only operation detected with existing data. "
+                    f"Buffer: {has_buffer_data}, Context: {has_context_import}, "
+                    f"Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, "
+                    f"Override: {bronze_dir_override}"
                 )
                 needs_fvm_credentials = False
             else:
                 logging.warning(
-                    f"Silver-only operation but no existing data found. Will need to run bronze steps. Buffer: {has_buffer_data}, Context: {has_context_import}, Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, Override: {bronze_dir_override}"
+                    f"Silver-only operation but no existing data found. Will need to run bronze steps. "
+                    f"Buffer: {has_buffer_data}, Context: {has_context_import}, "
+                    f"Files: {has_bronze_files}, Streaming: {can_use_streaming and bronze_timestamp}, "
+                    f"Override: {bronze_dir_override}"
                 )
 
         # Initialize context based on whether we need FVM credentials
@@ -960,10 +870,9 @@ def main():
             bronze_steps_to_run = [
                 "stamdata",
                 "herds",
-                "herd_discovery",  # Discovery phase - lightweight sampling
                 "herd_details",
                 "diko",
-                "animal_movements",  # Now uses discovery results for intelligent processing
+                "animal_movements",  # Now includes integrated discovery
                 "ejendom",
                 "vetstat",
                 "spf_su",
@@ -994,7 +903,6 @@ def main():
         for step in [
             "stamdata",
             "herds",
-            "herd_discovery",
             "herd_details",
             "diko",
             "animal_movements",
@@ -1056,7 +964,8 @@ def main():
                 if use_streaming_mode and bronze_timestamp:
                     # Use streaming mode for memory efficiency
                     logging.warning(
-                        f"🚀 Using STREAMING mode for memory-efficient processing (bronze_timestamp: {bronze_timestamp})"
+                        f"🚀 Using STREAMING mode for memory-efficient processing "
+                        f"(bronze_timestamp: {bronze_timestamp})"
                     )
                     success = run_silver_processing(
                         silver_dir=silver_dir,
@@ -1184,7 +1093,7 @@ def main():
 
     except Exception as e:
         logging.error(f"Pipeline failed: {e}", exc_info=True)
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
 
 if __name__ == "__main__":

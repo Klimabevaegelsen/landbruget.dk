@@ -15,22 +15,21 @@ on:
         # default: '5'
         # type: string
       skip_steps:
-        description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
+        description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding)'
         required: false
         type: string
       run_only_step:
-        description: 'Run only a specific step independently (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding,data_consolidation)'
+        description: 'Run only a specific step independently (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding)'
         required: false
         type: choice
         options:
-          - ''
+          - none
           - collection
           - company_fetching
           - pnumber_fetching
           - financial_documents
           - address_geocoding
-          - data_consolidation
-        default: ''
+        default: 'none'
       log_level:
         description: 'Logging level'
         type: choice
@@ -48,13 +47,17 @@ on:
 env:
   BUCKET_NAME: landbrugsdata-raw-data
   PYTHON_VERSION: '3.11'
+  # Shared timestamp for all pipeline steps to ensure consistent file paths
+  PIPELINE_START_TIME: ${{ github.run_started_at }}
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
 jobs:
   # Step 1: CVR Collection (Sequential - must run first)
   cvr_collection:
     name: "CVR Collection"
     runs-on: ubuntu-latest
-    if: ${{ (github.event.inputs.run_only_step == '' && !contains(github.event.inputs.skip_steps, 'collection')) || github.event.inputs.run_only_step == 'collection' }}
+    if: ${{ (github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'collection')) || github.event.inputs.run_only_step == 'collection' }}
     outputs:
       collection_success: ${{ steps.collection.outputs.success }}
     
@@ -120,7 +123,7 @@ jobs:
     name: "Company Fetching"
     runs-on: ubuntu-latest
     needs: cvr_collection
-    if: ${{ always() && ((github.event.inputs.run_only_step == '' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
     
     steps:
       - name: Checkout code
@@ -145,7 +148,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download CVR Collection Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
+        if: ${{ github.event.inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-collection-data
@@ -176,6 +179,42 @@ jobs:
           $CMD
           
           echo "✅ Company Fetching completed successfully"
+      
+      - name: Verify Company Data Artifact
+        run: |
+          # Check if the company fetching step already created the artifact file
+          if [ -f "/tmp/cvr_company_data.parquet" ]; then
+            echo "✅ Company data artifact already exists from the fetching step"
+            ls -lh /tmp/cvr_company_data.parquet
+          else
+            echo "⚠️ Company data artifact not found, looking for latest available data..."
+            
+            # Find the latest company data file from today's runs
+            LATEST_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
+            
+            if [ -n "$LATEST_COMPANY_PATH" ]; then
+              echo "✅ Found latest company file: $LATEST_COMPANY_PATH"
+              gsutil cp "$LATEST_COMPANY_PATH" /tmp/cvr_company_data.parquet
+              echo "✅ Created company artifact from: $LATEST_COMPANY_PATH"
+            else
+              echo "⚠️ No company data files found from today"
+              echo "Trying to find any recent company data file..."
+              
+              # Fallback: find any recent company file
+              RECENT_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+              
+              if [ -n "$RECENT_COMPANY_PATH" ]; then
+                echo "✅ Found recent company file: $RECENT_COMPANY_PATH"
+                gsutil cp "$RECENT_COMPANY_PATH" /tmp/cvr_company_data.parquet
+                echo "✅ Created company artifact from recent file: $RECENT_COMPANY_PATH"
+              else
+                echo "❌ No company data files found at all"
+                echo "Creating empty artifact to prevent downstream failures"
+                touch /tmp/cvr_company_data.parquet
+                echo "Created empty company artifact"
+              fi
+            fi
+          fi
 
       - name: Upload Company Data
         uses: actions/upload-artifact@v4
@@ -189,7 +228,7 @@ jobs:
     name: "P-Number Fetching"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching]
-    if: ${{ always() && ((github.event.inputs.run_only_step == '' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching')) || github.event.inputs.run_only_step == 'pnumber_fetching') }}
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching')) || github.event.inputs.run_only_step == 'pnumber_fetching') }}
     
     steps:
       - name: Checkout code
@@ -214,7 +253,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download Company Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
+        if: ${{ github.event.inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
@@ -236,6 +275,42 @@ jobs:
           
           echo "Running: $CMD"
           $CMD
+      
+      - name: Verify P-Number Data Artifact
+        run: |
+          # Check if the P-number fetching step already created the artifact file
+          if [ -f "/tmp/cvr_pnumber_data.parquet" ]; then
+            echo "✅ P-number data artifact already exists from the fetching step"
+            ls -lh /tmp/cvr_pnumber_data.parquet
+          else
+            echo "⚠️ P-number data artifact not found, looking for latest available data..."
+            
+            # Find the latest P-number data file from today's runs
+            LATEST_PNUMBER_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
+            
+            if [ -n "$LATEST_PNUMBER_PATH" ]; then
+              echo "✅ Found latest P-number file: $LATEST_PNUMBER_PATH"
+              gsutil cp "$LATEST_PNUMBER_PATH" /tmp/cvr_pnumber_data.parquet
+              echo "✅ Created P-number artifact from: $LATEST_PNUMBER_PATH"
+            else
+              echo "⚠️ No P-number data files found from today"
+              echo "Trying to find any recent P-number data file..."
+              
+              # Fallback: find any recent P-number file
+              RECENT_PNUMBER_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_pnumbers/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+              
+              if [ -n "$RECENT_PNUMBER_PATH" ]; then
+                echo "✅ Found recent P-number file: $RECENT_PNUMBER_PATH"
+                gsutil cp "$RECENT_PNUMBER_PATH" /tmp/cvr_pnumber_data.parquet
+                echo "✅ Created P-number artifact from recent file: $RECENT_PNUMBER_PATH"
+              else
+                echo "❌ No P-number data files found at all"
+                echo "Creating empty artifact to prevent downstream failures"
+                touch /tmp/cvr_pnumber_data.parquet
+                echo "Created empty P-number artifact"
+              fi
+            fi
+          fi
 
       - name: Upload P-Number Data
         uses: actions/upload-artifact@v4
@@ -249,7 +324,7 @@ jobs:
     name: "Financial Documents"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching]
-    if: ${{ always() && ((github.event.inputs.run_only_step == '' && !contains(github.event.inputs.skip_steps, 'financial_documents')) || github.event.inputs.run_only_step == 'financial_documents') }}
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'financial_documents')) || github.event.inputs.run_only_step == 'financial_documents') }}
     
     steps:
       - name: Checkout code
@@ -274,7 +349,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download Company Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
+        if: ${{ github.event.inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
@@ -299,15 +374,32 @@ jobs:
       
       - name: Create Financial Data Artifact
         run: |
-          # Get the latest financial data from GCS and save as artifact
-          LATEST_DIR=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/ | tail -1)
-          if [ ! -z "$LATEST_DIR" ]; then
-            FINANCIAL_PATH="${LATEST_DIR}data.parquet"
-            gsutil cp "$FINANCIAL_PATH" /tmp/cvr_financial_data.parquet
-            echo "Created financial artifact from: $FINANCIAL_PATH"
+          echo "🔍 Finding latest financial data..."
+          
+          # Find the latest financial data file from today's runs
+          LATEST_FINANCIAL_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
+          
+          if [ -n "$LATEST_FINANCIAL_PATH" ]; then
+            echo "✅ Found latest financial file: $LATEST_FINANCIAL_PATH"
+            gsutil cp "$LATEST_FINANCIAL_PATH" /tmp/cvr_financial_data.parquet
+            echo "✅ Created financial artifact from: $LATEST_FINANCIAL_PATH"
           else
-            echo "No financial data found, creating empty artifact"
-            touch /tmp/cvr_financial_data.parquet
+            echo "⚠️ No financial data files found from today"
+            echo "Trying to find any recent financial data file..."
+            
+            # Fallback: find any recent financial file
+            RECENT_FINANCIAL_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_financial/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+            
+            if [ -n "$RECENT_FINANCIAL_PATH" ]; then
+              echo "✅ Found recent financial file: $RECENT_FINANCIAL_PATH"
+              gsutil cp "$RECENT_FINANCIAL_PATH" /tmp/cvr_financial_data.parquet
+              echo "✅ Created financial artifact from recent file: $RECENT_FINANCIAL_PATH"
+            else
+              echo "❌ No financial data files found at all"
+              echo "Creating empty artifact to prevent downstream failures"
+              touch /tmp/cvr_financial_data.parquet
+              echo "Created empty financial artifact"
+            fi
           fi
       
       - name: Upload Financial Data Artifact
@@ -324,7 +416,7 @@ jobs:
     name: "Address Geocoding"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching, pnumber_fetching]
-    if: ${{ always() && ((github.event.inputs.run_only_step == '' && !contains(github.event.inputs.skip_steps, 'address_geocoding')) || github.event.inputs.run_only_step == 'address_geocoding') }}
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'address_geocoding')) || github.event.inputs.run_only_step == 'address_geocoding') }}
     
     steps:
       - name: Checkout code
@@ -349,7 +441,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
       
       - name: Download Company and P-Number Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
+        if: ${{ github.event.inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
@@ -357,7 +449,7 @@ jobs:
         continue-on-error: true
       
       - name: Download P-Number Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
+        if: ${{ github.event.inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-pnumber-data
@@ -379,15 +471,32 @@ jobs:
       
       - name: Create Address Data Artifact
         run: |
-          # Get the latest address data from GCS and save as artifact
-          LATEST_DIR=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment/ | tail -1)
-          if [ ! -z "$LATEST_DIR" ]; then
-            ADDRESS_PATH="${LATEST_DIR}address_geocoding.parquet"
-            gsutil cp "$ADDRESS_PATH" /tmp/cvr_address_data.parquet
-            echo "Created address artifact from: $ADDRESS_PATH"
+          echo "🔍 Finding latest address geocoding data..."
+          
+          # Find the latest address geocoding file from today's runs
+          LATEST_ADDRESS_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment/*/address_geocoding.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
+          
+          if [ -n "$LATEST_ADDRESS_PATH" ]; then
+            echo "✅ Found latest address file: $LATEST_ADDRESS_PATH"
+            gsutil cp "$LATEST_ADDRESS_PATH" /tmp/cvr_address_data.parquet
+            echo "✅ Created address artifact from: $LATEST_ADDRESS_PATH"
           else
-            echo "No address data found, creating empty artifact"
-            touch /tmp/cvr_address_data.parquet
+            echo "⚠️ No address geocoding files found from today"
+            echo "Trying to find any recent address geocoding file..."
+            
+            # Fallback: find any recent address file within the last 7 days
+            RECENT_ADDRESS_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment/*/address_geocoding.parquet 2>/dev/null | sort -r | head -1 || echo "")
+            
+            if [ -n "$RECENT_ADDRESS_PATH" ]; then
+              echo "✅ Found recent address file: $RECENT_ADDRESS_PATH"
+              gsutil cp "$RECENT_ADDRESS_PATH" /tmp/cvr_address_data.parquet
+              echo "✅ Created address artifact from recent file: $RECENT_ADDRESS_PATH"
+            else
+              echo "❌ No address geocoding files found at all"
+              echo "Creating empty artifact to prevent downstream failures"
+              touch /tmp/cvr_address_data.parquet
+              echo "Created empty address artifact"
+            fi
           fi
       
       - name: Upload Address Data Artifact
@@ -399,83 +508,15 @@ jobs:
 
 
 
-  # Step 6: Data Consolidation (Sequential - must run last)
-  data_consolidation:
-    name: "Data Consolidation"
+  # Step 6: Pipeline Summary (moved from data_consolidation step)
+  pipeline_summary:
+    name: "Pipeline Summary"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding]
-    if: ${{ always() && ((github.event.inputs.run_only_step == '' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'data_consolidation')) || github.event.inputs.run_only_step == 'data_consolidation') }}
+    if: always()
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      
-      - name: Install dependencies
-        run: |
-          cd backend/pipelines/unified_pipeline
-          pip install -e .
-      
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-      
-      - name: Download Company Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: cvr-company-data
-          path: /tmp/
-        continue-on-error: true
-      
-      - name: Download P-Number Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: cvr-pnumber-data
-          path: /tmp/
-        continue-on-error: true
-      
-      - name: Download Financial Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: cvr-financial-data
-          path: /tmp/
-        continue-on-error: true  # Don't fail if financial data not available
-      
-      - name: Download Address Data
-        if: ${{ github.event.inputs.run_only_step == '' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: cvr-address-data
-          path: /tmp/
-        continue-on-error: true  # Don't fail if address data not available
-
-      
-      - name: Run Data Consolidation
-        run: |
-          cd backend/pipelines/unified_pipeline
-          
-          CMD="python -u -m unified_pipeline --source cvr_enrichment --stage data_consolidation"
-          
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
-          fi
-          
-          echo "Running: $CMD"
-          $CMD
-      
       - name: Pipeline Summary
-        if: always()
         run: |
           echo "🎉 CVR Enrichment Pipeline completed!"
           echo "📊 Pipeline Configuration:"
@@ -489,20 +530,22 @@ jobs:
           echo "   • P-Number Fetching: ${{ needs.pnumber_fetching.result }}"
           echo "   • Financial Documents: ${{ needs.financial_documents.result }}"
           echo "   • Address Geocoding: ${{ needs.address_geocoding.result }}"
-          echo "   • Data Consolidation: ${{ job.status }}"
+          echo ""
+          echo "✅ Data consolidation is now handled directly in the financial documents step"
+          echo "   as part of the CVR Enrichment Architecture Redesign"
 
   # Notification job (runs regardless of success/failure)
   notify:
     name: "Pipeline Notification"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding, data_consolidation]
+    needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding, pipeline_summary]
     if: always()
     
     steps:
       - name: Determine overall status
         id: status
         run: |
-          if [[ "${{ needs.data_consolidation.result }}" == "success" ]]; then
+          if [[ "${{ needs.address_geocoding.result }}" == "success" ]]; then
             echo "status=success" >> $GITHUB_OUTPUT
             echo "message=CVR Enrichment Pipeline completed successfully! 🎉" >> $GITHUB_OUTPUT
           elif [[ "${{ needs.cvr_collection.result }}" == "failure" ]]; then

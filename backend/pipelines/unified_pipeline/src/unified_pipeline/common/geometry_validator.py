@@ -62,8 +62,8 @@ def validate_and_transform_geometries_duckdb(
         # Check the actual type of the geometry column
         geom_type_result = conn.execute(f"""
             SELECT DISTINCT typeof({geometry_column}) as geom_type
-            FROM {table_name} 
-            WHERE {geometry_column} IS NOT NULL 
+            FROM {table_name}
+            WHERE {geometry_column} IS NOT NULL
             LIMIT 5
         """).fetchall()
 
@@ -74,9 +74,9 @@ def validate_and_transform_geometries_duckdb(
         if "VARCHAR" in geom_types:
             logger.info(f"{dataset_name}: Converting VARCHAR geometries to spatial objects")
             conn.execute(f"""
-                UPDATE {table_name} SET 
+                UPDATE {table_name} SET
                     {geometry_column} = ST_GeomFromText({geometry_column})
-                WHERE {geometry_column} IS NOT NULL 
+                WHERE {geometry_column} IS NOT NULL
                     AND typeof({geometry_column}) = 'VARCHAR'
             """)
         else:
@@ -86,7 +86,7 @@ def validate_and_transform_geometries_duckdb(
 
         # Validate geometries and fix invalid ones
         invalid_count = conn.execute(f"""
-            SELECT COUNT(*) FROM {table_name} 
+            SELECT COUNT(*) FROM {table_name}
             WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
         """).fetchone()[0]
 
@@ -96,14 +96,14 @@ def validate_and_transform_geometries_duckdb(
             # Try to fix invalid geometries
             try:
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
+                    UPDATE {table_name} SET
                         {geometry_column} = ST_MakeValid({geometry_column})
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """)
 
                 # Check how many are still invalid
                 still_invalid = conn.execute(f"""
-                    SELECT COUNT(*) FROM {table_name} 
+                    SELECT COUNT(*) FROM {table_name}
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """).fetchone()[0]
 
@@ -112,14 +112,14 @@ def validate_and_transform_geometries_duckdb(
                         f"{dataset_name}: {still_invalid} geometries remain invalid, removing them"
                     )
                     conn.execute(f"""
-                        DELETE FROM {table_name} 
+                        DELETE FROM {table_name}
                         WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                     """)
 
             except Exception:
                 # Remove invalid geometries if ST_MakeValid fails
                 conn.execute(f"""
-                    DELETE FROM {table_name} 
+                    DELETE FROM {table_name}
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """)
                 logger.info(f"{dataset_name}: Removed {invalid_count} invalid geometries")
@@ -127,7 +127,7 @@ def validate_and_transform_geometries_duckdb(
         # Detect CRS before transformation by checking coordinate bounds
         logger.info(f"{dataset_name}: Detecting coordinate reference system")
         initial_bounds = conn.execute(f"""
-            SELECT 
+            SELECT
                 MIN(ST_XMin({geometry_column})) as min_x,
                 MAX(ST_XMax({geometry_column})) as max_x,
                 MIN(ST_YMin({geometry_column})) as min_y,
@@ -141,6 +141,7 @@ def validate_and_transform_geometries_duckdb(
             min_x, max_x, min_y, max_y = initial_bounds
 
             # Check if coordinates are already in WGS84 (longitude/latitude ranges)
+            # FIXED: Corrected variable names to match actual coordinate order detection
             is_wgs84_lon_lat = (
                 7 <= min_x <= 16 and 7 <= max_x <= 16 and 54 <= min_y <= 58 and 54 <= max_y <= 58
             )
@@ -151,67 +152,96 @@ def validate_and_transform_geometries_duckdb(
 
             if is_wgs84_lon_lat:
                 logger.info(
-                    f"{dataset_name}: Data already in WGS84 (correct lon/lat order) - skipping transformation"
+                    f"{dataset_name}: Data in WGS84 (LON, LAT) order - needs coordinate flip "
+                    "for correct EPSG:4326 standard"
                 )
+                # Flip coordinates to get proper (LAT, LON) order for EPSG:4326 standard
+                logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix coordinate order")
+                conn.execute(f"""
+                    UPDATE {table_name} SET
+                        {geometry_column} = ST_FlipCoordinates({geometry_column})
+                    WHERE {geometry_column} IS NOT NULL
+                """)
+                logger.info(f"{dataset_name}: ✅ Coordinate flip completed")
             elif is_wgs84_lat_lon:
                 logger.info(
-                    f"{dataset_name}: Data in WGS84 but lat/lon order - will flip after processing"
+                    f"{dataset_name}: Data in WGS84 (LAT, LON) order - CORRECT for "
+                    "EPSG:4326 standard"
                 )
+                # No transformation needed - coordinates are already in correct order
             elif is_utm:
                 logger.info(
                     f"{dataset_name}: Data in Danish UTM (EPSG:25832) - transforming to WGS84"
                 )
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
-                        {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
+                    UPDATE {table_name} SET
+                        {geometry_column} = ST_Transform(
+                            {geometry_column}, 'EPSG:25832', 'EPSG:4326'
+                        )
                     WHERE {geometry_column} IS NOT NULL
                 """)
             else:
                 logger.warning(
-                    f"{dataset_name}: Unknown CRS (X: {min_x:.1f}-{max_x:.1f}, Y: {min_y:.1f}-{max_y:.1f}) - assuming UTM"
+                    f"{dataset_name}: Unknown CRS (X: {min_x:.1f}-{max_x:.1f}, "
+                    f"Y: {min_y:.1f}-{max_y:.1f}) - assuming UTM"
                 )
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
-                        {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
+                    UPDATE {table_name} SET
+                        {geometry_column} = ST_Transform(
+                            {geometry_column}, 'EPSG:25832', 'EPSG:4326'
+                        )
                     WHERE {geometry_column} IS NOT NULL
                 """)
         else:
             logger.warning(f"{dataset_name}: Could not detect CRS - assuming UTM and transforming")
             conn.execute(f"""
-                UPDATE {table_name} SET 
+                UPDATE {table_name} SET
                     {geometry_column} = ST_Transform({geometry_column}, 'EPSG:25832', 'EPSG:4326')
                 WHERE {geometry_column} IS NOT NULL
             """)
 
         # Apply coordinate flipping if needed - check bounds AFTER any transformation
-        post_transform_bounds = conn.execute(f"""
-            SELECT 
-                MIN(ST_XMin({geometry_column})) as min_x,
-                MAX(ST_XMax({geometry_column})) as max_x,
-                MIN(ST_YMin({geometry_column})) as min_y,
-                MAX(ST_YMax({geometry_column})) as max_y
-            FROM {table_name}
-            WHERE {geometry_column} IS NOT NULL
-            LIMIT 100
-        """).fetchone()
+        # Skip if we already flipped coordinates for WGS84 lon/lat data
+        already_flipped_for_wgs84 = (
+            initial_bounds
+            and 7 <= initial_bounds[0] <= 16
+            and 7 <= initial_bounds[1] <= 16
+            and 54 <= initial_bounds[2] <= 58
+            and 54 <= initial_bounds[3] <= 58
+        )
 
-        if post_transform_bounds:
-            min_x, max_x, min_y, max_y = post_transform_bounds
-            is_wgs84_lat_lon_after = (
-                54 <= min_x <= 58 and 54 <= max_x <= 58 and 7 <= min_y <= 16 and 7 <= max_y <= 16
-            )
+        if not already_flipped_for_wgs84:
+            post_transform_bounds = conn.execute(f"""
+                SELECT
+                    MIN(ST_XMin({geometry_column})) as min_x,
+                    MAX(ST_XMax({geometry_column})) as max_x,
+                    MIN(ST_YMin({geometry_column})) as min_y,
+                    MAX(ST_YMax({geometry_column})) as max_y
+                FROM {table_name}
+                WHERE {geometry_column} IS NOT NULL
+                LIMIT 100
+            """).fetchone()
 
-            if is_wgs84_lat_lon_after:
-                logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix lat/lon order")
-                conn.execute(f"""
-                    UPDATE {table_name} SET 
-                        {geometry_column} = ST_FlipCoordinates({geometry_column})
-                    WHERE {geometry_column} IS NOT NULL
-                """)
+            if post_transform_bounds:
+                min_x, max_x, min_y, max_y = post_transform_bounds
+                is_wgs84_lat_lon_after = (
+                    54 <= min_x <= 58
+                    and 54 <= max_x <= 58
+                    and 7 <= min_y <= 16
+                    and 7 <= max_y <= 16
+                )
+
+                if is_wgs84_lat_lon_after:
+                    logger.info(
+                        f"{dataset_name}: Detected (LAT, LON) order - CORRECT EPSG:4326 "
+                        "format for direct ST_Area_Spheroid usage"
+                    )
+                    # COORDINATE APPROACH: Data is correctly in (LAT, LON) EPSG:4326 standard
+                    # ST_Area_Spheroid expects (LAT, LON) input - no transformation needed
 
                 # Verify the flip worked
                 final_bounds = conn.execute(f"""
-                    SELECT 
+                    SELECT
                         MIN(ST_XMin({geometry_column})) as min_x,
                         MAX(ST_XMax({geometry_column})) as max_x,
                         MIN(ST_YMin({geometry_column})) as min_y,
@@ -224,14 +254,136 @@ def validate_and_transform_geometries_duckdb(
                 if final_bounds:
                     final_min_x, final_max_x, final_min_y, final_max_y = final_bounds
                     logger.info(
-                        f"{dataset_name}: Final coordinates (X: {final_min_x:.3f}-{final_max_x:.3f}, Y: {final_min_y:.3f}-{final_max_y:.3f})"
+                        f"{dataset_name}: Final coordinates "
+                        f"(X: {final_min_x:.3f}-{final_max_x:.3f}, "
+                        f"Y: {final_min_y:.3f}-{final_max_y:.3f})"
                     )
             else:
                 logger.info(f"{dataset_name}: Coordinates are in correct order")
 
+            # 🔍 COORDINATE ORDER VERIFICATION: Extract raw coordinate pairs
+            # to verify actual storage order
+            try:
+                sample_wkt = conn.execute(f"""
+                    SELECT
+                        ST_AsText(ST_Centroid({geometry_column})) as wkt_centroid
+                    FROM {table_name}
+                    WHERE {geometry_column} IS NOT NULL
+                    LIMIT 5
+                """).fetchall()
+
+                if sample_wkt:
+                    logger.info(
+                        f"🧭 {dataset_name}: COORDINATE ORDER VERIFICATION - "
+                        f"Found {len(sample_wkt)} sample centroids:"
+                    )
+                    coord_pairs = []
+                    for i, (wkt,) in enumerate(sample_wkt[:3]):
+                        logger.info(f"   Raw WKT {i+1}: {wkt}")
+                        # Extract coordinates from "POINT(x y)" format
+                        if wkt and "POINT(" in wkt:
+                            coords_str = wkt.replace("POINT(", "").replace(")", "")
+                            try:
+                                coord_parts = coords_str.split()
+                                if len(coord_parts) >= 2:
+                                    first_val, second_val = (
+                                        float(coord_parts[0]),
+                                        float(coord_parts[1]),
+                                    )
+                                    coord_pairs.append((first_val, second_val))
+                                    logger.info(
+                                        f"   Sample {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"   Sample {i+1}: Invalid coordinate format: {coords_str}"
+                                    )
+                            except Exception as parse_e:
+                                logger.warning(f"   Sample {i+1}: Parse error: {parse_e}")
+                                continue
+                        else:
+                            logger.warning(f"   Sample {i+1}: Not a POINT geometry: {wkt}")
+
+                    if coord_pairs:
+                        logger.info(
+                            f"🧭 {dataset_name}: Successfully parsed "
+                            f"{len(coord_pairs)} coordinate pairs"
+                        )
+                        # Analyze the pattern - first value in coordinate pair
+                        first_vals = [pair[0] for pair in coord_pairs]
+                        second_vals = [pair[1] for pair in coord_pairs]
+                        first_range = (min(first_vals), max(first_vals))
+                        second_range = (min(second_vals), max(second_vals))
+
+                        logger.info(
+                            f"🧭 {dataset_name}: First values range: "
+                            f"{first_range[0]:.2f} to {first_range[1]:.2f}"
+                        )
+                        logger.info(
+                            f"🧭 {dataset_name}: Second values range: "
+                            f"{second_range[0]:.2f} to {second_range[1]:.2f}"
+                        )
+
+                        # Check coordinate order - EPSG:4326 standard is LAT/LON
+                        if (
+                            54 <= first_range[0] <= 58
+                            and 54 <= first_range[1] <= 58
+                            and 8 <= second_range[0] <= 15
+                            and 8 <= second_range[1] <= 15
+                        ):
+                            logger.info(
+                                f"✅ {dataset_name}: CONFIRMED - Data stored as "
+                                f"(LAT, LON) EPSG:4326 standard - "
+                                f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                            )
+                            logger.info(
+                                "   → ST_Area_Spheroid can be used directly "
+                                "(expects LAT/LON input)"
+                            )
+                        elif (
+                            8 <= first_range[0] <= 15
+                            and 8 <= first_range[1] <= 15
+                            and 54 <= second_range[0] <= 58
+                            and 54 <= second_range[1] <= 58
+                        ):
+                            logger.warning(
+                                f"⚠️ {dataset_name}: ALERT - Data stored as "
+                                f"(LON, LAT) GIS convention - "
+                                f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                            )
+                            logger.warning(
+                                "   → ST_Area_Spheroid would need ST_FlipCoordinates "
+                                "wrapper if data is (LON, LAT)!"
+                            )
+                        else:
+                            logger.warning(
+                                f"❓ {dataset_name}: UNCLEAR - Coordinate order unclear - "
+                                f"({first_range[0]:.2f}-{first_range[1]:.2f}, "
+                                f"{second_range[0]:.2f}-{second_range[1]:.2f})"
+                            )
+                            logger.warning(
+                                "   → Manual verification needed for ST_Area_Spheroid usage"
+                            )
+                    else:
+                        logger.warning(
+                            f"🧭 {dataset_name}: No valid coordinate pairs extracted from centroids"
+                        )
+                else:
+                    logger.warning(
+                        f"🧭 {dataset_name}: No sample WKT centroids returned from query"
+                    )
+            except Exception as e:
+                logger.warning(f"⚠️ {dataset_name}: Could not verify coordinate order: {e}")
+                logger.warning(f"   Exception type: {type(e).__name__}")
+                import traceback
+
+                logger.warning(f"   Traceback: {traceback.format_exc()}")
+
         # Final validation in WGS84
         invalid_wgs84 = conn.execute(f"""
-            SELECT COUNT(*) FROM {table_name} 
+            SELECT COUNT(*) FROM {table_name}
             WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
         """).fetchone()[0]
 
@@ -243,13 +395,13 @@ def validate_and_transform_geometries_duckdb(
             # Try to fix again
             try:
                 conn.execute(f"""
-                    UPDATE {table_name} SET 
+                    UPDATE {table_name} SET
                         {geometry_column} = ST_MakeValid({geometry_column})
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """)
 
                 final_invalid = conn.execute(f"""
-                    SELECT COUNT(*) FROM {table_name} 
+                    SELECT COUNT(*) FROM {table_name}
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """).fetchone()[0]
 
@@ -258,21 +410,21 @@ def validate_and_transform_geometries_duckdb(
                         f"{dataset_name}: {final_invalid} geometries remain invalid, removing them"
                     )
                     conn.execute(f"""
-                        DELETE FROM {table_name} 
+                        DELETE FROM {table_name}
                         WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                     """)
 
             except Exception:
                 # Remove invalid geometries if ST_MakeValid fails
                 conn.execute(f"""
-                    DELETE FROM {table_name} 
+                    DELETE FROM {table_name}
                     WHERE {geometry_column} IS NOT NULL AND NOT ST_IsValid({geometry_column})
                 """)
                 logger.info(f"{dataset_name}: Removed {invalid_wgs84} invalid geometries")
 
         # Remove null and empty geometries
         conn.execute(f"""
-            DELETE FROM {table_name} 
+            DELETE FROM {table_name}
             WHERE {geometry_column} IS NULL OR ST_IsEmpty({geometry_column})
         """)
 
@@ -316,7 +468,8 @@ def verify_spatial_join_usage(conn: duckdb.DuckDBPyConnection, query: str) -> bo
         else:
             logger.warning("⚠️ SPATIAL_JOIN operator not used - query may use standard join")
             logger.warning(
-                "💡 Tip: SPATIAL_JOIN requires simple spatial predicates without complex calculations in SELECT"
+                "💡 Tip: SPATIAL_JOIN requires simple spatial predicates without "
+                "complex calculations in SELECT"
             )
             logger.debug(f"Query plan:\n{explain_text}")
 

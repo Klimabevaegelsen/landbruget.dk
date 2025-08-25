@@ -37,10 +37,10 @@ except ImportError as e:
     save_pipeline_cvr_numbers = None
     CVRAPIClient = None
     CVR_COLLECTION_AVAILABLE = False
-    print(f"CVR collection not available: {e}")
+    logging.warning(f"CVR collection not available: {e}")
 
 
-def _get_optimized_gcs_access():
+def _get_optimized_gcs_access() -> type | None:
     """
     Get optimized GCS access with robust import handling.
 
@@ -86,7 +86,7 @@ class GCSStorage:
                 self.gcs_access = None
                 self.use_optimized = False
 
-    def _check_gcs_available(self):
+    def _check_gcs_available(self) -> bool:
         """Check if GCS is available (Google Cloud Storage library is installed)."""
         try:
             _ = storage
@@ -95,7 +95,7 @@ class GCSStorage:
             logging.warning("Google Cloud Storage library not available. Using local storage only.")
             return False
 
-    def upload_file(self, local_path, gcs_path=None):
+    def upload_file(self, local_path, gcs_path=None) -> bool:
         """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
@@ -186,7 +186,7 @@ class SilverPipeline:
         self.df = None
         self.input_csv = None
 
-    def setup_output_directories(self):
+    def setup_output_directories(self) -> bool:
         """Create output directories if they don't exist."""
         try:
             os.makedirs(self.silver_dir, exist_ok=True)
@@ -199,7 +199,7 @@ class SilverPipeline:
             self.logger.error(f"Error creating output directories: {str(e)}")
             return False
 
-    def find_latest_bronze_data(self):
+    def find_latest_bronze_data(self) -> bool:
         """Find the latest bronze directory and CSV file."""
         try:
             self.logger.info(f"Looking for bronze data in: {self.data_root}")
@@ -222,7 +222,7 @@ class SilverPipeline:
             self.logger.error(f"Error finding latest bronze data: {str(e)}")
             return False
 
-    def connect_database(self):
+    def connect_database(self) -> bool:
         """Connect to DuckDB via Ibis."""
         try:
             self.con = ibis.duckdb.connect("data.ddb")
@@ -232,7 +232,7 @@ class SilverPipeline:
             self.logger.error(f"Error connecting to DuckDB: {str(e)}")
             return False
 
-    def load_data(self):
+    def load_data(self) -> bool:
         """Load CSV data using Ibis."""
         try:
             self.raw = self.con.read_csv(self.input_csv)
@@ -242,7 +242,7 @@ class SilverPipeline:
             self.logger.error(f"Error loading data from CSV: {str(e)}")
             return False
 
-    def rename_columns(self):
+    def rename_columns(self) -> bool:
         """Rename columns according to conventions."""
         try:
             # Stepwise renaming to avoid IbisTypeError
@@ -257,7 +257,7 @@ class SilverPipeline:
             self.logger.error(f"Error renaming columns: {str(e)}")
             return False
 
-    def validate_column_names(self):
+    def validate_column_names(self) -> bool:
         """Validate column names against conventions."""
         try:
             for name in self.raw.columns:
@@ -482,51 +482,51 @@ class SilverPipeline:
 
             cvr_client = CVRAPIClient(username=cvr_username, password=cvr_password)
 
-            # Map P-numbers to CVR numbers using the CVR API
+            # Map P-numbers to CVR numbers using bulk CVR API
+            self.logger.info(f"🚀 Using bulk P-number to CVR mapping for {len(p_numbers)} P-numbers")
+
+            # Use bulk P-number fetching from CVR enrichment system
+            pnumber_results = cvr_client.fetch_multiple_pnumbers(
+                pnumbers=p_numbers,
+                fetch_all_fields=False,  # Only fetch basic fields for performance
+                enrich_with_geometry=False,  # Skip geocoding for performance
+                batch_size=50,  # Process in batches of 50
+            )
+
+            # Extract CVR numbers from P-number results
             cvr_numbers = set()
             successful_mappings = 0
 
-            for p_number in p_numbers[:50]:  # Limit to first 50 P-numbers to avoid overwhelming the API
+            for pnumber, pnumber_data in pnumber_results.get("results", {}).items():
                 try:
-                    # Query CVR register for P-number to find the parent CVR number
-                    # Use a search query to find companies with this P-number
-                    query = {
-                        "query": {
-                            "bool": {
-                                "should": [
-                                    {"term": {"Vrvirksomhed.penheder.pNummer": int(p_number)}},
-                                    {"term": {"pNummer": int(p_number)}},
-                                ]
-                            }
-                        },
-                        "size": 1,
-                        "_source": ["Vrvirksomhed.cvrNummer", "cvrNummer"],
-                    }
-
-                    # Make request to CVR API
-                    response = cvr_client._make_request(cvr_client.company_endpoint, query)
-
-                    if response and "hits" in response and response["hits"]["hits"]:
-                        hit = response["hits"]["hits"][0]["_source"]
-
-                        # Extract CVR number from response
-                        cvr_number = None
-                        if "Vrvirksomhed" in hit and "cvrNummer" in hit["Vrvirksomhed"]:
-                            cvr_number = str(hit["Vrvirksomhed"]["cvrNummer"])
-                        elif "cvrNummer" in hit:
-                            cvr_number = str(hit["cvrNummer"])
-
-                        if cvr_number and len(cvr_number) == 8 and cvr_number.isdigit():
-                            cvr_numbers.add(cvr_number)
-                            successful_mappings += 1
-                            self.logger.debug(f"✅ Mapped P-number {p_number} to CVR {cvr_number}")
-
+                    if pnumber_data and "company_relations" in pnumber_data:
+                        # Extract parent CVR number from company relations
+                        for relation in pnumber_data["company_relations"]:
+                            if relation.get("is_current", False) and relation.get("cvr_number"):
+                                cvr_number = str(relation["cvr_number"])
+                                if len(cvr_number) == 8 and cvr_number.isdigit():
+                                    cvr_numbers.add(cvr_number)
+                                    successful_mappings += 1
+                                    self.logger.debug(f"✅ Mapped P-number {pnumber} to CVR {cvr_number}")
+                                    break  # Use first valid current relation
                 except Exception as e:
-                    self.logger.debug(f"⚠️ Could not map P-number {p_number}: {e}")
+                    self.logger.debug(f"⚠️ Could not extract CVR from P-number {pnumber}: {e}")
                     continue
 
+            # Log bulk processing results
+            total_processed = len(pnumber_results.get("results", {}))
+            efficiency_info = pnumber_results.get("summary", {})
+
             self.logger.info(
-                f"🎯 Successfully mapped {successful_mappings} P-numbers to {len(cvr_numbers)} unique CVR numbers"
+                f"🎯 Bulk P-number processing completed: {successful_mappings}/{total_processed} successful mappings"
+            )
+            self.logger.info(
+                f"📊 Efficiency: {efficiency_info.get('api_calls', 0)} API calls for {len(p_numbers)} P-numbers "
+                f"({efficiency_info.get('efficiency_gain', '1.0x')} efficiency gain)"
+            )
+            self.logger.info(
+                f"✅ Final result: {len(cvr_numbers)} unique CVR numbers from {len(p_numbers)} P-numbers "
+                f"({len(cvr_numbers)/len(p_numbers)*100:.1f}% success rate)"
             )
 
             if cvr_numbers:
@@ -747,10 +747,10 @@ if __name__ == "__main__":
     except RuntimeError as e:
         # Logger might not be configured if __main__ is run and SilverPipeline init fails before logger setup
         # So, print to stderr as well
-        print(f"Silver Pipeline ERROR: {e}", file=sys.stderr)
+        logging.error(f"Silver Pipeline ERROR: {e}")
         logging.getLogger(__name__).error(f"Silver Pipeline execution failed: {e}", exc_info=True)
         exit(1)
     except Exception as e:
-        print(f"Silver Pipeline UNEXPECTED ERROR: {e}", file=sys.stderr)
+        logging.error(f"Silver Pipeline UNEXPECTED ERROR: {e}")
         logging.getLogger(__name__).error(f"Unexpected error in silver pipeline __main__: {e}", exc_info=True)
         exit(1)

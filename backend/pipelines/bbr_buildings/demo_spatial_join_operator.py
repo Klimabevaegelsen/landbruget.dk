@@ -22,7 +22,7 @@ Limitations:
 import duckdb
 
 
-def create_sample_data():
+def create_sample_data() -> duckdb.DuckDBPyConnection:
     """Create sample spatial data for demonstration."""
     print("🏗️  Creating sample spatial data...")
 
@@ -36,9 +36,9 @@ def create_sample_data():
         SELECT
             'building_' || row_number() OVER () as building_id,
             ST_Point(x, y) as geometry,
-            CASE 
+            CASE
                 WHEN random() < 0.3 THEN 'agricultural'
-                WHEN random() < 0.7 THEN 'residential' 
+                WHEN random() < 0.7 THEN 'residential'
                 ELSE 'commercial'
             END as building_type,
             random() * 1000 + 50 as building_area_m2
@@ -55,7 +55,7 @@ def create_sample_data():
             'field_' || row_number() OVER () as field_id,
             ST_Buffer(ST_Point(x, y), 50) as geometry,
             random() * 10000 + 1000 as field_area_m2,
-            CASE 
+            CASE
                 WHEN random() < 0.5 THEN 'crop_production'
                 ELSE 'livestock'
             END as field_type
@@ -74,7 +74,7 @@ def create_sample_data():
     return conn
 
 
-def demonstrate_spatial_join_operator():
+def demonstrate_spatial_join_operator() -> bool:
     """Demonstrate the SPATIAL_JOIN operator with proper query structure."""
     print("\n🚀 Demonstrating SPATIAL_JOIN operator...")
 
@@ -82,7 +82,7 @@ def demonstrate_spatial_join_operator():
 
     # Query that will trigger SPATIAL_JOIN operator
     spatial_join_query = """
-    SELECT 
+    SELECT
         b.building_id,
         b.building_type,
         b.building_area_m2,
@@ -92,7 +92,7 @@ def demonstrate_spatial_join_operator():
         ST_Area_Spheroid(ST_Intersection(b.geometry, f.geometry)) as intersection_area_m2
     FROM buildings b
     INNER JOIN agricultural_fields f ON ST_Intersects(b.geometry, f.geometry)
-    WHERE ST_IsValid(b.geometry) 
+    WHERE ST_IsValid(b.geometry)
     AND ST_IsValid(f.geometry)
     """
 
@@ -163,7 +163,7 @@ def demonstrate_query_patterns() -> None:
         print(f"\n🔍 Testing {predicate}: {description}")
 
         query = f"""
-        EXPLAIN SELECT COUNT(*) 
+        EXPLAIN SELECT COUNT(*)
         FROM buildings b
         INNER JOIN agricultural_fields f ON {predicate}(b.geometry, f.geometry)
         """
@@ -218,7 +218,7 @@ def demonstrate_performance_comparison() -> None:
     start_time = time.time()
 
     result_with_spatial_join = conn.execute("""
-        SELECT COUNT(*) 
+        SELECT COUNT(*)
         FROM large_buildings b
         INNER JOIN agricultural_fields f ON ST_Intersects(b.geometry, f.geometry)
     """).fetchone()[0]
@@ -226,7 +226,8 @@ def demonstrate_performance_comparison() -> None:
     spatial_join_time = time.time() - start_time
 
     print(
-        f"✅ SPATIAL_JOIN result: {result_with_spatial_join:,} intersections in {spatial_join_time:.2f}s"
+        f"✅ SPATIAL_JOIN result: {result_with_spatial_join:,} intersections "
+        f"in {spatial_join_time:.2f}s"
     )
 
     # Note: We can't easily disable the SPATIAL_JOIN operator once it's available

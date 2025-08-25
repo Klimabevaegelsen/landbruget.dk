@@ -186,7 +186,9 @@ class ArbjdstilsynetInspectionsGold(
                 "kraeftfremkaldende belastninger": "Kræftfremkaldende belastninger",
                 "luftvejsbelastninger": "Luftvejsbelastninger",
                 "asbest": "Asbest",
-                "nedfald af genstande, sammenstyrtning m.m.": "Nedfald af genstande, sammenstyrtning m.m.",
+                "nedfald af genstande, sammenstyrtning m.m.": (
+                    "Nedfald af genstande, sammenstyrtning m.m."
+                ),
                 "oevrige ulykkesrisici": "Øvrige ulykkesrisici",
                 "psykisk arbejdsmiljoe": "Psykisk arbejdsmiljø",
                 "stoej": "Støj",
@@ -210,11 +212,19 @@ class ArbjdstilsynetInspectionsGold(
             industry_mapping = {
                 "avl af malkekvaeg": "Avl af malkekvæg",
                 "avl af smaagrise": "Avl af smågrise",
-                "dyrkning af groentsager og meloner, roedder og rodknolde": "Dyrkning af grøntsager og meloner, rødder og rodknolde",
-                "dyrkning af korn (undtagen ris), baelgfrugter og olieholdige froe": "Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø",
-                "stoetteaktiviteter i forbindelse med planteavl": "Støtteaktiviteter i forbindelse med planteavl",
+                "dyrkning af groentsager og meloner, roedder og rodknolde": (
+        "Dyrkning af grøntsager og meloner, rødder og rodknolde"
+    ),
+                "dyrkning af korn (undtagen ris), baelgfrugter og olieholdige froe": (
+        "Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø"
+    ),
+                "stoetteaktiviteter i forbindelse med planteavl": (
+        "Støtteaktiviteter i forbindelse med planteavl"
+    ),
                 "anlaeg af ledningsnet til vaesker": "Anlæg af ledningsnet til væsker",
-                "anlaeg af ledningsnet til elektricitet og tele": "Anlæg af ledningsnet til elektricitet og tele",
+                "anlaeg af ledningsnet til elektricitet og tele": (
+                    "Anlæg af ledningsnet til elektricitet og tele"
+                ),
                 "anlaeg af jernbaner og undergrundsbaner": "Anlæg af jernbaner og undergrundsbaner",
                 "forberedende byggepladsarbejder": "Forberedende byggepladsarbejder",
                 "anlaeg af veje og motorveje": "Anlæg af veje og motorveje",
@@ -333,7 +343,8 @@ class ArbjdstilsynetInspectionsGold(
             df_validated["data_quality_score"] = quality_score.clip(0, 1)
 
             self.logger.info(
-                f"✅ Validated {len(df_validated)} records with average quality score: {df_validated['data_quality_score'].mean():.3f}"
+                f"✅ Validated {len(df_validated)} records with average quality score: "
+                f"{df_validated['data_quality_score'].mean():.3f}"
             )
             return df_validated
 

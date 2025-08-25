@@ -5,8 +5,19 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 import pyarrow.parquet as pq
+
+try:
+    import geopandas as gpd
+    import pandas as pd
+
+    DataFrame = pd.DataFrame
+    GeoDataFrame = gpd.GeoDataFrame
+except ImportError:
+    DataFrame = Any
+    GeoDataFrame = Any
 
 # ✅ MIGRATION: Removed shapely import - using DuckDB ST_Point for all spatial operations
 
@@ -18,7 +29,7 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    def get_logger():
+    def get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
     DriveStorageManager = None
@@ -80,8 +91,9 @@ class ParquetManager(DuckDBProcessor):
                 try:
                     # Export from DuckDB table to parquet
                     self.conn.execute(f"""
-                        COPY {table_name} TO '{temp_path}' 
-                        (FORMAT PARQUET, COMPRESSION {self.compression}, ROW_GROUP_SIZE {row_group_size})
+                        COPY {table_name} TO '{temp_path}'
+                        (FORMAT PARQUET, COMPRESSION {self.compression},
+                         ROW_GROUP_SIZE {row_group_size})
                     """)
 
                     # Add schema metadata if provided
@@ -133,8 +145,9 @@ class ParquetManager(DuckDBProcessor):
 
                 # Export directly from DuckDB
                 self.conn.execute(f"""
-                    COPY {table_name} TO '{output_path}' 
-                    (FORMAT PARQUET, COMPRESSION {self.compression}, ROW_GROUP_SIZE {row_group_size})
+                    COPY {table_name} TO '{output_path}'
+                    (FORMAT PARQUET, COMPRESSION {self.compression},
+                     ROW_GROUP_SIZE {row_group_size})
                 """)
 
                 # Add schema metadata if provided (requires reading and rewriting)
@@ -162,7 +175,7 @@ class ParquetManager(DuckDBProcessor):
     # Legacy method for backward compatibility during migration
     def save_dataframe_to_parquet(
         self,
-        df,  # Could be pandas DataFrame or table name
+        df: DataFrame | str,  # Could be pandas DataFrame or table name
         output_path: Path,
         schema_metadata: dict | None = None,
         row_group_size: int = 100000,
@@ -220,11 +233,11 @@ class ParquetManager(DuckDBProcessor):
             # Create spatial table using DuckDB-spatial
             self.conn.execute(f"""
                 CREATE TABLE {spatial_table} AS
-                SELECT 
+                SELECT
                     * EXCLUDE ({latitude_col}, {longitude_col}),
                     ST_Point({longitude_col}, {latitude_col}) as geometry
                 FROM {table_name}
-                WHERE {latitude_col} IS NOT NULL 
+                WHERE {latitude_col} IS NOT NULL
                   AND {longitude_col} IS NOT NULL
                   AND {latitude_col} BETWEEN -90 AND 90
                   AND {longitude_col} BETWEEN -180 AND 180
@@ -269,7 +282,7 @@ class ParquetManager(DuckDBProcessor):
                 try:
                     # Export geometry as WKT for geopandas conversion
                     df = self.conn.execute(f"""
-                        SELECT 
+                        SELECT
                             * EXCLUDE ({geometry_column}),
                             ST_AsText({geometry_column}) as {geometry_column}
                         FROM {table_name}
@@ -306,7 +319,7 @@ class ParquetManager(DuckDBProcessor):
 
                 # Export geometry as WKT for geopandas conversion
                 df = self.conn.execute(f"""
-                    SELECT 
+                    SELECT
                         * EXCLUDE ({geometry_column}),
                         ST_AsText({geometry_column}) as {geometry_column}
                     FROM {table_name}
@@ -337,7 +350,7 @@ class ParquetManager(DuckDBProcessor):
     # Legacy methods for backward compatibility
     def save_geodataframe_to_geoparquet(
         self,
-        gdf,  # Could be GeoDataFrame or table name
+        gdf: GeoDataFrame | str,  # Could be GeoDataFrame or table name
         output_path: Path,
         geometry_column: str = "geometry",
         schema_metadata: dict | None = None,
@@ -368,7 +381,7 @@ class ParquetManager(DuckDBProcessor):
                 # Create spatial table
                 self.conn.execute(f"""
                     CREATE TABLE {table_name} AS
-                    SELECT 
+                    SELECT
                         * EXCLUDE ({geometry_column}_wkt),
                         ST_GeomFromText({geometry_column}_wkt) as {geometry_column}
                     FROM {table_name}_temp

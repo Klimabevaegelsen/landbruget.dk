@@ -5,7 +5,7 @@ from enum import Enum
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, model_validator
 
 # Load environment variables from .env file
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
@@ -64,32 +64,24 @@ class Settings(BaseModel):
         env_file_encoding = "utf-8"
         case_sensitive = False
 
-    @validator("gcs_bucket")
-    def validate_gcs_bucket(self, v: str | None, values: dict) -> str | None:
-        """Validate that GCS bucket is provided when using GCS storage."""
-        if values.get("storage_type") == StorageType.GCS and not v:
+    @model_validator(mode='after')
+    def validate_storage_and_credentials(self) -> 'Settings':
+        """Validate storage and credentials configuration."""
+        # Validate GCS bucket
+        if self.storage_type == StorageType.GCS and not self.gcs_bucket:
             raise ValueError("GCS bucket must be specified when using GCS storage")
-        return v
-
-    @validator("google_application_credentials")
-    def validate_credentials_file(self, v: Path | None, values: dict) -> Path | None:
-        """Validate that the credentials file exists if provided and not using public access."""
-        use_public_access = values.get("use_public_access", False)
-
-        # If using public access, credentials are optional
-        if use_public_access:
-            return v
-
-        # If not using public access, credentials are required
-        if v is not None:
+        
+        # Validate credentials file
+        if not self.use_public_access and self.google_application_credentials is not None:
             # Check if it's an empty Path
-            if str(v) == "":
-                return None
-
-            # Check if file exists
-            if not v.exists():
-                raise ValueError(f"Credentials file not found: {v}")
-        return v
+            if str(self.google_application_credentials) == "":
+                self.google_application_credentials = None
+            elif not self.google_application_credentials.exists():
+                raise ValueError(
+                    f"Credentials file not found: {self.google_application_credentials}"
+                )
+        
+        return self
 
     def get_bronze_path_for_run(self, timestamp: str) -> Path:
         """Get the Bronze layer path for a specific run."""

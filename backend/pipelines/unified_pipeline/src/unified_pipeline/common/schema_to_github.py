@@ -55,8 +55,10 @@ class SchemaToGitHub:
                 "",
                 f"- **Table Name:** `{table_name}`",
                 f"- **Stage:** {stage}",
-                f"- **Estimated Rows:** {schema_info.get('basic_info', {}).get('estimated_size', 'Unknown'):,}",
-                f"- **Column Count:** {schema_info.get('basic_info', {}).get('column_count', 'Unknown')}",
+                f"- **Estimated Rows:** "
+                f"{schema_info.get('basic_info', {}).get('estimated_size', 'Unknown'):,}",
+                f"- **Column Count:** "
+                f"{schema_info.get('basic_info', {}).get('column_count', 'Unknown')}",
                 "",
                 "## Schema",
                 "",
@@ -295,9 +297,9 @@ class SchemaToGitHub:
         try:
             # Get all user tables
             query = """
-            SELECT table_name 
-            FROM duckdb_tables() 
-            WHERE NOT internal 
+            SELECT table_name
+            FROM duckdb_tables()
+            WHERE NOT internal
             AND NOT temporary
             """
 

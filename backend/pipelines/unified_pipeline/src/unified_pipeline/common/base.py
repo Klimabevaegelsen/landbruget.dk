@@ -161,7 +161,24 @@ class BaseSource(Generic[T], ABC):
         self.gcs_access = GCSDataAccess(connection=self.conn)
 
         # Use pipeline start time consistently (not save time)
-        self.pipeline_start_time = datetime.now()
+        # Check if shared timestamp is provided via environment variable (for GitHub Actions)
+        pipeline_start_env = os.getenv('PIPELINE_START_TIME')
+        if pipeline_start_env:
+            try:
+                # Parse GitHub's ISO timestamp format
+                self.pipeline_start_time = datetime.fromisoformat(
+                    pipeline_start_env.replace('Z', '+00:00')
+                )
+                self.log.info(
+                    f"Using shared pipeline start time from environment: "
+                    f"{self.pipeline_start_time}"
+                )
+            except (ValueError, TypeError) as e:
+                self.log.warning(f"Failed to parse PIPELINE_START_TIME environment variable: {e}")
+                self.pipeline_start_time = datetime.now()
+        else:
+            self.pipeline_start_time = datetime.now()
+        
         self.date_pattern = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
         # Initialize schema managers with shared connection
@@ -190,7 +207,8 @@ class BaseSource(Generic[T], ABC):
             # ✅ MIGRATION: Install latest spatial extension with SPATIAL_JOIN operator support
             # Based on DuckDB-spatial PR #545 merged in v1.2.2+
             try:
-                # Force install latest spatial extension to ensure SPATIAL_JOIN operator is available
+                # Force install latest spatial extension to ensure SPATIAL_JOIN operator
+                # is available
                 self.conn.execute("FORCE INSTALL spatial")
                 self.conn.execute("LOAD spatial")
 
@@ -203,7 +221,7 @@ class BaseSource(Generic[T], ABC):
                     test_result = self.conn.execute("""
                         EXPLAIN SELECT * FROM (
                             SELECT 1 as id, ST_Point(0, 0) as geom
-                        ) t1 
+                        ) t1
                         INNER JOIN (
                             SELECT 1 as id, ST_Point(0, 0) as geom
                         ) t2 ON ST_Intersects(t1.geom, t2.geom)
@@ -219,7 +237,8 @@ class BaseSource(Generic[T], ABC):
                         )
                     else:
                         self.log.warning(
-                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN operator not detected"
+                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN operator "
+                            "not detected"
                         )
 
                 except Exception as test_e:
@@ -259,10 +278,20 @@ class BaseSource(Generic[T], ABC):
             self.conn.execute("""
                 CREATE OR REPLACE FUNCTION uuid5(namespace, data) AS (
                     SELECT CONCAT(
-                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                        SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8
+                        ), '-',
+                        SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4
+                        ), '-',
+                        '5', SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3
+                        ), '-',
+                        CONCAT(
+                            '8', SUBSTR(
+                                crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3
+                            )
+                        ), '-',
                         SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
                     )
                 )
@@ -279,7 +308,9 @@ class BaseSource(Generic[T], ABC):
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
                             '5', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
-                            CONCAT('8', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                            CONCAT(
+                                '8', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)
+                            ), '-',
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
                         )
                     )
@@ -467,7 +498,9 @@ class BaseSource(Generic[T], ABC):
         # Create path with timestamp
         timestamp = self.date_pattern
         if not filename:
-            filename = "data.parquet"  # Default filename
+            # Default to parquet for silver/gold layers (processed data)
+            # Bronze layers should explicitly specify their file format
+            filename = "data.parquet"
         path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
 
         if self.config.save_local:
@@ -526,7 +559,8 @@ class BaseSource(Generic[T], ABC):
                 # Get row count for logging using shared connection
                 row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                 self.log.info(
-                    f"✅ Successfully loaded {row_count} records using unified connection from {latest_file_name}"
+                    f"✅ Successfully loaded {row_count} records using unified connection "
+                    f"from {latest_file_name}"
                 )
 
                 # Return table name - caller can use self.conn to access it
@@ -604,7 +638,7 @@ class BaseSource(Generic[T], ABC):
                             tmp_file.flush()
 
                             self.conn.execute(f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """)
 
@@ -620,7 +654,7 @@ class BaseSource(Generic[T], ABC):
                         tmp_file.flush()
 
                         self.conn.execute(f"""
-                            CREATE TABLE {table_name} AS 
+                            CREATE TABLE {table_name} AS
                             SELECT * FROM read_json_auto('{tmp_file.name}')
                         """)
 
@@ -698,7 +732,7 @@ class BaseSource(Generic[T], ABC):
                                 tmp_file.flush()
 
                                 self.conn.execute(f"""
-                                    CREATE TABLE {table_name} AS 
+                                    CREATE TABLE {table_name} AS
                                     SELECT * FROM read_json_auto('{tmp_file.name}')
                                 """)
 
@@ -714,7 +748,7 @@ class BaseSource(Generic[T], ABC):
                                 tmp_file.flush()
 
                                 self.conn.execute(f"""
-                                    CREATE TABLE {table_name} AS 
+                                    CREATE TABLE {table_name} AS
                                     SELECT * FROM read_json_auto('{tmp_file.name}')
                                 """)
 
@@ -767,7 +801,7 @@ class BaseSource(Generic[T], ABC):
 
                             self.conn.execute(
                                 f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """
                             )
@@ -785,7 +819,7 @@ class BaseSource(Generic[T], ABC):
 
                             self.conn.execute(
                                 f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """
                             )
@@ -860,7 +894,7 @@ class BaseSource(Generic[T], ABC):
                             tmp_file.flush()
 
                             self.conn.execute(f"""
-                                CREATE TABLE {temp_table_name} AS 
+                                CREATE TABLE {temp_table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """)
 
@@ -870,7 +904,7 @@ class BaseSource(Generic[T], ABC):
                         # List of values
                         values_str = ", ".join([f"'{v}'" for v in data])
                         self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
+                            CREATE TABLE {temp_table_name} AS
                             SELECT unnest([{values_str}]) as value
                         """)
                 elif isinstance(data, dict):
@@ -881,7 +915,7 @@ class BaseSource(Generic[T], ABC):
                         tmp_file.flush()
 
                         self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
+                            CREATE TABLE {temp_table_name} AS
                             SELECT * FROM read_json_auto('{tmp_file.name}')
                         """)
 
@@ -1063,7 +1097,8 @@ class BaseSource(Generic[T], ABC):
             stage: Processing stage (should NOT be 'bronze' due to memory constraints)
 
         Note:
-            Bronze stage documentation is not supported due to memory constraints with large raw datasets.
+            Bronze stage documentation is not supported due to memory constraints with
+            large raw datasets.
             Use 'silver', 'gold', or other processed stages instead.
         """
         if not self._standardized_schema_manager:
@@ -1115,7 +1150,8 @@ class BaseSource(Generic[T], ABC):
         self, dataset: str, filter_condition: str, table_name: str = None
     ) -> str:
         """
-        ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table - NO DataFrame conversion.
+        ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table -
+        NO DataFrame conversion.
         """
         gcs_path = self._get_latest_silver_path(dataset)
         table_name = table_name or f"silver_{dataset}_filtered"

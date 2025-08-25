@@ -39,6 +39,8 @@ on:
 env:
   ENVIRONMENT: production
   GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
 
 jobs:
   # Stage 0: Pre-filtering (Concurrent - operations are independent)

@@ -116,7 +116,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
         Example:
             >>> namespace = get_first_namespace(root)
-            >>> print(namespace)
+            >>> namespace  # Output: 'https://wfs2-miljoegis.mim.dk/vp3endelig2022'
             'https://wfs2-miljoegis.mim.dk/vp3endelig2022'
         """
         for elem in root.iter():
@@ -491,8 +491,14 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
             # Convert geometry XML to actual geometries using DuckDB-spatial
             self.conn.execute(f"""
-                ALTER TABLE {combined_table} 
+                ALTER TABLE {combined_table}
                 ADD COLUMN geometry_spatial GEOMETRY
+            """)
+
+            # Also add the geometry column for WKT text (needed by downstream consumers)
+            self.conn.execute(f"""
+                ALTER TABLE {combined_table}
+                ADD COLUMN geometry TEXT
             """)
 
             # Convert GML geometries to WKT using Python-based parser
@@ -508,11 +514,11 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
             # Get all records with geometry_xml
             rows = self.conn.execute(f"""
-                SELECT 
-                    ROWID, 
+                SELECT
+                    ROWID,
                     geometry_xml,
                     layer
-                FROM {combined_table} 
+                FROM {combined_table}
                 WHERE geometry_xml IS NOT NULL
             """).fetchall()
 
@@ -527,7 +533,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                             # First try direct conversion
                             self.conn.execute(
                                 f"""
-                                UPDATE {combined_table} 
+                                UPDATE {combined_table}
                                 SET geometry_spatial = ST_GeomFromText(?)
                                 WHERE ROWID = ?
                             """,
@@ -554,7 +560,7 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                                         # Update with repaired geometry
                                         self.conn.execute(
                                             f"""
-                                            UPDATE {combined_table} 
+                                            UPDATE {combined_table}
                                             SET geometry_spatial = ST_GeomFromText(?)
                                             WHERE ROWID = ?
                                         """,
@@ -570,12 +576,14 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                                         if repair_valid and repair_valid[0]:
                                             converted_count += 1
                                             self.log.debug(
-                                                f"Fixed invalid geometry for row {rowid} with ST_MakeValid"
+                                                f"Fixed invalid geometry for row {rowid} "
+                                                f"with ST_MakeValid"
                                             )
                                         else:
                                             failed_count += 1
                                             self.log.debug(
-                                                f"ST_MakeValid repair failed validation for row {rowid}"
+                                                f"ST_MakeValid repair failed validation "
+                                                f"for row {rowid}"
                                             )
                                     else:
                                         failed_count += 1
@@ -731,6 +739,13 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
                         self.config.dataset,
                         geometry_column="geometry_spatial",
                     )
+
+                    # ✅ UPDATE: Replace original geometry column with transformed WKT
+                    self.conn.execute(f"""
+                        UPDATE {table_name} SET
+                            geometry = ST_AsText(geometry_spatial)
+                        WHERE geometry_spatial IS NOT NULL
+                    """)
                 else:
                     self.log.warning(
                         "⚠️ No spatial geometries found after XML conversion - skipping validation"
@@ -752,4 +767,4 @@ class WaterTypologySilver(BaseSource[WaterTypologySilverConfig], SilverJobInterf
 
             except Exception as e:
                 self.log.error(f"Error in Water Typology silver processing: {e}")
-                return None
+                raise  # Re-raise the exception to ensure pipeline fails

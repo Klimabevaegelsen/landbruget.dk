@@ -224,7 +224,7 @@ def create_spf_su_health_controls_table(
                 UNNEST(healthStatus.healthControlInfo) AS health_control_raw,
                 _export_timestamp
             FROM spf_su_raw
-            WHERE ownerDetailInfo IS NOT NULL 
+            WHERE ownerDetailInfo IS NOT NULL
               AND healthStatus.healthControlInfo IS NOT NULL
               AND len(healthStatus.healthControlInfo) > 0
         """)
@@ -364,7 +364,7 @@ def create_spf_su_salmonella_data_table(
                 ownerDetailInfo.salmonellaData.showData AS show_data_raw,
                 _export_timestamp
             FROM spf_su_raw
-            WHERE ownerDetailInfo IS NOT NULL 
+            WHERE ownerDetailInfo IS NOT NULL
               AND ownerDetailInfo.salmonellaData IS NOT NULL
         """)
 

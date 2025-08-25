@@ -1,7 +1,8 @@
 """
 Silver layer data processing for Jordbrugsanalyser Marker data.
 
-This module handles the processing of raw WFS responses from the bronze layer and convert them into structured tables with proper field mappings and data types.
+This module handles the processing of raw WFS responses from the bronze layer and
+convert them into structured tables with proper field mappings and data types.
 
 The module contains:
 - JordbrugsanalyserSilverConfig: Configuration class for the silver processing
@@ -293,7 +294,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                     try:
                         raw_value = elem.text.strip()
                         if raw_value:
-                            if converter == str:
+                            if converter is str:
                                 feature_data[target_field] = self._clean_text_value(raw_value)
                             else:
                                 feature_data[target_field] = converter(raw_value)
@@ -338,7 +339,8 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                     parsed_features.append(feature_data)
 
             self.log.info(
-                f"Parsed {len(parsed_features)} features from {len(features)} XML elements for year {year}"
+                f"Parsed {len(parsed_features)} features from {len(features)} "
+                f"XML elements for year {year}"
             )
             return parsed_features
 
@@ -463,7 +465,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             # Create processed table with spatial geometries
             bronze_conn.execute("""
                 CREATE OR REPLACE TABLE processed_features AS
-                SELECT 
+                SELECT
                     *,
                     ST_GeomFromText(geometry) as geom,
                     ST_IsValid(ST_GeomFromText(geometry)) as is_valid_geometry
@@ -560,15 +562,18 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                         # Log some statistics using DuckDB
                         total_area = (
                             self.conn.execute(
-                                f"SELECT SUM(area_ha) FROM {processed_table} WHERE area_ha IS NOT NULL"
+                                f"SELECT SUM(area_ha) FROM {processed_table} "
+                                f"WHERE area_ha IS NOT NULL"
                             ).fetchone()[0]
                             or 0
                         )
                         unique_crops = self.conn.execute(
-                            f"SELECT COUNT(DISTINCT crop_code) FROM {processed_table} WHERE crop_code IS NOT NULL"
+                            f"SELECT COUNT(DISTINCT crop_code) FROM {processed_table} "
+                            f"WHERE crop_code IS NOT NULL"
                         ).fetchone()[0]
                         unique_blocks = self.conn.execute(
-                            f"SELECT COUNT(DISTINCT field_block) FROM {processed_table} WHERE field_block IS NOT NULL"
+                            f"SELECT COUNT(DISTINCT field_block) FROM {processed_table} "
+                            f"WHERE field_block IS NOT NULL"
                         ).fetchone()[0]
 
                         self.log.info(f"Year {year} statistics:")

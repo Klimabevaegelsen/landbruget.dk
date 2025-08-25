@@ -94,7 +94,8 @@ if __name__ == "__main__":
         oplysninger_raw = load_ejendom_oplysninger(ejendom_client, username, TEST_CHR_NUMBER)
         if oplysninger_raw:
             logger.info(
-                f"Successfully called load_ejendom_oplysninger for CHR {TEST_CHR_NUMBER}. Raw data saved via export module."
+                f"Successfully called load_ejendom_oplysninger for CHR {TEST_CHR_NUMBER}. "
+                f"Raw data saved via export module."
             )
         else:
             logger.warning("load_ejendom_oplysninger returned None or empty.")
@@ -104,7 +105,8 @@ if __name__ == "__main__":
         vet_events_raw = load_ejendom_vet_events(ejendom_client, username, TEST_CHR_NUMBER)
         if vet_events_raw:
             logger.info(
-                f"Successfully called load_ejendom_vet_events for CHR {TEST_CHR_NUMBER}. Raw data saved via export module."
+                f"Successfully called load_ejendom_vet_events for CHR {TEST_CHR_NUMBER}. "
+                f"Raw data saved via export module."
             )
         else:
             logger.warning("load_ejendom_vet_events returned None or empty.")

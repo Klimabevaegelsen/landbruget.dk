@@ -19,7 +19,6 @@ class CVREnrichmentStep(str, Enum):
     PNUMBER_FETCHING = "pnumber_fetching"
     FINANCIAL_DOCUMENTS = "financial_documents"
     ADDRESS_GEOCODING = "address_geocoding"
-    DATA_CONSOLIDATION = "data_consolidation"
 
 
 class CVREnrichmentSharedConfig(BaseModel):
@@ -49,8 +48,9 @@ class CVREnrichmentSharedConfig(BaseModel):
     )
 
     api_batch_size: int = Field(
-        default=100,
-        description="Number of CVR numbers or P-numbers to fetch per API call using 'terms' query (optimized for maximum efficiency)",
+        default=50,
+        description="Number of CVR numbers or P-numbers to fetch per API call using "
+        "'terms' query (reduced for GitHub Actions memory constraints)",
     )
 
     # Address geocoding configuration
@@ -112,7 +112,8 @@ class CVREnrichmentSharedConfig(BaseModel):
     # Independent execution configuration
     enable_independent_execution: bool = Field(
         default=True,
-        description="Whether to enable independent step execution by fetching latest files from GCS",
+        description="Whether to enable independent step execution by fetching "
+        "latest files from GCS",
     )
 
     max_days_back_for_inputs: int = Field(
@@ -240,20 +241,20 @@ def _get_latest_input_paths_from_gcs(
 
         elif step == CVREnrichmentStep.PNUMBER_FETCHING:
             # P-number fetching depends on company fetching
-            pattern = f"{base_pattern}/*/company_fetching.parquet"
+            pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
         elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
             # Financial documents depend on company fetching
-            pattern = f"{base_pattern}/*/company_fetching.parquet"
+            pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
         elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
             # Address geocoding depends on both company and P-number data
-            company_pattern = f"{base_pattern}/*/company_fetching.parquet"
-            pnumber_pattern = f"{base_pattern}/*/pnumber_fetching.parquet"
+            company_pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
+            pnumber_pattern = f"gs://{bucket}/gold/cvr_enrichment_pnumbers/*/data.parquet"
 
             latest_company = _find_latest_file_with_pattern(
                 gcs_access, company_pattern, max_days_back
@@ -274,7 +275,8 @@ def _get_latest_input_paths_from_gcs(
             patterns = [
                 f"{base_pattern}/*/company_fetching.parquet",
                 f"{base_pattern}/*/pnumber_fetching.parquet",
-                f"{base_pattern}/*/financial_documents.parquet",
+                # Financial docs use different dataset
+                f"gs://{bucket}/gold/cvr_enrichment_financial/*/financial_documents.parquet",
                 f"{base_pattern}/*/address_geocoding.parquet",
             ]
 
@@ -298,7 +300,8 @@ def _get_latest_input_paths_from_gcs(
 
 def _find_latest_company_data_file(gcs_access, pattern: str, max_days_back: int) -> Optional[str]:
     """
-    Find the latest file matching a pattern that contains company data (has company_data_json column).
+    Find the latest file matching a pattern that contains company data
+    (has company_data_json column).
 
     Args:
         gcs_access: GCSDataAccess instance
@@ -373,6 +376,8 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
         True if file contains company data, False otherwise
     """
     try:
+        import os
+
         import duckdb
         import gcsfs
 
@@ -380,7 +385,16 @@ def _has_company_data(gcs_access, filepath: str) -> bool:
         temp_conn = duckdb.connect()
         temp_conn.install_extension("spatial")
         temp_conn.load_extension("spatial")
-        fs = gcsfs.GCSFileSystem()
+
+        # Use HMAC authentication if available (same pattern as gcs_access.py)
+        gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+        gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+
+        if gcs_access_key and gcs_secret_key:
+            fs = gcsfs.GCSFileSystem(access_key_id=gcs_access_key, secret_access_key=gcs_secret_key)
+        else:
+            fs = gcsfs.GCSFileSystem()
+
         temp_conn.register_filesystem(fs)
 
         columns_result = temp_conn.execute(f"""
@@ -486,6 +500,19 @@ def _check_pipeline_dependencies_exist(pipeline_paths: list[str]) -> bool:
 
     # If running in GitHub Actions, check for local artifacts
     if os.getenv("GITHUB_ACTIONS") == "true":
+        # For address geocoding, we need BOTH company and pnumber artifacts to exist
+        # Otherwise, we should use independent execution to fetch from GCS
+        if any("address_geocoding" in path for path in pipeline_paths):
+            company_artifact_exists = os.path.exists("/tmp/cvr_company_data.parquet")
+            pnumber_artifact_exists = os.path.exists("/tmp/cvr_pnumber_data.parquet")
+
+            # Only return True if BOTH required artifacts exist
+            if company_artifact_exists and pnumber_artifact_exists:
+                return True
+            else:
+                return False  # Missing artifacts, use independent execution
+
+        # For other steps, check for any matching artifact
         for pipeline_path in pipeline_paths:
             # Extract the file type from the pipeline path
             for file_type, local_path in local_artifact_patterns.items():
@@ -554,6 +581,8 @@ def _get_traditional_input_paths(
 
     elif step == CVREnrichmentStep.ADDRESS_GEOCODING:
         # Address geocoding depends on both company and P-number data (no batching)
+        # Note: These paths are for pipeline dependencies only -
+        # independent execution uses different paths
         return [f"{base_path}/company_fetching.parquet", f"{base_path}/pnumber_fetching.parquet"]
 
     elif step == CVREnrichmentStep.DATA_CONSOLIDATION:
@@ -561,7 +590,8 @@ def _get_traditional_input_paths(
         return [
             f"{base_path}/company_fetching.parquet",
             f"{base_path}/pnumber_fetching.parquet",
-            f"{base_path}/financial_documents.parquet",
+            # Financial docs use different dataset
+            f"gs://{bucket}/gold/cvr_enrichment_financial/{date_pattern}/financial_documents.parquet",
             f"{base_path}/address_geocoding.parquet",
         ]
 

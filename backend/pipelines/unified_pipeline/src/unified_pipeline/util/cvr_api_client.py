@@ -8,6 +8,7 @@ https://datacvr.virk.dk/artikel/system-til-system-adgang-til-cvr-data
 The API uses Elasticsearch-style queries with HTTP Basic Authentication.
 """
 
+import hashlib
 import json
 import os
 import time
@@ -539,6 +540,65 @@ class CVRAPIClient:
         filtered_leadership = filter_cvr_pii(leadership)
         parsed_data["leadership"] = filtered_leadership
 
+        # Extract ownership data (ownership percentages)
+        ownership = []
+        for relation in company.get("deltagerRelation", []):
+            deltager = relation.get("deltager", {})
+
+            # Get owner unique identifier (unit_number)
+            unit_number = deltager.get("enhedsNummer")
+            if not unit_number:
+                continue
+
+            # Get owner name
+            owner_name = None
+            for name_entry in deltager.get("navne", []):
+                owner_name = name_entry.get("navn")
+                break
+
+            if not owner_name:
+                continue
+
+            # Check for ownership (EJERREGISTER)
+            for org in relation.get("organisationer", []):
+                org_name = None
+                for org_name_entry in org.get("organisationsNavn", []):
+                    org_name = org_name_entry.get("navn")
+                    break
+
+                if org_name == "EJERREGISTER":
+                    # Get all ownership percentages with their periods from medlemsData
+                    for member in org.get("medlemsData", []):
+                        for attr in member.get("attributter", []):
+                            if attr.get("type") == "EJERANDEL_PROCENT":
+                                for value_entry in attr.get("vaerdier", []):
+                                    periode = value_entry.get("periode", {})
+                                    ownership_pct = value_entry.get("vaerdi")
+
+                                    # Convert decimal to percentage (1.0 = 100%)
+                                    ownership_percentage = (
+                                        float(ownership_pct) * 100 if ownership_pct else None
+                                    )
+
+                                    # Generate person UUID for consistency with persons table
+                                    # Using same method as cvr_persons table: md5(unit_number)
+                                    person_uuid = hashlib.md5(str(unit_number).encode()).hexdigest()
+
+                                    ownership.append(
+                                        {
+                                            "person_uuid": person_uuid,
+                                            "unit_number": unit_number,
+                                            "owner_name": owner_name,
+                                            "owner_type": deltager.get("enhedstype", "UNKNOWN"),
+                                            "ownership_percentage": ownership_percentage,
+                                            "period_start": periode.get("gyldigFra"),
+                                            "period_end": periode.get("gyldigTil"),
+                                            "is_current": periode.get("gyldigTil") is None,
+                                        }
+                                    )
+
+        parsed_data["ownership"] = ownership
+
         # Extract company status history
         status_history = []
         for status_entry in company.get("virksomhedsstatus", []):
@@ -788,7 +848,10 @@ class CVRAPIClient:
                         # Show the complete address that was attempted for geocoding
                         failed_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                            failed_address = (
+                                f"{address['full_address']}, "
+                                f"{address['postal_code']} {address['city']}"
+                            )
                         self.log.warning(f"Failed to geocode address: {failed_address}")
 
                 enriched_addresses.append(enriched_address)
@@ -797,15 +860,17 @@ class CVRAPIClient:
             company_data = company_data.copy()
             company_data["addresses"] = enriched_addresses
 
-            # Add primary address geometry to top level for easy access
-            current_geocoded = [
-                addr
-                for addr in enriched_addresses
-                if addr.get("is_current") and addr.get("dawa_enriched")
-            ]
+            # Add primary address using intelligent selection
+            # (both geometry and full address details)
+            from .primary_address_selector import select_primary_address_for_company_table
 
-            if current_geocoded:
-                primary_address = current_geocoded[0]  # Use first current geocoded address
+            primary_address = select_primary_address_for_company_table(enriched_addresses)
+
+            if primary_address:
+                # Save full primary address details
+                company_data["primary_address"] = primary_address
+
+                # Also save geometry in legacy format for backward compatibility
                 company_data["primary_address_geometry"] = {
                     "latitude": primary_address.get("latitude"),  # WGS84 latitude
                     "longitude": primary_address.get("longitude"),  # WGS84 longitude
@@ -1485,7 +1550,8 @@ class CVRAPIClient:
                 if "hits" in raw_data:
                     hits_info = raw_data["hits"]
                     self.log.debug(
-                        f"Hits info: total={hits_info.get('total', 'unknown')}, max_score={hits_info.get('max_score', 'unknown')}"
+                        f"Hits info: total={hits_info.get('total', 'unknown')}, "
+                        f"max_score={hits_info.get('max_score', 'unknown')}"
                     )
                     self.log.debug(f"Number of hits returned: {len(hits_info.get('hits', []))}")
 
@@ -1522,7 +1588,8 @@ class CVRAPIClient:
                             self.log.debug(f"Successfully parsed P-number: {pnumber}")
                         else:
                             self.log.warning(
-                                f"Parsed P-number data has no p_number field: {list(parsed_data.keys())}"
+                                f"Parsed P-number data has no p_number field: "
+                                f"{list(parsed_data.keys())}"
                             )
                     else:
                         self.log.warning(
@@ -1534,7 +1601,8 @@ class CVRAPIClient:
                     continue
 
             self.log.debug(
-                f"P-number batch parsing completed: {len(results)} successful out of {len(hits)} hits"
+                f"P-number batch parsing completed: {len(results)} successful "
+                f"out of {len(hits)} hits"
             )
             return results
 
@@ -1920,7 +1988,10 @@ class CVRAPIClient:
                     if should_geocode:
                         failed_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                            failed_address = (
+                                f"{address['full_address']}, "
+                                f"{address['postal_code']} {address['city']}"
+                            )
                         self.log.warning(f"Failed to geocode P-number address: {failed_address}")
 
                 enriched_addresses.append(enriched_address)
@@ -1929,15 +2000,17 @@ class CVRAPIClient:
             pnumber_data = pnumber_data.copy()
             pnumber_data["addresses"] = enriched_addresses
 
-            # Add primary address geometry to top level for easy access
-            current_geocoded = [
-                addr
-                for addr in enriched_addresses
-                if addr.get("is_current") and addr.get("dawa_enriched")
-            ]
+            # Add primary address using intelligent selection
+            # (both geometry and full address details)
+            from .primary_address_selector import select_primary_address_for_company_table
 
-            if current_geocoded:
-                primary_address = current_geocoded[0]  # Use first current geocoded address
+            primary_address = select_primary_address_for_company_table(enriched_addresses)
+
+            if primary_address:
+                # Save full primary address details
+                pnumber_data["primary_address"] = primary_address
+
+                # Also save geometry in legacy format for backward compatibility
                 pnumber_data["primary_address_geometry"] = {
                     "latitude": primary_address.get("latitude"),  # WGS84 latitude
                     "longitude": primary_address.get("longitude"),  # WGS84 longitude

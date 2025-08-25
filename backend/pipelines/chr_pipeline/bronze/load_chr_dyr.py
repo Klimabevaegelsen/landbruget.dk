@@ -113,9 +113,9 @@ def add_to_consolidated_table(movement_data):
         for movement in movements:
             _duckdb_conn.execute(
                 """
-                INSERT INTO consolidated_movements 
-                (reporting_herd_number, movement_date, counterparty_herd, movement_type, 
-                 animal_count, movement_reasons, cattle_type_breakdown, 
+                INSERT INTO consolidated_movements
+                (reporting_herd_number, movement_date, counterparty_herd, movement_type,
+                 animal_count, movement_reasons, cattle_type_breakdown,
                  nation_codes_from, nation_codes_to, is_international)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import PasswordProtection from "@/components/PasswordProtection";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta-sans",
@@ -20,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="da" className="bg-primary-foreground">
       <body className={`${plusJakartaSans.variable} antialiased`}>
+        <PasswordProtection />
         {children}
       </body>
     </html>

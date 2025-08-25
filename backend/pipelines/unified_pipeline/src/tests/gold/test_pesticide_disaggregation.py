@@ -326,7 +326,8 @@ class TestPesticideDisaggregationGold:
         )
 
     def test_organic_field_identification(self, config, mock_gcs_access):
-        """Test that organic fields are properly identified and excluded from pesticide applications."""
+        """Test that organic fields are properly identified and excluded from pesticide
+        applications."""
         # Create fields with organic farming indicators
         fields_df = gGeo(
             {

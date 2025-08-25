@@ -57,9 +57,9 @@ export async function GET() {
     // Years: 2015-2023, Resolutions: 8, 10 (simplified)
     const years = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
     const resolutions = [8, 10] // Only res8 and res10 for H3
-    
+
     const pmtilesFiles: PMTilesFile[] = []
-    
+
     // Generate file entries for all year/resolution combinations
     for (const year of years) {
       for (const resolution of resolutions) {
@@ -73,12 +73,12 @@ export async function GET() {
         })
       }
     }
-    
+
     // Add BNBO PMTiles information
     const bnboFiles: BNBOFile[] = [{
       filename: 'bnbo_areas.pmtiles',
       size: 4685085, // 4.47 MB
-      url: 'https://storage.googleapis.com/landbrugsdata-raw-data/pmtiles/bnbo_areas.pmtiles',
+      url: 'https://data.pesticidkortet.dk/pmtiles/bnbo_areas.pmtiles',
       lastModified: new Date().toISOString(),
       type: 'bnbo_areas'
     }]
@@ -96,7 +96,7 @@ export async function GET() {
         type: 'kommune_pfas'
       })
     }
-    
+
     const metadata: PMTilesMetadata = {
       files: pmtilesFiles,
       years,
@@ -124,7 +124,7 @@ export async function GET() {
         }
       }
     }
-    
+
     return NextResponse.json(metadata, {
       headers: {
         'Cache-Control': 'public, max-age=300', // Cache for 5 minutes
@@ -138,4 +138,4 @@ export async function GET() {
       { status: 500 }
     )
   }
-} 
+}

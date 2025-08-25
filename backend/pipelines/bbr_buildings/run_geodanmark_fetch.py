@@ -10,8 +10,8 @@ from bronze.bulk_geodanmark_fetcher import BulkGeoDanmarkFetcher
 
 # GCS upload functionality
 try:
-    from google.cloud import storage
-    from unified_pipeline.util.gcs_access import GCSDataAccess
+    from google.cloud import storage  # noqa: F401
+    from unified_pipeline.util.gcs_access import GCSDataAccess  # noqa: F401
 
     GCS_AVAILABLE = True
 except ImportError:
@@ -75,7 +75,10 @@ def main() -> None:
 
         # Upload to GCS if in production environment
         if gcs_bucket and os.getenv("ENVIRONMENT") == "production":
-            gcs_path = f"bronze/bbr_buildings/geodanmark/{timestamp}/geodanmark_buildings_complete.geoparquet"
+            gcs_path = (
+                f"bronze/bbr_buildings/geodanmark/{timestamp}/"
+                "geodanmark_buildings_complete.geoparquet"
+            )
 
             success = upload_to_gcs(
                 "data/geodanmark_buildings_complete.geoparquet", gcs_bucket, gcs_path

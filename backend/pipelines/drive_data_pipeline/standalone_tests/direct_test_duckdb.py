@@ -6,17 +6,18 @@ Direct test for the DuckDBHelper class without going through __init__.py.
 # Standard library imports
 import sys
 from pathlib import Path
+from typing import Any
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Third-party imports
-import duckdb
-import ibis
+import duckdb  # noqa: E402
+import ibis  # noqa: E402
 
 # Import the logger directly
-from utils.logging import get_logger
+from utils.logging import get_logger  # noqa: E402
 
 logger = get_logger()
 
@@ -24,7 +25,7 @@ logger = get_logger()
 class DuckDBHelper:
     """Helper class for DuckDB and Ibis operations."""
 
-    def __init__(self, database_path=None) -> None:
+    def __init__(self, database_path: Path | str | None = None) -> None:
         """Initialize the DuckDB helper."""
         # Create DuckDB connection
         if database_path:
@@ -41,7 +42,7 @@ class DuckDBHelper:
         # Initialize Ibis connection - use the path string, not the connection object
         self.ibis_conn = ibis.duckdb.connect(self.db_path)
 
-    def dataframe_to_ibis(self, df, table_name):
+    def dataframe_to_ibis(self, df: Any, table_name: str) -> Any:
         """Convert a pandas DataFrame to an Ibis table."""
         try:
             # Register the DataFrame with DuckDB
@@ -60,7 +61,7 @@ class DuckDBHelper:
             logger.error(f"Failed to convert DataFrame to Ibis table: {str(e)}")
             raise
 
-    def ibis_to_dataframe(self, table):
+    def ibis_to_dataframe(self, table: Any) -> Any:
         """Convert an Ibis table to pandas DataFrame."""
         try:
             df = table.execute()
@@ -71,7 +72,7 @@ class DuckDBHelper:
             logger.error(f"Failed to convert Ibis table to DataFrame: {str(e)}")
             raise
 
-    def save_to_parquet(self, table, output_path, compression="snappy"):
+    def save_to_parquet(self, table: Any, output_path: Path, compression: str = "snappy") -> Path:
         """Save an Ibis table to Parquet format."""
         try:
             # Execute the Ibis expression and convert to a DataFrame
@@ -90,7 +91,7 @@ class DuckDBHelper:
             logger.error(f"Failed to save table to Parquet: {str(e)}")
             raise
 
-    def get_schema(self, table):
+    def get_schema(self, table: Any) -> dict[str, str]:
         """Get the schema of an Ibis table."""
         try:
             schema = {}
@@ -104,7 +105,7 @@ class DuckDBHelper:
             logger.error(f"Failed to get schema: {str(e)}")
             raise
 
-    def cast_column_types(self, table, type_mapping):
+    def cast_column_types(self, table: Any, type_mapping: dict[str, str]) -> Any:
         """Cast columns to specified types."""
         try:
             for col_name, dtype in type_mapping.items():
@@ -137,7 +138,7 @@ def test_duckdb_helper() -> bool:
     helper = DuckDBHelper()
 
     # Create a test DataFrame
-    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
+    df = helper.conn.execute("CREATE TABLE temp_table AS SELECT 1 as id, 'test' as name").fetchdf()
 
     print("Created test DataFrame:")
     print(df.head())

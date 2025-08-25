@@ -187,11 +187,11 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
                     except ET.ParseError as e:
                         err_msg = f"Failed to parse XML response: {e}"
                         self.log.error(err_msg)
-                        raise Exception(err_msg)
+                        raise Exception(err_msg) from e
             except Exception as e:
                 err_msg = f"Error fetching data: {e}"
                 self.log.error(err_msg)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
 
     async def _fetch_raw_data(self) -> Optional[list[str]]:
         """
@@ -287,7 +287,7 @@ class BNBOStatusBronze(BaseSource[BNBOStatusBronzeConfig], BronzeJobInterface):
         self.conn.execute(
             """
             CREATE OR REPLACE TABLE final_dataframe AS
-            SELECT 
+            SELECT
                 payload,
                 ? as source,
                 ? as created_at,

@@ -9,7 +9,7 @@ from pathlib import Path
 import duckdb
 
 
-def test_proximity_analysis():
+def test_proximity_analysis() -> None:
     print("🧪 Testing pesticide proximity analysis with local data")
 
     # Setup paths
@@ -44,7 +44,7 @@ def test_proximity_analysis():
 
     # Load disaggregation data
     conn.execute(f"""
-        CREATE TABLE current_disaggregation AS 
+        CREATE TABLE current_disaggregation AS
         SELECT * FROM '{gold_dir / "pesticide_disaggregation_2021_2022.parquet"}'
     """)
     disagg_count = conn.execute("SELECT COUNT(*) FROM current_disaggregation").fetchone()[0]
@@ -52,7 +52,7 @@ def test_proximity_analysis():
 
     # Load field data
     conn.execute(f"""
-        CREATE TABLE data_fvm_marker_2022_silver AS 
+        CREATE TABLE data_fvm_marker_2022_silver AS
         SELECT * FROM '{silver_dir / "fvm_marker_2022.parquet"}'
     """)
     field_count = conn.execute("SELECT COUNT(*) FROM data_fvm_marker_2022_silver").fetchone()[0]
@@ -60,7 +60,7 @@ def test_proximity_analysis():
 
     # Load buildings data
     conn.execute(f"""
-        CREATE TABLE data_bbr_buildings_silver AS 
+        CREATE TABLE data_bbr_buildings_silver AS
         SELECT * FROM '{silver_dir / "joined_buildings.parquet"}'
     """)
     building_count = conn.execute("SELECT COUNT(*) FROM data_bbr_buildings_silver").fetchone()[0]
@@ -68,7 +68,7 @@ def test_proximity_analysis():
 
     # Load water data
     conn.execute(f"""
-        CREATE TABLE data_water_typology_silver AS 
+        CREATE TABLE data_water_typology_silver AS
         SELECT * FROM '{silver_dir / "water_typology.parquet"}'
     """)
     water_count = conn.execute("SELECT COUNT(*) FROM data_water_typology_silver").fetchone()[0]
@@ -76,8 +76,8 @@ def test_proximity_analysis():
 
     # Check unique fields
     unique_fields = conn.execute("""
-        SELECT COUNT(DISTINCT field_uuid) 
-        FROM current_disaggregation 
+        SELECT COUNT(DISTINCT field_uuid)
+        FROM current_disaggregation
         WHERE field_uuid IS NOT NULL
     """).fetchone()[0]
     print(f"📊 Processing {unique_fields:,} unique fields with pesticide applications")
@@ -104,7 +104,7 @@ def test_proximity_analysis():
         print("Step 2: Testing residential proximity...")
         conn.execute("""
             CREATE OR REPLACE TABLE residential_proximity AS
-            SELECT 
+            SELECT
                 fg.field_uuid,
                 COUNT(b.address) as residential_count
             FROM fields_with_geometry fg
@@ -122,9 +122,9 @@ def test_proximity_analysis():
 
         # Check some sample results
         sample = conn.execute("""
-            SELECT field_uuid, residential_count 
-            FROM residential_proximity 
-            WHERE residential_count > 0 
+            SELECT field_uuid, residential_count
+            FROM residential_proximity
+            WHERE residential_count > 0
             LIMIT 5
         """).fetchall()
 

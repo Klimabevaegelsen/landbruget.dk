@@ -14,7 +14,7 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    def get_logger():
+    def get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
     from silver.duckdb_base import DuckDBProcessor
@@ -244,7 +244,8 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
 
                     sheets_data.append((clean_sheet_name, table_name))
                     logger.debug(
-                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' with {len(df)} rows"
+                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' "
+                        f"with {len(df)} rows"
                     )
 
                 except Exception as e:
@@ -291,7 +292,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     # Use domain-specific mapping
                     standardized_name = mapped_name
                 else:
-                    # Standardize column name: lowercase, replace spaces/special chars with underscores
+                    # Standardize column name: lowercase, replace spaces/special chars
                     # Handle Danish characters properly
                     standardized_name = str(col_name).lower()
                     # Replace Danish characters
@@ -413,7 +414,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
         return None
 
     def _add_backward_compatibility_columns(self, table_name: str) -> None:
-        """Add backward compatibility columns for pesticide data to maintain downstream compatibility.
+        """Add backward compatibility columns for pesticide data to maintain compatibility.
 
         Args:
             table_name: Name of the table to add compatibility columns to
@@ -515,7 +516,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Simplified query without complex row filtering to avoid parsing issues
             self.conn.execute(f"""
                 CREATE TABLE {result_table} AS
-                SELECT 
+                SELECT
                     {transformations_sql}
                 FROM {table_name}
                 WHERE 1=1

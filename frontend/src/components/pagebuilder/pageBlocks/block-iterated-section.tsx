@@ -24,12 +24,12 @@ export function IteratedSectionMenu({
   onSectionChange: (sectionId: string) => void;
 }) {
   const navigationItems: ExtendedNavigationItem[] =
-    iteratedSection.sections.map((item) => ({
+    iteratedSection.sections?.map((item) => ({
       name: item.title,
       href: `${slugify(item._key)}`,
       current: `${slugify(item._key)}` === activeSection,
       id: `${slugify(item._key)}`,
-    }));
+    })) || [];
 
   return (
     <div className="flex gap-4 overflow-x-auto">
@@ -65,7 +65,7 @@ export function BlockIteratedSection({
   level?: number;
 }) {
   const [activeSection, setActiveSection] = useState<string>(
-    `${slugify(iteratedSection.sections[0]._key)}`
+    iteratedSection.sections?.[0] ? `${slugify(iteratedSection.sections[0]._key)}` : ""
   );
 
   const { currentHash } = useHashStore();
@@ -75,7 +75,7 @@ export function BlockIteratedSection({
       // check if the current hash is a section in the iterated section, and if so, set the active section
       const sectionId = currentHash.split("#")[1];
       if (
-        iteratedSection.sections.some((section) => section._key === sectionId)
+        iteratedSection.sections?.some((section) => section._key === sectionId)
       ) {
         setActiveSection(sectionId);
         setTimeout(() => {
@@ -84,6 +84,11 @@ export function BlockIteratedSection({
       }
     }
   }, [currentHash, iteratedSection, level]);
+
+  // If there are no sections, don't render anything
+  if (!iteratedSection.sections || iteratedSection.sections.length === 0) {
+    return <div>No sections available</div>;
+  }
 
   return (
     <div className={cn("flex flex-col w-full gap-4 relative")}>
@@ -105,7 +110,7 @@ export function BlockIteratedSection({
         />
       </div>
       <div className="flex flex-col gap-11">
-        {iteratedSection.sections.map((item) => {
+        {iteratedSection.sections?.map((item) => {
           const sectionId = `${slugify(item._key)}`;
           const isActive = sectionId === activeSection;
 

@@ -1,5 +1,6 @@
 """Main entry point for Google Drive Data Pipeline."""
 
+import logging
 import os
 import sys
 import time
@@ -14,13 +15,14 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # Use absolute imports
-from drive_data_pipeline.bronze import BronzeProcessor
-from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service
-from drive_data_pipeline.bronze.metadata import MetadataManager
-from drive_data_pipeline.config import get_settings, parse_args
-from drive_data_pipeline.silver import SilverProcessor
-from drive_data_pipeline.utils.logging import get_logger, setup_logging
-from drive_data_pipeline.utils.storage import get_storage_manager
+from drive_data_pipeline.bronze import BronzeProcessor  # noqa: E402
+from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service  # noqa: E402
+from drive_data_pipeline.bronze.drive.models import DriveFolder  # noqa: E402
+from drive_data_pipeline.bronze.metadata import MetadataManager  # noqa: E402
+from drive_data_pipeline.config import get_settings, parse_args  # noqa: E402
+from drive_data_pipeline.silver import SilverProcessor  # noqa: E402
+from drive_data_pipeline.utils.logging import get_logger, setup_logging  # noqa: E402
+from drive_data_pipeline.utils.storage import get_storage_manager  # noqa: E402
 
 # Try to import CVR collection utilities
 try:
@@ -47,7 +49,9 @@ if not os.path.exists(env_path):
 load_dotenv(env_path)
 
 
-def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetime, logger) -> None:
+def _save_discovered_cvr_numbers(
+    silver_path: Path, pipeline_start_time: datetime, logger: logging.Logger
+) -> None:
     """
     Extract and save CVR numbers discovered in the drive data pipeline silver data.
 
@@ -133,26 +137,39 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
                 if source == "gcs":
                     # 🚀 ENHANCED: Use native HMAC acceleration for faster Drive data loading
                     try:
+                        # Use GCS access connection directly for both table creation and CVR extraction
                         gcs_access.query_parquet_native(file_path, "SELECT *", table_name)
+                        # Extract CVR numbers using the GCS connection
+                        cvr_numbers = extract_cvr_numbers_from_table(
+                            table_name=table_name,
+                            connection=gcs_access.duckdb_conn,
+                            cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                        )
                     except Exception as e:
                         print(f"Native loading failed, using fallback: {e}")
                         # Fallback to existing temp file method
                         with gcs_access._temp_download(file_path) as temp_file:
                             conn.execute(
-                                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{temp_file}')"
+                                f"CREATE TABLE {table_name} AS "
+                                f"SELECT * FROM read_parquet('{temp_file}')"
                             )
+                        # Extract CVR numbers using the main connection for fallback
+                        cvr_numbers = extract_cvr_numbers_from_table(
+                            table_name=table_name,
+                            connection=conn,
+                            cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                        )
                 else:
                     # Local file - use directly
                     conn.execute(
                         f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
                     )
-
-                # Extract CVR numbers from this table
-                cvr_numbers = extract_cvr_numbers_from_table(
-                    table_name=table_name,
-                    connection=conn,
-                    cvr_column="cvr_number",  # Standardized column name from Excel transformer
-                )
+                    # Extract CVR numbers from this table
+                    cvr_numbers = extract_cvr_numbers_from_table(
+                        table_name=table_name,
+                        connection=conn,
+                        cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                    )
 
                 if cvr_numbers:
                     all_cvr_numbers.extend(cvr_numbers)
@@ -249,11 +266,13 @@ class ProgressTracker:
                     self.bronze_stats["downloaded_files"] / self.bronze_stats["total_files"]
                 ) * 100
                 print(
-                    f"Bronze progress: {self.bronze_stats['downloaded_files']}/{self.bronze_stats['total_files']} files ({pct:.1f}%)"
+                    f"Bronze progress: {self.bronze_stats['downloaded_files']}/"
+                    f"{self.bronze_stats['total_files']} files ({pct:.1f}%)"
                 )
             else:
                 print(
-                    f"Bronze progress: {self.bronze_stats['downloaded_files']} files processed (total unknown)"
+                    f"Bronze progress: {self.bronze_stats['downloaded_files']} "
+                    f"files processed (total unknown)"
                 )
 
     def start_silver_operation(self, total_files: int) -> None:
@@ -286,11 +305,13 @@ class ProgressTracker:
                     self.silver_stats["processed_files"] / self.silver_stats["total_files"]
                 ) * 100
                 print(
-                    f"Silver progress: {self.silver_stats['processed_files']}/{self.silver_stats['total_files']} files ({pct:.1f}%)"
+                    f"Silver progress: {self.silver_stats['processed_files']}/"
+                    f"{self.silver_stats['total_files']} files ({pct:.1f}%)"
                 )
             else:
                 print(
-                    f"Silver progress: {self.silver_stats['processed_files']} files processed (total unknown)"
+                    f"Silver progress: {self.silver_stats['processed_files']} "
+                    f"files processed (total unknown)"
                 )
 
     def print_summary(self) -> None:
@@ -314,7 +335,8 @@ class ProgressTracker:
         if self.silver_stats["total_files"] > 0:
             print("\nSilver Layer:")
             print(
-                f"  Files processed: {self.silver_stats['processed_files']}/{self.silver_stats['total_files']}"
+                f"  Files processed: {self.silver_stats['processed_files']}/"
+                f"{self.silver_stats['total_files']}"
             )
             if self.silver_stats["processing_errors"] > 0:
                 print(f"  Processing errors: {self.silver_stats['processing_errors']}")
@@ -429,7 +451,7 @@ def main() -> int:
             # Extract all files recursively from the folder structure for progress tracking
             all_files = []
 
-            def collect_files(folder) -> None:
+            def collect_files(folder: DriveFolder) -> None:
                 all_files.extend(folder.files)
                 for subfolder in folder.subfolders:
                     collect_files(subfolder)
@@ -464,10 +486,12 @@ def main() -> int:
             logger.info("Starting Silver layer processing")
 
             # Initialize Silver processor with progress tracking
+            schema_dir = Path(__file__).parent / "schemas"
             silver_processor = SilverProcessor(
                 settings=settings,
                 storage_manager=storage_manager,
                 metadata_manager=metadata_manager,
+                schema_dir=schema_dir if schema_dir.exists() else None,
                 progress_callback=progress.update_silver_progress,
             )
 
@@ -537,7 +561,8 @@ def main() -> int:
                 # Count files to process for progress tracking using storage manager
                 # This ensures compatibility with both local and GCS storage
                 try:
-                    # Use storage manager to list metadata files (which correspond to processable files)
+                    # Use storage manager to list metadata files
+                    # (which correspond to processable files)
                     metadata_files = storage_manager.list_files(
                         bronze_run_path, pattern="*.metadata.json"
                     )
@@ -639,11 +664,13 @@ def main() -> int:
 
                 try:
                     from backend.common.schema_documentation import SchemaDocumentationManager
+
+                    schema_doc_manager_class = SchemaDocumentationManager
                 except ImportError as e:
                     import warnings
 
                     warnings.warn(f"Schema documentation not available: {e}", stacklevel=2)
-                    SchemaDocumentationManager = None
+                    schema_doc_manager_class = None
 
                 conn = duckdb.connect()
 
@@ -659,7 +686,8 @@ def main() -> int:
                         try:
                             table_name = f"drive_data_{i + 1}"
                             conn.execute(
-                                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
+                                f"CREATE TABLE {table_name} AS "
+                                f"SELECT * FROM read_parquet('{file_path}')"
                             )
                             table_names.append(table_name)
                         except Exception as e:
@@ -667,9 +695,9 @@ def main() -> int:
                                 f"Could not load {file_path} for schema documentation: {e}"
                             )
 
-                    if table_names and SchemaDocumentationManager is not None:
+                    if table_names and schema_doc_manager_class is not None:
                         # Initialize schema documentation manager
-                        schema_manager = SchemaDocumentationManager(
+                        schema_manager = schema_doc_manager_class(
                             connection=conn,
                             pipeline_name="drive_data_pipeline",
                             pipeline_start_time=pipeline_start_time,
@@ -685,7 +713,7 @@ def main() -> int:
                         # Commit to GitHub
                         schema_manager.commit_to_github()
                         logger.info("Drive data schema documentation committed to GitHub")
-                    elif SchemaDocumentationManager is None:
+                    elif schema_doc_manager_class is None:
                         logger.warning("Schema documentation disabled due to import error")
                     else:
                         logger.info("No processable parquet files found for schema documentation")

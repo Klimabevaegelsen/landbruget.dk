@@ -105,7 +105,10 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
         return property_path, cadastral_path
 
     def _stream_merge_to_gcs(self, property_path: str, cadastral_path: str) -> Dict[str, Any]:
-        """Perform streaming BFE-based merge and save directly to GCS without loading into memory."""
+        """
+        Perform streaming BFE-based merge and save directly to GCS 
+        without loading into memory.
+        """
 
         try:
             self.log.info("Creating property_owners table from GCS parquet file...")
@@ -136,8 +139,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             try:
                 # Test if we can access the BFE number from the nested structure
                 test_result = self.conn.execute("""
-                    SELECT properties.bestemtFastEjendomBFENr as bfe_number 
-                    FROM property_owners 
+                    SELECT properties.bestemtFastEjendomBFENr as bfe_number
+                    FROM property_owners
                     LIMIT 1
                 """).fetchone()
 
@@ -151,13 +154,15 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             except Exception as e:
                 self.log.error(f"Failed to access BFE from nested structure: {e}")
-                raise ValueError(f"Cannot access BFE number from property data structure: {e}")
+                raise ValueError(
+                    f"Cannot access BFE number from property data structure: {e}"
+                ) from e
 
             # Perform the merge and save directly to parquet using DuckDB COPY
             self.log.info("Performing BFE-based merge and creating result table...")
             merge_query = f"""
             CREATE OR REPLACE TABLE merged_properties AS
-            SELECT 
+            SELECT
                 p.{bfe_column} as bfe_number,
                 p.properties.ejendePerson as person_data,
                 p.properties.ejendeVirksomhed as company_data,
@@ -208,14 +213,23 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                 try:
                     # Extract CVR numbers from the company_data JSON structure
                     cvr_extraction_query = """
-                    SELECT DISTINCT 
-                        TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) as cvr_number
-                    FROM merged_properties 
+                    SELECT DISTINCT
+                        TRIM(CAST(
+                            JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR
+                        )) as cvr_number
+                    FROM merged_properties
                     WHERE company_data IS NOT NULL
                       AND JSON_EXTRACT_STRING(company_data, '$.cvrNummer') IS NOT NULL
-                      AND TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) != ''
-                      AND LENGTH(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR))) = 8
-                      AND REGEXP_MATCHES(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)), '^[1-9][0-9]{7}$')
+                      AND TRIM(CAST(
+                          JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR
+                      )) != ''
+                      AND LENGTH(TRIM(CAST(
+                          JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR
+                      ))) = 8
+                      AND REGEXP_MATCHES(TRIM(CAST(
+                          JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR
+                      )),
+                                        '^[1-9][0-9]{7}$')
                     ORDER BY cvr_number
                     """
 
@@ -224,7 +238,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
                     if cvr_numbers:
                         self.log.info(
-                            f"✅ Found {len(cvr_numbers)} unique CVR numbers from property ownership"
+                            f"✅ Found {len(cvr_numbers)} unique CVR numbers "
+                            f"from property ownership"
                         )
 
                         # Save CVR numbers using the collection utility
@@ -300,12 +315,14 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             # Check if we have the required data
             if cadastral_path is None:
-                self.log.error("No cadastral data available - cannot proceed with merge")
-                return
+                error_msg = "No cadastral data available - cannot proceed with merge"
+                self.log.error(error_msg)
+                raise ValueError(error_msg)
 
             if property_path is None:
-                self.log.error("No property owners data available - cannot proceed with merge")
-                return
+                error_msg = "No property owners data available - cannot proceed with merge"
+                self.log.error(error_msg)
+                raise ValueError(error_msg)
 
             self.log.info(f"Using property data: {property_path}")
             self.log.info(f"Using cadastral data: {cadastral_path}")

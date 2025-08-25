@@ -395,7 +395,7 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
         self.conn.execute(
             """
             CREATE OR REPLACE TABLE final_dataframe AS
-            SELECT 
+            SELECT
                 payload,
                 ? as source,
                 ? as layer_type,
@@ -462,6 +462,12 @@ class FVMWFSBronze(BaseSource[FVMWFSBronzeConfig], BronzeJobInterface):
 
             except Exception as e:
                 self.log.error(f"Error processing {layer_type} {year}: {e}")
+                # For critical errors like timeouts after retries, fail the pipeline
+                if "RetryError" in str(e) or "TimeoutError" in str(e):
+                    self.log.error(f"Critical error processing {layer_type} {year}: {e}")
+                    raise e
+                # For other errors, continue but warn about potential data gaps
+                self.log.warning(f"Skipping {layer_type} {year} due to error - data gap created")
                 continue
 
         return layer_data

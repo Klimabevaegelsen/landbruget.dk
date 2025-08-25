@@ -13,7 +13,7 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    def get_logger():
+    def get_logger() -> logging.Logger:
         return logging.getLogger(__name__)
 
     from silver.duckdb_base import DuckDBProcessor
@@ -97,7 +97,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                 # Try to interpret geometry as WKT
                 self.conn.execute(f"""
                     CREATE TABLE {spatial_table} AS
-                    SELECT 
+                    SELECT
                         * EXCLUDE {self.geometry_column},
                         ST_GeomFromText({self.geometry_column}) as {self.geometry_column}
                     FROM {table_name}
@@ -117,7 +117,7 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
 
             # Check for null geometries
             null_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {spatial_table} 
+                SELECT COUNT(*) FROM {spatial_table}
                 WHERE {self.geometry_column} IS NULL
             """).fetchone()[0]
 
@@ -129,8 +129,8 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
             if self.validate_geometry:
                 try:
                     invalid_count = self.conn.execute(f"""
-                        SELECT COUNT(*) FROM {spatial_table} 
-                        WHERE {self.geometry_column} IS NOT NULL 
+                        SELECT COUNT(*) FROM {spatial_table}
+                        WHERE {self.geometry_column} IS NOT NULL
                             AND NOT ST_IsValid({self.geometry_column})
                     """).fetchone()[0]
 
@@ -142,8 +142,8 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                             invalid_details = self.conn.execute(f"""
                                 SELECT ROW_NUMBER() OVER () as row_num,
                                        ST_AsText({self.geometry_column}) as geom_wkt
-                                FROM {spatial_table} 
-                                WHERE {self.geometry_column} IS NOT NULL 
+                                FROM {spatial_table}
+                                WHERE {self.geometry_column} IS NOT NULL
                                     AND NOT ST_IsValid({self.geometry_column})
                                 LIMIT 5
                             """).fetchall()
@@ -160,21 +160,23 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
                                 except Exception:
                                     self.add_error(
                                         result,
-                                        f"Invalid geometry at row {row_num}: Could not determine reason",
+                                        f"Invalid geometry at row {row_num}: "
+                                        f"Could not determine reason",
                                     )
                 except Exception as e:
                     self.add_warning(result, f"Could not validate geometries: {str(e)}")
 
             # Check coordinate system (assume EPSG:25832 for Danish data if not specified)
             valid_geom_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {spatial_table} 
+                SELECT COUNT(*) FROM {spatial_table}
                 WHERE {self.geometry_column} IS NOT NULL
             """).fetchone()[0]
 
             if valid_geom_count > 0:
                 self.add_warning(
                     result,
-                    f"CRS validation: Assuming geometries are in EPSG:25832, will transform to {self.target_crs}",
+                    f"CRS validation: Assuming geometries are in EPSG:25832, "
+                    f"will transform to {self.target_crs}",
                 )
 
             # Clean up temporary table
@@ -276,28 +278,34 @@ class GeospatialValidator(BaseValidator, DuckDBProcessor):
             # Create spatial table with standardized geometries
             self.conn.execute(f"""
                 CREATE TABLE {result_table} AS
-                SELECT 
+                SELECT
                     * EXCLUDE {self.geometry_column},
-                    CASE 
+                    CASE
                         WHEN {self.geometry_column} IS NULL THEN NULL
                         WHEN ST_IsValid(ST_GeomFromText({self.geometry_column})) THEN
-                            ST_Transform(ST_GeomFromText({self.geometry_column}), 'EPSG:25832', '{self.target_crs}')
+                            ST_Transform(
+                                ST_GeomFromText({self.geometry_column}), 
+                                'EPSG:25832', '{self.target_crs}'
+                            )
                         ELSE
                             -- Try to fix invalid geometries
-                            ST_Transform(ST_MakeValid(ST_GeomFromText({self.geometry_column})), 'EPSG:25832', '{self.target_crs}')
+                            ST_Transform(
+                                ST_MakeValid(ST_GeomFromText({self.geometry_column})), 
+                                'EPSG:25832', '{self.target_crs}'
+                            )
                     END as {self.geometry_column}
                 FROM {source_table}
             """)
 
             # Validate the result
             valid_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {result_table} 
-                WHERE {self.geometry_column} IS NOT NULL 
+                SELECT COUNT(*) FROM {result_table}
+                WHERE {self.geometry_column} IS NOT NULL
                     AND ST_IsValid({self.geometry_column})
             """).fetchone()[0]
 
             total_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {result_table} 
+                SELECT COUNT(*) FROM {result_table}
                 WHERE {self.geometry_column} IS NOT NULL
             """).fetchone()[0]
 

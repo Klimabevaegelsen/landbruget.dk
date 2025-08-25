@@ -106,7 +106,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info("📦 Step 1: Creating field_bnbo_intersections (2-way total BNBO)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_intersections AS
-            SELECT 
+            SELECT
                 f.field_uuid,
                 f.field_id,
                 f.block_id,
@@ -124,7 +124,7 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
         self.log.info("📦 Step 2: Creating field_bnbo_water_intersections (3-way water-covered)")
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_bnbo_water_intersections AS
-            SELECT 
+            SELECT
                 fbi.field_uuid,
                 fbi.field_id,
                 fbi.block_id,
@@ -133,10 +133,12 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
                 fbi.bnbo_id,
                 fbi.status_category,
                 wpbi.project_id,
-                ST_Intersection(fbi.field_bnbo_geometry, wpbi.intersection_geometry) as field_bnbo_water_geometry
+                ST_Intersection(fbi.field_bnbo_geometry, wpbi.intersection_geometry) as
+                    field_bnbo_water_geometry
             FROM field_bnbo_intersections fbi
-            JOIN water_projects_bnbo_intersections wpbi 
-                ON fbi.bnbo_id = wpbi.bnbo_id  -- FIX: Ensure same BNBO to prevent cross-contamination
+            JOIN water_projects_bnbo_intersections wpbi
+                ON fbi.bnbo_id = wpbi.bnbo_id
+                    -- FIX: Ensure same BNBO to prevent cross-contamination
                 AND ST_Intersects(fbi.field_bnbo_geometry, wpbi.intersection_geometry)
         """)
 
@@ -198,28 +200,28 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Check field_bnbo_intersections geometry validity
         invalid_bnbo = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_bnbo_intersections 
+            SELECT COUNT(*)
+            FROM field_bnbo_intersections
             WHERE field_bnbo_geometry IS NULL OR NOT ST_IsValid(field_bnbo_geometry)
         """).fetchone()[0]
 
         # Check field_bnbo_water_intersections geometry validity
         invalid_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_bnbo_water_intersections 
+            SELECT COUNT(*)
+            FROM field_bnbo_water_intersections
             WHERE field_bnbo_water_geometry IS NULL OR NOT ST_IsValid(field_bnbo_water_geometry)
         """).fetchone()[0]
 
         # Check for empty geometries
         empty_bnbo = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_bnbo_intersections 
+            SELECT COUNT(*)
+            FROM field_bnbo_intersections
             WHERE field_bnbo_geometry IS NOT NULL AND ST_IsEmpty(field_bnbo_geometry)
         """).fetchone()[0]
 
         empty_water = self.conn.execute("""
-            SELECT COUNT(*) 
-            FROM field_bnbo_water_intersections 
+            SELECT COUNT(*)
+            FROM field_bnbo_water_intersections
             WHERE field_bnbo_water_geometry IS NOT NULL AND ST_IsEmpty(field_bnbo_water_geometry)
         """).fetchone()[0]
 
@@ -233,14 +235,16 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         if invalid_bnbo > 0:
             self.log.error(
-                f"❌ Found {invalid_bnbo:,}/{total_bnbo:,} invalid/NULL geometries in field_bnbo_intersections"
+                f"❌ Found {invalid_bnbo:,}/{total_bnbo:,} invalid/NULL geometries in "
+                f"field_bnbo_intersections"
             )
         else:
             self.log.info(f"✅ All {total_bnbo:,} field_bnbo_intersections geometries are valid")
 
         if invalid_water > 0:
             self.log.error(
-                f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries in field_bnbo_water_intersections"
+                f"❌ Found {invalid_water:,}/{total_water:,} invalid/NULL geometries in "
+                f"field_bnbo_water_intersections"
             )
         else:
             self.log.info(
@@ -284,13 +288,16 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         # Log validation results
         self.log.info(
-            f"📊 Input data: {fields_count:,} fields, {bnbo_count:,} BNBO features, {water_bnbo_count:,} water×BNBO intersections"
+            f"📊 Input data: {fields_count:,} fields, {bnbo_count:,} BNBO features, "
+            f"{water_bnbo_count:,} water×BNBO intersections"
         )
         self.log.info(
-            f"📊 Output data: {field_bnbo_count:,} field×BNBO intersections, {field_bnbo_water_count:,} field×BNBO×water intersections"
+            f"📊 Output data: {field_bnbo_count:,} field×BNBO intersections, "
+            f"{field_bnbo_water_count:,} field×BNBO×water intersections"
         )
         self.log.info(
-            f"📊 Field coverage: {unique_fields_with_bnbo:,} fields with BNBO, {unique_fields_with_water:,} fields with water-covered BNBO"
+            f"📊 Field coverage: {unique_fields_with_bnbo:,} fields with BNBO, "
+            f"{unique_fields_with_water:,} fields with water-covered BNBO"
         )
 
         # Sanity checks
@@ -303,7 +310,8 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         if unique_fields_with_bnbo > fields_count:
             self.log.error(
-                f"❌ CRITICAL: More unique fields with BNBO ({unique_fields_with_bnbo:,}) than total fields ({fields_count:,})"
+                f"❌ CRITICAL: More unique fields with BNBO ({unique_fields_with_bnbo:,}) "
+                f"than total fields ({fields_count:,})"
             )
 
     def _validate_data_consistency(self):
@@ -320,7 +328,8 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         if water_only_fields > 0:
             self.log.error(
-                f"❌ CRITICAL: {water_only_fields:,} fields have water-covered BNBO but no total BNBO (data inconsistency)"
+                f"❌ CRITICAL: {water_only_fields:,} fields have water-covered BNBO but "
+                f"no total BNBO (data inconsistency)"
             )
         else:
             self.log.info(
@@ -337,7 +346,8 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
         if invalid_field_uuids > 0:
             self.log.error(
-                f"❌ CRITICAL: {invalid_field_uuids:,} intersection records have invalid field_uuid references"
+                f"❌ CRITICAL: {invalid_field_uuids:,} intersection records have "
+                f"invalid field_uuid references"
             )
         else:
             self.log.info("✅ All intersection records have valid field_uuid references")

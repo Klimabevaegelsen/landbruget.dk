@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from unittest import mock
 
@@ -11,14 +12,20 @@ from googleapiclient.discovery import Resource
 
 
 @pytest.fixture
-def mock_credentials():
+def mock_credentials() -> Generator[Path, None, None]:
     """Create a temporary mock credentials file."""
     content = """
     {
         "type": "service_account",
         "project_id": "test-project",
         "private_key_id": "test-key-id",
-        "private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7VJTUt9Us8cKj\\nMzEfYyjiWA4R4/M2bS1GB4t7NXp98C3SC6dVMvDuictGeurT8jNbvJZHtCSuYEvu\\nNMoSfm76oqFvAp8Gy0iz5sxjZmSnXyCdPEovGhLa0VzMaQ8s+CLOyS56YyCFGeJZ\\n-----END PRIVATE KEY-----\\n",
+        "private_key": (
+            "-----BEGIN PRIVATE KEY-----\\n"
+            "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7VJTUt9Us8cKj\\n"
+            "MzEfYyjiWA4R4/M2bS1GB4t7NXp98C3SC6dVMvDuictGeurT8jNbvJZHtCSuYEvu\\n"
+            "NMoSfm76oqFvAp8Gy0iz5sxjZmSnXyCdPEovGhLa0VzMaQ8s+CLOyS56YyCFGeJZ\\n"
+            "-----END PRIVATE KEY-----\\n"
+        ),
         "client_email": "test@test-project.iam.gserviceaccount.com",
         "client_id": "123456789",
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -38,7 +45,7 @@ def mock_credentials():
 
 
 @pytest.fixture
-def mock_build():
+def mock_build() -> Generator[mock.MagicMock, None, None]:
     """Mock for googleapiclient.discovery.build."""
     with mock.patch("drive_data_pipeline.bronze.drive.auth.build") as mock_build:
         mock_drive_service = mock.MagicMock(spec=Resource)
@@ -47,7 +54,7 @@ def mock_build():
 
 
 @pytest.fixture
-def mock_service_account():
+def mock_service_account() -> Generator[mock.MagicMock, None, None]:
     """Mock for service_account.Credentials."""
     with mock.patch(
         "drive_data_pipeline.bronze.drive.auth.service_account.Credentials"
@@ -57,7 +64,7 @@ def mock_service_account():
 
 
 def test_get_drive_service_with_valid_credentials(
-    mock_credentials, mock_build, mock_service_account
+    mock_credentials: Path, mock_build: mock.MagicMock, mock_service_account: mock.MagicMock
 ) -> None:
     """Test get_drive_service with valid credentials."""
     # Call the function
@@ -81,7 +88,9 @@ def test_get_drive_service_with_nonexistent_file() -> None:
         get_drive_service(Path("/nonexistent/path.json"))
 
 
-def test_get_drive_service_with_invalid_credentials(mock_credentials, mock_service_account) -> None:
+def test_get_drive_service_with_invalid_credentials(
+    mock_credentials: Path, mock_service_account: mock.MagicMock
+) -> None:
     """Test get_drive_service with invalid credentials."""
     # Mock service_account.Credentials.from_service_account_file to raise an exception
     mock_service_account.from_service_account_file.side_effect = ValueError("Invalid credentials")

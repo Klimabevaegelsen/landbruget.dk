@@ -73,7 +73,7 @@ pip3 install uv
 
 # Install required Python packages (added ijson, pyarrow, uuid for processing)
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-uv pip install --system google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
+uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
@@ -724,8 +724,9 @@ class SFTPToGCSTransferWithProcessing:
                 logger.info(f"Processing complete. Parquet file size: {parquet_file_path.stat().st_size / (1024**2):.1f} MB")
                 flush_logs()
 
-                # Upload Parquet to GCS
-                gcs_filename = f"silver/property_owners/{timestamp}_property_owners_processed.parquet"
+                # Upload Parquet to GCS using unified pipeline naming convention
+                # Use new standardized format: silver/{dataset}/{timestamp}/data.parquet
+                gcs_filename = f"silver/property_owners/{timestamp}/data.parquet"
                 bucket = self.storage_client.bucket(self.bucket_name)
                 blob = bucket.blob(gcs_filename)
 
@@ -818,14 +819,24 @@ validate_success() {
     if gsutil ls gs://landbrugsdata-raw-data/silver/property_owners/ >/dev/null 2>&1; then
         log_with_timestamp "✅ Silver directory exists"
 
-        # Check if parquet file was created in last hour
-        recent_files=$(gsutil ls -l gs://landbrugsdata-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
+        # Check if data.parquet file was created in timestamped directory (new format)
+        # Look for directories created today and check for data.parquet files
+        today=$(date +%Y%m%d)
+        recent_files=$(gsutil ls gs://landbrugsdata-raw-data/silver/property_owners/${today}*/data.parquet 2>/dev/null | wc -l)
         if [ "$recent_files" -gt 0 ]; then
-            log_with_timestamp "✅ Recent Parquet file found in silver directory"
+            log_with_timestamp "✅ Recent data.parquet file found in timestamped directory (new format)"
             return 0
         else
-            log_with_timestamp "❌ No recent Parquet files found in silver directory"
-            return 1
+            log_with_timestamp "❌ No recent data.parquet files found in timestamped directories"
+            # Also check legacy format as fallback
+            legacy_files=$(gsutil ls -l gs://landbrugsdata-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
+            if [ "$legacy_files" -gt 0 ]; then
+                log_with_timestamp "✅ Recent Parquet file found in legacy format"
+                return 0
+            else
+                log_with_timestamp "❌ No recent Parquet files found in either format"
+                return 1
+            fi
         fi
     else
         log_with_timestamp "❌ Silver property_owners directory does not exist"

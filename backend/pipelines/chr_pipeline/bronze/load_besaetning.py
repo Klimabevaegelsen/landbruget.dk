@@ -72,7 +72,8 @@ def load_herd_list(
     # Create the payload dictionary expected by the operation elements
 
     logger.info(
-        f"Fetching herd list for species {species_code}, usage {usage_code}, starting from herd {start_herd_number or 'beginning'}..."
+        f"Fetching herd list for species {species_code}, usage {usage_code}, "
+        f"starting from herd {start_herd_number or 'beginning'}..."
     )
 
     # --- Construct the request structure precisely according to WSDL/XSD ---
@@ -154,7 +155,11 @@ def load_herd_list(
                         except (ValueError, TypeError):
                             logger.warning(f"Skipping invalid herd number: {herd_num_str}")
             else:
-                logger.warning("BesaetningsnummerListe or BesNrListe not found in response.")
+                # Only log as debug since many species/usage combinations legitimately have no herds
+                logger.debug(
+                    f"No herds found for species {species_code}, usage {usage_code} - "
+                    "BesaetningsnummerListe or BesNrListe not found in response."
+                )
         else:
             logger.warning("Response attribute not found in the SOAP response object.")
 
@@ -277,8 +282,11 @@ if __name__ == "__main__":
 
         # --- Commented out listBesaetningerMedBrugsart test ---
         # TEST_USAGE_CODE = 11  # Example: Kød, generelt
-        # logger.info(f"\n--- Testing load_herd_list (Species: {TEST_SPECIES_CODE}, Usage: {TEST_USAGE_CODE}) ---")
-        # herd_list, last_herd_in_batch, has_more = load_herd_list(besaetning_client, username, TEST_SPECIES_CODE, TEST_USAGE_CODE)
+        # logger.info(f"\n--- Testing load_herd_list (Species: {TEST_SPECIES_CODE}, "
+        #             f"Usage: {TEST_USAGE_CODE}) ---")
+        # herd_list, last_herd_in_batch, has_more = load_herd_list(
+        #     besaetning_client, username, TEST_SPECIES_CODE, TEST_USAGE_CODE
+        # )
         # if herd_list:
         #     logger.info(f"Successfully called load_herd_list. Raw data saved via export module.")
         # else:
