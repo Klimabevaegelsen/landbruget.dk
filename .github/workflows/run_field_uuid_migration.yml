@@ -32,7 +32,7 @@ jobs:
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      
+
       - name: Configure uv
         run: source ~/.cargo/env && uv venv
 
@@ -56,4 +56,4 @@ jobs:
         run: |
           source .venv/bin/activate
           python scripts/migration/add_field_uuid_to_gold_tables.py
-        continue-on-error: false 
+        continue-on-error: false

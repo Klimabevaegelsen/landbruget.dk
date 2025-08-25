@@ -1,6 +1,6 @@
 ---
 description: landbruget.dk project organization and file placement rules
-globs: 
+globs:
 alwaysApply: true
 ---
 
