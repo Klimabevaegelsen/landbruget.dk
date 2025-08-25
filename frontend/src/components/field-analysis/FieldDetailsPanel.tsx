@@ -288,7 +288,7 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
             <div className="bg-gray-50 rounded-lg p-3">
               <div className="flex items-center mb-1">
                 <span className="text-gray-600 mr-2">💨</span>
-                <span className="font-medium text-gray-800">Vådområde</span>
+                <span className="font-medium text-gray-800">Lavbundsområde</span>
               </div>
               <div className="text-sm text-gray-700">
                 {formatNumber(fieldData.wetland_area_hectares)} ha lavbundsjorder

@@ -81,6 +81,135 @@ function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit 
       data.push({ label: statusLabel, value: properties.status_category });
     }
 
+    // Show building-specific data if available
+    if (layerName === "Bygning") {
+      if (properties.address) {
+        data.push({ label: "Adresse", value: properties.address });
+      }
+
+      // Show category group with Danish labels
+      if (properties.category_group) {
+        const categoryLabels: Record<string, string> = {
+          'residential': 'Bolig',
+          'agricultural': 'Landbrug',
+          'publicServices': 'Offentlig service'
+        };
+        const categoryLabel = categoryLabels[properties.category_group as string] || properties.category_group;
+        data.push({ label: "Kategori", value: categoryLabel });
+      }
+
+            // Show BBR usage code with official Danish labels
+      if (properties.bbr_usage_code) {
+        const bbrUsageLabels: Record<string, string> = {
+          // Boliger (100-199)
+          '110': 'Stuehus til landbrugsejendom',
+          '120': 'Fritliggende enfamiliehus',
+          '130': 'Række-, kæde- eller dobbelthus',
+          '140': 'Etageboligbebyggelse',
+          '150': 'Kollegium',
+          '160': 'Døgninstitution',
+          '190': 'Anden boligbenyttelse',
+
+          // Erhverv (200-299)
+          '210': 'Kontor og lign.',
+          '211': 'Pengeinstitut, forsikring og lign.',
+          '212': 'Offentlig administration',
+          '213': 'Liberalt erhverv',
+          '214': 'Anden kontorvirksomhed',
+          '215': 'Konsulentvirksomhed og lign.',
+          '216': 'Virksomhed og kontor i samme bygning',
+          '217': 'Blandet erhverv og kontor',
+          '218': 'IT og kommunikation',
+          '219': 'Anden erhvervsvirksomhed',
+          '220': 'Butik og lign.',
+          '230': 'Hotel og restaurant',
+          '240': 'Finansiel tjeneste',
+          '250': 'Håndværk og industri i bymæssig bebyggelse',
+          '290': 'Anden erhvervsbebyggelse',
+
+          // Produktions- og lagerbygninger (300-399)
+          '310': 'Industri',
+          '320': 'Værksted og lign.',
+          '330': 'Lager',
+          '340': 'Energiproduktion og -forsyning',
+          '390': 'Anden produktions- og lagerbygning',
+
+          // Transport (400-499)
+          '410': 'Garageanlæg',
+          '420': 'Bygning til kollektiv transport',
+          '421': 'Jernbanestation og lign.',
+          '422': 'Bustation og lign.',
+          '429': 'Anden transportbygning',
+          '441': 'Lufthavn',
+          '490': 'Anden transportbebyggelse',
+
+          // Institutioner (500-599)
+          '510': 'Undervisning og forskning',
+          '520': 'Hospital og sygehus',
+          '530': 'Sundhed og sociale formål',
+          '540': 'Institution',
+          '550': 'Forsamling og sport',
+          '560': 'Kultur og kirke',
+          '590': 'Anden institutionsbebyggelse',
+
+          // Fritidsbebyggelse (600-699)
+          '610': 'Sommerhus',
+          '620': 'Anden fritidsbebyggelse',
+          '690': 'Anden fritidsbebyggelse',
+
+          // Landbrugs- og skovbrugsbygninger (900-999)
+          '910': 'Stuehus til landbrugsejendom',
+          '920': 'Driftsbygning til landbrugsejendom',
+          '930': 'Anden bygning til landbrugsformål',
+          '940': 'Bygning til gartneri, planteskole og lign.',
+          '950': 'Bygning til pelsdyravl',
+          '960': 'Bygning til fiskeopdræt',
+          '970': 'Skovbrugsbygning',
+          '990': 'Anden landbrugs- eller skovbrugsbygning'
+        };
+
+        const usageLabel = bbrUsageLabels[properties.bbr_usage_code as string] || `BBR kode ${properties.bbr_usage_code}`;
+        data.push({ label: "BBR anvendelse", value: usageLabel });
+      }
+
+      // Show detailed INSPIRE usage as fallback
+      else if (properties.inspire_current_use) {
+        const usageLabels: Record<string, string> = {
+          'individualResidence': 'Enfamilieboliger',
+          'agriculture': 'Landbrugsbygninger',
+          'collectiveResidence': 'Flerfamilieboliger',
+          'twoDwellings': 'Tofamiliehuse',
+          'publicServices': 'Offentlige bygninger'
+        };
+        const usageLabel = usageLabels[properties.inspire_current_use as string] || properties.inspire_current_use;
+        data.push({ label: "Anvendelse", value: usageLabel });
+      }
+
+      if (properties.building_type) {
+        data.push({ label: "Bygningstype", value: properties.building_type });
+      }
+
+      if (properties.inspire_construction_year) {
+        data.push({ label: "Byggeår", value: properties.inspire_construction_year });
+      }
+
+      if (properties.inspire_floor_area) {
+        data.push({ label: "Etageareal", value: properties.inspire_floor_area, unit: "m²" });
+      }
+
+      if (properties.inspire_floors) {
+        data.push({ label: "Etager", value: properties.inspire_floors });
+      }
+
+      if (properties.inspire_dwellings) {
+        data.push({ label: "Boliger", value: properties.inspire_dwellings });
+      }
+
+      if (properties.distance_m) {
+        data.push({ label: "Afstand til mark", value: properties.distance_m, unit: "m" });
+      }
+    }
+
     // Show data relevant to current visualization mode
     switch (visualizationMode) {
       case 'total_pesticide_belastning':
@@ -842,8 +971,9 @@ export default function FieldAnalysisMap({
   const getLayerDisplayName = (layerId: string): string => {
     if (layerId.startsWith("fields-")) return "Landbrugsmark";
     if (layerId.startsWith("bnbo-")) return "BNBO Område";
-    if (layerId.startsWith("wetlands-")) return "Vådområde";
+    if (layerId.startsWith("wetlands-")) return "Lavbundsområde";
     if (layerId.startsWith("water-projects-")) return "Vandprojekt";
+    if (layerId.startsWith("buildings-")) return "Bygning";
     return "Ukendt lag";
   };
 
@@ -874,7 +1004,8 @@ export default function FieldAnalysisMap({
     "fields-fill",
     "bnbo-fill",
     "wetlands-fill",
-    "water-projects-fill"
+    "water-projects-fill",
+    "buildings-fill"
   ];
 
   return (
