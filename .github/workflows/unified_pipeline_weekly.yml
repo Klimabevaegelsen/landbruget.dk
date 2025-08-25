@@ -99,8 +99,8 @@ jobs:
           fi
 
           # Run the pipeline
-          echo "🚀 Executing: python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-          python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+          echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
+          python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
 
           # Stop monitoring
           if [ -n "$MONITOR_PID" ]; then

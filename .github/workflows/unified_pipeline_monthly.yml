@@ -187,8 +187,8 @@ jobs:
             echo "✅ FVM WFS matrix workflow triggered successfully"
           else
             # Regular pipeline execution
-            echo "🚀 Executing: python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
+            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
           fi
 
           # Stop monitoring
@@ -350,8 +350,8 @@ jobs:
             echo "✅ Field Area Analysis matrix workflow triggered successfully"
           else
             # Regular pipeline execution
-            echo "🚀 Executing: python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
+            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
           fi
 
           # Stop monitoring
