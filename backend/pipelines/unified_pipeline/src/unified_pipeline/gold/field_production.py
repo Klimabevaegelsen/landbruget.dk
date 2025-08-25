@@ -52,7 +52,7 @@ class FieldProductionGoldConfig(BaseJobConfig):
     # Leave 4GB buffer for OS and other processes (25% safety margin)
     memory_limit: str = "8GB"  # REDUCED: Use 50% of available 16GB for safer operation
     max_temp_directory_size: str = (
-        "6GB"  # REDUCED: Use 43% of available 14GB SSD for safer operation
+        "10GB"  # INCREASED: Use 71% of available 14GB SSD for complex spatial operations
     )
     thread_count: int = 2  # REDUCED: Use 50% of available cores to reduce memory pressure
 
@@ -71,7 +71,9 @@ class FieldProductionGoldConfig(BaseJobConfig):
     fallback_batch_reduction_factor: float = 0.5  # Reduce batch size by 50% on memory issues
 
     # NEW: Spatial join batching configuration for GitHub Actions
-    spatial_join_batch_size: int = 100000  # Process spatial joins in batches of 100k records
+    spatial_join_batch_size: int = (
+        50000  # REDUCED: Process spatial joins in smaller batches for memory control
+    )
     enable_batched_spatial_joins: bool = True  # Enable batched spatial processing
 
     # Quality thresholds
@@ -625,12 +627,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 CREATE TABLE final_production_estimates AS
                 SELECT * FROM (VALUES
                     ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy',
-                     0.0, 'dummy', 0.0, 'dummy', 'dummy', current_timestamp, 'dummy', 'dummy')
+                     0.0, 'dummy', 0.0, 'dummy', current_timestamp, 'dummy', 'dummy')
                 ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming,
                        landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha,
                        yield_estimation_method, production_estimate_hkg, production_unit,
-                       geometry_wkt, created_at,
-                       field_uuid, primary_field_id)
+                       created_at, field_uuid, primary_field_id)
                 WHERE false
             """)
 
@@ -813,14 +814,20 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         f.crop_type,
                         f.organic_farming,
                         f.year,
-                        z.landsdel_code,
-                        z.landsdel_name,
-                        z.dst_regions,
-                        ST_AsText(f.geometry) as geometry_wkt,
+                        COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
+                        COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
+                        COALESCE(z.dst_regions, 'unknown') as dst_regions,
                         f.field_uuid,
                         f.primary_field_id
                     FROM current_year_fields f
-                    LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
+                    LEFT JOIN (
+                        SELECT DISTINCT
+                            landsdel_code,
+                            landsdel_name,
+                            dst_regions,
+                            geometry
+                        FROM dst_zones
+                    ) z ON ST_Intersects(f.geometry, z.geometry)
                 """)
 
             # Verify SPATIAL_JOIN operator usage
@@ -830,7 +837,18 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # AGGRESSIVE: Clean up source table immediately after spatial join
             self.conn.execute("DROP TABLE IF EXISTS current_year_fields")
 
-            # Check memory after spatial join
+            # CRITICAL: Force checkpoint and vacuum to free up temp space before estimates
+            self.log.info("  🧹 Intermediate cleanup before production estimates...")
+            self.conn.execute("CHECKPOINT")
+            self.conn.execute("VACUUM")
+
+            # Force garbage collection
+            import gc
+
+            collected = gc.collect()
+            self.log.info(f"  🧹 Intermediate cleanup: collected {collected} objects")
+
+            # Check memory after spatial join and cleanup
             self._check_emergency_memory_threshold()
 
             # OPTIMIZED: Create production estimates using single-phase joins
@@ -886,8 +904,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         THEN 'hkg'
                         ELSE NULL
                     END as production_unit,
-                    -- SPATIAL INFO
-                    f.geometry_wkt,
                     -- METADATA
                     current_timestamp as created_at,
                     -- FIELD UUID SUPPORT
@@ -984,7 +1000,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 NULL::VARCHAR as landsdel_code,
                 NULL::VARCHAR as landsdel_name,
                 NULL::VARCHAR as dst_regions,
-                NULL::VARCHAR as geometry_wkt,
                 NULL::VARCHAR as field_uuid,
                 NULL::VARCHAR as primary_field_id
             WHERE FALSE
@@ -1011,7 +1026,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             if batch_count == 0:
                 break
 
-            # Perform spatial join for this batch
+            # Perform spatial join for this batch - SPATIAL_JOIN operator compliant
+            # Use INNER JOIN first to get matches, then LEFT JOIN to preserve all records
             self.conn.execute("""
                 INSERT INTO year_fields_with_zones
                 SELECT
@@ -1022,14 +1038,20 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.crop_type,
                     f.organic_farming,
                     f.year,
-                    z.landsdel_code,
-                    z.landsdel_name,
-                    z.dst_regions,
-                    ST_AsText(f.geometry) as geometry_wkt,
+                    COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
+                    COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
+                    COALESCE(z.dst_regions, 'unknown') as dst_regions,
                     f.field_uuid,
                     f.primary_field_id
                 FROM current_batch f
-                LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
+                LEFT JOIN (
+                    SELECT DISTINCT
+                        landsdel_code,
+                        landsdel_name,
+                        dst_regions,
+                        geometry
+                    FROM dst_zones
+                ) z ON ST_Intersects(f.geometry, z.geometry)
             """)
 
             # Clean up batch table immediately
