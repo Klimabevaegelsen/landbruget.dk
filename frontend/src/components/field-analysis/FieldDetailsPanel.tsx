@@ -273,25 +273,25 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
         <h3 className="text-lg font-semibold text-gray-900 mb-3">Miljøområder</h3>
         <div className="space-y-3">
           {fieldData.bnbo_area_hectares > 0 && (
-            <div className="bg-green-50 rounded-lg p-3">
+            <div className="bg-blue-50 rounded-lg p-3">
               <div className="flex items-center mb-1">
-                <span className="text-green-600 mr-2">🌱</span>
-                <span className="font-medium text-green-800">BNBO Område</span>
+                <span className="text-blue-600 mr-2">💧</span>
+                <span className="font-medium text-blue-800">BNBO Område</span>
               </div>
-              <div className="text-sm text-green-700">
-                {formatNumber(fieldData.bnbo_area_hectares)} ha biodiversitets- og naturgenopretning
+              <div className="text-sm text-blue-700">
+                {formatNumber(fieldData.bnbo_area_hectares)} ha boringsnære beskyttelsesområder
               </div>
             </div>
           )}
 
           {fieldData.wetland_area_hectares > 0 && (
-            <div className="bg-blue-50 rounded-lg p-3">
+            <div className="bg-gray-50 rounded-lg p-3">
               <div className="flex items-center mb-1">
-                <span className="text-blue-600 mr-2">💧</span>
-                <span className="font-medium text-blue-800">Vådområde</span>
+                <span className="text-gray-600 mr-2">💨</span>
+                <span className="font-medium text-gray-800">Vådområde</span>
               </div>
-              <div className="text-sm text-blue-700">
-                {formatNumber(fieldData.wetland_area_hectares)} ha vådområde
+              <div className="text-sm text-gray-700">
+                {formatNumber(fieldData.wetland_area_hectares)} ha lavbundsjorder
               </div>
             </div>
           )}
