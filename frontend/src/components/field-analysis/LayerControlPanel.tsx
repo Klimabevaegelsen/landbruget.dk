@@ -419,9 +419,20 @@ export function LayerControlPanel({
 
         {/* Standard legend */}
         <div className="space-y-2 text-xs">
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-blue-600 rounded"></div>
-            <span>Boringsnære beskyttelsesområder</span>
+          <div className="space-y-1 mb-3">
+            <div className="text-sm font-medium text-gray-700 mb-1">Boringsnære beskyttelsesområder:</div>
+            <div className="flex items-center space-x-2 ml-2">
+              <div className="w-4 h-4 bg-red-500 rounded"></div>
+              <span>Handling påkrævet</span>
+            </div>
+            <div className="flex items-center space-x-2 ml-2">
+              <div className="w-4 h-4 bg-green-500 rounded"></div>
+              <span>Gennemført</span>
+            </div>
+            <div className="flex items-center space-x-2 ml-2">
+              <div className="w-4 h-4 bg-blue-600 rounded"></div>
+              <span>Generelle BNBO områder</span>
+            </div>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-gray-600 rounded"></div>

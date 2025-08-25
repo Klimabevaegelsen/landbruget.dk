@@ -38,6 +38,11 @@ export interface FieldAnalysisData {
   bnbo_area_hectares: number;
   wetland_area_hectares: number;
 
+  // BNBO status data
+  bnbo_action_required_hectares?: number;
+  bnbo_completed_hectares?: number;
+  bnbo_status_categories?: string;
+
   // Proximity data
   residential_buildings_proximity: string;
   educational_facilities_proximity?: string;
