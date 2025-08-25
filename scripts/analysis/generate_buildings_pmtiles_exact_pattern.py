@@ -93,12 +93,13 @@ def load_bbr_buildings(conn: duckdb.DuckDBPyConnection, buildings_file: str):
     # Load all buildings into reference table (like proximity pipeline data_bbr_buildings_silver)
     conn.execute(f"""
         CREATE OR REPLACE TABLE data_bbr_buildings_silver AS
-        SELECT
+                SELECT
             building_uuid,
             geo_building_polygon as geometry,
             geo_building_centroid,
             building_type,
             building_usage_category,
+            bbr_usage_code,
             inspire_current_use,
             inspire_building_nature,
             inspire_construction_year,
@@ -180,9 +181,9 @@ def find_buildings_exact_proximity_pattern(conn: duckdb.DuckDBPyConnection, batc
             LIMIT {batch_size} OFFSET {offset}
         """)
 
-        # Step 2: Pre-filter buildings per batch (IDENTICAL to proximity pipeline lines 360-369)
+        # Step 2: Pre-filter buildings per batch (MODIFIED to include all building categories)
         conn.execute("""
-            CREATE OR REPLACE TABLE residential_buildings AS
+            CREATE OR REPLACE TABLE filtered_buildings AS
             SELECT
                 building_uuid,
                 address,
@@ -198,7 +199,7 @@ def find_buildings_exact_proximity_pattern(conn: duckdb.DuckDBPyConnection, batc
                 inspire_dwellings,
                 ST_Transform(geo_building_centroid, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
             FROM data_bbr_buildings_silver
-            WHERE category_group = 'residential'
+            WHERE category_group IN ('residential', 'agricultural', 'publicServices')
               AND address IS NOT NULL
               AND geometry IS NOT NULL
               AND geo_building_centroid IS NOT NULL
@@ -213,6 +214,7 @@ def find_buildings_exact_proximity_pattern(conn: duckdb.DuckDBPyConnection, batc
                 b.geometry,
                 b.building_type,
                 b.building_usage_category,
+                b.bbr_usage_code,
                 b.inspire_current_use,
                 b.inspire_building_nature,
                 b.inspire_construction_year,
@@ -220,9 +222,10 @@ def find_buildings_exact_proximity_pattern(conn: duckdb.DuckDBPyConnection, batc
                 b.inspire_floors,
                 b.inspire_dwellings,
                 b.address,
+                b.category_group,
                 ROUND(ST_Distance(f.field_geom_utm, b.building_geom_utm), 1) as distance_m
             FROM current_field_batch f
-            LEFT JOIN residential_buildings b ON ST_Intersects(
+            LEFT JOIN filtered_buildings b ON ST_Intersects(
                 ST_Buffer(f.field_geom_utm, 100.0),  -- 100m buffer (same as proximity pipeline)
                 b.building_geom_utm
             )
