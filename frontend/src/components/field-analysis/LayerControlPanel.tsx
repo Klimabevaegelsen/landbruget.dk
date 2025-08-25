@@ -33,7 +33,7 @@ export function LayerControlPanel({
     },
     {
       key: "wetlands" as const,
-      name: "Vådområder",
+      name: "Lavbundsområder",
       description: "768.646 lavbundsjorder med tørvindhold",
       icon: "💨",
       color: "bg-gray-600",
@@ -422,7 +422,7 @@ export function LayerControlPanel({
           <div className="space-y-1 mb-3">
             <div className="text-sm font-medium text-gray-700 mb-1">Boringsnære beskyttelsesområder:</div>
             <div className="flex items-center space-x-2 ml-2">
-              <div className="w-4 h-4 bg-red-500 rounded"></div>
+              <div className="w-4 h-4 bg-yellow-500 rounded"></div>
               <span>Handling påkrævet</span>
             </div>
             <div className="flex items-center space-x-2 ml-2">
