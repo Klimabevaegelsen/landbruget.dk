@@ -34,7 +34,7 @@ export function LayerControlPanel({
     {
       key: "wetlands" as const,
       name: "Vådområder",
-      description: "768.646 vådområder med fugtighedsniveauer",
+      description: "768.646 lavbundsjorder med tørvindhold",
       icon: "💧",
       color: "bg-blue-500",
     },
