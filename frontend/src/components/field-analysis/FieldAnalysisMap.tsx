@@ -17,7 +17,7 @@ interface MapInstance {
   setLayoutProperty: (id: string, prop: string, value: string) => void;
   setPaintProperty: (id: string, prop: string, value: unknown) => void;
   addSource: (id: string, source: unknown) => void;
-  addImage: (id: string, image: HTMLCanvasElement) => void;
+  addImage: (id: string, image: HTMLCanvasElement | ImageBitmap | ImageData) => void;
 }
 
 interface FieldAnalysisMapProps {
@@ -153,43 +153,56 @@ export default function FieldAnalysisMap({
 
     const fieldName = getFieldName(visualizationMode);
 
-    if (useDecileColoring) {
-      // Use decile-based coloring
+        if (useDecileColoring) {
+      // Use decile-based coloring with step function
       const breakpoints = getDecileBreakpoints(visualizationMode, colorUnit);
       const colors = colorScheme.colors;
+
+      // Create step expression with proper structure
+      const stepExpression: unknown[] = [
+        "step",
+        ["coalesce", ["get", fieldName], 0],
+        "#f3f4f6" // Default color for 0 values
+      ];
+
+      // Add breakpoints and colors
+      breakpoints.forEach((breakpoint, i) => {
+        if (i < colors.length - 1) {
+          stepExpression.push(breakpoint, colors[i]);
+        }
+      });
 
       return {
         "fill-color": [
           "case",
-          // Check if field has data for this visualization
-          ["==", ["coalesce", ["get", fieldName], 0], 0],
-          "#f3f4f6", // Light gray for no data
-          [
-            "step",
-            ["coalesce", ["get", fieldName], 0],
-            colors[0], // Base color
-            ...breakpoints.flatMap((breakpoint, i) => [breakpoint, colors[i + 1] || colors[colors.length - 1]])
-          ]
+          ["==", ["typeof", ["get", fieldName]], "null"],
+          "#f3f4f6", // Light gray for null data
+          ["<=", ["coalesce", ["get", fieldName], 0], 0],
+          "#f3f4f6", // Light gray for zero/negative values
+          stepExpression
         ],
         "fill-opacity": 0.7,
       };
     } else {
-      // Use linear interpolation
+      // Use linear interpolation with proper structure
       const colors = colorScheme.colors;
       return {
         "fill-color": [
           "case",
-          ["==", ["coalesce", ["get", fieldName], 0], 0],
-          "#f3f4f6", // Light gray for no data
+          ["==", ["typeof", ["get", fieldName]], "null"],
+          "#f3f4f6", // Light gray for null data
+          ["<=", ["coalesce", ["get", fieldName], 0], 0],
+          "#f3f4f6", // Light gray for zero/negative values
           [
             "interpolate",
             ["linear"],
             ["coalesce", ["get", fieldName], 0],
-            0, colors[0],
-            10, colors[2],
-            50, colors[5],
+            0.1, colors[0],
+            1, colors[1],
+            10, colors[3],
+            50, colors[6],
             100, colors[8],
-            200, colors[9]
+            500, colors[9]
           ]
         ],
         "fill-opacity": 0.7,
@@ -255,29 +268,51 @@ export default function FieldAnalysisMap({
     }
   }, [layerVisibility.fields, generateFieldsPaint, filterState.visualizationMode]);
 
-  // Add BNBO layers with stripe pattern
+  // Add BNBO layers with cross-hatch pattern
   const addBNBOLayers = useCallback((map: MapInstance) => {
     if (map.getSource("bnbo") && !map.getLayer("bnbo-fill")) {
-      // Create diagonal stripe pattern for BNBO
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = 16;
-      canvas.height = 16;
+      // Create cross-hatch pattern for BNBO
+      const createBNBOPattern = async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = 32;
+          canvas.height = 32;
 
-      if (ctx) {
-        ctx.fillStyle = '#10B981';
-        ctx.fillRect(0, 0, 16, 16);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, 8);
-        ctx.lineTo(16, 8);
-        ctx.moveTo(8, 0);
-        ctx.lineTo(8, 16);
-        ctx.stroke();
+          if (ctx) {
+            // Fill with green background
+            ctx.fillStyle = '#10B981';
+            ctx.fillRect(0, 0, 32, 32);
 
-        map.addImage('bnbo-pattern', canvas);
-      }
+            // Add cross-hatch lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            // Diagonal lines
+            ctx.moveTo(0, 0);
+            ctx.lineTo(32, 32);
+            ctx.moveTo(32, 0);
+            ctx.lineTo(0, 32);
+            // Grid lines
+            ctx.moveTo(16, 0);
+            ctx.lineTo(16, 32);
+            ctx.moveTo(0, 16);
+            ctx.lineTo(32, 16);
+            ctx.stroke();
+
+            const imageBitmap = await createImageBitmap(canvas);
+            map.addImage('bnbo-pattern', imageBitmap);
+
+            // Update layer to use pattern
+            if (map.getLayer("bnbo-fill")) {
+              map.setPaintProperty("bnbo-fill", "fill-pattern", "bnbo-pattern");
+              map.setPaintProperty("bnbo-fill", "fill-opacity", 0.8);
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to create BNBO pattern:', error);
+        }
+      };
 
       map.addLayer({
         id: "bnbo-fill",
@@ -285,13 +320,16 @@ export default function FieldAnalysisMap({
         "source-layer": "bnbo",
         type: "fill",
         paint: {
-          "fill-pattern": "bnbo-pattern",
-          "fill-opacity": 0.7,
+          "fill-color": "#10B981", // Fallback color
+          "fill-opacity": 0.6,
         },
         layout: {
           visibility: layerVisibility.bnbo ? "visible" : "none",
         },
       });
+
+      // Create pattern after layer is added
+      createBNBOPattern();
 
       map.addLayer({
         id: "bnbo-outline",
@@ -314,28 +352,49 @@ export default function FieldAnalysisMap({
   const addWetlandsLayers = useCallback((map: MapInstance) => {
     if (map.getSource("wetlands") && !map.getLayer("wetlands-fill")) {
       // Create wave pattern for wetlands
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = 20;
-      canvas.height = 12;
+      const createWetlandsPattern = async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = 24;
+          canvas.height = 16;
 
-      if (ctx) {
-        ctx.fillStyle = '#3B82F6';
-        ctx.fillRect(0, 0, 20, 12);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        // Create wave pattern
-        ctx.moveTo(0, 6);
-        ctx.quadraticCurveTo(5, 2, 10, 6);
-        ctx.quadraticCurveTo(15, 10, 20, 6);
-        ctx.moveTo(0, 9);
-        ctx.quadraticCurveTo(5, 5, 10, 9);
-        ctx.quadraticCurveTo(15, 13, 20, 9);
-        ctx.stroke();
+          if (ctx) {
+            // Fill with blue background
+            ctx.fillStyle = '#3B82F6';
+            ctx.fillRect(0, 0, 24, 16);
 
-        map.addImage('wetlands-pattern', canvas);
-      }
+            // Add wave pattern
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            // Top wave
+            ctx.moveTo(0, 4);
+            ctx.quadraticCurveTo(6, 2, 12, 4);
+            ctx.quadraticCurveTo(18, 6, 24, 4);
+            // Middle wave
+            ctx.moveTo(0, 8);
+            ctx.quadraticCurveTo(6, 6, 12, 8);
+            ctx.quadraticCurveTo(18, 10, 24, 8);
+            // Bottom wave
+            ctx.moveTo(0, 12);
+            ctx.quadraticCurveTo(6, 10, 12, 12);
+            ctx.quadraticCurveTo(18, 14, 24, 12);
+            ctx.stroke();
+
+            const imageBitmap = await createImageBitmap(canvas);
+            map.addImage('wetlands-pattern', imageBitmap);
+
+            // Update layer to use pattern
+            if (map.getLayer("wetlands-fill")) {
+              map.setPaintProperty("wetlands-fill", "fill-pattern", "wetlands-pattern");
+              map.setPaintProperty("wetlands-fill", "fill-opacity", 0.8);
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to create wetlands pattern:', error);
+        }
+      };
 
       map.addLayer({
         id: "wetlands-fill",
@@ -343,13 +402,16 @@ export default function FieldAnalysisMap({
         "source-layer": "wetlands",
         type: "fill",
         paint: {
-          "fill-pattern": "wetlands-pattern",
-          "fill-opacity": 0.7,
+          "fill-color": "#3B82F6", // Fallback color
+          "fill-opacity": 0.6,
         },
         layout: {
           visibility: layerVisibility.wetlands ? "visible" : "none",
         },
       });
+
+      // Create pattern after layer is added
+      createWetlandsPattern();
 
       map.addLayer({
         id: "wetlands-outline",
@@ -372,26 +434,44 @@ export default function FieldAnalysisMap({
   const addWaterProjectsLayers = useCallback((map: MapInstance) => {
     if (map.getSource("water_projects") && !map.getLayer("water-projects-fill")) {
       // Create dot pattern for water projects
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = 16;
-      canvas.height = 16;
+      const createWaterProjectsPattern = async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = 20;
+          canvas.height = 20;
 
-      if (ctx) {
-        ctx.fillStyle = '#14B8A6';
-        ctx.fillRect(0, 0, 16, 16);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-        // Create dot pattern
-        ctx.beginPath();
-        ctx.arc(4, 4, 1.5, 0, 2 * Math.PI);
-        ctx.arc(12, 4, 1.5, 0, 2 * Math.PI);
-        ctx.arc(4, 12, 1.5, 0, 2 * Math.PI);
-        ctx.arc(12, 12, 1.5, 0, 2 * Math.PI);
-        ctx.arc(8, 8, 1.5, 0, 2 * Math.PI);
-        ctx.fill();
+          if (ctx) {
+            // Fill with teal background
+            ctx.fillStyle = '#14B8A6';
+            ctx.fillRect(0, 0, 20, 20);
 
-        map.addImage('water-projects-pattern', canvas);
-      }
+            // Add dot pattern
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            // Create dots in a grid pattern
+            const dotSize = 2;
+            const spacing = 6;
+            for (let x = spacing/2; x < 20; x += spacing) {
+              for (let y = spacing/2; y < 20; y += spacing) {
+                ctx.beginPath();
+                ctx.arc(x, y, dotSize, 0, 2 * Math.PI);
+                ctx.fill();
+              }
+            }
+
+            const imageBitmap = await createImageBitmap(canvas);
+            map.addImage('water-projects-pattern', imageBitmap);
+
+            // Update layer to use pattern
+            if (map.getLayer("water-projects-fill")) {
+              map.setPaintProperty("water-projects-fill", "fill-pattern", "water-projects-pattern");
+              map.setPaintProperty("water-projects-fill", "fill-opacity", 0.8);
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to create water projects pattern:', error);
+        }
+      };
 
       map.addLayer({
         id: "water-projects-fill",
@@ -399,13 +479,16 @@ export default function FieldAnalysisMap({
         "source-layer": "water_projects",
         type: "fill",
         paint: {
-          "fill-pattern": "water-projects-pattern",
-          "fill-opacity": 0.8,
+          "fill-color": "#14B8A6", // Fallback color
+          "fill-opacity": 0.7,
         },
         layout: {
           visibility: layerVisibility.water_projects ? "visible" : "none",
         },
       });
+
+      // Create pattern after layer is added
+      createWaterProjectsPattern();
 
       map.addLayer({
         id: "water-projects-outline",
