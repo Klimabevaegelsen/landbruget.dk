@@ -38,15 +38,119 @@ interface TooltipInfo {
   y: number;
   properties: Record<string, unknown>;
   layerName: string;
+  visualizationMode: FilterState['visualizationMode'];
+  colorUnit: FilterState['colorUnit'];
 }
 
-function MapTooltip({ x, y, properties, layerName }: TooltipInfo) {
-  const formatValue = (value: unknown): string => {
+function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit }: TooltipInfo) {
+  const formatValue = (value: unknown, unit?: string): string => {
     if (typeof value === "number") {
-      return value.toLocaleString("da-DK", { maximumFractionDigits: 2 });
+      const formatted = value.toLocaleString("da-DK", { maximumFractionDigits: 2 });
+      return unit ? `${formatted} ${unit}` : formatted;
     }
     return String(value);
   };
+
+  const getRelevantData = () => {
+    const data: Array<{ label: string; value: unknown; unit?: string }> = [];
+
+    // Always show basic field info
+    if (properties.crop_name) {
+      data.push({ label: "Afgrøde", value: properties.crop_name });
+    }
+
+    if (properties.area_hectares) {
+      data.push({ label: "Areal", value: properties.area_hectares, unit: "ha" });
+    }
+
+    if (properties.is_organic !== undefined) {
+      data.push({ label: "Økologisk", value: properties.is_organic ? "Ja" : "Nej" });
+    }
+
+    if (properties.kommune) {
+      data.push({ label: "Kommune", value: properties.kommune });
+    }
+
+    // Show data relevant to current visualization mode
+    switch (visualizationMode) {
+      case 'total_pesticide_belastning':
+        if (properties.total_pesticide_belastning) {
+          data.push({
+            label: "Total pesticidbelastning",
+            value: properties.total_pesticide_belastning,
+            unit: colorUnit === 'per_hectare' ? 'per ha' : ''
+          });
+        }
+        if (properties.total_pesticide_applications) {
+          data.push({ label: "Antal applikationer", value: properties.total_pesticide_applications });
+        }
+        break;
+
+      case 'pfas_belastning':
+        if (properties.total_pfas_belastning) {
+          data.push({
+            label: "PFAS belastning",
+            value: properties.total_pfas_belastning,
+            unit: colorUnit === 'per_hectare' ? 'per ha' : ''
+          });
+        }
+        if (properties.total_pfas_active_ingredient_kg) {
+          data.push({ label: "PFAS aktivstof", value: properties.total_pfas_active_ingredient_kg, unit: "kg" });
+        }
+        if (properties.pfas_applications) {
+          data.push({ label: "PFAS applikationer", value: properties.pfas_applications });
+        }
+        break;
+
+      case 'diquat_belastning':
+        if (properties.total_diquat_belastning) {
+          data.push({
+            label: "Diquat belastning",
+            value: properties.total_diquat_belastning,
+            unit: colorUnit === 'per_hectare' ? 'per ha' : ''
+          });
+        }
+        if (properties.diquat_applications) {
+          data.push({ label: "Diquat applikationer", value: properties.diquat_applications });
+        }
+        break;
+
+      case 'glyphosate_belastning':
+        if (properties.total_glyphosate_belastning) {
+          data.push({
+            label: "Glyphosate belastning",
+            value: properties.total_glyphosate_belastning,
+            unit: colorUnit === 'per_hectare' ? 'per ha' : ''
+          });
+        }
+        if (properties.total_glyphosate_active_ingredient_kg) {
+          data.push({ label: "Glyphosate aktivstof", value: properties.total_glyphosate_active_ingredient_kg, unit: "kg" });
+        }
+        if (properties.glyphosate_applications) {
+          data.push({ label: "Glyphosate applikationer", value: properties.glyphosate_applications });
+        }
+        break;
+
+      case 'applications_count':
+        if (properties.total_pesticide_applications) {
+          data.push({ label: "Total applikationer", value: properties.total_pesticide_applications });
+        }
+        if (properties.unique_pesticide_products) {
+          data.push({ label: "Unikke produkter", value: properties.unique_pesticide_products });
+        }
+        break;
+
+      case 'area_size':
+        if (properties.area_hectares) {
+          data.push({ label: "Markareal", value: properties.area_hectares, unit: "ha" });
+        }
+        break;
+    }
+
+    return data.slice(0, 6); // Limit to 6 items
+  };
+
+  const relevantData = getRelevantData();
 
   return (
     <div
@@ -60,19 +164,16 @@ function MapTooltip({ x, y, properties, layerName }: TooltipInfo) {
     >
       <p className="text-sm font-semibold text-gray-900 mb-2">{layerName}</p>
       <div className="space-y-1 text-xs">
-        {Object.entries(properties)
-          .filter(([key]) => !key.startsWith("_") && key !== "geometry")
-          .slice(0, 6) // Limit to 6 properties to avoid huge tooltips
-          .map(([key, value]) => (
-            <div key={key} className="flex justify-between">
-              <span className="text-gray-600 capitalize">
-                {key.replace(/_/g, " ")}:
-              </span>
-              <span className="font-medium text-gray-900 ml-2">
-                {formatValue(value)}
-              </span>
-            </div>
-          ))}
+        {relevantData.map(({ label, value, unit }, index) => (
+          <div key={index} className="flex justify-between">
+            <span className="text-gray-600">
+              {label}:
+            </span>
+            <span className="font-medium text-gray-900 ml-2">
+              {formatValue(value, unit)}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -629,11 +730,13 @@ export default function FieldAnalysisMap({
         y: event.point.y,
         properties: feature.properties || {},
         layerName,
+        visualizationMode: filterState.visualizationMode,
+        colorUnit: filterState.colorUnit,
       });
     } else {
       setHoverInfo(null);
     }
-  }, []);
+  }, [filterState.visualizationMode, filterState.colorUnit]);
 
   // Handle click events for field selection
   const onClick = useCallback((event: MapLayerMouseEvent) => {
