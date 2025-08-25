@@ -17,7 +17,7 @@ export default function PasswordProtection() {
     e.preventDefault()
     const correctPassword = process.env.NEXT_PUBLIC_SITE_PASSWORD
 
-    if (password === correctPassword) {
+    if (correctPassword && password.includes(correctPassword)) {
       localStorage.setItem('authenticated', 'true')
       setIsVisible(false)
     } else {
