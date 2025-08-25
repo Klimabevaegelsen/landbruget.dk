@@ -530,6 +530,31 @@ class SilverPipeline:
             )
 
             if cvr_numbers:
+                # Create P-number to CVR mapping dictionary
+                pnumber_to_cvr = {}
+                for pnumber, pnumber_data in pnumber_results.get("results", {}).items():
+                    try:
+                        if pnumber_data and "company_relations" in pnumber_data:
+                            for relation in pnumber_data["company_relations"]:
+                                if relation.get("is_current", False) and relation.get("cvr_number"):
+                                    pnumber_to_cvr[int(pnumber)] = relation["cvr_number"]
+                                    break
+                    except Exception as e:
+                        self.logger.debug(f"⚠️ Could not map P-number {pnumber}: {e}")
+                        continue
+
+                # Add CVR numbers to the dataframe
+                self.df["cvr_number"] = self.df["company_id"].map(pnumber_to_cvr)
+
+                # Log mapping statistics
+                mapped_count = self.df["cvr_number"].notna().sum()
+                total_count = len(self.df)
+                success_rate = mapped_count / total_count * 100
+                self.logger.info(
+                    f"📊 CVR mapping results: {mapped_count}/{total_count} records "
+                    f"({success_rate:.1f}%) have CVR numbers"
+                )
+
                 # Save CVR numbers using the collection utility
                 cvr_gcs_path = save_pipeline_cvr_numbers(
                     pipeline_name="arbejdstilsynet_inspections",
@@ -540,9 +565,11 @@ class SilverPipeline:
                 )
 
                 self.logger.info(f"📋 CVR numbers saved to: {cvr_gcs_path}")
-                self.logger.info(f"✅ Arbejdstilsynet CVR collection completed: {len(cvr_numbers)} CVR numbers")
+                self.logger.info(f"✅ Arbejdstilsynet CVR collection completed: {len(cvr_numbers)} unique CVR numbers")
             else:
                 self.logger.warning("⚠️ No CVR numbers could be mapped from P-numbers")
+                # Add empty CVR column
+                self.df["cvr_number"] = None
 
             return True
 
@@ -705,8 +732,8 @@ class SilverPipeline:
                 self.cast_types,
                 self.filter_by_date,
                 self.check_for_pii,
+                self.extract_and_save_cvr_numbers,  # Move before save_output to include CVR numbers
                 self.save_output,
-                self.extract_and_save_cvr_numbers,
                 self.generate_schema_documentation,
             ]
 
