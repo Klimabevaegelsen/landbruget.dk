@@ -191,12 +191,14 @@ def find_buildings_exact_proximity_pattern(conn: duckdb.DuckDBPyConnection, batc
                 geo_building_centroid,
                 building_type,
                 building_usage_category,
+                bbr_usage_code,
                 inspire_current_use,
                 inspire_building_nature,
                 inspire_construction_year,
                 inspire_floor_area,
                 inspire_floors,
                 inspire_dwellings,
+                category_group,
                 ST_Transform(geo_building_centroid, 'EPSG:4326', 'EPSG:25832') as building_geom_utm
             FROM data_bbr_buildings_silver
             WHERE category_group IN ('residential', 'agricultural', 'publicServices')
