@@ -59,13 +59,13 @@ on:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    
+
     # Add resource limits to ensure we stay well within GitHub runner capacity
     env:
       NODE_OPTIONS: "--max-old-space-size=4096"  # Limit Node.js memory to 4GB
       GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
       GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
-    
+
     steps:
     - uses: actions/checkout@v4
 
@@ -84,7 +84,7 @@ jobs:
         # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
-        
+
         # Install svineflytning pipeline dependencies
         cd ../svineflytning_pipeline
         uv pip install --system -e .
@@ -112,7 +112,7 @@ jobs:
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "SVINEFLYTNING_OUTPUT_DIR=/tmp/data/raw/svineflytning" >> .env
         echo "SVINEFLYTNING_SILVER_OUTPUT_DIR=/tmp/data/silver/svineflytning" >> .env
-        
+
         # Create data directories (using /tmp/data like other pipelines)
         mkdir -p /tmp/data/raw/svineflytning
         mkdir -p /tmp/data/silver/svineflytning
@@ -122,18 +122,18 @@ jobs:
       run: |
         # Determine log level: use input if available (workflow_dispatch), otherwise default to WARNING (schedule)
         LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
-        
+
         # Determine stage: use input if available (workflow_dispatch), otherwise default to all (schedule)
         STAGE=${{ inputs.stage || 'all' }}
-        
+
         # Build base command with common arguments
         CMD="python main.py --log-level $LOG_LEVEL --stage $STAGE"
-        
+
         # Add bronze timestamp if provided (for silver-only runs)
         if [ -n "${{ inputs.bronze_timestamp }}" ]; then
           CMD="$CMD --bronze-timestamp ${{ inputs.bronze_timestamp }}"
         fi
-        
+
         # Add date range arguments based on event type (only needed for bronze stage)
         if [ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]; then
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -153,28 +153,28 @@ jobs:
             CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
           fi
         fi
-        
+
         # Add progress flag if enabled
         if [ "${{ inputs.show_progress }}" = "true" ]; then
           CMD="$CMD --progress"
         fi
-        
+
         # Add test mode flag if enabled (only for bronze stage)
         if [ "${{ inputs.test_mode }}" = "true" ] && ([ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]); then
           CMD="$CMD --test"
         fi
-        
+
         # Add resource control parameters (only for bronze stage)
         if [ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]; then
           if [ -n "${{ inputs.max_concurrent_fetches }}" ]; then
             CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
           fi
-          
+
           if [ -n "${{ inputs.buffer_size }}" ]; then
             CMD="$CMD --buffer-size ${{ inputs.buffer_size }}"
           fi
         fi
-        
+
         echo "Running command: $CMD"
         $CMD
 
@@ -191,11 +191,11 @@ jobs:
         name: bronze-output
         path: /tmp/data/raw/svineflytning
         retention-days: 7
-        
+
     - name: Upload silver artifacts
       uses: actions/upload-artifact@v4
       if: always()  # Upload even if the pipeline fails
       with:
         name: silver-output
         path: /tmp/data/silver/svineflytning
-        retention-days: 7 
+        retention-days: 7

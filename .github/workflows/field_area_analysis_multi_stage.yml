@@ -338,7 +338,7 @@ jobs:
         run: |
           echo "=== Initial disk usage ==="
           df -h
-          
+
           echo "=== Freeing up disk space for memory-intensive processing ==="
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
@@ -346,12 +346,12 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo rm -rf /usr/local/.ghcup
           sudo rm -rf /usr/share/swift
-          
+
           sudo docker system prune -af
           sudo docker image prune -af
           sudo apt-get clean
           sudo rm -rf /var/lib/apt/lists/*
-          
+
           echo "=== Disk usage after cleanup ==="
           df -h
 
@@ -718,7 +718,7 @@ jobs:
           echo "✅ All stages executed successfully"
           echo "📊 Final consolidated results available in GCS"
 
-  # Stage 4B: Consolidation (Independent mode - uses latest GCS data) 
+  # Stage 4B: Consolidation (Independent mode - uses latest GCS data)
   stage4-consolidate-independent:
     if: ${{ github.event.inputs.stage == 'stage4' }}
     runs-on: ubuntu-latest
@@ -762,4 +762,4 @@ jobs:
         run: |
           echo "🎉 Field Area Analysis Stage 4 Completed"
           echo "✅ Consolidation executed successfully using latest GCS data"
-          echo "📊 Final consolidated results available in GCS" 
+          echo "📊 Final consolidated results available in GCS"
