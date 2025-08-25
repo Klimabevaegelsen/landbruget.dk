@@ -1533,6 +1533,7 @@ class CVRAPIClient:
                     "VrproduktionsEnhed.elektroniskPost",
                     "VrproduktionsEnhed.telefonnummer",
                     "VrproduktionsEnhed.aarsbeskaeftigelse",
+                    "VrproduktionsEnhed.virksomhedsrelation",  # Essential for CVR mapping
                 ]
 
             # DEBUG: Log the query being sent
@@ -1694,7 +1695,9 @@ class CVRAPIClient:
             if relation.get("periode", {}).get("gyldigTil") is None:  # Current relations only
                 company_relations.append(
                     {
-                        "cvr_number": relation.get("virksomhed", {}).get("cvrNummer"),
+                        "cvr_number": relation.get(
+                            "cvrNummer"
+                        ),  # CVR number is directly in the relation
                         "relation_type": relation.get("virksomhedsrelation"),
                         "period_start": relation.get("periode", {}).get("gyldigFra"),
                         "period_end": relation.get("periode", {}).get("gyldigTil"),
