@@ -256,8 +256,15 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                                     company_data = json.loads(company_json)
                                     addresses = company_data.get("addresses", [])
 
+                                    # Check if company has any current addresses
+                                    company_has_current_addresses = any(
+                                        addr.get("is_current") for addr in addresses
+                                    )
+
                                     for addr in addresses:
-                                        if self._should_geocode_address(addr):
+                                        if self._should_geocode_address_with_fallback(
+                                            addr, company_has_current_addresses
+                                        ):
                                             addr_record = self._create_address_record(
                                                 addr, "company", cvr_number, company_name
                                             )
@@ -276,8 +283,15 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                                     pnumber_data = json.loads(pnumber_json)
                                     addresses = pnumber_data.get("addresses", [])
 
+                                    # Check if P-number has any current addresses
+                                    pnumber_has_current_addresses = any(
+                                        addr.get("is_current") for addr in addresses
+                                    )
+
                                     for addr in addresses:
-                                        if self._should_geocode_address(addr):
+                                        if self._should_geocode_address_with_fallback(
+                                            addr, pnumber_has_current_addresses
+                                        ):
                                             addr_record = self._create_address_record(
                                                 addr, "pnumber", parent_cvr, unit_name, p_number
                                             )
@@ -311,8 +325,15 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                             company_data = json.loads(company_json)
                             addresses = company_data.get("addresses", [])
 
+                            # Check if company has any current addresses
+                            company_has_current_addresses = any(
+                                addr.get("is_current") for addr in addresses
+                            )
+
                             for addr in addresses:
-                                if self._should_geocode_address(addr):
+                                if self._should_geocode_address_with_fallback(
+                                    addr, company_has_current_addresses
+                                ):
                                     addr_record = self._create_address_record(
                                         addr, "company", cvr_number, company_name
                                     )
@@ -341,8 +362,15 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                             pnumber_data = json.loads(pnumber_json)
                             addresses = pnumber_data.get("addresses", [])
 
+                            # Check if P-number has any current addresses
+                            pnumber_has_current_addresses = any(
+                                addr.get("is_current") for addr in addresses
+                            )
+
                             for addr in addresses:
-                                if self._should_geocode_address(addr):
+                                if self._should_geocode_address_with_fallback(
+                                    addr, pnumber_has_current_addresses
+                                ):
                                     addr_record = self._create_address_record(
                                         addr, "pnumber", parent_cvr, unit_name, p_number
                                     )
@@ -418,6 +446,46 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         # Skip if already geocoded
         if addr.get("dawa_enriched") or addr.get("datavask_enriched"):
             return False
+
+        return True
+
+    def _should_geocode_address_with_fallback(
+        self, addr: Dict[str, Any], company_has_current_addresses: bool
+    ) -> bool:
+        """
+        Determine if an address should be geocoded, considering fallback to historical addresses
+        ONLY for companies with zero current addresses.
+
+        Args:
+            addr: Address record
+            company_has_current_addresses: Whether the company has any current addresses at all
+
+        Returns:
+            True if address should be geocoded
+        """
+        # Must have either adresse_id or full address
+        if not (addr.get("adresse_id") or addr.get("full_address")):
+            return False
+
+        # Skip if already geocoded
+        if addr.get("dawa_enriched") or addr.get("datavask_enriched"):
+            return False
+
+        # If geocode_current_only is True, apply strict rules:
+        # - Always geocode current addresses
+        # - Only geocode historical addresses if company has ZERO current addresses
+        #   (for analytical purposes)
+        if self.config.geocode_current_only:
+            if addr.get("is_current", True):
+                return True  # Always geocode current addresses
+            elif not company_has_current_addresses:
+                return (
+                    True  # Geocode historical addresses ONLY if company has zero current addresses
+                )
+            else:
+                # Skip historical addresses when company has current addresses
+                # (preserve existing behavior)
+                return False
 
         return True
 
@@ -882,47 +950,84 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
             # Create a SQL query that implements the primary address selection logic
             # This selects the best address for each CVR number based on priority rules:
-            # 1. Current addresses over historical
-            # 2. Successfully geocoded addresses (dawa_enriched = true)
-            # 3. Business address types (beliggenhedsadresse > postadresse > kontaktadresse)
-            # 4. Higher coordinate quality (A > B > C > D)
+            # 1. Current addresses over historical (preserve existing behavior for companies
+            #    with current addresses)
+            # 2. For companies with ZERO current addresses: use most recent historical address
+            #    for analytical purposes
+            # 3. Successfully geocoded addresses (dawa_enriched = true)
+            # 4. Business address types (beliggenhedsadresse > postadresse > kontaktadresse)
+            # 5. Higher coordinate quality (A > B > C > D)
+            # 6. Most recent address by period_start for historical addresses (only when no
+            #    current addresses exist)
             self.conn.execute("""
                 CREATE OR REPLACE TABLE primary_address_selection AS
-                WITH address_scores AS (
-                    SELECT *,
-                        -- Score for current vs historical (current = 1000, historical = 0)
-                        CASE WHEN is_current THEN 1000 ELSE 0 END +
+                WITH company_current_status AS (
+                    -- Determine which companies have current addresses
+                    SELECT
+                        cvr_number,
+                        COUNT(CASE WHEN is_current THEN 1 END) as current_address_count
+                    FROM cvr_addresses
+                    GROUP BY cvr_number
+                ),
+                address_scores AS (
+                    SELECT a.*,
+                        ccs.current_address_count,
+                        -- Score for current vs historical, with precise fallback logic
+                                                CASE
+                            WHEN a.is_current THEN 1000  -- Always prioritize current addresses
+                                                        WHEN ccs.current_address_count = 0 THEN 500
+                                -- Only boost historical addresses when company has ZERO
+                                -- current addresses
+                            ELSE 0
+                                -- Historical addresses get no score when current addresses exist
+                                -- (preserve existing behavior)
+                        END +
                         -- Score for geocoding success (geocoded = 100, not geocoded = 0)
-                        CASE WHEN dawa_enriched OR datavask_enriched THEN 100 ELSE 0 END +
+                        CASE WHEN a.dawa_enriched OR a.datavask_enriched THEN 100 ELSE 0 END +
                         -- Score for address type priority
                         CASE
-                            WHEN UPPER(address_type) LIKE '%BELIGGENHED%' THEN 30
-                            WHEN UPPER(address_type) LIKE '%POST%' THEN 20
-                            WHEN UPPER(address_type) LIKE '%KONTAKT%' THEN 10
+                            WHEN UPPER(a.address_type) LIKE '%BELIGGENHED%' THEN 30
+                            WHEN UPPER(a.address_type) LIKE '%POST%' THEN 20
+                            WHEN UPPER(a.address_type) LIKE '%KONTAKT%' THEN 10
                             ELSE 5
                         END +
                         -- Score for coordinate quality (A=4, B=3, C=2, D=1, NULL=0)
                         CASE
-                            WHEN coordinate_quality = 'A' THEN 4
-                            WHEN coordinate_quality = 'B' THEN 3
-                            WHEN coordinate_quality = 'C' THEN 2
-                            WHEN coordinate_quality = 'D' THEN 1
+                            WHEN a.coordinate_quality = 'A' THEN 4
+                            WHEN a.coordinate_quality = 'B' THEN 3
+                            WHEN a.coordinate_quality = 'C' THEN 2
+                            WHEN a.coordinate_quality = 'D' THEN 1
                             ELSE 0
                         END +
-                        -- Small bonus for having coordinates
-                        CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 ELSE 0 END
+                                                -- Small bonus for having coordinates
+                        CASE WHEN a.latitude IS NOT NULL AND a.longitude IS NOT NULL
+                             THEN 1 ELSE 0 END +
+                        -- Recency bonus for historical addresses (ONLY when company has zero
+                        -- current addresses)
+                        CASE
+                            WHEN ccs.current_address_count = 0 AND NOT a.is_current
+                                 AND a.period_start IS NOT NULL
+                            THEN LEAST(LENGTH(a.period_start), 10)  -- Simple proxy for recency
+                            ELSE 0
+                        END
                         as selection_score
-                    FROM cvr_addresses
+                    FROM cvr_addresses a
+                    LEFT JOIN company_current_status ccs ON a.cvr_number = ccs.cvr_number
                 ),
                 ranked_addresses AS (
                     SELECT *,
-                        ROW_NUMBER() OVER (
+                                                ROW_NUMBER() OVER (
                             PARTITION BY cvr_number
-                            ORDER BY selection_score DESC, address_id
+                            ORDER BY selection_score DESC,
+                                     -- Only apply recency sorting for companies with zero
+                                     -- current addresses
+                                     CASE WHEN current_address_count = 0 AND NOT is_current
+                                          THEN period_start END DESC NULLS LAST,
+                                     address_id
                         ) as rank
                     FROM address_scores
                 )
-                SELECT cvr_number, address_id, selection_score
+                SELECT cvr_number, address_id, selection_score, current_address_count
                 FROM ranked_addresses
                 WHERE rank = 1
             """)
