@@ -24,7 +24,7 @@ export default function FieldAnalysisVisualization() {
     bnbo: true,
     wetlands: false,
     water_projects: false,
-    buildings: false,
+    buildings: true,
   });
 
   const [filterState, setFilterState] = useState<FilterState>({
@@ -52,7 +52,7 @@ export default function FieldAnalysisVisualization() {
     bnbo: process.env.NEXT_PUBLIC_BNBO_PMTILES_URL || '',
     wetlands: process.env.NEXT_PUBLIC_WETLANDS_PMTILES_URL || '',
     water_projects: process.env.NEXT_PUBLIC_WATER_PROJECTS_PMTILES_URL || '',
-    buildings: '', // Buildings PMTiles not yet generated
+    buildings: process.env.NEXT_PUBLIC_BUILDINGS_PMTILES_URL || 'https://pmtiles.pesticidkortet.dk/buildings_proximity_2024.pmtiles',
   };
 
   // Ensure client-side only rendering

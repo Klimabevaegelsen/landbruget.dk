@@ -48,7 +48,7 @@ export function LayerControlPanel({
     {
       key: "buildings" as const,
       name: "Bygninger",
-      description: "Bygninger inden for 100m af marker",
+      description: "268.260 bygninger inden for 100m af pesticidmarker",
       icon: "🏠",
       color: "bg-gray-500",
     },
