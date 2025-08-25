@@ -1,0 +1,485 @@
+name: Field Production Matrix Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Years to process (comma-separated, e.g., "2020,2021,2022" or "all")'
+        type: string
+        default: 'all'
+        required: true
+      max_parallel_jobs:
+        description: 'Maximum number of parallel jobs'
+        type: string
+        default: '8'
+        required: true
+      dry_run:
+        description: 'Dry run mode (discover years only)'
+        type: boolean
+        default: false
+
+env:
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+jobs:
+  discover-years:
+    runs-on: ubuntu-latest
+    outputs:
+      years: ${{ steps.discover.outputs.years }}
+      year_count: ${{ steps.discover.outputs.year_count }}
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+      with:
+        install_components: 'gke-gcloud-auth-plugin'
+
+    - name: Discover available years
+      id: discover
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        cd backend/pipelines/unified_pipeline
+
+        # Create discovery script
+        cat > discover_field_production_years.py << 'EOF'
+        #!/usr/bin/env python3
+        """
+        Discover available years for field production gold layer processing.
+        """
+        import json
+        import os
+        import sys
+        from pathlib import Path
+
+        # Add project root to path for imports
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+
+        from backend.common.gcs_data_access import GCSDataAccess
+        from backend.common.logging_utils import get_pipeline_logger
+
+        def discover_fvm_marker_years():
+            """Discover available fvm_marker years from silver data."""
+            logger = get_pipeline_logger()
+            gcs_access = GCSDataAccess()
+            bucket = os.getenv('GCS_BUCKET', 'landbrugsdata-raw-data')
+
+            try:
+                # List all fvm_marker datasets in silver layer
+                pattern = f"gs://{bucket}/silver/fvm_marker_*/"
+                logger.info(f"Searching for fvm_marker datasets: {pattern}")
+
+                directories = gcs_access.list_directories(pattern)
+                years = []
+
+                for directory in directories:
+                    # Extract year from directory name like "fvm_marker_2020"
+                    parts = directory.rstrip('/').split('/')
+                    dataset_name = parts[-1] if parts else ''
+
+                    if dataset_name.startswith('fvm_marker_'):
+                        try:
+                            year_str = dataset_name.replace('fvm_marker_', '')
+                            year = int(year_str)
+                            if 2005 <= year <= 2030:  # Reasonable year range
+                                years.append(year)
+                                logger.info(f"Found fvm_marker data for year: {year}")
+                        except ValueError:
+                            logger.warning(f"Could not parse year from: {dataset_name}")
+                            continue
+
+                years.sort()
+                logger.info(f"Discovered {len(years)} years with fvm_marker data: {years}")
+                return years
+
+            except Exception as e:
+                logger.error(f"Error discovering years: {e}")
+                return []
+
+        def main():
+            """Main discovery function."""
+            logger = get_pipeline_logger()
+
+            # Get input years
+            input_years = "${{ github.event.inputs.years }}"
+
+            # Discover available years
+            available_years = discover_fvm_marker_years()
+
+            if not available_years:
+                logger.error("No fvm_marker years found")
+                print("[]")
+                return
+
+            # Filter based on input
+            if input_years == "all":
+                selected_years = available_years
+            else:
+                try:
+                    requested_years = [int(y.strip()) for y in input_years.split(',')]
+                    selected_years = [y for y in requested_years if y in available_years]
+
+                    missing_years = [y for y in requested_years if y not in available_years]
+                    if missing_years:
+                        logger.warning(f"Requested years not found: {missing_years}")
+                        logger.warning(f"Available years: {available_years}")
+
+                except ValueError as e:
+                    logger.error(f"Invalid year format: {e}")
+                    selected_years = available_years
+
+            logger.info(f"Selected years for processing: {selected_years}")
+            print(json.dumps(selected_years))
+
+        if __name__ == "__main__":
+            main()
+        EOF
+
+        # Run discovery and capture output
+        python discover_field_production_years.py > discovery_output.txt 2>&1
+        discovery_exit_code=$?
+
+        if [ $discovery_exit_code -ne 0 ]; then
+          echo "❌ Discovery script failed with exit code $discovery_exit_code"
+          cat discovery_output.txt
+          exit $discovery_exit_code
+        fi
+
+        years=$(tail -n 1 discovery_output.txt)
+        year_count=$(echo "$years" | jq '. | length')
+
+        echo "years=$years" >> $GITHUB_OUTPUT
+        echo "year_count=$year_count" >> $GITHUB_OUTPUT
+
+        echo "Discovered $year_count years for matrix processing: $years"
+
+  process-years:
+    if: ${{ !inputs.dry_run && needs.discover-years.outputs.years != '[]' && needs.discover-years.outputs.years != '' }}
+    needs: discover-years
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false  # Don't stop other jobs if one fails
+      matrix:
+        year: ${{ fromJson(needs.discover-years.outputs.years) }}
+
+    name: Field Production Year ${{ matrix.year }}
+
+    env:
+      ENVIRONMENT: production
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      SAVE_LOCAL: false
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+      with:
+        install_components: 'gke-gcloud-auth-plugin'
+
+    - name: Run Field Production for Year ${{ matrix.year }}
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        cd backend/pipelines/unified_pipeline
+        echo "🌾 Processing field production estimates for year ${{ matrix.year }}..."
+
+        # Set up signal handling for graceful cancellation
+        trap 'echo "Received cancellation signal, stopping..."; kill -TERM $PID 2>/dev/null; wait $PID 2>/dev/null; exit 130' SIGINT SIGTERM
+
+        python -m unified_pipeline \
+          -s field_production \
+          -j gold \
+          --year ${{ matrix.year }} &
+
+        PID=$!
+        wait $PID
+
+    - name: Report completion
+      if: success()
+      run: |
+        echo "✅ Successfully processed field production estimates for year ${{ matrix.year }}"
+        echo "Data saved to: gs://landbrugsdata-raw-data/gold/field_production_${{ matrix.year }}/"
+
+    - name: Report failure
+      if: failure()
+      run: |
+        echo "❌ Failed to process field production estimates for year ${{ matrix.year }}"
+        exit 1
+
+  consolidate-results:
+    needs: [discover-years, process-years]
+    runs-on: ubuntu-latest
+    if: always() && needs.discover-years.result == 'success'
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    name: Consolidate Field Production Results
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Install dependencies
+      run: |
+        cd backend/pipelines/unified_pipeline
+        uv pip install --system -e .
+
+    - id: 'auth'
+      name: 'Authenticate to Google Cloud'
+      uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v2'
+      with:
+        install_components: 'gke-gcloud-auth-plugin'
+
+    - name: Consolidate all years into single dataset
+      env:
+        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      run: |
+        cd backend/pipelines/unified_pipeline
+        echo "📊 Consolidating field production estimates from all years..."
+
+        # Create consolidation script
+        cat > consolidate_field_production.py << 'EOF'
+        #!/usr/bin/env python3
+        """
+        Consolidate field production estimates from all processed years into a single dataset.
+        """
+        import os
+        import sys
+        from pathlib import Path
+
+        # Add project root to path for imports
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+
+        from backend.common.gcs_data_access import GCSDataAccess
+        from backend.common.logging_utils import get_pipeline_logger
+        import duckdb
+
+        def consolidate_field_production():
+            """Consolidate all year-specific field production estimates."""
+            logger = get_pipeline_logger()
+            gcs_access = GCSDataAccess()
+            bucket = os.getenv('GCS_BUCKET', 'landbrugsdata-raw-data')
+
+            # Create DuckDB connection
+            conn = duckdb.connect(":memory:")
+            conn.execute("INSTALL spatial")
+            conn.execute("LOAD spatial")
+
+            try:
+                # Find all year-specific field production datasets
+                pattern = f"gs://{bucket}/gold/field_production_*/"
+                directories = gcs_access.list_directories(pattern)
+
+                consolidated_files = []
+                years_found = []
+
+                for directory in directories:
+                    # Look for data.parquet files in each year directory
+                    try:
+                        data_files = gcs_access.list_files(f"{directory}*/data.parquet")
+                        if data_files:
+                            latest_file = sorted(data_files)[-1]  # Get latest timestamp
+                            consolidated_files.append(latest_file)
+
+                            # Extract year from directory name
+                            parts = directory.rstrip('/').split('/')
+                            dataset_name = parts[-1] if parts else ''
+                            if dataset_name.startswith('field_production_'):
+                                year_str = dataset_name.replace('field_production_', '')
+                                years_found.append(year_str)
+
+                            logger.info(f"Found field production data: {latest_file}")
+                    except Exception as e:
+                        logger.warning(f"Could not process directory {directory}: {e}")
+                        continue
+
+                if not consolidated_files:
+                    logger.error("No field production data found to consolidate")
+                    return False
+
+                logger.info(f"Consolidating {len(consolidated_files)} field production datasets")
+                logger.info(f"Years found: {sorted(years_found)}")
+
+                # Create consolidated table
+                conn.execute("DROP TABLE IF EXISTS consolidated_field_production")
+
+                for i, file_path in enumerate(consolidated_files):
+                    logger.info(f"Loading file {i+1}/{len(consolidated_files)}: {file_path}")
+
+                    # Download and load each file
+                    with gcs_access._temp_download(file_path) as temp_file:
+                        if i == 0:
+                            # Create table with first file
+                            conn.execute(f"""
+                                CREATE TABLE consolidated_field_production AS
+                                SELECT * FROM read_parquet('{temp_file}')
+                            """)
+                        else:
+                            # Insert additional files
+                            conn.execute(f"""
+                                INSERT INTO consolidated_field_production
+                                SELECT * FROM read_parquet('{temp_file}')
+                            """)
+
+                # Get summary statistics
+                total_records = conn.execute("SELECT COUNT(*) FROM consolidated_field_production").fetchone()[0]
+                years_in_data = conn.execute("SELECT COUNT(DISTINCT year) FROM consolidated_field_production").fetchone()[0]
+                year_range = conn.execute("SELECT MIN(year), MAX(year) FROM consolidated_field_production").fetchone()
+
+                logger.info(f"Consolidated dataset statistics:")
+                logger.info(f"  Total records: {total_records:,}")
+                logger.info(f"  Years covered: {years_in_data} ({year_range[0]}-{year_range[1]})")
+
+                # Save consolidated dataset
+                output_path = f"gs://{bucket}/gold/field_production/latest/data.parquet"
+                gcs_access.upload_from_duckdb_table(
+                    conn,
+                    "consolidated_field_production",
+                    output_path,
+                    compression="zstd",
+                    row_group_size=100000,
+                )
+
+                logger.info(f"✅ Consolidated field production data saved to: {output_path}")
+                logger.info(f"📊 Final dataset: {total_records:,} records across {years_in_data} years")
+
+                return True
+
+            except Exception as e:
+                logger.error(f"Error consolidating field production data: {e}")
+                return False
+
+            finally:
+                conn.close()
+
+        if __name__ == "__main__":
+            success = consolidate_field_production()
+            sys.exit(0 if success else 1)
+        EOF
+
+        python consolidate_field_production.py
+
+    - name: Report consolidation completion
+      if: success()
+      run: |
+        echo "✅ Successfully consolidated field production estimates from all years"
+        echo "Final dataset saved to: gs://landbrugsdata-raw-data/gold/field_production/latest/data.parquet"
+
+    - name: Report consolidation failure
+      if: failure()
+      run: |
+        echo "❌ Failed to consolidate field production estimates"
+        exit 1
+
+  summary:
+    needs: [discover-years, process-years, consolidate-results]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Processing Summary
+        run: |
+          YEAR_COUNT="${{ needs.discover-years.outputs.year_count }}"
+          YEARS="${{ needs.discover-years.outputs.years }}"
+
+          echo "## Field Production Matrix Processing Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Years Requested | ${{ github.event.inputs.years }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Years Processed | $YEAR_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| Max Parallel Jobs | ${{ github.event.inputs.max_parallel_jobs }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Processing Mode | Matrix (parallel by year) |" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Years Processed" >> $GITHUB_STEP_SUMMARY
+          echo "$(echo "$YEARS" | jq -r 'join(", ")')" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Performance Benefits" >> $GITHUB_STEP_SUMMARY
+          echo "- **Memory Isolation**: Each year processed independently (no memory accumulation)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Parallel Processing**: Up to ${{ github.event.inputs.max_parallel_jobs }} years processed simultaneously" >> $GITHUB_STEP_SUMMARY
+          echo "- **Fault Tolerance**: Failed years don't stop other years from processing" >> $GITHUB_STEP_SUMMARY
+          echo "- **Scalability**: Can process 18+ years efficiently within GitHub Actions limits" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Technical Optimizations" >> $GITHUB_STEP_SUMMARY
+          echo "- **SPATIAL_JOIN Compliance**: Optimized for DuckDB Spatial PR #545" >> $GITHUB_STEP_SUMMARY
+          echo "- **Memory Management**: 10GB temp directory, 50k spatial join batches" >> $GITHUB_STEP_SUMMARY
+          echo "- **No Geometry Text**: Eliminated ST_AsText() memory waste" >> $GITHUB_STEP_SUMMARY
+          echo "- **Consolidated Output**: All years merged into single gold dataset" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Data Location" >> $GITHUB_STEP_SUMMARY
+          echo "- **Individual Years**: \`gs://landbrugsdata-raw-data/gold/field_production_YYYY/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Consolidated**: \`gs://landbrugsdata-raw-data/gold/field_production/latest/data.parquet\`" >> $GITHUB_STEP_SUMMARY

@@ -12,6 +12,7 @@ import gc
 import os
 import shutil
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import psutil
@@ -32,6 +33,9 @@ class FieldProductionGoldConfig(BaseJobConfig):
     description: str = "Comprehensive field production estimates using DST yield data"
     frequency: str = "weekly"
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
+
+    # NEW: Single year processing for matrix jobs
+    target_year: Optional[int] = None  # If set, process only this year
 
     # Input silver datasets
     agricultural_fields_dataset: str = "fvm_marker"
@@ -80,6 +84,11 @@ class FieldProductionGoldConfig(BaseJobConfig):
     min_yield_coverage: float = 0.3  # Minimum acceptable yield coverage rate
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    def apply_cli_filters(self, cli_config) -> None:
+        """Apply CLI filters for matrix job processing."""
+        if cli_config.target_year:
+            object.__setattr__(self, "target_year", cli_config.target_year)
 
 
 class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterface):
@@ -594,15 +603,21 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Check initial memory state
             self._check_emergency_memory_threshold()
 
-            # Get all available years
+            # Get all available years (or single target year for matrix jobs)
             available_years = self._get_available_fvm_marker_years()
             if not available_years:
                 self.log.error("No fvm_marker years found")
                 return
 
-            self.log.info(
-                f"Found fvm_marker data for years: {available_years} ({len(available_years)} years)"
-            )
+            # For matrix jobs, log the single year being processed
+            if self.config.target_year:
+                self.log.info(f"🎯 Matrix job: Processing single year {self.config.target_year}")
+                self.log.info(f"   (Found {len(available_years)} total years available)")
+            else:
+                self.log.info(
+                    f"Found fvm_marker data for years: {available_years} "
+                    f"({len(available_years)} years)"
+                )
 
             # Load DST zone mapping into DuckDB table (small dataset, can stay in memory)
             if not self._load_silver_data_to_table(
@@ -1224,6 +1239,23 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.error(f"Error setting up DST zones: {e}")
             raise
 
+    def _get_available_fvm_marker_years(self) -> List[int]:
+        """Override base method to respect target_year for matrix jobs."""
+        if self.config.target_year:
+            # For matrix jobs, only return the target year if it exists
+            all_years = super()._get_available_fvm_marker_years()
+            if self.config.target_year in all_years:
+                return [self.config.target_year]
+            else:
+                self.log.error(
+                    f"Target year {self.config.target_year} not found in available years: "
+                    f"{all_years}"
+                )
+                return []
+        else:
+            # For normal processing, return all years
+            return super()._get_available_fvm_marker_years()
+
     def _load_dst_yield_data(self, silver_data: Optional[Dict[str, Any]] = None) -> List[str]:
         """Load DST yield data into DuckDB tables."""
         loaded_tables = []
@@ -1318,10 +1350,22 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     def _save_results_to_gold(self) -> None:
         """Save results to gold layer using optimized DuckDB export."""
         try:
-            # Use optimized save method from base class
-            output_path = (
-                f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
-            )
+            # For matrix jobs, use year-specific paths; for normal jobs, use latest
+            if self.config.target_year:
+                # Matrix job: save to year-specific directory
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = (
+                    f"gs://{self.config.bucket}/gold/{self.config.dataset}_{self.config.target_year}/"
+                    f"{timestamp}/data.parquet"
+                )
+                self.log.info(
+                    f"🎯 Matrix job: Saving year {self.config.target_year} to year-specific path"
+                )
+            else:
+                # Normal job: save to latest directory
+                output_path = (
+                    f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
+                )
 
             # Export directly from DuckDB table to GCS
             self.gcs_access.upload_from_duckdb_table(

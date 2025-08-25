@@ -176,3 +176,6 @@ class CliConfig(BaseModel):
     # Batch processing parameters
     batch_number: Optional[int] = None
     total_batches: Optional[int] = None
+
+    # General year parameter for matrix jobs
+    target_year: Optional[int] = None
