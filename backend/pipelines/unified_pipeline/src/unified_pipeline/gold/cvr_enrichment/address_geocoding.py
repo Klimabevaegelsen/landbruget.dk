@@ -927,7 +927,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 WHERE rank = 1
             """)
 
-            # Create table with selected primary addresses
+            # Create table with selected primary addresses and PostGIS geometry
             self.conn.execute("""
                 CREATE OR REPLACE TABLE company_geocoding AS
                 SELECT
@@ -947,7 +947,13 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     a.municipality_code as current_municipality_code,
                     a.municipality_name as current_municipality_name,
                     a.address_type as current_address_type,
-                    a.coordinate_source
+                    a.coordinate_source,
+                    -- Create PostGIS geometry from coordinates for Supabase compatibility
+                    CASE
+                        WHEN a.latitude IS NOT NULL AND a.longitude IS NOT NULL THEN
+                            ST_Point(a.longitude, a.latitude)
+                        ELSE NULL
+                    END as address_geom
                 FROM cvr_addresses a
                 INNER JOIN primary_address_selection p
                     ON a.cvr_number = p.cvr_number AND a.address_id = p.address_id
@@ -977,6 +983,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                 "current_municipality_code",
                 "current_municipality_name",
                 "current_address_type",
+                "address_geom",  # PostGIS geometry for Supabase
             }
 
             for col in existing_columns:
@@ -1077,7 +1084,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             if len(columns_loaded) > 10:
                 self.log.info(f"🔍 DEBUG:   ... and {len(columns_loaded) - 10} more columns")
 
-            # Create geocoding lookup from address table
+            # Create geocoding lookup from address table with PostGIS geometry
             # Get primary addresses for pnumbers (first geocoded address per pnumber)
             self.conn.execute("""
                 CREATE OR REPLACE TABLE pnumber_geocoding AS
@@ -1087,6 +1094,12 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     longitude,
                     coordinate_quality,
                     dawa_enriched,
+                    -- Create PostGIS geometry from coordinates for production sites compatibility
+                    CASE
+                        WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN
+                            ST_Point(longitude, latitude)
+                        ELSE NULL
+                    END as location_geom,
                     ROW_NUMBER() OVER (
                         PARTITION BY p_number ORDER BY geocoding_timestamp DESC
                     ) as rn
@@ -1104,7 +1117,13 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
             # Build SELECT clause that preserves all existing columns
             select_clauses = []
-            geocoding_fields = {"latitude", "longitude", "coordinate_quality", "dawa_enriched"}
+            geocoding_fields = {
+                "latitude",
+                "longitude",
+                "coordinate_quality",
+                "dawa_enriched",
+                "location_geom",
+            }
 
             for col in existing_columns:
                 if col in geocoding_fields:
