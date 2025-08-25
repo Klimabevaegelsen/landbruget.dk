@@ -169,6 +169,80 @@ export function LayerControlPanel({
           </div>
         </div>
 
+        {/* Visualization Mode */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Visualiseringsmodus
+          </label>
+          <select
+            value={filterState.visualizationMode}
+            onChange={(e) => onFilterChange({ visualizationMode: e.target.value as FilterState['visualizationMode'] })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="total_pesticide_belastning">Total pesticidbelastning</option>
+            <option value="pfas_belastning">PFAS belastning</option>
+            <option value="diquat_belastning">Diquat belastning</option>
+            <option value="glyphosate_belastning">Glyphosate belastning</option>
+            <option value="applications_count">Antal applikationer</option>
+            <option value="organic_status">Økologisk status</option>
+            <option value="area_size">Markareal</option>
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Belastning bruges til farvning for sammenlignelighed. Faktiske mængder (L, kg, tabletter) vises i detaljer.
+          </p>
+        </div>
+
+        {/* Color Unit */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Farveskala enhed
+          </label>
+          <select
+            value={filterState.colorUnit}
+            onChange={(e) => onFilterChange({ colorUnit: e.target.value as FilterState['colorUnit'] })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="total">Total mængde (kg/L)</option>
+            <option value="per_hectare">Per hektar</option>
+            <option value="belastning">Belastning (anbefalet)</option>
+            <option value="applications">Antal applikationer</option>
+          </select>
+        </div>
+
+        {/* Decile Coloring Toggle */}
+        <div className="mb-4">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              checked={filterState.useDecileColoring}
+              onChange={(e) => onFilterChange({ useDecileColoring: e.target.checked })}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <span className="ml-2 text-sm text-gray-700">Brug decil-baseret farvning</span>
+          </label>
+          <p className="text-xs text-gray-500 mt-1">
+            Fordeler data i 10 lige store grupper for bedre sammenligning
+          </p>
+        </div>
+
+        {/* Chemical Filter */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Kemisk filter
+          </label>
+          <select
+            value={filterState.chemicalFilter}
+            onChange={(e) => onFilterChange({ chemicalFilter: e.target.value as FilterState['chemicalFilter'] })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="all">Alle pesticider</option>
+            <option value="pfas">Kun PFAS</option>
+            <option value="diquat">Kun Diquat</option>
+            <option value="glyphosate">Kun Glyphosate</option>
+            <option value="none">Ingen pesticider</option>
+          </select>
+        </div>
+
         {/* Pesticide Threshold */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -189,6 +263,72 @@ export function LayerControlPanel({
           </div>
         </div>
 
+        {/* PFAS Threshold */}
+        {(filterState.chemicalFilter === 'all' || filterState.chemicalFilter === 'pfas') && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Min. PFAS indhold (g)
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="50"
+              value={filterState.pfasThreshold}
+              onChange={(e) => onFilterChange({ pfasThreshold: parseInt(e.target.value) })}
+              className="w-full h-2 bg-red-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>0g</span>
+              <span>{filterState.pfasThreshold}g</span>
+              <span>50+g</span>
+            </div>
+          </div>
+        )}
+
+        {/* Diquat Threshold */}
+        {(filterState.chemicalFilter === 'all' || filterState.chemicalFilter === 'diquat') && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Min. Diquat indhold (g)
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={filterState.diquatThreshold}
+              onChange={(e) => onFilterChange({ diquatThreshold: parseInt(e.target.value) })}
+              className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>0g</span>
+              <span>{filterState.diquatThreshold}g</span>
+              <span>100+g</span>
+            </div>
+          </div>
+        )}
+
+        {/* Glyphosate Threshold */}
+        {(filterState.chemicalFilter === 'all' || filterState.chemicalFilter === 'glyphosate') && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Min. Glyphosate indhold (g)
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="500"
+              value={filterState.glyphosateThreshold}
+              onChange={(e) => onFilterChange({ glyphosateThreshold: parseInt(e.target.value) })}
+              className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>0g</span>
+              <span>{filterState.glyphosateThreshold}g</span>
+              <span>500+g</span>
+            </div>
+          </div>
+        )}
+
         {/* Reset Filters */}
         <button
           onClick={() => onFilterChange({
@@ -197,6 +337,13 @@ export function LayerControlPanel({
             organicOnly: false,
             areaRange: [0, 1000],
             pesticideThreshold: 0,
+            pfasThreshold: 0,
+            diquatThreshold: 0,
+            glyphosateThreshold: 0,
+            chemicalFilter: 'all',
+            visualizationMode: 'total_pesticide_belastning',
+            colorUnit: 'belastning',
+            useDecileColoring: true,
           })}
           className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
         >
@@ -207,11 +354,71 @@ export function LayerControlPanel({
       {/* Legend */}
       <div className="border-t pt-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Signaturforklaring</h3>
-        <div className="space-y-2 text-xs">
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-red-500 rounded"></div>
-            <span>Høj pesticidbelastning</span>
+
+        {/* Decile Legend */}
+        {filterState.useDecileColoring && (
+          <div className="mb-4">
+            <h4 className="text-sm font-medium text-gray-800 mb-2">Decil-baseret farvning</h4>
+            <div className="text-xs text-gray-600 mb-2">
+              Baseret på faktiske data fra {filterState.visualizationMode === 'pfas_belastning' ? '156.025 marker med PFAS' :
+              filterState.visualizationMode === 'diquat_belastning' ? '471 marker med diquat' :
+              filterState.visualizationMode === 'glyphosate_belastning' ? '105.511 marker med glyphosate' : '617.774 marker'}
+            </div>
+            <div className="space-y-1 text-xs">
+              {Array.from({ length: 10 }, (_, i) => (
+                <div key={i} className="flex items-center space-x-2">
+                  <div
+                    className="w-3 h-3 rounded"
+                    style={{
+                      backgroundColor: `hsl(${240 - (i * 24)}, 70%, ${50 + (i * 3)}%)`
+                    }}
+                  ></div>
+                  <span>Decil {i + 1} (10% af data)</span>
+                </div>
+              ))}
+            </div>
+            <div className="text-xs text-gray-500 mt-2 italic">
+              Belastning anbefales til sammenligning mellem forskellige pesticider
+            </div>
           </div>
+        )}
+
+        {/* Chemical-specific legend */}
+        {filterState.visualizationMode.includes('pfas') && (
+          <div className="mb-4">
+            <h4 className="text-sm font-medium text-red-800 mb-2">🧪 PFAS Pesticider</h4>
+            <div className="space-y-1 text-xs text-red-700">
+              <div>Per- og polyfluorerede alkylstoffer</div>
+              <div>Potentielt sundhedsskadelige</div>
+              <div>Bioakkumulerende og persistente</div>
+            </div>
+          </div>
+        )}
+
+        {filterState.visualizationMode.includes('diquat') && (
+          <div className="mb-4">
+            <h4 className="text-sm font-medium text-blue-800 mb-2">💧 Diquat Pesticider</h4>
+            <div className="space-y-1 text-xs text-blue-700">
+              <div>Kontakt herbicid</div>
+              <div>Bruges til ukrudtsbekæmpelse</div>
+              <div>Kan påvirke vandmiljøet</div>
+            </div>
+          </div>
+        )}
+
+        {filterState.visualizationMode.includes('glyphosate') && (
+          <div className="mb-4">
+            <h4 className="text-sm font-medium text-green-800 mb-2">🌿 Glyphosate Pesticider</h4>
+            <div className="space-y-1 text-xs text-green-700">
+              <div>Systemisk herbicid</div>
+              <div>Mest anvendte ukrudtsmiddel</div>
+              <div>Hæmmer planters aminosyresyntese</div>
+            </div>
+          </div>
+        )}
+
+        {/* Standard legend */}
+        <div className="space-y-2 text-xs">
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-green-500 rounded"></div>
             <span>BNBO - Gennemført</span>
@@ -227,6 +434,10 @@ export function LayerControlPanel({
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-teal-500 rounded"></div>
             <span>Vandprojekter</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 bg-emerald-600 rounded"></div>
+            <span>Økologiske marker</span>
           </div>
         </div>
       </div>
