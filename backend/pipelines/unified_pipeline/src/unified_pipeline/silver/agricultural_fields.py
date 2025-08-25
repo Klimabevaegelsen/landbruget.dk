@@ -420,7 +420,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         .replace("(", "_")
                         .replace(")", "_")
                     )
-                    
+
                     # Check if the cleaned column exists
                     if cleaned_old_col in available_columns:
                         # Apply proper type casting for area columns
@@ -432,9 +432,9 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                             "shape_area",
                             "shape_length",
                         ]:
-                            select_columns.append(f'CAST({cleaned_old_col} AS DOUBLE) as {new_col}')
+                            select_columns.append(f"CAST({cleaned_old_col} AS DOUBLE) as {new_col}")
                         else:
-                            select_columns.append(f'{cleaned_old_col} as {new_col}')
+                            select_columns.append(f"{cleaned_old_col} as {new_col}")
                     # Also check if the original column name exists (for columns without
                     # special chars)
                     elif old_col in available_columns:
@@ -447,9 +447,9 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                             "shape_area",
                             "shape_length",
                         ]:
-                            select_columns.append(f'CAST({old_col} AS DOUBLE) as {new_col}')
+                            select_columns.append(f"CAST({old_col} AS DOUBLE) as {new_col}")
                         else:
-                            select_columns.append(f'{old_col} as {new_col}')
+                            select_columns.append(f"{old_col} as {new_col}")
 
                 # Add unmapped columns (except geometry_json and payload_id)
                 mapped_columns = set()
@@ -470,7 +470,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                         "payload_id",
                     ]:
                         # Column names are already cleaned, so use them as-is
-                        select_columns.append(f'{col}')
+                        select_columns.append(f"{col}")
 
                 # DEBUG: Log what columns will be selected
                 self.log.info(f"Select columns built: {select_columns}")
@@ -485,7 +485,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                     for col in available_columns:
                         if col not in ["geometry_json", "payload_id"]:
                             # Column names are already cleaned, so use them as-is
-                            select_columns.append(f'{col}')
+                            select_columns.append(f"{col}")
 
                 # Ensure we have a valid select clause
                 if select_columns:
@@ -601,7 +601,7 @@ class AgriculturalFieldsSilver(BaseSource[AgriculturalFieldsSilverConfig], Silve
                                     raw_data_table = bronze_data[bronze_key][year]
                                     if isinstance(raw_data_table, list):
                                         # List of JSON strings - create table in silver layer's
-                        # connection
+                                        # connection
                                         table_name = f"bronze_raw_{dataset}_{year}"
                                         self.conn.execute(
                                             f"CREATE OR REPLACE TABLE {table_name} "

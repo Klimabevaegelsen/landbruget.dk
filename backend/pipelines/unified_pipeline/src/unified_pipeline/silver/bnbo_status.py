@@ -396,7 +396,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         validate_and_transform_geometries_duckdb(
             self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
         )
-        
+
         # ✅ UPDATE: Replace original geometry column with transformed WKT
         self.conn.execute(f"""
             UPDATE {table_name} SET
@@ -486,9 +486,9 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                         CURRENT_TIMESTAMP as dissolved_at
                     FROM {dissolved_table_name}
                     WHERE status_category = 'Action Required'
-                    
+
                     UNION ALL
-                    
+
                     SELECT
                         'Completed' as status_category,
                         ST_Difference(

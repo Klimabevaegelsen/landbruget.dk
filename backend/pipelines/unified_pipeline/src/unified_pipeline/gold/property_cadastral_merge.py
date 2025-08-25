@@ -106,7 +106,7 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
     def _stream_merge_to_gcs(self, property_path: str, cadastral_path: str) -> Dict[str, Any]:
         """
-        Perform streaming BFE-based merge and save directly to GCS 
+        Perform streaming BFE-based merge and save directly to GCS
         without loading into memory.
         """
 

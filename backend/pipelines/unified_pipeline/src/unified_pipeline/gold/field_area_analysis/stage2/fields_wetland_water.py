@@ -142,7 +142,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 w.toerv_pct,
                 wpwi.project_id,
                 ST_Intersection(
-                    ST_Intersection(f.geometry, w.geometry), 
+                    ST_Intersection(f.geometry, w.geometry),
                     wpwi.intersection_geometry
                 ) as field_wetland_water_geometry
             FROM agricultural_fields f
@@ -153,7 +153,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
                 -- Field must intersect water-covered part
             WHERE ST_Area_Spheroid(
                 ST_Intersection(
-                    ST_Intersection(f.geometry, w.geometry), 
+                    ST_Intersection(f.geometry, w.geometry),
                     wpwi.intersection_geometry
                 )
             ) > 0
@@ -228,7 +228,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         invalid_water = self.conn.execute("""
             SELECT COUNT(*)
             FROM field_wetland_water_intersections
-            WHERE field_wetland_water_geometry IS NULL 
+            WHERE field_wetland_water_geometry IS NULL
                OR NOT ST_IsValid(field_wetland_water_geometry)
         """).fetchone()[0]
 
@@ -242,7 +242,7 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
         empty_water = self.conn.execute("""
             SELECT COUNT(*)
             FROM field_wetland_water_intersections
-            WHERE field_wetland_water_geometry IS NOT NULL 
+            WHERE field_wetland_water_geometry IS NOT NULL
                AND ST_IsEmpty(field_wetland_water_geometry)
         """).fetchone()[0]
 

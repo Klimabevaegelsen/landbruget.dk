@@ -237,7 +237,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 f.cvr_number,
                 f.year,
                 ST_Area_Spheroid(f.geometry) as field_area_m2,
-                
+
                 -- BNBO Analysis (using pre-aggregated data)
                 COALESCE(ba.field_bnbo_total_m2, 0) as field_bnbo_total_m2,
                 COALESCE(bwa.field_bnbo_water_covered_m2, 0) as field_bnbo_water_covered_m2,
@@ -275,7 +275,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     ) * 100.0
                     ELSE 0
                 END as field_bnbo_water_coverage_pct,
-                
+
                 -- BNBO Status Analysis (from pre-aggregated data)
                 COALESCE(ba.bnbo_status_count, 0) as bnbo_status_count,
                 ba.bnbo_status_categories,
@@ -285,7 +285,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     bnbo_action_required_water_covered_hectares,
                 COALESCE(bwa.bnbo_completed_water_covered_hectares, 0) as
                     bnbo_completed_water_covered_hectares,
-                
+
                 -- Wetland Analysis (using pre-aggregated data)
                 COALESCE(wa.field_wetland_total_m2, 0) as field_wetland_total_m2,
                 COALESCE(wwa.field_wetland_water_covered_m2, 0) as field_wetland_water_covered_m2,
@@ -325,7 +325,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     ) * 100.0
                     ELSE 0
                 END as field_wetland_water_coverage_pct,
-                
+
                 -- Soil Analysis (from Stage 1D field_soil_intersections)
                 COALESCE(sa.field_soil_total_m2, 0) as field_soil_total_m2,
                 CASE
@@ -336,7 +336,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 END as field_soil_coverage_pct,
                 COALESCE(sa.soil_type_count, 0) as soil_type_count,
                 sa.soil_coverage_details
-                
+
             FROM agricultural_fields f
             LEFT JOIN bnbo_field_aggregates ba ON f.field_uuid = ba.field_uuid
             LEFT JOIN bnbo_water_field_aggregates bwa ON f.field_uuid = bwa.field_uuid
@@ -434,7 +434,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 fp.cvr_number,
                 fp.year,
                 ST_Area_Spheroid(fp.intersection_geometry) as property_intersection_area_m2,
-                
+
                 -- Environmental data from pre-aggregated tables
                 COALESCE(pba.property_bnbo_total_m2, 0) as property_bnbo_total_m2,
                 COALESCE(pbwa.property_bnbo_water_covered_m2, 0)
@@ -442,7 +442,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(pwa.property_wetland_total_m2, 0) as property_wetland_total_m2,
                 COALESCE(pwwa.property_wetland_water_covered_m2, 0)
                     as property_wetland_water_covered_m2,
-                
+
                 -- BNBO Status Analysis (from pre-aggregated data)
                 COALESCE(pba.property_bnbo_status_count, 0) as property_bnbo_status_count,
                 pba.property_bnbo_status_categories,
@@ -454,7 +454,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     as property_bnbo_action_required_water_covered_hectares,
                 COALESCE(pbwa.property_bnbo_completed_water_covered_hectares, 0)
                     as property_bnbo_completed_water_covered_hectares
-                
+
             FROM field_property_intersections fp
             LEFT JOIN property_bnbo_aggregates pba
                 ON fp.field_uuid = pba.field_uuid AND fp.bfe_number = pba.bfe_number

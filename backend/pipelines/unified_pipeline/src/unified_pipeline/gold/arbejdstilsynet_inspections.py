@@ -213,14 +213,14 @@ class ArbjdstilsynetInspectionsGold(
                 "avl af malkekvaeg": "Avl af malkekvæg",
                 "avl af smaagrise": "Avl af smågrise",
                 "dyrkning af groentsager og meloner, roedder og rodknolde": (
-        "Dyrkning af grøntsager og meloner, rødder og rodknolde"
-    ),
+                    "Dyrkning af grøntsager og meloner, rødder og rodknolde"
+                ),
                 "dyrkning af korn (undtagen ris), baelgfrugter og olieholdige froe": (
-        "Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø"
-    ),
+                    "Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø"
+                ),
                 "stoetteaktiviteter i forbindelse med planteavl": (
-        "Støtteaktiviteter i forbindelse med planteavl"
-    ),
+                    "Støtteaktiviteter i forbindelse med planteavl"
+                ),
                 "anlaeg af ledningsnet til vaesker": "Anlæg af ledningsnet til væsker",
                 "anlaeg af ledningsnet til elektricitet og tele": (
                     "Anlæg af ledningsnet til elektricitet og tele"
