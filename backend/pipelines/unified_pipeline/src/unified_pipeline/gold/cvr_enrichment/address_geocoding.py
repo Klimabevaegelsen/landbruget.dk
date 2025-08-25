@@ -1023,11 +1023,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                                      -- current addresses
                                      CASE WHEN current_address_count = 0 AND NOT is_current
                                           THEN period_start END DESC NULLS LAST,
-                                     address_id
+                                     address_uuid
                         ) as rank
                     FROM address_scores
                 )
-                SELECT cvr_number, address_id, selection_score, current_address_count
+                SELECT cvr_number, address_uuid, selection_score, current_address_count
                 FROM ranked_addresses
                 WHERE rank = 1
             """)
@@ -1061,7 +1061,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     END as address_geom
                 FROM cvr_addresses a
                 INNER JOIN primary_address_selection p
-                    ON a.cvr_number = p.cvr_number AND a.address_id = p.address_id
+                    ON a.cvr_number = p.cvr_number AND a.address_uuid = p.address_uuid
             """)
 
             # 🔧 FIX: Preserve all existing columns and only update geocoding fields
