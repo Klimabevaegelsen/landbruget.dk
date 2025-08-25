@@ -152,34 +152,32 @@ export default function FieldAnalysisMap({
     };
 
     const fieldName = getFieldName(visualizationMode);
+    console.log('🎨 Color generation:', { visualizationMode, fieldName, colorScheme: colorScheme.name });
 
-        if (useDecileColoring) {
+            if (useDecileColoring) {
       // Use decile-based coloring with step function
       const breakpoints = getDecileBreakpoints(visualizationMode, colorUnit);
       const colors = colorScheme.colors;
 
-      // Create step expression with proper structure
-      const stepExpression: unknown[] = [
-        "step",
-        ["coalesce", ["get", fieldName], 0],
-        "#f3f4f6" // Default color for 0 values
-      ];
-
-      // Add breakpoints and colors
-      breakpoints.forEach((breakpoint, i) => {
-        if (i < colors.length - 1) {
-          stepExpression.push(breakpoint, colors[i]);
-        }
-      });
-
       return {
         "fill-color": [
           "case",
-          ["==", ["typeof", ["get", fieldName]], "null"],
-          "#f3f4f6", // Light gray for null data
           ["<=", ["coalesce", ["get", fieldName], 0], 0],
           "#f3f4f6", // Light gray for zero/negative values
-          stepExpression
+          [
+            "step",
+            ["coalesce", ["get", fieldName], 0],
+            colors[0], // Base color for lowest values
+            breakpoints[0], colors[1],
+            breakpoints[1], colors[2],
+            breakpoints[2], colors[3],
+            breakpoints[3], colors[4],
+            breakpoints[4], colors[5],
+            breakpoints[5], colors[6],
+            breakpoints[6], colors[7],
+            breakpoints[7], colors[8],
+            breakpoints[8], colors[9]
+          ]
         ],
         "fill-opacity": 0.7,
       };
@@ -189,8 +187,6 @@ export default function FieldAnalysisMap({
       return {
         "fill-color": [
           "case",
-          ["==", ["typeof", ["get", fieldName]], "null"],
-          "#f3f4f6", // Light gray for null data
           ["<=", ["coalesce", ["get", fieldName], 0], 0],
           "#f3f4f6", // Light gray for zero/negative values
           [
@@ -198,8 +194,8 @@ export default function FieldAnalysisMap({
             ["linear"],
             ["coalesce", ["get", fieldName], 0],
             0.1, colors[0],
-            1, colors[1],
-            10, colors[3],
+            1, colors[2],
+            10, colors[4],
             50, colors[6],
             100, colors[8],
             500, colors[9]
@@ -306,7 +302,7 @@ export default function FieldAnalysisMap({
             // Update layer to use pattern
             if (map.getLayer("bnbo-fill")) {
               map.setPaintProperty("bnbo-fill", "fill-pattern", "bnbo-pattern");
-              map.setPaintProperty("bnbo-fill", "fill-opacity", 0.8);
+              map.setPaintProperty("bnbo-fill", "fill-opacity", 0.5);
             }
           }
         } catch (error) {
@@ -321,7 +317,7 @@ export default function FieldAnalysisMap({
         type: "fill",
         paint: {
           "fill-color": "#10B981", // Fallback color
-          "fill-opacity": 0.6,
+          "fill-opacity": 0.5,
         },
         layout: {
           visibility: layerVisibility.bnbo ? "visible" : "none",
@@ -388,7 +384,7 @@ export default function FieldAnalysisMap({
             // Update layer to use pattern
             if (map.getLayer("wetlands-fill")) {
               map.setPaintProperty("wetlands-fill", "fill-pattern", "wetlands-pattern");
-              map.setPaintProperty("wetlands-fill", "fill-opacity", 0.8);
+              map.setPaintProperty("wetlands-fill", "fill-opacity", 0.4);
             }
           }
         } catch (error) {
@@ -403,7 +399,7 @@ export default function FieldAnalysisMap({
         type: "fill",
         paint: {
           "fill-color": "#3B82F6", // Fallback color
-          "fill-opacity": 0.6,
+          "fill-opacity": 0.4,
         },
         layout: {
           visibility: layerVisibility.wetlands ? "visible" : "none",
@@ -465,7 +461,7 @@ export default function FieldAnalysisMap({
             // Update layer to use pattern
             if (map.getLayer("water-projects-fill")) {
               map.setPaintProperty("water-projects-fill", "fill-pattern", "water-projects-pattern");
-              map.setPaintProperty("water-projects-fill", "fill-opacity", 0.8);
+              map.setPaintProperty("water-projects-fill", "fill-opacity", 0.5);
             }
           }
         } catch (error) {
@@ -480,7 +476,7 @@ export default function FieldAnalysisMap({
         type: "fill",
         paint: {
           "fill-color": "#14B8A6", // Fallback color
-          "fill-opacity": 0.7,
+          "fill-opacity": 0.5,
         },
         layout: {
           visibility: layerVisibility.water_projects ? "visible" : "none",
