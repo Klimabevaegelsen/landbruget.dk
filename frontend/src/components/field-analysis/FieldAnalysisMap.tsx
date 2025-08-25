@@ -72,11 +72,13 @@ function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit 
     }
 
     // Show BNBO status if available
-    if (properties.bnbo_action_required_hectares && typeof properties.bnbo_action_required_hectares === 'number' && properties.bnbo_action_required_hectares > 0) {
-      data.push({ label: "BNBO handling påkrævet", value: properties.bnbo_action_required_hectares, unit: "ha" });
-    }
-    if (properties.bnbo_completed_hectares && typeof properties.bnbo_completed_hectares === 'number' && properties.bnbo_completed_hectares > 0) {
-      data.push({ label: "BNBO gennemført", value: properties.bnbo_completed_hectares, unit: "ha" });
+    if (properties.status_category) {
+      const statusLabel = properties.status_category === "Action Required"
+        ? "BNBO handling påkrævet"
+        : properties.status_category === "Completed"
+        ? "BNBO gennemført"
+        : "BNBO status";
+      data.push({ label: statusLabel, value: properties.status_category });
     }
 
     // Show data relevant to current visualization mode
@@ -437,13 +439,13 @@ export default function FieldAnalysisMap({
         "source-layer": "bnbo",
         type: "fill",
         paint: {
-          "fill-color": [
+                    "fill-color": [
             "case",
             // If action is required (red)
-            [">", ["coalesce", ["get", "bnbo_action_required_hectares"], 0], 0],
+            ["==", ["get", "status_category"], "Action Required"],
             "#EF4444",
             // If completed (green)
-            [">", ["coalesce", ["get", "bnbo_completed_hectares"], 0], 0],
+            ["==", ["get", "status_category"], "Completed"],
             "#10B981",
             // Default blue for general BNBO areas
             "#2563EB"
@@ -461,9 +463,9 @@ export default function FieldAnalysisMap({
         if (map.getLayer("bnbo-fill")) {
           map.setPaintProperty("bnbo-fill", "fill-pattern", [
             "case",
-            [">", ["coalesce", ["get", "bnbo_action_required_hectares"], 0], 0],
+            ["==", ["get", "status_category"], "Action Required"],
             "bnbo-action-pattern",
-            [">", ["coalesce", ["get", "bnbo_completed_hectares"], 0], 0],
+            ["==", ["get", "status_category"], "Completed"],
             "bnbo-completed-pattern",
             "" // No pattern for general areas
           ]);
@@ -478,9 +480,9 @@ export default function FieldAnalysisMap({
         paint: {
           "line-color": [
             "case",
-            [">", ["coalesce", ["get", "bnbo_action_required_hectares"], 0], 0],
+            ["==", ["get", "status_category"], "Action Required"],
             "#DC2626", // Darker red outline
-            [">", ["coalesce", ["get", "bnbo_completed_hectares"], 0], 0],
+            ["==", ["get", "status_category"], "Completed"],
             "#059669", // Darker green outline
             "#1D4ED8"  // Darker blue outline
           ],
