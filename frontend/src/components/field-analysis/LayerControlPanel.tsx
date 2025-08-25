@@ -55,10 +55,10 @@ export function LayerControlPanel({
   ];
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 lg:p-4 space-y-4 lg:space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Kortlag</h2>
+        <h2 className="text-lg lg:text-xl font-bold text-gray-900 mb-2">Kortlag</h2>
         <p className="text-sm text-gray-600">
           Vælg hvilke data der skal vises på kortet
         </p>
@@ -71,14 +71,14 @@ export function LayerControlPanel({
             <div className="flex-shrink-0 mt-1">
               <button
                 onClick={() => onLayerToggle(layer.key)}
-                className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                className={`min-h-[44px] min-w-[44px] lg:w-5 lg:h-5 lg:min-h-0 lg:min-w-0 rounded border-2 flex items-center justify-center ${
                   layerVisibility[layer.key]
                     ? "bg-blue-600 border-blue-600"
-                    : "border-gray-300 hover:border-gray-400"
-                }`}
+                    : "border-gray-300 hover:border-gray-400 active:border-gray-500"
+                } transition-colors`}
               >
                 {layerVisibility[layer.key] && (
-                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <svg className="w-4 h-4 lg:w-3 lg:h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path
                       fillRule="evenodd"
                       d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -91,8 +91,8 @@ export function LayerControlPanel({
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center space-x-2">
-                <span className="text-lg">{layer.icon}</span>
-                <h3 className="font-medium text-gray-900">{layer.name}</h3>
+                <span className="text-xl lg:text-lg">{layer.icon}</span>
+                <h3 className="font-medium text-gray-900 text-base lg:text-sm">{layer.name}</h3>
               </div>
               <p className="text-xs text-gray-500 mt-1">{layer.description}</p>
             </div>
@@ -116,7 +116,7 @@ export function LayerControlPanel({
               const values = Array.from(e.target.selectedOptions, (option) => option.value);
               onFilterChange({ kommune: values });
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-3 lg:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base lg:text-sm"
           >
             <option value="">Alle kommuner</option>
             <option value="copenhagen">København</option>
@@ -133,9 +133,9 @@ export function LayerControlPanel({
               type="checkbox"
               checked={filterState.organicOnly}
               onChange={(e) => onFilterChange({ organicOnly: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-5 w-5 lg:h-4 lg:w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
-            <span className="ml-2 text-sm text-gray-700">Kun økologiske marker</span>
+            <span className="ml-3 lg:ml-2 text-base lg:text-sm text-gray-700">Kun økologiske marker</span>
           </label>
         </div>
 
@@ -153,7 +153,7 @@ export function LayerControlPanel({
                 const newMin = parseInt(e.target.value) || 0;
                 onFilterChange({ areaRange: [newMin, filterState.areaRange[1]] });
               }}
-              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+              className="w-24 lg:w-20 px-3 lg:px-2 py-2 lg:py-1 border border-gray-300 rounded text-base lg:text-sm"
             />
             <span className="text-gray-500">-</span>
             <input
@@ -164,7 +164,7 @@ export function LayerControlPanel({
                 const newMax = parseInt(e.target.value) || 1000;
                 onFilterChange({ areaRange: [filterState.areaRange[0], newMax] });
               }}
-              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+              className="w-24 lg:w-20 px-3 lg:px-2 py-2 lg:py-1 border border-gray-300 rounded text-base lg:text-sm"
             />
           </div>
         </div>
@@ -177,7 +177,7 @@ export function LayerControlPanel({
           <select
             value={filterState.visualizationMode}
             onChange={(e) => onFilterChange({ visualizationMode: e.target.value as FilterState['visualizationMode'] })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-3 lg:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base lg:text-sm"
           >
             <option value="total_pesticide_belastning">Total pesticidbelastning</option>
             <option value="pfas_belastning">PFAS belastning</option>
@@ -200,7 +200,7 @@ export function LayerControlPanel({
           <select
             value={filterState.colorUnit}
             onChange={(e) => onFilterChange({ colorUnit: e.target.value as FilterState['colorUnit'] })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-3 lg:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base lg:text-sm"
           >
             <option value="total">Total mængde (kg/L)</option>
             <option value="per_hectare">Per hektar</option>
@@ -216,9 +216,9 @@ export function LayerControlPanel({
               type="checkbox"
               checked={filterState.useDecileColoring}
               onChange={(e) => onFilterChange({ useDecileColoring: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-5 w-5 lg:h-4 lg:w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
-            <span className="ml-2 text-sm text-gray-700">Brug decil-baseret farvning</span>
+            <span className="ml-3 lg:ml-2 text-base lg:text-sm text-gray-700">Brug decil-baseret farvning</span>
           </label>
           <p className="text-xs text-gray-500 mt-1">
             Fordeler data i 10 lige store grupper for bedre sammenligning
@@ -233,7 +233,7 @@ export function LayerControlPanel({
           <select
             value={filterState.chemicalFilter}
             onChange={(e) => onFilterChange({ chemicalFilter: e.target.value as FilterState['chemicalFilter'] })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            className="w-full px-3 py-3 lg:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base lg:text-sm"
           >
             <option value="all">Alle pesticider</option>
             <option value="pfas">Kun PFAS</option>
@@ -254,11 +254,12 @@ export function LayerControlPanel({
             max="100"
             value={filterState.pesticideThreshold}
             onChange={(e) => onFilterChange({ pesticideThreshold: parseInt(e.target.value) })}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-3 lg:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer touch-manipulation"
+            style={{ minHeight: '44px' }}
           />
           <div className="flex justify-between text-xs text-gray-500 mt-1">
             <span>0</span>
-            <span>{filterState.pesticideThreshold}</span>
+            <span className="font-medium">{filterState.pesticideThreshold}</span>
             <span>100+</span>
           </div>
         </div>
@@ -275,7 +276,8 @@ export function LayerControlPanel({
               max="50"
               value={filterState.pfasThreshold}
               onChange={(e) => onFilterChange({ pfasThreshold: parseInt(e.target.value) })}
-              className="w-full h-2 bg-red-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-3 lg:h-2 bg-red-200 rounded-lg appearance-none cursor-pointer touch-manipulation"
+              style={{ minHeight: '44px' }}
             />
             <div className="flex justify-between text-xs text-gray-500 mt-1">
               <span>0g</span>
@@ -297,7 +299,8 @@ export function LayerControlPanel({
               max="100"
               value={filterState.diquatThreshold}
               onChange={(e) => onFilterChange({ diquatThreshold: parseInt(e.target.value) })}
-              className="w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-3 lg:h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer touch-manipulation"
+              style={{ minHeight: '44px' }}
             />
             <div className="flex justify-between text-xs text-gray-500 mt-1">
               <span>0g</span>
@@ -319,7 +322,8 @@ export function LayerControlPanel({
               max="500"
               value={filterState.glyphosateThreshold}
               onChange={(e) => onFilterChange({ glyphosateThreshold: parseInt(e.target.value) })}
-              className="w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-3 lg:h-2 bg-green-200 rounded-lg appearance-none cursor-pointer touch-manipulation"
+              style={{ minHeight: '44px' }}
             />
             <div className="flex justify-between text-xs text-gray-500 mt-1">
               <span>0g</span>
@@ -345,7 +349,7 @@ export function LayerControlPanel({
             colorUnit: 'belastning',
             useDecileColoring: true,
           })}
-          className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+          className="w-full px-3 py-3 lg:py-2 text-base lg:text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
         >
           Nulstil filtre
         </button>

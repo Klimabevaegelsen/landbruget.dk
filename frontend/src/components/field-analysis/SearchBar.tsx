@@ -203,7 +203,7 @@ export function SearchBar({
           value={query}
           onChange={handleInputChange}
           placeholder={placeholder}
-          className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+          className="block w-full pl-10 pr-10 py-3 lg:py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors text-base lg:text-sm"
         />
 
         {/* Clear Button */}
@@ -239,13 +239,13 @@ export function SearchBar({
             <button
               key={`${result.tekst}-${index}`}
               onClick={() => handleSelectResult(result)}
-              className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0 ${
+              className={`w-full px-4 py-4 lg:py-3 text-left hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0 ${
                 index === selectedIndex ? 'bg-blue-50 text-blue-900' : 'text-gray-900'
               }`}
             >
               <div className="flex items-center space-x-3">
-                <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                <span className="text-sm font-medium truncate">{result.tekst}</span>
+                <MapPin className="h-5 w-5 lg:h-4 lg:w-4 text-gray-400 flex-shrink-0" />
+                <span className="text-base lg:text-sm font-medium truncate">{result.tekst}</span>
               </div>
             </button>
           ))}
