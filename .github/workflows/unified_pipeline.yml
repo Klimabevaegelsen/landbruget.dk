@@ -340,8 +340,8 @@ jobs:
           # Step 1: Run disaggregation
           echo "🧪 Step 1: Running pesticide disaggregation for year ${{ matrix.year }}"
           echo "🚨 WORKFLOW: About to execute Python command for disaggregation"
-          echo "🚨 WORKFLOW: Command: python -m unified_pipeline --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}"
-          if python -m unified_pipeline --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}; then
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline run -s pesticide_disaggregation -j gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline run -s pesticide_disaggregation -j gold --pesticide-year ${{ matrix.year }}; then
             echo "✅ Disaggregation completed for year ${{ matrix.year }}"
           else
             DISAGG_EXIT_CODE=$?
@@ -355,8 +355,8 @@ jobs:
           echo "🏠 Analyzing building proximity (100m radius)"
           echo "🌊 Analyzing water feature proximity (100m radius)"
           echo "🚨 WORKFLOW: About to execute Python command for proximity"
-          echo "🚨 WORKFLOW: Command: python -m unified_pipeline --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}"
-          if python -m unified_pipeline --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}; then
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline run -s pesticide_proximity -j gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline run -s pesticide_proximity -j gold --pesticide-year ${{ matrix.year }}; then
             echo "✅ Proximity analysis completed for year ${{ matrix.year }}"
           else
             PROX_EXIT_CODE=$?
