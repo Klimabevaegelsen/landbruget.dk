@@ -984,7 +984,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 NULL::VARCHAR as landsdel_code,
                 NULL::VARCHAR as landsdel_name,
                 NULL::VARCHAR as dst_regions,
-                NULL::VARCHAR as geometry_wkt
+                NULL::VARCHAR as geometry_wkt,
+                NULL::VARCHAR as field_uuid,
+                NULL::VARCHAR as primary_field_id
             WHERE FALSE
         """)
 
