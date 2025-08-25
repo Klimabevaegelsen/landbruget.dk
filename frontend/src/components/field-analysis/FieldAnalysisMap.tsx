@@ -7,6 +7,7 @@ import Map, {
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { LayerVisibility, FilterState, FieldAnalysisData } from "./types";
+import { getDecileBreakpoints, getColorScheme } from "./colorUtils";
 
 // Type for MapLibre map instance
 interface MapInstance {
@@ -14,7 +15,9 @@ interface MapInstance {
   getLayer: (id: string) => unknown;
   addLayer: (layer: unknown) => void;
   setLayoutProperty: (id: string, prop: string, value: string) => void;
+  setPaintProperty: (id: string, prop: string, value: unknown) => void;
   addSource: (id: string, source: unknown) => void;
+  addImage: (id: string, image: HTMLCanvasElement) => void;
 }
 
 interface FieldAnalysisMapProps {
@@ -78,6 +81,7 @@ function MapTooltip({ x, y, properties, layerName }: TooltipInfo) {
 export default function FieldAnalysisMap({
   pmtilesUrls,
   layerVisibility,
+  filterState,
   onFieldSelect,
 }: FieldAnalysisMapProps) {
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
@@ -116,32 +120,95 @@ export default function FieldAnalysisMap({
     initializePMTiles();
   }, []);
 
+  // Generate dynamic paint properties based on visualization mode
+  const generateFieldsPaint = useCallback(() => {
+    const { visualizationMode, colorUnit, useDecileColoring } = filterState;
+    const colorScheme = getColorScheme(visualizationMode);
+
+    // Handle organic status visualization with symbols
+    if (visualizationMode === 'organic_status') {
+      return {
+        "fill-color": [
+          "case",
+          ["==", ["get", "is_organic"], true],
+          "transparent", // Transparent fill for organic fields - will use symbols instead
+          "#f3f4f6" // Light gray for non-organic
+        ],
+        "fill-opacity": 0.6,
+      };
+    }
+
+    // Get the appropriate field name for the visualization mode
+    const getFieldName = (mode: FilterState['visualizationMode']) => {
+      switch (mode) {
+        case 'total_pesticide_belastning': return 'total_pesticide_belastning';
+        case 'pfas_belastning': return 'total_pfas_belastning';
+        case 'diquat_belastning': return 'total_diquat_belastning';
+        case 'glyphosate_belastning': return 'total_glyphosate_belastning';
+        case 'applications_count': return 'total_pesticide_applications';
+        case 'area_size': return 'area_hectares';
+        default: return 'total_pesticide_belastning';
+      }
+    };
+
+    const fieldName = getFieldName(visualizationMode);
+
+    if (useDecileColoring) {
+      // Use decile-based coloring
+      const breakpoints = getDecileBreakpoints(visualizationMode, colorUnit);
+      const colors = colorScheme.colors;
+
+      return {
+        "fill-color": [
+          "case",
+          // Check if field has data for this visualization
+          ["==", ["coalesce", ["get", fieldName], 0], 0],
+          "#f3f4f6", // Light gray for no data
+          [
+            "step",
+            ["coalesce", ["get", fieldName], 0],
+            colors[0], // Base color
+            ...breakpoints.flatMap((breakpoint, i) => [breakpoint, colors[i + 1] || colors[colors.length - 1]])
+          ]
+        ],
+        "fill-opacity": 0.7,
+      };
+    } else {
+      // Use linear interpolation
+      const colors = colorScheme.colors;
+      return {
+        "fill-color": [
+          "case",
+          ["==", ["coalesce", ["get", fieldName], 0], 0],
+          "#f3f4f6", // Light gray for no data
+          [
+            "interpolate",
+            ["linear"],
+            ["coalesce", ["get", fieldName], 0],
+            0, colors[0],
+            10, colors[2],
+            50, colors[5],
+            100, colors[8],
+            200, colors[9]
+          ]
+        ],
+        "fill-opacity": 0.7,
+      };
+    }
+  }, [filterState]);
+
   // Add field analysis layers
   const addFieldsLayers = useCallback((map: MapInstance) => {
     if (map.getSource("fields") && !map.getLayer("fields-fill")) {
+      const paintProps = generateFieldsPaint();
+
       // Main fields layer
       map.addLayer({
         id: "fields-fill",
         source: "fields",
         "source-layer": "fields",
         type: "fill",
-        paint: {
-          "fill-color": [
-            "case",
-            ["==", ["get", "is_organic"], true],
-            "#10B981", // Green for organic
-            [
-              "interpolate",
-              ["linear"],
-              ["coalesce", ["get", "total_pesticide_belastning"], 0],
-              0, "#F3F4F6",   // Light gray for no pesticides
-              10, "#FEF3C7",  // Light yellow
-              50, "#F59E0B",  // Orange
-              100, "#DC2626"  // Red for high pesticide load
-            ]
-          ],
-          "fill-opacity": 0.7,
-        },
+        paint: paintProps,
         layout: {
           visibility: layerVisibility.fields ? "visible" : "none",
         },
@@ -162,25 +229,64 @@ export default function FieldAnalysisMap({
           visibility: layerVisibility.fields ? "visible" : "none",
         },
       });
-    }
-  }, [layerVisibility.fields]);
 
-  // Add BNBO layers
+      // Add organic symbols layer
+      if (filterState.visualizationMode === 'organic_status') {
+        map.addLayer({
+          id: "organic-symbols",
+          source: "fields",
+          "source-layer": "fields",
+          type: "symbol",
+          filter: ["==", ["get", "is_organic"], true],
+          paint: {
+            "text-color": "#16a34a",
+            "text-halo-color": "#ffffff",
+            "text-halo-width": 1,
+          },
+          layout: {
+            "text-field": "🌿",
+            "text-size": 16,
+            "text-allow-overlap": false,
+            "text-ignore-placement": false,
+            visibility: layerVisibility.fields ? "visible" : "none",
+          },
+        });
+      }
+    }
+  }, [layerVisibility.fields, generateFieldsPaint, filterState.visualizationMode]);
+
+  // Add BNBO layers with stripe pattern
   const addBNBOLayers = useCallback((map: MapInstance) => {
     if (map.getSource("bnbo") && !map.getLayer("bnbo-fill")) {
+      // Create diagonal stripe pattern for BNBO
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 16;
+      canvas.height = 16;
+
+      if (ctx) {
+        ctx.fillStyle = '#10B981';
+        ctx.fillRect(0, 0, 16, 16);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 8);
+        ctx.lineTo(16, 8);
+        ctx.moveTo(8, 0);
+        ctx.lineTo(8, 16);
+        ctx.stroke();
+
+        map.addImage('bnbo-pattern', canvas);
+      }
+
       map.addLayer({
         id: "bnbo-fill",
         source: "bnbo",
         "source-layer": "bnbo",
         type: "fill",
         paint: {
-          "fill-color": [
-            "case",
-            ["==", ["get", "status_category"], "Completed"],
-            "#10B981", // Green for completed
-            "#F59E0B"  // Orange for action required
-          ],
-          "fill-opacity": 0.8,
+          "fill-pattern": "bnbo-pattern",
+          "fill-opacity": 0.7,
         },
         layout: {
           visibility: layerVisibility.bnbo ? "visible" : "none",
@@ -193,8 +299,9 @@ export default function FieldAnalysisMap({
         "source-layer": "bnbo",
         type: "line",
         paint: {
-          "line-color": "#065F46",
-          "line-width": 1,
+          "line-color": "#059669",
+          "line-width": 2,
+          "line-opacity": 0.9,
         },
         layout: {
           visibility: layerVisibility.bnbo ? "visible" : "none",
@@ -203,22 +310,41 @@ export default function FieldAnalysisMap({
     }
   }, [layerVisibility.bnbo]);
 
-  // Add wetlands layers
+  // Add wetlands layers with wave pattern
   const addWetlandsLayers = useCallback((map: MapInstance) => {
     if (map.getSource("wetlands") && !map.getLayer("wetlands-fill")) {
+      // Create wave pattern for wetlands
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 20;
+      canvas.height = 12;
+
+      if (ctx) {
+        ctx.fillStyle = '#3B82F6';
+        ctx.fillRect(0, 0, 20, 12);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        // Create wave pattern
+        ctx.moveTo(0, 6);
+        ctx.quadraticCurveTo(5, 2, 10, 6);
+        ctx.quadraticCurveTo(15, 10, 20, 6);
+        ctx.moveTo(0, 9);
+        ctx.quadraticCurveTo(5, 5, 10, 9);
+        ctx.quadraticCurveTo(15, 13, 20, 9);
+        ctx.stroke();
+
+        map.addImage('wetlands-pattern', canvas);
+      }
+
       map.addLayer({
         id: "wetlands-fill",
         source: "wetlands",
         "source-layer": "wetlands",
         type: "fill",
         paint: {
-          "fill-color": [
-            "case",
-            ["==", ["get", "toerv_pct"], ">12"],
-            "#1E40AF", // Dark blue for high moisture
-            "#3B82F6"  // Light blue for medium moisture
-          ],
-          "fill-opacity": 0.6,
+          "fill-pattern": "wetlands-pattern",
+          "fill-opacity": 0.7,
         },
         layout: {
           visibility: layerVisibility.wetlands ? "visible" : "none",
@@ -231,8 +357,9 @@ export default function FieldAnalysisMap({
         "source-layer": "wetlands",
         type: "line",
         paint: {
-          "line-color": "#1E3A8A",
-          "line-width": 0.5,
+          "line-color": "#1E40AF",
+          "line-width": 1.5,
+          "line-opacity": 0.8,
         },
         layout: {
           visibility: layerVisibility.wetlands ? "visible" : "none",
@@ -241,17 +368,39 @@ export default function FieldAnalysisMap({
     }
   }, [layerVisibility.wetlands]);
 
-  // Add water projects layers
+  // Add water projects layers with dot pattern
   const addWaterProjectsLayers = useCallback((map: MapInstance) => {
     if (map.getSource("water_projects") && !map.getLayer("water-projects-fill")) {
+      // Create dot pattern for water projects
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 16;
+      canvas.height = 16;
+
+      if (ctx) {
+        ctx.fillStyle = '#14B8A6';
+        ctx.fillRect(0, 0, 16, 16);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        // Create dot pattern
+        ctx.beginPath();
+        ctx.arc(4, 4, 1.5, 0, 2 * Math.PI);
+        ctx.arc(12, 4, 1.5, 0, 2 * Math.PI);
+        ctx.arc(4, 12, 1.5, 0, 2 * Math.PI);
+        ctx.arc(12, 12, 1.5, 0, 2 * Math.PI);
+        ctx.arc(8, 8, 1.5, 0, 2 * Math.PI);
+        ctx.fill();
+
+        map.addImage('water-projects-pattern', canvas);
+      }
+
       map.addLayer({
         id: "water-projects-fill",
         source: "water_projects",
         "source-layer": "water_projects",
         type: "fill",
         paint: {
-          "fill-color": "#14B8A6",
-          "fill-opacity": 0.7,
+          "fill-pattern": "water-projects-pattern",
+          "fill-opacity": 0.8,
         },
         layout: {
           visibility: layerVisibility.water_projects ? "visible" : "none",
@@ -265,7 +414,8 @@ export default function FieldAnalysisMap({
         type: "line",
         paint: {
           "line-color": "#0F766E",
-          "line-width": 1,
+          "line-width": 2,
+          "line-opacity": 0.9,
         },
         layout: {
           visibility: layerVisibility.water_projects ? "visible" : "none",
@@ -303,7 +453,7 @@ export default function FieldAnalysisMap({
     }
   }, [pmtilesUrls, addFieldsLayers, addBNBOLayers, addWetlandsLayers, addWaterProjectsLayers]);
 
-  // Update layer visibility when props change
+  // Update layer visibility and styling when props change
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -313,6 +463,13 @@ export default function FieldAnalysisMap({
     if (map.getLayer("fields-fill")) {
       map.setLayoutProperty("fields-fill", "visibility", layerVisibility.fields ? "visible" : "none");
       map.setLayoutProperty("fields-outline", "visibility", layerVisibility.fields ? "visible" : "none");
+
+      // Update organic symbols visibility
+      if (map.getLayer("organic-symbols")) {
+        map.setLayoutProperty("organic-symbols", "visibility",
+          layerVisibility.fields && filterState.visualizationMode === 'organic_status' ? "visible" : "none"
+        );
+      }
     }
 
     // Update BNBO layers
@@ -332,7 +489,55 @@ export default function FieldAnalysisMap({
       map.setLayoutProperty("water-projects-fill", "visibility", layerVisibility.water_projects ? "visible" : "none");
       map.setLayoutProperty("water-projects-outline", "visibility", layerVisibility.water_projects ? "visible" : "none");
     }
-  }, [layerVisibility]);
+  }, [layerVisibility, filterState.visualizationMode]);
+
+  // Update field visualization when filterState changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current.getMap();
+
+    if (map.getLayer("fields-fill")) {
+      const paintProps = generateFieldsPaint();
+
+      // Update the fill color
+      map.setPaintProperty("fields-fill", "fill-color", paintProps["fill-color"]);
+      map.setPaintProperty("fields-fill", "fill-opacity", paintProps["fill-opacity"]);
+
+      // Handle organic symbols layer
+      if (filterState.visualizationMode === 'organic_status') {
+        // Add organic symbols if not exists
+        if (!map.getLayer("organic-symbols")) {
+          map.addLayer({
+            id: "organic-symbols",
+            source: "fields",
+            "source-layer": "fields",
+            type: "symbol",
+            filter: ["==", ["get", "is_organic"], true],
+            paint: {
+              "text-color": "#16a34a",
+              "text-halo-color": "#ffffff",
+              "text-halo-width": 1,
+            },
+            layout: {
+              "text-field": "🌿",
+              "text-size": 16,
+              "text-allow-overlap": false,
+              "text-ignore-placement": false,
+              visibility: layerVisibility.fields ? "visible" : "none",
+            },
+          });
+        } else {
+          map.setLayoutProperty("organic-symbols", "visibility", layerVisibility.fields ? "visible" : "none");
+        }
+      } else {
+        // Hide organic symbols for other modes
+        if (map.getLayer("organic-symbols")) {
+          map.setLayoutProperty("organic-symbols", "visibility", "none");
+        }
+      }
+    }
+  }, [filterState, layerVisibility.fields, generateFieldsPaint]);
 
   // Handle hover events
   const onHover = useCallback((event: MapLayerMouseEvent) => {
