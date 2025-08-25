@@ -15,6 +15,16 @@ from bronze.fetch_company_data import DMAScraper  # noqa: E402
 from bronze.fetch_company_detail import DMACompanyDetailScraper  # noqa: E402
 from silver.transformation import transform_dma_json  # noqa: E402
 
+# Import pipeline metadata system for data tracing
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
+
 
 def _get_optimized_storage():
     """
@@ -357,7 +367,18 @@ def bronze(timestamp: str):
 if __name__ == "__main__":
     pipeline_start_time = datetime.now()
     timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        print("✅ Pipeline metadata system initialized")
+    else:
+        print("⚠️ Pipeline metadata system not available - continuing without data tracing")
+
     args = parse_args()
+    data = None
+
     if args.silver:
         if not args.timestamp:
             print("Error: --timestamp is required for silver stage")
@@ -438,3 +459,40 @@ if __name__ == "__main__":
             import traceback
 
             traceback.print_exc()
+
+    # Create and save metadata for DMA companies data
+    if pipeline_metadata_manager and data:
+        try:
+            processing_duration = time.time() - pipeline_start_time.timestamp()
+
+            # Create metadata for DMA companies
+            dma_metadata = pipeline_metadata_manager.create_metadata(
+                source_key="dma_companies",
+                record_count=len(data) if data else None,
+                processing_duration=processing_duration,
+                file_size_bytes=None,  # Will be calculated automatically
+                source_datasets=None,
+            )
+
+            # Determine where to save metadata (use local storage structure)
+            if ENVIRONMENT.lower() in ("production", "container"):
+                # For GCS environment, save to the same structure
+                metadata_path = f"{PREFIX_SILVER_SAVE_PATH}/{timestamp}/dma_companies_metadata.json"
+                storage_backend.save_json(dma_metadata.model_dump(), metadata_path)
+                print(f"✅ DMA companies metadata saved to GCS: {metadata_path}")
+            else:
+                # For local environment
+                import os
+
+                metadata_dir = os.path.join(PREFIX_SILVER_SAVE_PATH, timestamp)
+                os.makedirs(metadata_dir, exist_ok=True)
+
+                from pathlib import Path
+
+                metadata_path = pipeline_metadata_manager.save_metadata(
+                    dma_metadata, Path(metadata_dir) / "dma_companies_metadata.json"
+                )
+                print(f"✅ DMA companies metadata saved to {metadata_path}")
+
+        except Exception as e:
+            print(f"❌ Failed to create DMA pipeline metadata: {e}")

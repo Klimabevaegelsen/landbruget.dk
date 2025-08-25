@@ -44,7 +44,7 @@ logger = Logger.get_logger()
 def get_gcs_filesystem() -> gcsfs.GCSFileSystem:
     """
     Get cached gcsfs filesystem instance with optimal authentication.
-    
+
     Priority order:
     1. HMAC credentials (fastest, no OAuth required)
     2. Service account authentication (fallback)
@@ -52,13 +52,10 @@ def get_gcs_filesystem() -> gcsfs.GCSFileSystem:
     # Try HMAC authentication first (no OAuth required)
     gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
     gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-    
+
     if gcs_access_key and gcs_secret_key:
         logger.info("✅ Using HMAC authentication for gcsfs (no OAuth required)")
-        return gcsfs.GCSFileSystem(
-            access_key_id=gcs_access_key,
-            secret_access_key=gcs_secret_key
-        )
+        return gcsfs.GCSFileSystem(access_key_id=gcs_access_key, secret_access_key=gcs_secret_key)
     else:
         logger.info("ℹ️ Using service account authentication for gcsfs (requires OAuth)")
         return gcsfs.GCSFileSystem()
@@ -80,16 +77,16 @@ def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
             # Use HMAC credentials if available for fsspec as well
             gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
             gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-            
+
             if gcs_access_key and gcs_secret_key:
-                fs = filesystem("gs", 
-                               access_key_id=gcs_access_key,
-                               secret_access_key=gcs_secret_key)
+                fs = filesystem(
+                    "gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key
+                )
                 logger.info("✅ DuckDB configured with gcsfs integration using HMAC (no OAuth)")
             else:
                 fs = filesystem("gs")
                 logger.info("✅ DuckDB configured with gcsfs integration using service account")
-            
+
             conn.register_filesystem(fs)
         except Exception as e:
             logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
@@ -235,14 +232,14 @@ class GCSDataAccess:
             # Use HMAC authentication if available
             gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
             gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-            
+
             if gcs_access_key and gcs_secret_key:
-                fs = filesystem("gs", 
-                               access_key_id=gcs_access_key,
-                               secret_access_key=gcs_secret_key)
+                fs = filesystem(
+                    "gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key
+                )
             else:
                 fs = filesystem("gs")  # Uses gcsfs under the hood
-            
+
             self.duckdb_conn.register_filesystem(fs)
 
             logger.info("✅ DuckDB configured with spatial and gcsfs filesystem integration")
@@ -517,14 +514,25 @@ class GCSDataAccess:
                         """
                     elif "WHERE" in query_upper:
                         # SELECT with WHERE but no FROM - split and reassemble
-                        where_start = query_upper.find("WHERE")
-                        select_part = query[:where_start].strip()
-                        where_part = query[where_start:].strip()
-                        full_query = f"""
-                            CREATE OR REPLACE TABLE {table_name} AS
-                            {select_part} FROM read_parquet('{gcs_path}')
-                            {where_part}
-                        """
+                        # Use case-insensitive regex to find WHERE position in original query
+                        import re
+
+                        where_match = re.search(r"\bWHERE\b", query, re.IGNORECASE)
+                        if where_match:
+                            where_start = where_match.start()
+                            select_part = query[:where_start].strip()
+                            where_part = query[where_start:].strip()
+                            full_query = f"""
+                                CREATE OR REPLACE TABLE {table_name} AS
+                                {select_part} FROM read_parquet('{gcs_path}')
+                                {where_part}
+                            """
+                        else:
+                            # Fallback if regex fails
+                            full_query = f"""
+                                CREATE OR REPLACE TABLE {table_name} AS
+                                {query} FROM read_parquet('{gcs_path}')
+                            """
                     else:
                         # Simple SELECT with no WHERE or FROM
                         full_query = f"""
@@ -683,12 +691,14 @@ class GCSDataAccess:
         self.monitor.check_resources("post_upload")
 
     @retry(
-        retry=retry_if_exception_type((
-            ConnectionError,
-            TimeoutError,
-            OSError,
-            Exception  # Catch-all for network-related issues
-        )),
+        retry=retry_if_exception_type(
+            (
+                ConnectionError,
+                TimeoutError,
+                OSError,
+                Exception,  # Catch-all for network-related issues
+            )
+        ),
         wait=wait_exponential(multiplier=2, min=4, max=60),
         stop=stop_after_attempt(5),
         before_sleep=before_sleep_log(logger, "WARNING"),
@@ -707,7 +717,7 @@ class GCSDataAccess:
             data: Dictionary or list to upload as JSON
             gcs_path: GCS path (gs://bucket/path/file.json)
             **kwargs: Additional options for json.dumps (indent, ensure_ascii, etc.)
-        
+
         Raises:
             Exception: After 5 retry attempts with exponential backoff
         """
@@ -734,8 +744,10 @@ class GCSDataAccess:
         except Exception as e:
             self.log.error(f"Failed to upload JSON to {gcs_path}: {e}")
             # Check if it's a network-related error that should be retried
-            if any(error_type in str(type(e).__name__).lower() or error_type in str(e).lower() 
-                   for error_type in ['network', 'connection', 'timeout', 'unreachable', 'oauth2']):
+            if any(
+                error_type in str(type(e).__name__).lower() or error_type in str(e).lower()
+                for error_type in ["network", "connection", "timeout", "unreachable", "oauth2"]
+            ):
                 self.log.warning(f"Network-related error detected, will retry: {e}")
             raise
 

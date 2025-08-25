@@ -440,10 +440,10 @@ class JordbrugsanalyserBronze(BaseSource[JordbrugsanalyserBronzeConfig], BronzeJ
                                 all_year_data[str(year)] = raw_responses
                             else:
                                 # 🧹 CLEANUP: For GitHub runners, immediately clear
-                        # raw_responses to free memory
+                                # raw_responses to free memory
                                 self.log.info(
                                     f"Year {year}: Clearing raw responses from memory "
-                            f"(GitHub runner optimization)"
+                                    f"(GitHub runner optimization)"
                                 )
                                 raw_responses.clear()
                                 raw_responses = None

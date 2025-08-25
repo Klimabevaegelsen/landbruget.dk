@@ -127,7 +127,7 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
         # Get the latest gold path
         gold_path = self._get_latest_gold_path(dataset_name)
-        
+
         # Use gcs_access to query the data directly
         if where_clause != "1=1":
             query = f"SELECT * WHERE {where_clause}"

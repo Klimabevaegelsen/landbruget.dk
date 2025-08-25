@@ -63,7 +63,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             CREATE OR REPLACE TABLE bnbo_status AS
             SELECT
                 ROW_NUMBER() OVER (
-                    ORDER BY status_category, ST_X(ST_Centroid(geometry)), 
+                    ORDER BY status_category, ST_X(ST_Centroid(geometry)),
                              ST_Y(ST_Centroid(geometry))
                 ) as bnbo_id,
                 status_category,
@@ -112,12 +112,12 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) as intersection_area_m2,
             ST_Area_Spheroid(wp.geometry) as water_project_area_m2,
             ST_Area_Spheroid(b.geometry) as bnbo_area_m2,
-            (ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) / 
+            (ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) /
              ST_Area_Spheroid(wp.geometry)) * 100 as wp_coverage_percentage
-            
+
         FROM water_projects wp
         JOIN bnbo_status b ON ST_Intersects(wp.geometry, b.geometry)
-        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 0  
+        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 0
               -- Keep all intersections
         """
 

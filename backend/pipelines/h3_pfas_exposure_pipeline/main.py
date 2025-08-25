@@ -19,6 +19,16 @@ from pathlib import Path
 import dotenv
 from loguru import logger
 
+# Import pipeline metadata system for data tracing
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
+
 # Load environment variables
 # Only load .env file if it exists (for local development)
 # In GitHub Actions, environment variables are set directly
@@ -279,6 +289,9 @@ Examples:
 
 def main():
     """Main entry point."""
+    # Record start time for execution tracking
+    start_time = datetime.now()
+
     args = parse_args()
 
     # Set up logging
@@ -287,7 +300,15 @@ def main():
     setup_logging()
 
     # Set up directories
-    setup_directories()
+    output_dir = setup_directories()
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
 
     logger.info("🏗️ H3 PFAS Exposure Analysis Pipeline")
     logger.info(f"📊 Mode: {args.mode}")
@@ -297,6 +318,7 @@ def main():
         logger.info("📅 Years: all available")
 
     # Run the pipeline
+    success = False
     try:
         success = asyncio.run(
             run_pipeline(
@@ -310,6 +332,39 @@ def main():
                 use_legacy_cumulative=args.use_legacy_cumulative,
             )
         )
+
+        # Create and save metadata for H3 PFAS exposure analysis
+        if pipeline_metadata_manager and success:
+            try:
+                import time
+
+                processing_duration = time.time() - start_time.timestamp()
+
+                # Create metadata for H3 PFAS exposure analysis
+                h3_pfas_metadata = pipeline_metadata_manager.create_metadata(
+                    source_key="h3_pfas_exposure",
+                    record_count=None,  # Could be enhanced to track hexagon count
+                    processing_duration=processing_duration,
+                    file_size_bytes=None,  # Will be calculated automatically
+                    source_datasets=[
+                        "pesticide",
+                        "agricultural_fields",
+                        "bmd_pesticide_database",
+                    ],  # Combined dataset
+                )
+
+                # Save metadata to output directory
+                timestamp = start_time.strftime("%Y%m%d_%H%M%S")
+                metadata_dir = output_dir / timestamp
+                metadata_dir.mkdir(parents=True, exist_ok=True)
+
+                metadata_path = pipeline_metadata_manager.save_metadata(
+                    h3_pfas_metadata, metadata_dir / "h3_pfas_exposure_metadata.json"
+                )
+                logger.info(f"✅ H3 PFAS exposure metadata saved to {metadata_path}")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to create H3 PFAS pipeline metadata: {e}")
 
         if success:
             logger.info("🎉 Pipeline completed successfully!")

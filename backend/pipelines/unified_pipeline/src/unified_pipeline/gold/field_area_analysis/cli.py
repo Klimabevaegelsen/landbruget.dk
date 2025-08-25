@@ -169,16 +169,16 @@ def create_parser() -> argparse.ArgumentParser:
 Examples:
   # Run single job
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 --job=water_projects_bnbo
-  
+
   # Run all jobs in a stage
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=2
-  
+
   # Run complete pipeline
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=all
-  
+
   # Run with area validation disabled (if needed)
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 --disable-area-validation
-  
+
   # Use custom bucket
   python -m unified_pipeline.gold.field_area_analysis.cli --stage=1 \
     --job=fields_properties --bucket=my-bucket
@@ -196,7 +196,7 @@ Area validation (stages 1-4 only, ENABLED BY DEFAULT):
   --disable-area-validation: Disable area validation (enabled by default for data integrity)
   --area-validation-tolerance-pct: Maximum acceptable area difference (default: 1.0%)
   --no-fail-on-validation-error: Don't fail pipeline on validation errors (default: fails pipeline)
-  
+
   Environment variables (override defaults):
     ENABLE_AREA_VALIDATION=false     # Disable validation globally
     AREA_VALIDATION_TOLERANCE_PCT=2.0 # Set custom tolerance

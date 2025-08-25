@@ -41,6 +41,16 @@ from silver.chr_silver_processing import process_chr_data as run_silver_processi
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+# Import pipeline metadata system for data tracing
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -726,6 +736,14 @@ def main():
     args = parse_args()
     setup_logging(args["log_level"])
 
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+
     try:
         # Determine steps to run first to decide if we need FVM credentials
         requested_step = args["steps"]
@@ -1003,6 +1021,58 @@ def main():
                     raise RuntimeError("No bronze data source available for silver processing")
 
                 logging.warning(f"✅ Silver processing completed. Output in: {silver_dir}")
+
+                # Create and save metadata for CHR data sources
+                if pipeline_metadata_manager:
+                    try:
+                        processing_duration = time.time() - start_time.timestamp()
+
+                        # Create metadata for CHR animal movements
+                        if unique_bronze_steps and "animal_movements" in unique_bronze_steps:
+                            chr_movements_metadata = pipeline_metadata_manager.create_metadata(
+                                source_key="chr_animal_movements",
+                                record_count=len(context.get("animal_movements_results", [])),
+                                processing_duration=processing_duration,
+                                file_size_bytes=None,  # Will be calculated automatically
+                                source_datasets=None,
+                            )
+                            metadata_path = pipeline_metadata_manager.save_metadata(
+                                chr_movements_metadata, silver_dir / "chr_animal_movements_metadata.json"
+                            )
+                            logger.info(f"✅ CHR animal movements metadata saved to {metadata_path}")
+
+                        # Create metadata for CHR properties
+                        if unique_bronze_steps and any(
+                            step in unique_bronze_steps for step in ["ejendom", "herd_details"]
+                        ):
+                            chr_properties_metadata = pipeline_metadata_manager.create_metadata(
+                                source_key="chr_properties",
+                                record_count=len(context.get("chr_to_species", {})),
+                                processing_duration=processing_duration,
+                                file_size_bytes=None,
+                                source_datasets=None,
+                            )
+                            metadata_path = pipeline_metadata_manager.save_metadata(
+                                chr_properties_metadata, silver_dir / "chr_properties_metadata.json"
+                            )
+                            logger.info(f"✅ CHR properties metadata saved to {metadata_path}")
+
+                        # Create metadata for CHR herds
+                        if unique_bronze_steps and "herd_details" in unique_bronze_steps:
+                            chr_herds_metadata = pipeline_metadata_manager.create_metadata(
+                                source_key="chr_herds",
+                                record_count=len(context.get("herd_details", [])),
+                                processing_duration=processing_duration,
+                                file_size_bytes=None,
+                                source_datasets=None,
+                            )
+                            metadata_path = pipeline_metadata_manager.save_metadata(
+                                chr_herds_metadata, silver_dir / "chr_herds_metadata.json"
+                            )
+                            logger.info(f"✅ CHR herds metadata saved to {metadata_path}")
+
+                    except Exception as e:
+                        logger.error(f"❌ Failed to create CHR pipeline metadata: {e}")
 
                 # --- Gold Layer Processing ---
                 # Run gold processing if this is an "all" run or a specific gold step

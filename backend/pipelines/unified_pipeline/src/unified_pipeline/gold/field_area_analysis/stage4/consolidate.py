@@ -153,7 +153,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 field_uuid,
                 field_geometry as geometry,
                 field_area_m2,
-                
+
                 -- Property ownership summary
                 COUNT(*) as property_count,
                 SUM(intersection_area_m2) as total_property_intersection_area_m2,
@@ -165,7 +165,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                     ORDER BY fp2.intersection_area_m2 DESC
                     LIMIT 1
                 ) as primary_bfe_number
-                
+
             FROM field_property_intersections fp
             GROUP BY field_id, block_id, cvr_number, year, field_uuid, field_geometry, field_area_m2
         """)
@@ -197,16 +197,16 @@ class ConsolidateResults(FieldAnalysisStageBase):
             SELECT
                 field_uuid,
                 year,
-                
+
                 -- Keep composite keys for debugging/reference
                 field_id,
                 block_id,
                 cvr_number,
-                
+
                 -- Soil type diversity metrics
                 COUNT(DISTINCT soil_type_category) as soil_type_count,
                 COUNT(DISTINCT soil_code) as unique_soil_codes,
-                
+
                 -- Dominant soil type (largest area)
                 (
                     SELECT soil_type_category
@@ -216,7 +216,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                     ORDER BY fsa2.soil_area_m2 DESC
                     LIMIT 1
                 ) as dominant_soil_type,
-                
+
                 -- Dominant soil coverage percentage
                 (
                     SELECT soil_area_share_pct
@@ -226,10 +226,10 @@ class ConsolidateResults(FieldAnalysisStageBase):
                     ORDER BY fsa2.soil_area_m2 DESC
                     LIMIT 1
                 ) as dominant_soil_coverage_pct,
-                
+
                 -- Total soil coverage (should be close to 100% for most fields)
                 SUM(soil_area_share_pct) as total_soil_coverage_pct,
-                
+
                 -- Soil breakdown as JSON: {soil_type: {area_m2, coverage_pct}}
                 '{' || STRING_AGG(
                     '"' || soil_type_category || '": {' ||
@@ -238,7 +238,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                     '}', ', '
                     ORDER BY soil_area_m2 DESC
                 ) || '}' as soil_type_breakdown
-                
+
             FROM field_soil_areas fsa
             GROUP BY field_uuid, year, field_id, block_id, cvr_number
         """)
@@ -262,7 +262,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 MAX(field_bnbo_water_covered_pct) as field_bnbo_water_covered_pct,
                 MAX(field_bnbo_water_uncovered_pct) as field_bnbo_water_uncovered_pct,
                 MAX(field_bnbo_coverage_pct) as field_bnbo_coverage_pct,
-                
+
                 -- BNBO status metrics (field-level - should be same across property rows)
                 MAX(bnbo_action_required_hectares) as bnbo_action_required_hectares,
                 MAX(bnbo_completed_hectares) as bnbo_completed_hectares,
@@ -274,7 +274,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                     bnbo_completed_not_covered_by_water_hectares,
                 MAX(bnbo_status_categories) as bnbo_status_categories,
                 MAX(bnbo_status_count) as bnbo_status_count,
-                
+
                 -- Property-level BNBO totals (SUM - aggregate across all properties for this field)
                 SUM(property_bnbo_total_m2) as property_bnbo_total_m2,
                 SUM(property_bnbo_water_covered_m2) as property_bnbo_water_covered_m2,
@@ -283,7 +283,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 -- Total count across all properties
                 MAX(property_bnbo_owners) as property_bnbo_owners,
                 MAX(property_bnbo_breakdown) as property_bnbo_breakdown
-                
+
             FROM final_bnbo_analysis
             GROUP BY field_uuid, year
         """)
@@ -307,7 +307,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 MAX(field_wetland_water_covered_pct) as field_wetland_water_covered_pct,
                 MAX(field_wetland_water_uncovered_pct) as field_wetland_water_uncovered_pct,
                 MAX(field_wetland_coverage_pct) as field_wetland_coverage_pct,
-                
+
                 -- Property-level wetland totals
                 -- (SUM - aggregate across all properties for this field)
                 SUM(property_wetland_total_m2) as property_wetland_total_m2,
@@ -317,7 +317,7 @@ class ConsolidateResults(FieldAnalysisStageBase):
                 -- Total count across all properties
                 MAX(property_wetland_owners) as property_wetland_owners,
                 MAX(property_wetland_breakdown) as property_wetland_breakdown
-                
+
             FROM final_wetland_analysis
             GROUP BY field_uuid, year
         """)
@@ -362,51 +362,51 @@ class ConsolidateResults(FieldAnalysisStageBase):
                     as fields_with_bnbo_property_relationships,
                 COUNT(CASE WHEN property_wetland_count > 0 THEN 1 END)
                     as fields_with_wetland_property_relationships,
-                
+
                 -- Average coverages
                 AVG(field_bnbo_coverage_pct) as avg_field_bnbo_pct,
                 AVG(field_wetland_coverage_pct) as avg_field_wetland_pct,
                 AVG(combined_property_environmental_coverage_pct) as avg_property_environmental_pct,
                 AVG(property_count) as avg_properties_per_field,
-                AVG(CASE WHEN soil_type_count > 0 THEN dominant_soil_coverage_pct END) 
+                AVG(CASE WHEN soil_type_count > 0 THEN dominant_soil_coverage_pct END)
                     as avg_dominant_soil_coverage_pct,
-                AVG(CASE WHEN soil_type_count > 0 THEN total_soil_coverage_pct END) 
+                AVG(CASE WHEN soil_type_count > 0 THEN total_soil_coverage_pct END)
                     as avg_total_soil_coverage_pct,
-                AVG(CASE WHEN soil_type_count > 0 THEN soil_type_count END) 
+                AVG(CASE WHEN soil_type_count > 0 THEN soil_type_count END)
                     as avg_soil_types_per_field,
-                
+
                 -- Water project coverages
-                AVG(CASE WHEN field_bnbo_total_m2 > 0 THEN field_bnbo_water_covered_pct END) 
+                AVG(CASE WHEN field_bnbo_total_m2 > 0 THEN field_bnbo_water_covered_pct END)
                     as avg_bnbo_water_coverage,
-                AVG(CASE WHEN field_wetland_total_m2 > 0 THEN field_wetland_water_covered_pct END) 
+                AVG(CASE WHEN field_wetland_total_m2 > 0 THEN field_wetland_water_covered_pct END)
                     as avg_wetland_water_coverage,
                 AVG(CASE WHEN property_wetland_count > 0 THEN
                     (property_wetland_water_covered_m2 / NULLIF(property_wetland_total_m2, 0)) * 100
                 END) as avg_property_wetland_water_coverage,
-                
+
                 -- Property-environmental spatial relationships
                 SUM(property_bnbo_count) as total_bnbo_property_relationships,
                 SUM(property_wetland_count) as total_wetland_property_relationships,
-                SUM(total_properties_with_environmental_features) 
+                SUM(total_properties_with_environmental_features)
                     as total_environmental_property_relationships,
-                
+
                 -- Total areas
                 SUM(field_area_m2) / 1000000 as total_field_area_km2,
                 SUM(field_bnbo_total_m2) / 1000000 as total_bnbo_area_km2,
                 SUM(field_wetland_total_m2) / 1000000 as total_wetland_area_km2,
                 SUM(field_bnbo_water_covered_m2) / 1000000 as total_bnbo_covered_km2,
                 SUM(field_wetland_water_covered_m2) / 1000000 as total_wetland_covered_km2,
-                
+
                 -- Property-level wetland water coverage totals
-                SUM(property_wetland_water_covered_m2) / 1000000 
+                SUM(property_wetland_water_covered_m2) / 1000000
                     as total_property_wetland_covered_km2,
-                SUM(property_wetland_water_uncovered_m2) / 1000000 
+                SUM(property_wetland_water_uncovered_m2) / 1000000
                     as total_property_wetland_uncovered_km2,
-                SUM(CASE WHEN property_wetland_water_covered_m2 > 0 
-                    THEN property_wetland_count ELSE 0 END) 
+                SUM(CASE WHEN property_wetland_water_covered_m2 > 0
+                    THEN property_wetland_count ELSE 0 END)
                     as total_properties_with_covered_wetlands,
-                SUM(CASE WHEN property_wetland_water_uncovered_m2 > 0 
-                    THEN property_wetland_count ELSE 0 END) 
+                SUM(CASE WHEN property_wetland_water_uncovered_m2 > 0
+                    THEN property_wetland_count ELSE 0 END)
                     as total_properties_with_uncovered_wetlands
             FROM field_area_analysis_final
         """).fetchone()
