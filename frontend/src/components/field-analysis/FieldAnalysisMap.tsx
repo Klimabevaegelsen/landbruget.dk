@@ -8,6 +8,7 @@ import Map, {
 import "maplibre-gl/dist/maplibre-gl.css";
 import { LayerVisibility, FilterState, FieldAnalysisData } from "./types";
 import { getDecileBreakpoints, getColorScheme } from "./colorUtils";
+import { SearchBar } from "./SearchBar";
 
 // Type for MapLibre map instance
 interface MapInstance {
@@ -31,6 +32,7 @@ interface FieldAnalysisMapProps {
   layerVisibility: LayerVisibility;
   filterState: FilterState;
   onFieldSelect: (fieldData: FieldAnalysisData) => void;
+  onLocationSelect?: (location: { lat: number; lng: number; address: string }) => void;
 }
 
 interface TooltipInfo {
@@ -323,11 +325,31 @@ export default function FieldAnalysisMap({
   layerVisibility,
   filterState,
   onFieldSelect,
+  onLocationSelect,
 }: FieldAnalysisMapProps) {
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
+
+  // Handle location selection from search
+  const handleLocationSelect = useCallback((location: { lat: number; lng: number; address: string }) => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current.getMap() as unknown as {
+      flyTo: (options: { center: [number, number]; zoom: number; duration?: number }) => void;
+    };
+
+    // Fly to the selected location
+    map.flyTo({
+      center: [location.lng, location.lat],
+      zoom: 14,
+      duration: 1500
+    });
+
+    // Call the parent callback if provided
+    onLocationSelect?.(location);
+  }, [onLocationSelect]);
 
   // Initialize PMTiles protocol
   useEffect(() => {
@@ -1010,6 +1032,15 @@ export default function FieldAnalysisMap({
 
   return (
     <div className="relative w-full h-full">
+      {/* Search Bar */}
+      <div className="absolute top-4 left-4 z-10 w-80 max-w-[calc(100vw-2rem)]">
+        <SearchBar
+          onLocationSelect={handleLocationSelect}
+          placeholder="Søg adresser, byer, regioner..."
+          className="w-full"
+        />
+      </div>
+
       <Map
       ref={mapRef}
         initialViewState={{
