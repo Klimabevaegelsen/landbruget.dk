@@ -39,7 +39,9 @@ export function SearchBar({
     setIsOpen(false);
     setSelectedIndex(-1);
 
-    // Get detailed address information including coordinates
+    let locationFound = false;
+
+    // Try to get detailed address information including coordinates
     if (result.adresse?.href) {
       try {
         const response = await fetch(result.adresse.href);
@@ -52,18 +54,27 @@ export function SearchBar({
               lng,
               address: result.tekst
             });
+            locationFound = true;
           }
         }
       } catch (error) {
         console.error('Error fetching address details:', error);
       }
-    } else if (result.adresse?.x && result.adresse?.y) {
-      // Use coordinates from autocomplete result if available
+    }
+
+    // Fall back to coordinates from autocomplete result if detailed fetch failed or had no coordinates
+    if (!locationFound && result.adresse?.x && result.adresse?.y) {
       onLocationSelect({
         lat: result.adresse.y,
         lng: result.adresse.x,
         address: result.tekst
       });
+      locationFound = true;
+    }
+
+    // Log if no coordinates were found at all
+    if (!locationFound) {
+      console.warn('No coordinates found for address:', result.tekst);
     }
   }, [onLocationSelect]);
 
