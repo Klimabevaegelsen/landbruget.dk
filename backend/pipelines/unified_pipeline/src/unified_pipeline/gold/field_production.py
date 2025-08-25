@@ -151,7 +151,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             # AGGRESSIVE: Spatial-specific optimizations for resource constraints
             self.conn.execute("SET enable_progress_bar = false")  # Reduce overhead
-            self.conn.execute("SET enable_checkpoint_on_shutdown = true")  # Ensure cleanup on exit
+            # Note: enable_checkpoint_on_shutdown is not available in this DuckDB version
             self.conn.execute("SET wal_autocheckpoint = 100")  # More frequent WAL checkpoints
 
             # Create optimized temp directory with cleanup

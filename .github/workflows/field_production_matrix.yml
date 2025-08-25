@@ -242,7 +242,7 @@ jobs:
         # Set up signal handling for graceful cancellation
         trap 'echo "Received cancellation signal, stopping..."; kill -TERM $PID 2>/dev/null; wait $PID 2>/dev/null; exit 130' SIGINT SIGTERM
 
-        python -m unified_pipeline \
+        python -m unified_pipeline run \
           -s field_production \
           -j gold \
           --year ${{ matrix.year }} &
