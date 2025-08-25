@@ -655,6 +655,40 @@ export default function FieldAnalysisMap({
     }
   }, [layerVisibility.water_projects]);
 
+  // Add buildings layers
+  const addBuildingsLayers = useCallback((map: MapInstance) => {
+    if (map.getSource("buildings") && !map.getLayer("buildings-fill")) {
+      map.addLayer({
+        id: "buildings-fill",
+        source: "buildings",
+        "source-layer": "buildings",
+        type: "fill",
+        paint: {
+          "fill-color": "#4A90E2",
+          "fill-opacity": 0.6,
+        },
+        layout: {
+          visibility: layerVisibility.buildings ? "visible" : "none",
+        },
+      });
+
+      map.addLayer({
+        id: "buildings-outline",
+        source: "buildings",
+        "source-layer": "buildings",
+        type: "line",
+        paint: {
+          "line-color": "#2563EB",
+          "line-width": 1,
+          "line-opacity": 0.8,
+        },
+        layout: {
+          visibility: layerVisibility.buildings ? "visible" : "none",
+        },
+      });
+    }
+  }, [layerVisibility.buildings]);
+
   // Handle map load and add sources
   const onMapLoad = useCallback(() => {
     if (!mapRef.current) return;
@@ -678,11 +712,12 @@ export default function FieldAnalysisMap({
       addBNBOLayers(map);
       addWetlandsLayers(map);
       addWaterProjectsLayers(map);
+      addBuildingsLayers(map);
 
     } catch (err) {
       console.error("Error adding map sources/layers:", err);
     }
-  }, [pmtilesUrls, addFieldsLayers, addBNBOLayers, addWetlandsLayers, addWaterProjectsLayers]);
+  }, [pmtilesUrls, addFieldsLayers, addBNBOLayers, addWetlandsLayers, addWaterProjectsLayers, addBuildingsLayers]);
 
   // Update layer visibility and styling when props change
   useEffect(() => {
@@ -719,6 +754,12 @@ export default function FieldAnalysisMap({
     if (map.getLayer("water-projects-fill")) {
       map.setLayoutProperty("water-projects-fill", "visibility", layerVisibility.water_projects ? "visible" : "none");
       map.setLayoutProperty("water-projects-outline", "visibility", layerVisibility.water_projects ? "visible" : "none");
+    }
+
+    // Update buildings layers
+    if (map.getLayer("buildings-fill")) {
+      map.setLayoutProperty("buildings-fill", "visibility", layerVisibility.buildings ? "visible" : "none");
+      map.setLayoutProperty("buildings-outline", "visibility", layerVisibility.buildings ? "visible" : "none");
     }
   }, [layerVisibility, filterState.visualizationMode]);
 
