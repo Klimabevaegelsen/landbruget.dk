@@ -85,4 +85,4 @@ credentials.json
 # Environment specific
 .env.local
 .env.production
-.env.staging 
+.env.staging

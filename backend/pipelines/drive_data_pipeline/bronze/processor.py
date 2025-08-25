@@ -1,6 +1,7 @@
 """Bronze layer processor for Google Drive data pipeline."""
 
 import datetime
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,6 +11,16 @@ from ..utils.storage import DriveStorageManager
 from .drive import DriveFile, DriveFolder, GoogleDriveFetcher
 from .metadata import MetadataManager
 from .storage import BronzeStorageManager
+
+# Import the new data tracing system
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
 
 # Get logger
 logger = get_logger()
@@ -44,8 +55,16 @@ class BronzeProcessor:
             base_path=settings.bronze_path,
         )
 
-        # Initialize metadata manager
+        # Initialize metadata manager (file-level)
         self.metadata_manager = MetadataManager(settings.bronze_path, storage_manager)
+
+        # Initialize pipeline metadata manager (pipeline-level data tracing)
+        if PIPELINE_METADATA_AVAILABLE:
+            self.pipeline_metadata_manager = PipelineMetadataManager()
+            logger.info("✅ Pipeline metadata system initialized for data tracing")
+        else:
+            self.pipeline_metadata_manager = None
+            logger.warning("⚠️  Pipeline metadata system not available")
 
         # Use provided pipeline start time or generate one
         if pipeline_start_time is not None:
@@ -103,14 +122,49 @@ class BronzeProcessor:
             # Initialize data collection for in-memory processing
             in_memory_data = {} if return_data else None
 
+            # Track processing start time for pipeline metadata
+            processing_start_time = time.time()
+
             # Process the folder
             processed_count = self._process_folder(
                 drive_folder, specific_subfolders, supported_file_types, in_memory_data
             )
 
+            # Calculate processing duration
+            processing_duration = time.time() - processing_start_time
+
             logger.info(
-                f"Successfully processed {processed_count} files from folder {drive_folder.id}"
+                f"Successfully processed {processed_count} files from folder "
+                f"{drive_folder.id} in {processing_duration:.1f}s"
             )
+
+            # Create and save pipeline metadata for data tracing
+            if self.pipeline_metadata_manager:
+                try:
+                    # Calculate total file size processed
+                    total_file_size = 0
+                    if in_memory_data:
+                        total_file_size = sum(
+                            item.get("file_size", 0) for item in in_memory_data.values()
+                        )
+
+                    # Create pipeline metadata
+                    pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                        source_key="drive_pesticide_reports",  # From DATA_SOURCE_REGISTRY
+                        record_count=processed_count,
+                        processing_duration=processing_duration,
+                        file_size_bytes=total_file_size,
+                    )
+
+                    # Save pipeline metadata alongside the run
+                    pipeline_metadata_path = self.pipeline_metadata_manager.save_metadata(
+                        pipeline_metadata, self.run_path / "pipeline_metadata.json"
+                    )
+
+                    logger.info(f"✅ Pipeline metadata saved to {pipeline_metadata_path}")
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to create pipeline metadata: {e}")
 
             if return_data:
                 return {

@@ -18,17 +18,17 @@ class BronzeStorageManager:
 
     def _sanitize_dataset_name(self, name: str) -> str:
         """Sanitize a folder name to be used as a dataset name.
-        
+
         Args:
             name: Raw folder name
-            
+
         Returns:
             Sanitized dataset name
         """
         # Replace special characters and spaces with underscores
         dataset_name = re.sub(r'[<>:"/\\|?*\s]', "_", name)
         # Clean up multiple consecutive underscores
-        dataset_name = re.sub(r'_+', "_", dataset_name)
+        dataset_name = re.sub(r"_+", "_", dataset_name)
         # Strip dots, spaces, and underscores from edges, then lowercase
         dataset_name = dataset_name.strip(". _").lower()
         return dataset_name if dataset_name else "unknown"
@@ -99,15 +99,15 @@ class BronzeStorageManager:
 
         # Extract the subfolder name (skip the root Drive folder)
         if folder_path:
-            # Split the path - expect format like "landbruget.dk_static_files/Fertiliser/2023_Data" 
+            # Split the path - expect format like "landbruget.dk_static_files/Fertiliser/2023_Data"
             # We want "Fertiliser" as the dataset name, preserve "2023_Data" as internal structure
             path_parts = folder_path.split("/")
-            
+
             if len(path_parts) >= 2:
                 # Use the first subfolder as dataset name (skip root folder)
                 subfolder = path_parts[1]
                 dataset_name = self._sanitize_dataset_name(subfolder)
-                
+
                 # Preserve any nested subfolders within the dataset
                 if len(path_parts) > 2:
                     nested_path = "/".join(path_parts[2:])
@@ -249,17 +249,17 @@ class BronzeStorageManager:
         # Extract the subfolder name (skip the root Drive folder)
         # Same logic as create_folder_structure
         folder_path = folder_path.strip("/")
-        
+
         if folder_path:
-            # Split the path - expect format like "landbruget.dk_static_files/Fertiliser/2023_Data" 
+            # Split the path - expect format like "landbruget.dk_static_files/Fertiliser/2023_Data"
             # We want "Fertiliser" as the dataset name, preserve "2023_Data" as internal structure
             path_parts = folder_path.split("/")
-            
+
             if len(path_parts) >= 2:
                 # Use the first subfolder as dataset name (skip root folder)
                 subfolder = path_parts[1]
                 dataset_name = self._sanitize_dataset_name(subfolder)
-                
+
                 # Preserve any nested subfolders within the dataset
                 if len(path_parts) > 2:
                     nested_path = "/".join(path_parts[2:])

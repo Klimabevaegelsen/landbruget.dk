@@ -267,8 +267,8 @@ class SvineflytningSilverProcessor:
                 self.conn.execute(
                     """
                     INSERT INTO raw_movements VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?
                     )
                 """,
@@ -345,12 +345,12 @@ class SvineflytningSilverProcessor:
                 Id as movement_id,
                 Oprindelse as origin_system,
                 Handling as action_type,
-                
+
                 -- Movement timing
                 FlytteTidspunkt_SvineflytDato as movement_date,
                 FlytteTidspunkt_SvineflytTidspunkt as movement_time,
                 FlytteTidspunkt_SvineflytRaekkefoelge as movement_sequence,
-                
+
                 -- Sender information
                 Afsender_Landekode as sender_country_code,
                 Afsender_ChrNummer as sender_chr_number,
@@ -364,7 +364,7 @@ class SvineflytningSilverProcessor:
                 Afsender_Ejendom_DatoOpret as sender_property_created,
                 Afsender_Ejendom_DatoOpdatering as sender_property_updated,
                 Afsender_UdlandsEjendom as sender_foreign_property,
-                
+
                 -- Receiver information
                 Modtager_Landekode as receiver_country_code,
                 Modtager_ChrNummer as receiver_chr_number,
@@ -378,35 +378,35 @@ class SvineflytningSilverProcessor:
                 Modtager_Ejendom_DatoOpret as receiver_property_created,
                 Modtager_Ejendom_DatoOpdatering as receiver_property_updated,
                 Modtager_UdlandsEjendom as receiver_foreign_property,
-                
+
                 -- Animal counts
                 AntalDyr_AntalDyrIAlt as total_animals,
                 AntalDyr_AntalSoer as sow_count,
                 AntalDyr_AntalSlagtesvin as slaughter_pig_count,
                 AntalDyr_Antal190LitersContainere as containers_190l,
                 AntalDyr_Antal240LitersContainere as containers_240l,
-                
+
                 -- Transport information
                 Koeretoej_Forvogn_Landekode as vehicle_country_code,
                 Koeretoej_Forvogn_RegNr as vehicle_registration,
                 Koeretoej_Haenger_Landekode as trailer_country_code,
                 Koeretoej_Haenger_RegNr as trailer_registration,
-                
+
                 -- Additional transport and documentation
                 Omlaesser as transshipment_info,
                 TracesDokument as traces_document,
                 Sundhedscertifikat as health_certificate,
-                
+
                 -- Administrative information
                 IndberetterLogon as reporter_login,
                 IndberetningForetaget as report_timestamp,
-                
+
                 -- Processing metadata
                 '{export_timestamp}' as processed_timestamp,
                 _chunk_timestamp as source_chunk_timestamp,
                 _chunk_start_date as source_period_start,
                 _chunk_end_date as source_period_end,
-                
+
                 -- Data quality flags
                 CASE
                     WHEN Handling = 'slet' THEN true
@@ -420,7 +420,7 @@ class SvineflytningSilverProcessor:
                     WHEN AntalDyr_AntalDyrIAlt IS NULL OR AntalDyr_AntalDyrIAlt <= 0 THEN true
                     ELSE false
                 END as missing_animal_count
-                
+
             FROM raw_movements
             WHERE Id IS NOT NULL  -- Filter out completely invalid records
         """)
@@ -525,7 +525,7 @@ class SvineflytningSilverProcessor:
                 MAX(FlytteTidspunkt_SvineflytDato) as last_movement_date
             FROM raw_movements
             WHERE Koeretoej_Forvogn_RegNr IS NOT NULL
-            GROUP BY Koeretoej_Forvogn_RegNr, Koeretoej_Forvogn_Landekode, 
+            GROUP BY Koeretoej_Forvogn_RegNr, Koeretoej_Forvogn_Landekode,
                      Koeretoej_Haenger_RegNr, Koeretoej_Haenger_Landekode
         """)
 
