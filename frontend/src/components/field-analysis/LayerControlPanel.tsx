@@ -27,16 +27,16 @@ export function LayerControlPanel({
     {
       key: "bnbo" as const,
       name: "BNBO Områder",
-      description: "2.761 biodiversitets- og naturgenopretningsområder",
-      icon: "🌱",
-      color: "bg-emerald-500",
+      description: "2.761 boringsnære beskyttelsesområder",
+      icon: "💧",
+      color: "bg-blue-600",
     },
     {
       key: "wetlands" as const,
       name: "Vådområder",
       description: "768.646 lavbundsjorder med tørvindhold",
-      icon: "💧",
-      color: "bg-blue-500",
+      icon: "💨",
+      color: "bg-gray-600",
     },
     {
       key: "water_projects" as const,
@@ -420,16 +420,12 @@ export function LayerControlPanel({
         {/* Standard legend */}
         <div className="space-y-2 text-xs">
           <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-green-500 rounded"></div>
-            <span>BNBO - Gennemført</span>
+            <div className="w-4 h-4 bg-blue-600 rounded"></div>
+            <span>Boringsnære beskyttelsesområder</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-orange-500 rounded"></div>
-            <span>BNBO - Handling påkrævet</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-4 h-4 bg-blue-500 rounded"></div>
-            <span>Vådområder</span>
+            <div className="w-4 h-4 bg-gray-600 rounded"></div>
+            <span>Lavbundsjorder (tørvindhold)</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-4 h-4 bg-teal-500 rounded"></div>

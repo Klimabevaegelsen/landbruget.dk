@@ -25,7 +25,7 @@ export default function MarkanalysePage() {
               </h1>
               <p className="mt-2 text-gray-600 max-w-3xl">
                 Omfattende visualisering af danske landbrugsmarker med pesticidforbrug,
-                miljøområder (BNBO og lavbundsjorder), vandprojekter og bygningsnærhed.
+                miljøområder (boringsnære beskyttelsesområder og lavbundsjorder), vandprojekter og bygningsnærhed.
               </p>
             </div>
             <div className="text-sm text-gray-500">
