@@ -50,11 +50,11 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging) return;
-    
+
     const touch = e.touches[0];
     const startY = (e.target as any)._startY || touch.clientY;
     const deltaY = startY - touch.clientY;
-    
+
     // Only allow upward drag to expand
     if (deltaY > 0) {
       setDragOffset(Math.min(deltaY, 200));
@@ -63,14 +63,14 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!isDragging) return;
-    
+
     setIsDragging(false);
-    
+
     // Expand if dragged up significantly
     if (dragOffset > 50) {
       setIsExpanded(true);
     }
-    
+
     setDragOffset(0);
   }, [isDragging, dragOffset]);
 
@@ -85,7 +85,7 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
         const diquatGrams = Number(hoverInfo.data.diquat_grams || 0);
         const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams || 0);
         const area = Number(hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha || 0);
-        
+
         // Calculate intensities with proper type casting
         const pfasIntensity = Number(hoverInfo.data.pfas_intensity) || (area > 0 ? pfasGrams / area : 0);
         const pesticideIntensity = Number(hoverInfo.data.pesticide_intensity) || (area > 0 ? pesticideLoad / area : 0);
@@ -207,7 +207,7 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
                 )}
               </div>
             </div>
-            
+
             {isExpanded && (
               <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-white/20 animate-in slide-in-from-bottom-2 duration-300">
                 <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wide">Area Details</h4>
@@ -247,7 +247,7 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
                 )}
               </div>
             </div>
-            
+
             {isExpanded && (
               <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-white/20 animate-in slide-in-from-bottom-2 duration-300">
                 <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wide">Building Details</h4>
@@ -280,13 +280,13 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
   return (
     <>
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300"
         onClick={onClose}
       />
-      
+
       {/* Bottom Panel */}
-      <div 
+      <div
         className={`fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-white/20 shadow-2xl z-50 transform transition-all duration-300 ease-out ${
           isExpanded ? 'max-h-[80vh]' : 'max-h-[50vh]'
         }`}
@@ -328,4 +328,4 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
       </div>
     </>
   );
-} 
+}

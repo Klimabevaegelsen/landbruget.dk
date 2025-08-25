@@ -6,37 +6,37 @@ import { Play, Pause, RotateCcw } from 'lucide-react';
 import { useMapStore } from '@/stores/map-store';
 
 export function TimeControls() {
-  const { 
-    selectedYear, 
-    setSelectedYear, 
-    cumulativeMode, 
+  const {
+    selectedYear,
+    setSelectedYear,
+    cumulativeMode,
     setCumulativeMode,
-    availableYears 
+    availableYears
   } = useMapStore();
-  
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1000); // ms per year
-  
+
   // Auto-play functionality
   useEffect(() => {
     if (!isPlaying) return;
-    
+
     const interval = setInterval(() => {
       const currentIndex = availableYears.indexOf(selectedYear);
       const nextIndex = (currentIndex + 1) % availableYears.length;
       setSelectedYear(availableYears[nextIndex]);
     }, playbackSpeed);
-    
+
     return () => clearInterval(interval);
   }, [isPlaying, playbackSpeed, availableYears, setSelectedYear, selectedYear]);
-  
+
   const resetToStart = () => {
     setSelectedYear(availableYears[0]);
     setIsPlaying(false);
   };
-  
+
   return (
-    <motion.div 
+    <motion.div
       className="control-panel"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -52,8 +52,8 @@ export function TimeControls() {
             <motion.button
               onClick={() => setCumulativeMode(!cumulativeMode)}
               className={`px-3 py-1 rounded text-xs transition-colors ${
-                cumulativeMode 
-                  ? 'bg-blue-100 text-blue-800' 
+                cumulativeMode
+                  ? 'bg-blue-100 text-blue-800'
                   : 'bg-gray-100 text-gray-800'
               }`}
               whileHover={{ scale: 1.05 }}
@@ -62,7 +62,7 @@ export function TimeControls() {
               {cumulativeMode ? 'Cumulative' : 'Single Year'}
             </motion.button>
           </div>
-          
+
           <div className="relative">
             <input
               type="range"
@@ -79,7 +79,7 @@ export function TimeControls() {
             </div>
           </div>
         </div>
-        
+
         {/* Playback Controls */}
         <div className="flex items-center justify-center space-x-4">
           <motion.button
@@ -91,7 +91,7 @@ export function TimeControls() {
             {isPlaying ? <Pause size={16} /> : <Play size={16} />}
             <span>{isPlaying ? 'Pause' : 'Play'}</span>
           </motion.button>
-          
+
           <motion.button
             onClick={resetToStart}
             className="flex items-center space-x-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
@@ -101,7 +101,7 @@ export function TimeControls() {
             <RotateCcw size={16} />
             <span>Reset</span>
           </motion.button>
-          
+
           <select
             value={playbackSpeed}
             onChange={(e) => setPlaybackSpeed(parseInt(e.target.value))}
@@ -113,7 +113,7 @@ export function TimeControls() {
           </select>
         </div>
       </div>
-      
+
       <style jsx>{`
         .slider::-webkit-slider-thumb {
           appearance: none;
@@ -125,7 +125,7 @@ export function TimeControls() {
           border: 2px solid white;
           box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
-        
+
         .slider::-moz-range-thumb {
           height: 20px;
           width: 20px;
@@ -138,4 +138,4 @@ export function TimeControls() {
       `}</style>
     </motion.div>
   );
-} 
+}

@@ -25,12 +25,12 @@ export class ProtomapsManager {
     try {
       // Initialize PMTiles with custom Denmark tileset
       this.pmtiles = new PMTiles(this.config.pmtilesUrl);
-      
+
       // Register protocol for deck.gl and Kepler.gl
       if (typeof window !== 'undefined') {
         Protocol.add(this.pmtiles);
       }
-      
+
       this.isInitialized = true;
       console.log('Protomaps initialized successfully');
     } catch (error) {
@@ -70,7 +70,7 @@ export class ProtomapsManager {
           'background-color': '#f8f9fa'
         }
       },
-      
+
       // Water bodies
       {
         id: 'water',
@@ -82,7 +82,7 @@ export class ProtomapsManager {
           'fill-opacity': 0.8
         }
       },
-      
+
       // Natural areas
       {
         id: 'natural',
@@ -101,7 +101,7 @@ export class ProtomapsManager {
           'fill-opacity': 0.6
         }
       },
-      
+
       // Agricultural areas
       {
         id: 'landuse-agricultural',
@@ -114,7 +114,7 @@ export class ProtomapsManager {
           'fill-opacity': 0.4
         }
       },
-      
+
       // Built-up areas
       {
         id: 'landuse-built',
@@ -134,7 +134,7 @@ export class ProtomapsManager {
           'fill-opacity': 0.5
         }
       },
-      
+
       // Buildings
       {
         id: 'buildings',
@@ -154,7 +154,7 @@ export class ProtomapsManager {
           ]
         }
       },
-      
+
       // Roads - Major highways
       {
         id: 'roads-highway',
@@ -175,7 +175,7 @@ export class ProtomapsManager {
           'line-opacity': 0.9
         }
       },
-      
+
       // Roads - Primary roads
       {
         id: 'roads-primary',
@@ -196,7 +196,7 @@ export class ProtomapsManager {
           'line-opacity': 0.8
         }
       },
-      
+
       // Roads - Local roads
       {
         id: 'roads-local',
@@ -217,7 +217,7 @@ export class ProtomapsManager {
           'line-opacity': 0.6
         }
       },
-      
+
       // Administrative boundaries
       {
         id: 'admin-boundaries',
@@ -239,7 +239,7 @@ export class ProtomapsManager {
           'line-opacity': 0.5
         }
       },
-      
+
       // Place labels - Cities
       {
         id: 'place-city',
@@ -267,7 +267,7 @@ export class ProtomapsManager {
           'text-halo-width': 1
         }
       },
-      
+
       // Place labels - Towns
       {
         id: 'place-town',
@@ -294,7 +294,7 @@ export class ProtomapsManager {
           'text-halo-width': 1
         }
       },
-      
+
       // Road labels
       {
         id: 'road-labels',
@@ -322,37 +322,37 @@ export class ProtomapsManager {
   // Get optimized style for different zoom levels
   getOptimizedStyle(zoom: number): Record<string, unknown> {
     const baseStyle = this.getMapStyle();
-    
+
     // Optimize layers based on zoom level
     if (zoom < 8) {
       // Country/region level - hide detailed features
-      (baseStyle.layers as Array<Record<string, unknown>>) = (baseStyle.layers as Array<Record<string, unknown>>).filter((layer: Record<string, unknown>) => 
+      (baseStyle.layers as Array<Record<string, unknown>>) = (baseStyle.layers as Array<Record<string, unknown>>).filter((layer: Record<string, unknown>) =>
         !['buildings', 'roads-local', 'road-labels'].includes(layer.id as string)
       );
     } else if (zoom < 12) {
       // County level - show more detail but hide buildings
-      (baseStyle.layers as Array<Record<string, unknown>>) = (baseStyle.layers as Array<Record<string, unknown>>).filter((layer: Record<string, unknown>) => 
+      (baseStyle.layers as Array<Record<string, unknown>>) = (baseStyle.layers as Array<Record<string, unknown>>).filter((layer: Record<string, unknown>) =>
         layer.id !== 'buildings'
       );
     }
-    
+
     return baseStyle;
   }
 
   // Create custom style for agricultural focus
   getAgriculturalStyle(): Record<string, unknown> {
     const baseStyle = this.getMapStyle();
-    
+
     // Enhance agricultural areas visibility
-    const agriculturalLayer = (baseStyle.layers as Array<Record<string, unknown>>).find((layer: Record<string, unknown>) => 
+    const agriculturalLayer = (baseStyle.layers as Array<Record<string, unknown>>).find((layer: Record<string, unknown>) =>
       layer.id === 'landuse-agricultural'
     );
-    
+
     if (agriculturalLayer && agriculturalLayer.paint && typeof agriculturalLayer.paint === 'object') {
       (agriculturalLayer.paint as Record<string, unknown>)['fill-opacity'] = 0.7;
       (agriculturalLayer.paint as Record<string, unknown>)['fill-color'] = '#e8f5e8';
     }
-    
+
     return baseStyle;
   }
 
@@ -396,7 +396,7 @@ export function isPMTilesSupported(): boolean {
 // Preload PMTiles for better performance
 export async function preloadPMTiles(url: string): Promise<void> {
   if (typeof window === 'undefined') return;
-  
+
   try {
     const response = await fetch(url, { method: 'HEAD' });
     if (!response.ok) {
@@ -406,4 +406,4 @@ export async function preloadPMTiles(url: string): Promise<void> {
   } catch (error) {
     console.warn('PMTiles preload failed:', error);
   }
-} 
+}

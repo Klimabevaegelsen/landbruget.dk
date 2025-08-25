@@ -23,16 +23,16 @@ export default function Home() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [showControls, setShowControls] = useState(false); // Start with controls hidden like London Underground
   const [showSidebar, setShowSidebar] = useState(true); // Start with sidebar visible
-  
+
   // Store state
   const { selectedYear } = useDataState();
   const { error } = useLoadingState();
   const { showTooltip, tooltipData, tooltipPosition } = useTooltipState();
   const { isMobile, setIsMobile, showMobilePanel, setShowMobilePanel } = useUIStore();
-  
+
   // Store actions
-  const { 
-    setAvailableYearOptions, 
+  const {
+    setAvailableYearOptions,
     setError: mapSetError,
     clearError: mapClearError,
     flyToLocation
@@ -43,9 +43,9 @@ export default function Home() {
     const checkMobile = () => {
       const isMobileViewport = window.innerWidth < 768;
       const wasAlreadyMobile = isMobile;
-      
+
       setIsMobile(isMobileViewport);
-      
+
       // Only adjust panels if mobile state actually changed
       if (isMobileViewport !== wasAlreadyMobile) {
         if (isMobileViewport) {
@@ -69,15 +69,15 @@ export default function Home() {
       try {
         console.log('🚀 Starting initialization...');
         setIsInitializing(true);
-        
+
         console.log('📡 Getting data availability...');
         const availability = await pmtilesDiscovery.getDataAvailability();
         console.log('✅ Data availability:', availability);
-        
+
         // Create year options including 'total' option
         const yearOptions: YearSelection[] = [...availability.years, 'total'];
         setAvailableYearOptions(yearOptions);
-        
+
         setIsInitialized(true);
         mapClearError();
         console.log('✅ Initialization complete');
@@ -96,7 +96,7 @@ export default function Home() {
   // Convert tooltip data to HoverInfo format for sidebar
   const convertToHoverInfo = (tooltipData: Record<string, unknown>, position: { x: number; y: number }): HoverInfo | null => {
     if (!tooltipData) return null;
-    
+
     // Determine layer type based on data
     let layer: 'h3' | 'bnbo' | 'bbr';
     if (tooltipData.bnbo_id || tooltipData.status) {
@@ -106,7 +106,7 @@ export default function Home() {
     } else {
       layer = 'h3';
     }
-    
+
     return {
       layer,
       data: tooltipData,
@@ -187,13 +187,13 @@ export default function Home() {
           <div className="w-80 bg-black/80 backdrop-blur-md border-r border-white/10 overflow-y-auto flex-shrink-0">
             <div className="p-4 space-y-6">
               <h3 className="text-lg font-semibold text-white mb-4">Advanced Controls</h3>
-              
+
               {/* Data Mode Selector */}
               <div>
                 <h4 className="text-sm font-medium text-gray-300 mb-2">Data Mode</h4>
                 <DataModeSelector variant="sidebar" />
               </div>
-              
+
               {/* Layer Visibility Controls */}
               <div>
                 <h4 className="text-sm font-medium text-gray-300 mb-3">Layer Visibility</h4>
@@ -205,7 +205,7 @@ export default function Home() {
             </div>
           </div>
         )}
-        
+
         {/* Map Container - Mobile Optimized */}
         <div className="flex-1 relative transition-all duration-300 ease-in-out min-h-0">
           <div className="w-full h-full relative">
@@ -215,7 +215,7 @@ export default function Home() {
 
         {/* Right Sidebar - Data Details (Desktop Only) */}
         {!isMobile && (
-          <DataSidebar 
+          <DataSidebar
             hoverInfo={hoverInfo}
             onClose={handleCloseSidebar}
             isVisible={showSidebar}
@@ -225,7 +225,7 @@ export default function Home() {
 
       {/* Mobile Bottom Panel - Mobile Only */}
       {isMobile && (
-        <MobileBottomPanel 
+        <MobileBottomPanel
           hoverInfo={hoverInfo}
           onClose={handleCloseMobilePanel}
           isVisible={showMobilePanel}
@@ -233,4 +233,4 @@ export default function Home() {
       )}
     </div>
   );
-} 
+}

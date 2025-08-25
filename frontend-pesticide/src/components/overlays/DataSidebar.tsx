@@ -39,7 +39,7 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
       const diquatGrams = Number(hoverInfo.data.diquat_grams) || 0;
       const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams) || 0;
       const area = Number(hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha) || 0;
-      
+
       // Calculate intensities
       const pfasIntensity = Number(hoverInfo.data.pfas_intensity) || (area > 0 ? pfasGrams / area : 0);
       const pesticideIntensity = Number(hoverInfo.data.pesticide_intensity) || (area > 0 ? pesticideLoad / area : 0);
@@ -162,7 +162,7 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
               {hoverInfo.data.status || 'Status unknown'}
             </div>
           </div>
-          
+
           <div className="bg-slate-800 rounded-lg p-4 border border-slate-600">
             <h4 className="text-slate-200 font-semibold mb-3">Area Details</h4>
             <div className="space-y-2 text-sm">
@@ -189,7 +189,7 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
               {hoverInfo.data.building_type || 'Type unknown'}
             </div>
           </div>
-          
+
           <div className="bg-slate-800 rounded-lg p-4 border border-slate-600">
             <h4 className="text-slate-200 font-semibold mb-3">Building Details</h4>
             <div className="space-y-2 text-sm">
@@ -220,7 +220,7 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
     }`}>
       {/* Spacer to account for top bar */}
       <div className="h-[9rem]"></div>
-      
+
       {/* Header */}
       <div className="bg-slate-800 border-b border-slate-700 p-3 flex items-center justify-between">
         <h2 className="text-base font-semibold text-white">Area Details</h2>
@@ -242,4 +242,4 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
       </div>
     </div>
   );
-} 
+}

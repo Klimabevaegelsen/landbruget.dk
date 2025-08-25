@@ -18,10 +18,10 @@ CREATE TABLE IF NOT EXISTS h3_pfas_exposure (
     geometry GEOMETRY(POLYGON, 4326),       -- H3 hexagon geometry (from WKT)
     h3_centroid GEOMETRY(POINT, 4326),      -- H3 center point (from lat/lon)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+
     -- H3 metadata from pipeline
     h3_resolution INTEGER DEFAULT 10,       -- H3 resolution level
-    
+
     -- Constraints
     CONSTRAINT unique_h3_year UNIQUE (h3_id, year),
     CONSTRAINT valid_year CHECK (year >= 2020 AND year <= 2030),
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS bnbo_status_areas (
     geometry GEOMETRY(MULTIPOLYGON, 4326),
     year INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+
     -- Constraints
     CONSTRAINT valid_bnbo_year CHECK (year >= 2020 AND year <= 2030),
     CONSTRAINT positive_bnbo_area CHECK (area_ha >= 0),
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS bbr_buildings (
     geometry GEOMETRY(POINT, 4326), -- Building centroid
     address TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    
+
     -- Constraints
     CONSTRAINT valid_construction_year CHECK (construction_year >= 1800 AND construction_year <= EXTRACT(YEAR FROM NOW()) + 10),
     CONSTRAINT positive_floor_area CHECK (floor_area >= 0),
@@ -105,15 +105,15 @@ CREATE INDEX IF NOT EXISTS idx_bbr_id ON bbr_buildings (bbr_id);
 
 -- H3 data with calculated intensity fields
 CREATE OR REPLACE VIEW h3_pfas_with_intensity AS
-SELECT 
+SELECT
     *,
-    CASE 
-        WHEN agricultural_area_ha > 0 THEN total_pfas_grams / agricultural_area_ha 
-        ELSE 0 
+    CASE
+        WHEN agricultural_area_ha > 0 THEN total_pfas_grams / agricultural_area_ha
+        ELSE 0
     END AS pfas_intensity,
-    CASE 
-        WHEN agricultural_area_ha > 0 THEN total_pesticide_load / agricultural_area_ha 
-        ELSE 0 
+    CASE
+        WHEN agricultural_area_ha > 0 THEN total_pesticide_load / agricultural_area_ha
+        ELSE 0
     END AS pesticide_intensity,
     ST_X(h3_centroid) AS centroid_lon,
     ST_Y(h3_centroid) AS centroid_lat
@@ -121,7 +121,7 @@ FROM h3_pfas_exposure;
 
 -- BNBO areas with calculated metrics
 CREATE OR REPLACE VIEW bnbo_areas_with_metrics AS
-SELECT 
+SELECT
     *,
     ST_Area(geometry::geography) / 10000 AS calculated_area_ha, -- Convert to hectares
     ST_Centroid(geometry) AS centroid
@@ -129,7 +129,7 @@ FROM bnbo_status_areas;
 
 -- BBR buildings with coordinates
 CREATE OR REPLACE VIEW bbr_buildings_with_coords AS
-SELECT 
+SELECT
     *,
     ST_X(geometry) AS longitude,
     ST_Y(geometry) AS latitude
@@ -166,7 +166,7 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         h.h3_id,
         h.year,
         h.total_pesticide_load,
@@ -179,16 +179,16 @@ BEGIN
         ST_X(h.h3_centroid) AS centroid_lon,
         ST_Y(h.h3_centroid) AS centroid_lat,
         h.h3_resolution,
-        CASE 
-            WHEN h.agricultural_area_ha > 0 THEN h.total_pfas_grams / h.agricultural_area_ha 
-            ELSE 0 
+        CASE
+            WHEN h.agricultural_area_ha > 0 THEN h.total_pfas_grams / h.agricultural_area_ha
+            ELSE 0
         END AS pfas_intensity,
-        CASE 
-            WHEN h.agricultural_area_ha > 0 THEN h.total_pesticide_load / h.agricultural_area_ha 
-            ELSE 0 
+        CASE
+            WHEN h.agricultural_area_ha > 0 THEN h.total_pesticide_load / h.agricultural_area_ha
+            ELSE 0
         END AS pesticide_intensity
     FROM h3_pfas_exposure h
-    WHERE 
+    WHERE
         (cumulative_mode = FALSE AND h.year = target_year) OR
         (cumulative_mode = TRUE AND h.year >= 2020 AND h.year <= target_year)
         AND (min_pesticide_load IS NULL OR h.total_pesticide_load >= min_pesticide_load)
@@ -218,7 +218,7 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         h.h3_id,
         h.year,
         h.total_pesticide_load,
@@ -227,9 +227,9 @@ BEGIN
         ST_X(h.h3_centroid) AS centroid_lon,
         ST_Y(h.h3_centroid) AS centroid_lat
     FROM h3_pfas_exposure h
-    WHERE 
+    WHERE
         ST_Intersects(
-            h.geometry, 
+            h.geometry,
             ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
         )
         AND (target_year IS NULL OR h.year = target_year)
@@ -263,19 +263,19 @@ COMMENT ON COLUMN bbr_buildings.building_type IS 'Building type: Residential, Ag
 SELECT PostGIS_Full_Version();
 
 -- Check if tables were created successfully
-SELECT 
+SELECT
     schemaname,
     tablename,
     tableowner
-FROM pg_tables 
+FROM pg_tables
 WHERE tablename IN ('h3_pfas_exposure', 'bnbo_status_areas', 'bbr_buildings');
 
 -- Check indexes were created
-SELECT 
+SELECT
     schemaname,
     tablename,
     indexname,
     indexdef
-FROM pg_indexes 
+FROM pg_indexes
 WHERE tablename IN ('h3_pfas_exposure', 'bnbo_status_areas', 'bbr_buildings')
-ORDER BY tablename, indexname; 
+ORDER BY tablename, indexname;

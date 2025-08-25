@@ -12,7 +12,7 @@ export interface BBRBuilding {
 }
 
 // BBR building types
-export type BBRBuildingType = 
+export type BBRBuildingType =
   | 'Residential'
   | 'Agricultural'
   | 'Industrial'
@@ -87,4 +87,4 @@ export interface BBRStatistics {
   totalFloorArea: number;
   averageFloorArea: number;
   buildingDensity: number; // Buildings per square kilometer
-} 
+}
