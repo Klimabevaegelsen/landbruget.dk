@@ -144,6 +144,7 @@ def find_buildings_exact_proximity_pattern(conn: duckdb.DuckDBPyConnection, batc
             geometry GEOMETRY,
             building_type VARCHAR,
             building_usage_category VARCHAR,
+            bbr_usage_code VARCHAR,
             inspire_current_use VARCHAR,
             inspire_building_nature VARCHAR,
             inspire_construction_year VARCHAR,
@@ -151,6 +152,7 @@ def find_buildings_exact_proximity_pattern(conn: duckdb.DuckDBPyConnection, batc
             inspire_floors VARCHAR,
             inspire_dwellings VARCHAR,
             address VARCHAR,
+            category_group VARCHAR,
             distance_m DOUBLE
         )
     """)
