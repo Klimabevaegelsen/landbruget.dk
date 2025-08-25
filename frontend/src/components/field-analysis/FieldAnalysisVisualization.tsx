@@ -45,6 +45,7 @@ export default function FieldAnalysisVisualization() {
   const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
 
   // PMTiles URLs from environment variables (Cloudflare R2)
   const pmtilesUrls = {
@@ -58,6 +59,17 @@ export default function FieldAnalysisVisualization() {
   // Ensure client-side only rendering
   useEffect(() => {
     setIsClient(true);
+  }, []);
+
+  // Handle orientation changes on mobile
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      // Close mobile panels on orientation change for better UX
+      setMobileControlsOpen(false);
+    };
+
+    window.addEventListener('orientationchange', handleOrientationChange);
+    return () => window.removeEventListener('orientationchange', handleOrientationChange);
   }, []);
 
   // Initialize visualization
@@ -94,17 +106,45 @@ export default function FieldAnalysisVisualization() {
   // Handle field selection
   const handleFieldSelect = useCallback((fieldData: FieldAnalysisData) => {
     setSelectedField(fieldData);
+    // Auto-close mobile controls when field is selected for better UX
+    setMobileControlsOpen(false);
   }, []);
+
+  // Handle escape key and prevent body scroll
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedField) {
+          setSelectedField(null);
+        } else if (mobileControlsOpen) {
+          setMobileControlsOpen(false);
+        }
+      }
+    };
+
+    // Prevent body scroll when modals are open
+    if (mobileControlsOpen || selectedField) {
+      document.body.style.overflow = 'hidden';
+      document.addEventListener('keydown', handleKeyDown);
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileControlsOpen, selectedField]);
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
-        <div className="text-center">
+      <div className="flex items-center justify-center h-screen bg-gray-50 p-4">
+        <div className="text-center max-w-md">
           <div className="text-red-600 text-xl mb-2">⚠️ Fejl</div>
-          <div className="text-gray-700">{error}</div>
+          <div className="text-gray-700 mb-4 text-sm lg:text-base">{error}</div>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors text-base font-medium min-h-[44px]"
           >
             Genindlæs
           </button>
@@ -119,9 +159,46 @@ export default function FieldAnalysisVisualization() {
   }
 
   return (
-    <div className="relative h-screen flex">
-      {/* Left Control Panel */}
-      <div className="w-80 bg-white shadow-lg z-10 overflow-y-auto">
+    <div className="relative h-screen flex flex-col lg:flex-row">
+      {/* Mobile Control Panel Toggle */}
+      <div className="lg:hidden absolute top-4 left-4 z-30" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+        <button
+          onClick={() => setMobileControlsOpen(!mobileControlsOpen)}
+          className="bg-white shadow-lg rounded-lg p-3 hover:bg-gray-50 active:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          aria-label="Toggle controls"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Left Control Panel - Desktop: sidebar, Mobile: overlay */}
+      <div className={`
+        ${mobileControlsOpen ? 'block' : 'hidden'} lg:block
+        fixed lg:relative inset-0 lg:inset-auto
+        w-full lg:w-80 h-full lg:h-auto
+        bg-white shadow-lg z-30 lg:z-10
+        overflow-y-auto
+        lg:shadow-lg
+      `} style={{
+        paddingTop: mobileControlsOpen ? 'env(safe-area-inset-top)' : undefined,
+        paddingBottom: mobileControlsOpen ? 'env(safe-area-inset-bottom)' : undefined
+      }}>
+        {/* Mobile close button */}
+        <div className="lg:hidden flex justify-between items-center p-4 border-b bg-white sticky top-0 z-10">
+          <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
+          <button
+            onClick={() => setMobileControlsOpen(false)}
+            className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label="Luk kontrolpanel"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
         <LayerControlPanel
           layerVisibility={layerVisibility}
           filterState={filterState}
@@ -129,6 +206,14 @@ export default function FieldAnalysisVisualization() {
           onFilterChange={handleFilterChange}
         />
       </div>
+
+      {/* Mobile Controls Backdrop */}
+      {mobileControlsOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+          onClick={() => setMobileControlsOpen(false)}
+        />
+      )}
 
       {/* Main Map Area */}
       <div className="flex-1 relative">
@@ -144,14 +229,31 @@ export default function FieldAnalysisVisualization() {
         )}
       </div>
 
-      {/* Right Details Panel */}
+      {/* Right Details Panel - Desktop: sidebar, Mobile: overlay */}
       {selectedField && (
-        <div className="w-96 bg-white shadow-lg z-10 overflow-y-auto">
-          <FieldDetailsPanel
-            fieldData={selectedField}
-            onClose={() => setSelectedField(null)}
+        <>
+          <div className={`
+            fixed lg:relative inset-0 lg:inset-auto
+            w-full lg:w-96 h-full lg:h-auto
+            bg-white shadow-lg z-30 lg:z-10
+            overflow-y-auto
+            lg:shadow-lg
+          `} style={{
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)'
+          }}>
+            <FieldDetailsPanel
+              fieldData={selectedField}
+              onClose={() => setSelectedField(null)}
+            />
+          </div>
+
+          {/* Mobile Details Backdrop */}
+          <div
+            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+            onClick={() => setSelectedField(null)}
           />
-        </div>
+        </>
       )}
     </div>
   );

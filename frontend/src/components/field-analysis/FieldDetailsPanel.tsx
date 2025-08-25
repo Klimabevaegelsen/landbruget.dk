@@ -13,6 +13,32 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
     return num.toLocaleString("da-DK", { maximumFractionDigits: decimals });
   };
 
+  // Handle swipe gestures for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    const startX = touch.clientX;
+
+    const handleTouchMove = (moveEvent: TouchEvent) => {
+      const currentTouch = moveEvent.touches[0];
+      const deltaX = currentTouch.clientX - startX;
+
+      // Swipe right to close (threshold: 100px)
+      if (deltaX > 100) {
+        onClose();
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+
+    document.addEventListener('touchmove', handleTouchMove);
+    document.addEventListener('touchend', handleTouchEnd);
+  };
+
   const getPesticideRiskLevel = (belastning: number): { level: string; color: string; description: string } => {
     if (belastning === 0) return { level: "Ingen", color: "text-green-600", description: "Ingen registreret pesticidanvendelse" };
     if (belastning < 10) return { level: "Lav", color: "text-yellow-600", description: "Lav pesticidbelastning" };
@@ -23,13 +49,16 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
   const riskLevel = getPesticideRiskLevel(fieldData.total_pesticide_belastning);
 
   return (
-    <div className="p-6 h-full overflow-y-auto">
+    <div className="p-4 lg:p-6 h-full overflow-y-auto" onTouchStart={handleTouchStart}>
+      {/* Mobile swipe indicator */}
+      <div className="lg:hidden w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Markdetaljer</h2>
+      <div className="flex items-center justify-between mb-4 lg:mb-6">
+        <h2 className="text-lg lg:text-xl font-bold text-gray-900">Markdetaljer</h2>
         <button
           onClick={onClose}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
           aria-label="Luk panel"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,11 +385,11 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
 
       {/* Actions */}
       <div className="mt-8 pt-6 border-t">
-        <div className="space-y-2">
-          <button className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+        <div className="space-y-3">
+          <button className="w-full px-4 py-3 lg:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors text-base lg:text-sm font-medium min-h-[44px]">
             Vis detaljeret rapport
           </button>
-          <button className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">
+          <button className="w-full px-4 py-3 lg:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 active:bg-gray-300 transition-colors text-base lg:text-sm font-medium min-h-[44px]">
             Eksporter data
           </button>
         </div>
