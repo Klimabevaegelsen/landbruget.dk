@@ -239,9 +239,9 @@ export default function FieldAnalysisMap({
     // Handle organic status visualization with symbols
     if (visualizationMode === 'organic_status') {
       return {
-        "fill-color": [
-          "case",
-          ["==", ["get", "is_organic"], true],
+            "fill-color": [
+              "case",
+              ["==", ["get", "is_organic"], true],
           "transparent", // Transparent fill for organic fields - will use symbols instead
           "#f3f4f6" // Light gray for non-organic
         ],
@@ -300,9 +300,9 @@ export default function FieldAnalysisMap({
           "case",
           ["<=", ["coalesce", ["get", fieldName], 0], 0],
           "#f3f4f6", // Light gray for zero/negative values
-          [
-            "interpolate",
-            ["linear"],
+              [
+                "interpolate",
+                ["linear"],
             ["coalesce", ["get", fieldName], 0],
             0.1, colors[0],
             1, colors[2],
@@ -310,9 +310,9 @@ export default function FieldAnalysisMap({
             50, colors[6],
             100, colors[8],
             500, colors[9]
-          ]
-        ],
-        "fill-opacity": 0.7,
+              ]
+            ],
+            "fill-opacity": 0.7,
       };
     }
   }, [filterState]);
@@ -437,20 +437,20 @@ export default function FieldAnalysisMap({
         id: "bnbo-fill",
         source: "bnbo",
         "source-layer": "bnbo",
-        type: "fill",
-        paint: {
-                    "fill-color": [
-            "case",
+          type: "fill",
+          paint: {
+            "fill-color": [
+              "case",
             // If action is required (red)
             ["==", ["get", "status_category"], "Action Required"],
             "#EF4444",
             // If completed (green)
-            ["==", ["get", "status_category"], "Completed"],
+              ["==", ["get", "status_category"], "Completed"],
             "#10B981",
             // Default blue for general BNBO areas
             "#2563EB"
-          ],
-          "fill-opacity": 0.6,
+            ],
+            "fill-opacity": 0.6,
         },
         layout: {
           visibility: layerVisibility.bnbo ? "visible" : "none",
@@ -477,9 +477,9 @@ export default function FieldAnalysisMap({
         source: "bnbo",
         "source-layer": "bnbo",
         type: "line",
-        paint: {
+          paint: {
           "line-color": [
-            "case",
+              "case",
             ["==", ["get", "status_category"], "Action Required"],
             "#DC2626", // Darker red outline
             ["==", ["get", "status_category"], "Completed"],
@@ -548,8 +548,8 @@ export default function FieldAnalysisMap({
         id: "wetlands-fill",
         source: "wetlands",
         "source-layer": "wetlands",
-        type: "fill",
-        paint: {
+          type: "fill",
+          paint: {
           "fill-color": "#3B82F6", // Fallback color
           "fill-opacity": 0.4,
         },
@@ -666,9 +666,9 @@ export default function FieldAnalysisMap({
       Object.entries(pmtilesUrls).forEach(([layerName, url]) => {
         if (url && !map.getSource(layerName)) {
           map.addSource(layerName, {
-            type: "vector",
-            url: `pmtiles://${url}`,
-          });
+        type: "vector",
+        url: `pmtiles://${url}`,
+      });
           console.log(`✅ Added ${layerName} source:`, url);
         }
       });
@@ -839,7 +839,7 @@ export default function FieldAnalysisMap({
   return (
     <div className="relative w-full h-full">
       <Map
-        ref={mapRef}
+      ref={mapRef}
         initialViewState={{
           longitude: 9.501785,
           latitude: 56.26392,
