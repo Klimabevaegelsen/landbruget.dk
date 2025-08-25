@@ -178,7 +178,7 @@ jobs:
           if [ -n "${{ matrix.layer_type }}" ]; then
             # FVM WFS matrix job with specific layer and year
             echo "Running FVM WFS matrix job: ${{ matrix.layer_type }} ${{ matrix.year }}"
-            python -m unified_pipeline -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
+            python -m unified_pipeline run -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
           elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
             # FVM WFS from "all" - trigger the dedicated matrix workflow with all stages
             echo "FVM WFS detected in 'all' mode - triggering dedicated FVM WFS matrix workflow"
@@ -209,7 +209,7 @@ jobs:
           else
             # Regular source job
             echo "Running regular pipeline job: ${{ matrix.source }} with stage: ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
           fi
 
           # Stop resource monitoring
