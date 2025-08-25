@@ -206,6 +206,10 @@ async def execute_pipeline_jobs(
                 f"🚨 APP: After CLI filters - pesticide_year = "
                 f"{getattr(config_instance, 'pesticide_year', 'NOT_SET')}"
             )
+            print(
+                f"🚨 APP: After CLI filters - target_year = "
+                f"{getattr(config_instance, 'target_year', 'NOT_SET')}"
+            )
         else:
             print(f"🚨 APP: No apply_cli_filters method found on {config_cls.__name__}")
 
