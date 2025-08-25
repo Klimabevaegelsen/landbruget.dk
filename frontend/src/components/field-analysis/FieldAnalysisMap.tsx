@@ -562,7 +562,7 @@ export default function FieldAnalysisMap({
           actionCanvas.height = 32;
 
           if (actionCtx) {
-            actionCtx.fillStyle = '#EF4444'; // Red background
+            actionCtx.fillStyle = '#EAB308'; // Yellow background
             actionCtx.fillRect(0, 0, 32, 32);
             actionCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
             actionCtx.lineWidth = 2;
@@ -592,9 +592,9 @@ export default function FieldAnalysisMap({
           paint: {
             "fill-color": [
               "case",
-            // If action is required (red)
+            // If action is required (yellow)
             ["==", ["get", "status_category"], "Action Required"],
-            "#EF4444",
+            "#EAB308",
             // If completed (green)
               ["==", ["get", "status_category"], "Completed"],
             "#10B981",

@@ -4,7 +4,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { ErrorBoundary } from 'react-error-boundary'
-import { useMapStore, useMapViewState, useDataState, useLoadingState, getComputedLayerVisibility, useSelectedCellState } from '@/stores/map-store'
+import { useMapStore, useMapViewState, useDataState, useLoadingState, getComputedLayerVisibility, useSelectedCellState, shouldUpdateLayerVisibility } from '@/stores/map-store'
 import { useUIStore } from '@/stores/ui-store'
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery'
 
@@ -35,10 +35,10 @@ const usePerformanceMonitor = () => {
 const throttle = (func: (...args: any[]) => void, delay: number) => {
   let timeoutId: NodeJS.Timeout | null = null;
   let lastExecTime = 0;
-  
+
   return (...args: any[]) => {
     const currentTime = Date.now();
-    
+
     if (currentTime - lastExecTime > delay) {
       func(...args);
       lastExecTime = currentTime;
@@ -55,7 +55,7 @@ const throttle = (func: (...args: any[]) => void, delay: number) => {
 // Debounce utility for less frequent updates
 const debounce = (func: (...args: any[]) => void, delay: number) => {
   let timeoutId: NodeJS.Timeout | null = null;
-  
+
   return (...args: any[]) => {
     if (timeoutId) clearTimeout(timeoutId);
     timeoutId = setTimeout(() => func(...args), delay);
@@ -65,16 +65,16 @@ const debounce = (func: (...args: any[]) => void, delay: number) => {
 // Dynamic imports for browser-only modules - Next.js 15 compatible
 const loadMapLibreAndPMTiles = async () => {
   if (typeof window === 'undefined') return null
-  
+
   console.log('🔄 Loading MapLibre and PMTiles...')
-  
+
   const [maplibregl, { Protocol }] = await Promise.all([
     import('maplibre-gl'),
     import('pmtiles')
   ])
-  
+
   console.log('✅ MapLibre and PMTiles loaded successfully')
-  
+
   // Register PMTiles protocol
   let protocolRegistered = false
   if (!protocolRegistered) {
@@ -83,7 +83,7 @@ const loadMapLibreAndPMTiles = async () => {
     protocolRegistered = true
     console.log('✅ PMTiles protocol registered')
   }
-  
+
   return maplibregl.default
 }
 
@@ -97,10 +97,10 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   const [mapLibre, setMapLibre] = useState<MapLibreGL>(null)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [pmtilesUrls, setPmtilesUrls] = useState<Record<string, string>>({})
-  
+
   // Performance monitoring (development only)
   const { metrics, updateMetrics } = usePerformanceMonitor();
-  
+
   // Store state
   const { zoom, center, bearing, pitch } = useMapViewState()
   const { selectedYear, selectedDataMode } = useDataState()
@@ -108,36 +108,41 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   const { isLoading, error } = useLoadingState()
   const { isMobile, setShowMobilePanel } = useUIStore()
   const { selectedCell, setSelectedCell, clearSelectedCell } = useSelectedCellState()
-  
+
   // Compute layer visibility based on zoom (stable) - use centralized function
   const layerVisibility = getComputedLayerVisibility(zoom)
   const shouldShowKommune = layerVisibility.shouldShowKommune
   const shouldShowH3 = layerVisibility.shouldShowH3
   const currentH3Resolution = layerVisibility.currentH3Resolution
-  
-  // Get property name based on data mode - using actual property names from tooltip
+  const shouldShowH3Res8 = layerVisibility.shouldShowH3Res8
+  const shouldShowH3Res10 = layerVisibility.shouldShowH3Res10
+  const inOverlapZone = layerVisibility.inOverlapZone
+  const res8Opacity = layerVisibility.res8Opacity
+  const res10Opacity = layerVisibility.res10Opacity
+
+  // Get property name based on data mode - using actual property names from PMTiles
   const getPropertyName = (mode: string) => {
     switch (mode) {
       case 'pfas':
-        return 'pfas_grams'; // Based on tooltip data
+        return 'total_pfas_containing_active_ingredient_grams'; // Actual PMTiles property
       case 'diquat':
-        return 'diquat_grams'; // Based on tooltip data
+        return 'total_diquat_containing_active_ingredient_grams'; // Actual PMTiles property
       case 'glyphosate':
-        return 'glyphosate_grams'; // Based on tooltip data
+        return 'total_glyphosate_containing_active_ingredient_grams'; // Actual PMTiles property
       default:
-        return 'pesticide_load'; // Based on tooltip data
+        return 'total_pesticide_belastning'; // Actual PMTiles property
     }
   }
-  
+
   // Get current property name for styling
   const currentPropertyName = getPropertyName(selectedDataMode)
-  
+
   // Store actions
-  const { 
+  const {
     setViewState,
     setMapInstance,
     setIsLoading,
-    setError, 
+    setError,
     clearError,
     showTooltipWithData,
     hideTooltip
@@ -156,7 +161,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   // Helper function to safely get available interactive layers
   const getAvailableInteractiveLayers = useCallback((): string[] => {
     if (!map.current) return []
-    
+
     const layers = []
     try {
       if ((map.current as any).getLayer('kommune-fill')) {
@@ -165,7 +170,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     } catch (e) {
       // Layer doesn't exist, ignore
     }
-    
+
     // Check for the current H3 resolution layer
     try {
       const h3LayerId = `h3-fill-res${currentH3Resolution}`
@@ -175,7 +180,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     } catch (e) {
       // Layer doesn't exist, ignore
     }
-    
+
     try {
       if ((map.current as any).getLayer('bnbo-fill')) {
         layers.push('bnbo-fill')
@@ -183,7 +188,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     } catch (e) {
       // Layer doesn't exist, ignore
     }
-    
+
     return layers
   }, [currentH3Resolution])
 
@@ -208,10 +213,10 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       if (isMobile) {
         return
       }
-      
+
       // Get available layers before querying
       const availableLayers = getAvailableInteractiveLayers()
-      
+
       if (availableLayers.length === 0) {
         // No interactive layers available, just hide tooltip
         debouncedHideTooltip()
@@ -220,7 +225,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
         return
       }
-      
+
       try {
         const features = (map.current as any)?.queryRenderedFeatures(e.point, {
           layers: availableLayers
@@ -251,7 +256,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   // Mobile-optimized touch handlers
   const handleTouchStart = useCallback((e: TouchEvent) => {
     if (!isMobile) return;
-    
+
     // Store touch start time for tap detection
     const touchStartTime = Date.now();
     (e.target as any)._touchStartTime = touchStartTime;
@@ -259,11 +264,11 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
   const handleTouchEnd = useCallback((e: TouchEvent) => {
     if (!isMobile) return;
-    
+
     const touchEndTime = Date.now();
     const touchStartTime = (e.target as any)._touchStartTime || 0;
     const touchDuration = touchEndTime - touchStartTime;
-    
+
     // Only treat as tap if touch duration is short (< 300ms)
     if (touchDuration < 300 && touchDuration > 0) {
       // Convert touch to map coordinates
@@ -273,21 +278,21 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         x: touch.clientX - rect.left,
         y: touch.clientY - rect.top
       };
-      
+
       // Query features at touch point
       const availableLayers = getAvailableInteractiveLayers();
-      
+
       if (availableLayers.length === 0) {
         memoizedHideTooltip();
         memoizedSetShowMobilePanel(false);
         return;
       }
-      
+
       try {
         const features = (map.current as any)?.queryRenderedFeatures(point, {
           layers: availableLayers
         });
-        
+
         if (features && features.length > 0) {
           const feature = features[0];
           memoizedShowTooltipWithData(feature.properties, point);
@@ -307,7 +312,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   // Load MapLibre and PMTiles
   useEffect(() => {
     let mounted = true
-    
+
     const initMapLibre = async () => {
       try {
         setIsLoading(true)
@@ -326,9 +331,9 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
       }
     }
-    
+
     initMapLibre()
-    
+
     return () => {
       mounted = false
     }
@@ -337,18 +342,18 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   // Load PMTiles URLs
   useEffect(() => {
     let mounted = true
-    
+
     const loadPMTilesUrls = async () => {
       try {
         console.log('🔄 Loading PMTiles URLs...')
         const yearUrls = await pmtilesDiscovery.getYearUrls(selectedYear)
-        
+
         // Convert to the expected format
         const urls: Record<string, string> = {
           basemap: yearUrls.basemap,
           bnbo: yearUrls.bnbo
         }
-        
+
         // Add H3 URLs for both resolutions
         const h3Key8 = `${selectedYear}_8`
         const h3Key10 = `${selectedYear}_10`
@@ -358,14 +363,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         if (yearUrls.h3[h3Key10]) {
           urls.h3_res10 = yearUrls.h3[h3Key10]
         }
-        
+
         // Add kommune URL
         if (yearUrls.kommune[selectedYear.toString()]) {
           urls.kommune = yearUrls.kommune[selectedYear.toString()]
         }
-        
+
         console.log('✅ PMTiles URLs loaded:', urls)
-        
+
         if (mounted) {
           setPmtilesUrls(urls)
         }
@@ -376,9 +381,9 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
       }
     }
-    
+
     loadPMTilesUrls()
-    
+
     return () => {
       mounted = false
     }
@@ -404,10 +409,10 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
     try {
       console.log('🔄 Creating map with PMTiles URLs:', pmtilesUrls)
-      
+
       // Create sources object with available URLs
       const sources: Record<string, { type: string; url: string }> = {}
-      
+
       if (pmtilesUrls.basemap) {
         sources.basemap = {
           type: 'vector',
@@ -415,7 +420,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
         console.log('✅ Added basemap source')
       }
-      
+
       if (pmtilesUrls.kommune) {
         sources.kommune = {
           type: 'vector',
@@ -423,7 +428,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
         console.log('✅ Added kommune source')
       }
-      
+
       if (pmtilesUrls.h3_res8) {
         sources.h3_res8 = {
           type: 'vector',
@@ -431,7 +436,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
         console.log('✅ Added h3_res8 source')
       }
-      
+
       if (pmtilesUrls.h3_res10) {
         sources.h3_res10 = {
           type: 'vector',
@@ -439,7 +444,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
         console.log('✅ Added h3_res10 source')
       }
-      
+
       if (pmtilesUrls.bnbo) {
         sources.bnbo = {
           type: 'vector',
@@ -447,14 +452,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         }
         console.log('✅ Added bnbo source')
       }
-      
+
       console.log('🗺️ Final sources configuration:', sources)
-      
+
       // Create layers array with only layers for available sources
       // Layer order matters: layers added later appear on top
       // Order: basemap (bottom) -> kommune -> h3 -> bnbo (top)
       const layers: Array<Record<string, string | number | boolean | object>> = []
-      
+
       // Always add basemap layer if available (bottom layer)
       if (sources.basemap) {
         layers.push(
@@ -570,16 +575,17 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               'interpolate',
               ['linear'],
               ['get', currentPropertyName],
-              0, 'rgba(255,255,255,0.1)',
-              1, 'rgba(255,100,100,0.3)',
-              10, 'rgba(255,50,50,0.5)',
-              50, 'rgba(255,0,0,0.7)',
-              100, 'rgba(139,0,0,0.8)'
+              0, 'rgba(200,200,200,0.4)', // More visible base color for zero values
+              0.1, 'rgba(255,255,200,0.5)', // Light yellow for very low values
+              1, 'rgba(255,100,100,0.6)',
+              10, 'rgba(255,50,50,0.7)',
+              50, 'rgba(255,0,0,0.8)',
+              100, 'rgba(139,0,0,0.9)'
             ],
             'fill-opacity': 0.7
           }
         })
-        
+
         layers.push({
           id: 'kommune-stroke',
           type: 'line',
@@ -620,7 +626,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             'fill-opacity': 0.6
           }
         })
-        
+
         layers.push({
           id: 'h3-stroke-res8',
           type: 'line',
@@ -636,7 +642,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           }
         })
       }
-      
+
       if (sources.h3_res10) {
         layers.push({
           id: 'h3-fill-res10',
@@ -660,7 +666,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             'fill-opacity': 0.6
           }
         })
-        
+
         layers.push({
           id: 'h3-stroke-res10',
           type: 'line',
@@ -691,7 +697,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             'fill-color': [
               'match',
               ['get', 'status'],
-              'Action Required', '#ff6b6b',
+              'Action Required', '#eab308',
               'Completed', '#51cf66',
               'Unknown', '#868e96',
               '#868e96'
@@ -699,7 +705,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             'fill-opacity': 0.3
           }
         })
-        
+
         layers.push({
           id: 'bnbo-stroke',
           type: 'line',
@@ -712,7 +718,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             'line-color': [
               'match',
               ['get', 'status'],
-              'Action Required', '#ff6b6b',
+              'Action Required', '#eab308',
               'Completed', '#51cf66',
               'Unknown', '#868e96',
               '#868e96'
@@ -721,7 +727,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           }
         })
       }
-      
+
       // Add highlight layers for selected cells (on top of all other layers)
       if (sources.kommune) {
         layers.push({
@@ -740,7 +746,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           filter: ['==', ['get', 'kommune_code'], ''] // Initially no features match
         })
       }
-      
+
       if (sources.h3_res8) {
         layers.push({
           id: 'h3-highlight-res8',
@@ -758,7 +764,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           filter: ['==', ['get', 'h3_id'], ''] // Initially no features match
         })
       }
-      
+
       if (sources.h3_res10) {
         layers.push({
           id: 'h3-highlight-res10',
@@ -776,7 +782,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           filter: ['==', ['get', 'h3_id'], ''] // Initially no features match
         })
       }
-      
+
       if (sources.bnbo) {
         layers.push({
           id: 'bnbo-highlight',
@@ -794,7 +800,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           filter: ['==', ['get', 'id'], ''] // Initially no features match
         })
       }
-      
+
       // Create the map with sources and layers
       map.current = new (mapLibre as any).Map({
         container: mapContainer.current,
@@ -841,14 +847,14 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         showZoom: true,
         visualizePitch: false
       });
-      
+
       (map.current as any).addControl(navigationControl, 'top-right');
-      
+
       // Only add scale control on desktop
       if (!isMobile) {
         (map.current as any).addControl(new (mapLibre as any).ScaleControl(), 'bottom-left');
       }
-      
+
       // Set map instance in store for external control
       setMapInstance(map.current as any)
 
@@ -858,16 +864,16 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         setMapLoaded(true)
         clearError()
       })
-      
+
       // Debug drag events
       ;(map.current as any).on('dragstart', (e: any) => {
         console.log('🖱️ Drag started:', e)
       })
-      
+
       ;(map.current as any).on('drag', (e: any) => {
         console.log('🖱️ Dragging:', e)
       })
-      
+
       ;(map.current as any).on('dragend', (e: any) => {
         console.log('🖱️ Drag ended:', e)
       })
@@ -879,20 +885,20 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         const zoom = (map.current as any).getZoom()
         const bearing = (map.current as any).getBearing()
         const pitch = (map.current as any).getPitch()
-        
+
         // Use throttled function for performance
-        throttledSetViewState({ 
-          center: [lng, lat], 
-          zoom, 
-          bearing, 
-          pitch 
+        throttledSetViewState({
+          center: [lng, lat],
+          zoom,
+          bearing,
+          pitch
         })
       })
 
       ;(map.current as any).on('click', (e: any) => {
         // Get available layers before querying
         const availableLayers = getAvailableInteractiveLayers()
-        
+
                   if (availableLayers.length === 0) {
             // No interactive layers available, clear selection and hide tooltip
             clearSelectedCell()
@@ -902,26 +908,26 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             }
             return
           }
-        
+
         try {
           const features = (map.current as any)?.queryRenderedFeatures(e.point, {
             layers: availableLayers
           })
           if (features && features.length > 0) {
             const feature = features[0]
-            
+
             // Set selected cell for highlighting
             const cellId = feature.properties.h3_id || feature.properties.kommune_code || feature.properties.id || 'unknown'
             const layerName = feature.layer.id
-            
+
             setSelectedCell({
               id: String(cellId),
               layer: layerName,
               properties: feature.properties
             })
-            
+
             showTooltipWithData(feature.properties, { x: e.point.x, y: e.point.y })
-            
+
             // On mobile, also show the mobile panel
             if (isMobile) {
               setShowMobilePanel(true)
@@ -930,7 +936,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
               // Clear selection when clicking empty space
               clearSelectedCell()
               hideTooltip()
-              
+
               // On mobile, hide the mobile panel when clicking empty space
               if (isMobile) {
                 setShowMobilePanel(false)
@@ -954,7 +960,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
         if (isMobile) {
           return
         }
-        
+
         hideTooltip()
         if (map.current) {
           (map.current as any).getCanvas().style.cursor = ''
@@ -963,11 +969,31 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
       ;(map.current as any).on('error', (e: any) => {
         console.error('❌ Map error:', e)
-        setError(`Map loading error: ${e.message || 'Unknown error'}`)
+        console.error('❌ Error details:', JSON.stringify(e, null, 2))
+        console.error('❌ Error type:', typeof e)
+        console.error('❌ Error keys:', Object.keys(e))
+        if (e.error) {
+          console.error('❌ Nested error:', e.error)
+          console.error('❌ Nested error message:', e.error.message)
+          console.error('❌ Nested error stack:', e.error.stack)
+        }
+        setError(`Map loading error: ${e.message || e.error?.message || 'Unknown error'}`)
       })
-      
+
+      // Listen for source data loading
+      ;(map.current as any).on('sourcedata', (e: any) => {
+        if (e.sourceId === 'kommune' && e.isSourceLoaded) {
+          console.log('✅ Kommune source data loaded!')
+          // Trigger a re-render of layer styling
+          setTimeout(() => {
+            console.log('🔄 Retrying layer styling after source load...')
+            // The styling effect will run again automatically due to dependencies
+          }, 100)
+        }
+      })
+
       console.log('🗺️ Created layers:', layers.map(l => ({ id: l.id, source: l.source })))
-      
+
     } catch (err) {
       console.error('❌ Error creating map:', err)
       memoizedSetError('Failed to create map')
@@ -984,13 +1010,24 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
   // No longer need dynamic H3 source updates - both sources are loaded initially
 
-  // Update layer visibility when zoom changes (optimized)
+  // Track previous zoom for threshold-based updates
+  const prevZoomRef = useRef<number>(zoom)
+
+  // Update layer visibility when zoom changes significantly (optimized with threshold)
   useEffect(() => {
     if (!map.current || !mapLoaded) return
 
+    // Only update if zoom changed significantly
+    if (!shouldUpdateLayerVisibility(prevZoomRef.current, zoom)) {
+      return
+    }
+
+    // Update the previous zoom reference
+    prevZoomRef.current = zoom
+
     try {
-      console.log('🔄 Updating layer visibility for zoom:', zoom, 'shouldShowKommune:', shouldShowKommune, 'shouldShowH3:', shouldShowH3, 'currentH3Resolution:', currentH3Resolution)
-      
+      console.log('🔄 Updating layer visibility for zoom:', zoom, 'shouldShowKommune:', shouldShowKommune, 'shouldShowH3:', shouldShowH3, 'currentH3Resolution:', currentH3Resolution, 'inOverlapZone:', inOverlapZone)
+
       // Helper function to safely update layer visibility
       const updateLayerVisibility = (layerId: string, visible: boolean) => {
         if (map.current && (map.current as any).getLayer(layerId)) {
@@ -1000,21 +1037,145 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           console.log(`⚠️ Layer ${layerId} not found, skipping visibility update`)
         }
       }
-      
+
+      // Helper function to safely update layer opacity
+      const updateLayerOpacity = (layerId: string, opacity: number) => {
+        if (map.current && (map.current as any).getLayer(layerId)) {
+          const layerType = (map.current as any).getLayer(layerId).type
+          const opacityProperty = layerType === 'fill' ? 'fill-opacity' : 'line-opacity'
+          ;(map.current as any).setPaintProperty(layerId, opacityProperty, opacity)
+          console.log(`✅ Updated ${layerId} opacity to ${opacity}`)
+        }
+      }
+
       // Update kommune layers
       updateLayerVisibility('kommune-fill', shouldShowKommune)
       updateLayerVisibility('kommune-stroke', shouldShowKommune)
-      
-      // Update H3 layers - check both res8 and res10, but only show current resolution
-      updateLayerVisibility('h3-fill-res8', shouldShowH3 && currentH3Resolution === 8)
-      updateLayerVisibility('h3-stroke-res8', shouldShowH3 && currentH3Resolution === 8)
-      updateLayerVisibility('h3-fill-res10', shouldShowH3 && currentH3Resolution === 10)
-      updateLayerVisibility('h3-stroke-res10', shouldShowH3 && currentH3Resolution === 10)
-      
+
+      // Debug kommune layer data when it becomes visible
+      if (shouldShowKommune && (map.current as any).getLayer('kommune-fill')) {
+        try {
+          const features = (map.current as any).queryRenderedFeatures({ layers: ['kommune-fill'] })
+          console.log(`🏛️ Kommune layer features found: ${features.length}`)
+          if (features.length > 0) {
+            console.log('🏛️ Sample kommune feature:', features[0].properties)
+            console.log(`🏛️ Sample ${currentPropertyName} value:`, features[0].properties?.[currentPropertyName])
+          } else {
+            console.log('🏛️ No kommune features rendered - checking source data...')
+
+            // Check if the source exists and is loaded
+            const source = (map.current as any).getSource('kommune')
+            console.log('🔍 Kommune source exists:', !!source)
+            if (source) {
+                          const isLoaded = typeof source.loaded === 'function' ? source.loaded() : source.loaded
+            console.log('🔍 Kommune source details:', {
+              type: source.type,
+              url: source.url,
+              loaded: isLoaded,
+              hasData: !!source.data
+            })
+
+            console.log('🔍 About to test layer names...')
+
+            if (!isLoaded) {
+              console.log('🔍 Source not fully loaded yet - this might explain missing features')
+            } else {
+              console.log('🔍 Source is loaded, testing different layer names...')
+
+              // Test the expected layer name first
+              const expectedLayerName = `kommune_pfas_${selectedYear}`
+              console.log('🔍 Testing expected layer name:', expectedLayerName)
+
+              try {
+                const testFeatures = (map.current as any).querySourceFeatures('kommune', {
+                  'source-layer': expectedLayerName
+                })
+                console.log(`🔍 Features found with expected layer name: ${testFeatures.length}`)
+
+                if (testFeatures.length > 0) {
+                  console.log('✅ SUCCESS! Found features with expected layer name')
+                  console.log('🔍 Sample feature properties:', testFeatures[0].properties)
+                  console.log('🔍 Available property keys:', Object.keys(testFeatures[0].properties || {}))
+                } else {
+                  console.log('❌ No features found with expected layer name, trying alternatives...')
+
+                  // Test alternative layer names
+                  const alternativeNames = ['kommune', 'default', 'layer0']
+                  for (const altName of alternativeNames) {
+                    try {
+                      const altFeatures = (map.current as any).querySourceFeatures('kommune', {
+                        'source-layer': altName
+                      })
+                      if (altFeatures.length > 0) {
+                        console.log(`✅ Found ${altFeatures.length} features with alternative layer name: ${altName}`)
+                        console.log('🔍 Sample properties:', altFeatures[0].properties)
+                        break
+                      }
+                    } catch (e) {
+                      console.log(`❌ Error with alternative layer name ${altName}:`, e)
+                    }
+                  }
+                }
+              } catch (e) {
+                console.log('❌ Error testing expected layer name:', e)
+              }
+            }
+            }
+
+            // Try to get features from the source directly
+            const sourceLayerName = `kommune_pfas_${selectedYear}`
+            console.log('🔍 Querying source layer:', sourceLayerName)
+
+            try {
+              const sourceFeatures = (map.current as any).querySourceFeatures('kommune', {
+                'source-layer': sourceLayerName
+              })
+              console.log(`🏛️ Kommune source features: ${sourceFeatures.length}`)
+              if (sourceFeatures.length > 0) {
+                console.log('🏛️ Sample source feature:', sourceFeatures[0].properties)
+                console.log('🏛️ All properties:', Object.keys(sourceFeatures[0].properties || {}))
+              }
+            } catch (sourceError) {
+              console.error('🔍 Error querying source features:', sourceError)
+            }
+
+            // Also try without source-layer to see if there are any features at all
+            try {
+              const allSourceFeatures = (map.current as any).querySourceFeatures('kommune')
+              console.log('🔍 All kommune source features (no source-layer):', allSourceFeatures.length)
+            } catch (allError) {
+              console.error('🔍 Error querying all source features:', allError)
+            }
+          }
+        } catch (error) {
+          console.warn('🏛️ Error querying kommune features:', error)
+        }
+      }
+
+      // Update H3 layers with overlap support
+      updateLayerVisibility('h3-fill-res8', shouldShowH3Res8)
+      updateLayerVisibility('h3-stroke-res8', shouldShowH3Res8)
+      updateLayerVisibility('h3-fill-res10', shouldShowH3Res10)
+      updateLayerVisibility('h3-stroke-res10', shouldShowH3Res10)
+
+      // Update opacities for smooth transitions in overlap zone
+      if (inOverlapZone) {
+        updateLayerOpacity('h3-fill-res8', res8Opacity * 0.7) // Base opacity * transition
+        updateLayerOpacity('h3-stroke-res8', res8Opacity * 0.8)
+        updateLayerOpacity('h3-fill-res10', res10Opacity * 0.7)
+        updateLayerOpacity('h3-stroke-res10', res10Opacity * 0.8)
+      } else {
+        // Reset to normal opacities outside overlap zone
+        updateLayerOpacity('h3-fill-res8', 0.7)
+        updateLayerOpacity('h3-stroke-res8', 0.8)
+        updateLayerOpacity('h3-fill-res10', 0.7)
+        updateLayerOpacity('h3-stroke-res10', 0.8)
+      }
+
     } catch (error) {
       console.warn('Error updating layer visibility:', error)
     }
-  }, [zoom, shouldShowKommune, shouldShowH3, currentH3Resolution, mapLoaded])
+  }, [zoom, shouldShowKommune, shouldShowH3, currentH3Resolution, shouldShowH3Res8, shouldShowH3Res10, inOverlapZone, res8Opacity, res10Opacity, mapLoaded])
 
   // Update basemap visibility when showBasemap changes
   useEffect(() => {
@@ -1022,7 +1183,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
     try {
       console.log('🗺️ Updating basemap visibility:', showBasemap)
-      
+
       // Helper function to safely update layer visibility
       const updateLayerVisibility = (layerId: string, visible: boolean) => {
         if (map.current && (map.current as any).getLayer(layerId)) {
@@ -1032,21 +1193,21 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           console.log(`⚠️ Layer ${layerId} not found, skipping visibility update`)
         }
       }
-      
+
       // Update all basemap layers
       const basemapLayers = [
         'basemap-fill',
-        'basemap-water', 
+        'basemap-water',
         'basemap-landuse',
         'basemap-buildings',
         'basemap-buildings-stroke',
         'basemap-roads'
       ]
-      
+
       basemapLayers.forEach(layerId => {
         updateLayerVisibility(layerId, showBasemap)
       })
-      
+
     } catch (error) {
       console.warn('Error updating basemap visibility:', error)
     }
@@ -1058,21 +1219,200 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
     try {
       console.log('🎨 Updating layer styling for data mode:', selectedDataMode)
-      
+
       // Update kommune layer styling
       if ((map.current as any).getLayer('kommune-fill')) {
-        (map.current as any).setPaintProperty('kommune-fill', 'fill-color', [
-          'interpolate',
-          ['linear'],
-          ['get', currentPropertyName],
-          0, 'rgba(255,255,255,0.1)',
-          1, 'rgba(255,100,100,0.3)',
-          10, 'rgba(255,50,50,0.5)',
-          50, 'rgba(255,0,0,0.7)',
-          100, 'rgba(139,0,0,0.8)'
-        ])
+        console.log('🎨 Updating kommune layer with property:', currentPropertyName)
+
+        // Debug: Check if the layer has features and what properties they have
+        try {
+          // Use the same source layer name as defined in the layer configuration
+          const sourceLayerName = `kommune_pfas_${selectedYear}`
+          console.log('🔍 Using source layer name:', sourceLayerName)
+
+          let features: any[] = []
+
+          // First check if source is loaded
+          const source = (map.current as any).getSource('kommune')
+          const isSourceLoaded = source && (typeof source.loaded === 'function' ? source.loaded() : source.loaded)
+          console.log('🔍 Source loaded status:', isSourceLoaded)
+
+          if (isSourceLoaded) {
+            try {
+              features = (map.current as any).querySourceFeatures('kommune', {
+                'source-layer': sourceLayerName
+              })
+              console.log('🔍 Found kommune features with correct sourceLayer:', features.length)
+            } catch (e) {
+              console.log('🔍 Failed to query with correct sourceLayer:', e)
+            }
+          } else {
+            console.log('🔍 Source not loaded yet, skipping feature query')
+          }
+
+          // Also try without sourceLayer parameter
+          if (features.length === 0) {
+            try {
+              const fallbackFeatures = (map.current as any).querySourceFeatures('kommune')
+              if (fallbackFeatures.length > 0) {
+                features = fallbackFeatures
+                console.log('🔍 Found kommune features without sourceLayer parameter')
+              }
+            } catch (e) {
+              console.log('🔍 Failed to query without sourceLayer:', e)
+            }
+          }
+
+                    console.log('🔍 Kommune features found:', features.length, 'using sourceLayer:', sourceLayerName)
+          if (features.length > 0) {
+            console.log('🔍 First feature properties:', features[0].properties)
+            console.log('🔍 Property', currentPropertyName, 'value:', features[0].properties?.[currentPropertyName])
+            console.log('🔍 All property keys:', Object.keys(features[0].properties || {}))
+          } else {
+            console.log('❌ No features found! Testing alternative layer names...')
+
+            // Test alternative layer names right here in the styling section
+            const alternativeNames = ['kommune', 'default', 'layer0', '2023']
+            for (const altName of alternativeNames) {
+              try {
+                const altFeatures = (map.current as any).querySourceFeatures('kommune', {
+                  'source-layer': altName
+                })
+                console.log(`🔍 Testing layer name "${altName}": ${altFeatures.length} features`)
+                if (altFeatures.length > 0) {
+                  console.log(`✅ SUCCESS! Found features with layer name: ${altName}`)
+                  console.log('🔍 Sample properties:', altFeatures[0].properties)
+                  console.log('🔍 Available property keys:', Object.keys(altFeatures[0].properties || {}))
+                  break
+                }
+              } catch (e) {
+                console.log(`❌ Error testing layer name "${altName}":`, e.message)
+              }
+            }
+
+            // Check current map state
+            const currentZoom = (map.current as any).getZoom()
+            const currentBounds = (map.current as any).getBounds()
+            const currentCenter = (map.current as any).getCenter()
+
+            console.log('🗺️ Current map state:', {
+              zoom: currentZoom,
+              center: [currentCenter.lng, currentCenter.lat],
+              centerFormatted: `lng: ${currentCenter.lng}, lat: ${currentCenter.lat}`,
+              bounds: {
+                sw: [currentBounds.getSouthWest().lng, currentBounds.getSouthWest().lat],
+                ne: [currentBounds.getNorthEast().lng, currentBounds.getNorthEast().lat]
+              }
+            })
+
+            // Let's be very explicit about coordinate comparison
+            console.log('🔍 COORDINATE ANALYSIS:')
+            console.log(`📍 Current map center: lng=${currentCenter.lng}, lat=${currentCenter.lat}`)
+            console.log(`📍 Denmark bounds should be roughly: lng=8-15, lat=54-58`)
+            console.log(`📍 PMTiles bounds from file: lng=8.07-15.16, lat=54.56-57.75`)
+
+            // Check if coordinates are swapped
+            const isLngInDenmarkRange = currentCenter.lng >= 8 && currentCenter.lng <= 16
+            const isLatInDenmarkRange = currentCenter.lat >= 54 && currentCenter.lat <= 58
+
+            console.log('🔍 Coordinate validation:', {
+              lngInDenmarkRange: isLngInDenmarkRange,
+              latInDenmarkRange: isLatInDenmarkRange,
+              bothInRange: isLngInDenmarkRange && isLatInDenmarkRange
+            })
+
+            // PMTiles bounds are SWAPPED! The file shows (long: 54.559078, lat: 8.072510)
+            // But those are actually Denmark's lat/lng ranges respectively
+            // So the ACTUAL bounds should be:
+            const pmtilesBounds = {
+              south: 8.072510,   // This was labeled as 'lat' but is actually south lat
+              west: 54.559078,   // This was labeled as 'long' but is actually west lng
+              north: 15.157377,  // This was labeled as 'lat' but is actually north lat
+              east: 57.752573    // This was labeled as 'long' but is actually east lng
+            }
+
+            console.log('🚨 COORDINATE PROBLEM DETECTED!')
+            console.log('🔍 PMTiles file has swapped coordinates!')
+            console.log('📍 PMTiles shows bounds as (long: 54.559078, lat: 8.072510) but these are swapped!')
+            console.log('📍 Actual Denmark bounds should be: lng=8-15, lat=54-58')
+
+            const isInBounds = currentCenter.lat >= pmtilesBounds.south &&
+                              currentCenter.lat <= pmtilesBounds.north &&
+                              currentCenter.lng >= pmtilesBounds.west &&
+                              currentCenter.lng <= pmtilesBounds.east
+
+            console.log('🔍 Map position analysis:', {
+              isInDenmarkBounds: isInBounds,
+              zoomInRange: currentZoom >= 3 && currentZoom <= 12,
+              pmtilesBounds
+            })
+
+            // Try queryRenderedFeatures to see if any kommune features are actually rendered
+            console.log('🔍 Testing queryRenderedFeatures for kommune layers...')
+            try {
+              const renderedFeatures = (map.current as any).queryRenderedFeatures({
+                layers: ['kommune-fill', 'kommune-stroke']
+              })
+              console.log(`🔍 Rendered kommune features: ${renderedFeatures.length}`)
+              if (renderedFeatures.length > 0) {
+                console.log('✅ Found rendered features!', renderedFeatures[0])
+              }
+            } catch (e) {
+              console.log('❌ Error querying rendered features:', e)
+            }
+
+            // Try to force load tiles by getting a specific tile
+            console.log('🔍 Testing if PMTiles is actually working...')
+            try {
+              // Get all sources to see what's available
+              const allSources = (map.current as any).getStyle().sources
+              console.log('🔍 All map sources:', Object.keys(allSources))
+
+              // Try to get a specific tile URL to test PMTiles directly
+              const kommuneSource = allSources.kommune
+              if (kommuneSource) {
+                console.log('🔍 Kommune source config:', kommuneSource)
+              }
+            } catch (e) {
+              console.log('❌ Error inspecting sources:', e)
+            }
+
+            // Check if the source itself exists and is loaded
+            const source = (map.current as any).getSource('kommune')
+            console.log('🔍 Kommune source exists:', !!source)
+            if (source) {
+              console.log('🔍 Kommune source type:', source.type)
+              console.log('🔍 Kommune source loaded:', typeof source.loaded === 'function' ? source.loaded() : source.loaded)
+              if (source.url) {
+                console.log('🔍 Kommune source URL:', source.url)
+              }
+            }
+          }
+        } catch (e) {
+          console.log('🔍 Could not query kommune features:', e)
+        }
+
+        try {
+          (map.current as any).setPaintProperty('kommune-fill', 'fill-color', [
+            'interpolate',
+            ['linear'],
+            ['get', currentPropertyName],
+            0, 'rgba(200,200,200,0.4)', // More visible base color for zero values
+            0.1, 'rgba(255,255,200,0.5)', // Light yellow for very low values
+            1, 'rgba(255,100,100,0.6)',
+            10, 'rgba(255,50,50,0.7)',
+            50, 'rgba(255,0,0,0.8)',
+            100, 'rgba(139,0,0,0.9)'
+          ])
+
+          // Also set a fallback color for debugging
+          (map.current as any).setPaintProperty('kommune-fill', 'fill-opacity', 0.7)
+          console.log('✅ Kommune layer styling updated successfully')
+        } catch (paintError) {
+          console.error('❌ Failed to update kommune paint properties:', paintError)
+        }
       }
-      
+
       // Update H3 layer styling for both resolutions
       const h3Layers = ['h3-fill-res8', 'h3-fill-res10']
       h3Layers.forEach(layerId => {
@@ -1089,26 +1429,26 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           ])
         }
       })
-      
+
     } catch (error) {
       console.warn('Error updating layer styling:', error)
     }
   }, [selectedDataMode, currentPropertyName, currentH3Resolution, mapLoaded])
-  
+
   // Update cell highlighting when selected cell changes
   useEffect(() => {
     if (!map.current || !mapLoaded) return
 
     try {
       console.log('🎯 Updating cell highlighting:', selectedCell)
-      
+
       // Helper function to clear all highlight layers
       const clearHighlights = () => {
         // Clear kommune highlight
         if ((map.current as any).getLayer('kommune-highlight')) {
           (map.current as any).setLayoutProperty('kommune-highlight', 'visibility', 'none')
         }
-        
+
         // Clear H3 highlights - only res8 and res10
         for (const res of [8, 10]) {
           const highlightId = `h3-highlight-res${res}`
@@ -1116,20 +1456,20 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
             (map.current as any).setLayoutProperty(highlightId, 'visibility', 'none')
           }
         }
-        
+
         // Clear BNBO highlight
         if ((map.current as any).getLayer('bnbo-highlight')) {
           (map.current as any).setLayoutProperty('bnbo-highlight', 'visibility', 'none')
         }
       }
-      
+
       // Clear all highlights first
       clearHighlights()
-      
+
       // If a cell is selected, highlight it
       if (selectedCell) {
         const { id, layer } = selectedCell
-        
+
         if (layer.includes('kommune')) {
           // Highlight kommune
           if ((map.current as any).getLayer('kommune-highlight')) {
@@ -1155,16 +1495,16 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           }
         }
       }
-      
+
     } catch (error) {
       console.warn('Error updating cell highlighting:', error)
     }
   }, [selectedCell, mapLoaded])
-  
+
   return (
     <div className={`relative ${className}`}>
-      <div 
-        ref={mapContainer} 
+      <div
+        ref={mapContainer}
         className="w-full h-full"
         style={{
           position: 'relative',
@@ -1173,7 +1513,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           pointerEvents: 'auto'
         }}
       />
-      
+
       {/* Performance monitor (development only) */}
       {process.env.NODE_ENV === 'development' && (
         <div className="absolute top-4 left-4 bg-black/80 text-white text-xs p-2 rounded font-mono pointer-events-none">
@@ -1182,7 +1522,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           <div>Mobile: {isMobile ? 'Yes' : 'No'}</div>
         </div>
       )}
-      
+
       {/* Loading overlay */}
       {!mapLoaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 pointer-events-none">
@@ -1192,7 +1532,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           </div>
         </div>
       )}
-      
+
       {/* Error overlay */}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-red-900/80 pointer-events-none">
@@ -1203,23 +1543,23 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
           </div>
         </div>
       )}
-      
+
       {/* Mobile tap hint - only show on first load */}
       {isMobile && mapLoaded && (
         <div className="absolute bottom-4 left-4 right-4 bg-black/80 text-white text-xs p-3 rounded-lg pointer-events-none opacity-75">
           <p className="text-center">Tap areas to view details • Pinch to zoom • Drag to pan</p>
         </div>
       )}
-      
+
       {/* Tooltip - Disabled in favor of sidebar */}
       {/* <MapTooltip /> */}
     </div>
   )
 }
 
-const MapErrorFallback: React.FC<{ error: Error; resetErrorBoundary: () => void }> = ({ 
-  error, 
-  resetErrorBoundary 
+const MapErrorFallback: React.FC<{ error: Error; resetErrorBoundary: () => void }> = ({
+  error,
+  resetErrorBoundary
 }) => (
   <div className="h-full w-full bg-red-50 flex items-center justify-center">
     <div className="text-center p-8">
@@ -1228,7 +1568,7 @@ const MapErrorFallback: React.FC<{ error: Error; resetErrorBoundary: () => void 
       <p className="text-red-600 mb-4 max-w-md">
         {error.message || 'An unexpected error occurred while loading the map.'}
       </p>
-      <button 
+      <button
         onClick={resetErrorBoundary}
         className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
       >
