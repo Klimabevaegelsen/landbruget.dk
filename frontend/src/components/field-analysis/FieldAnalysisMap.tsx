@@ -71,6 +71,14 @@ function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit 
       data.push({ label: "Kommune", value: properties.kommune });
     }
 
+    // Show BNBO status if available
+    if (properties.bnbo_action_required_hectares && typeof properties.bnbo_action_required_hectares === 'number' && properties.bnbo_action_required_hectares > 0) {
+      data.push({ label: "BNBO handling påkrævet", value: properties.bnbo_action_required_hectares, unit: "ha" });
+    }
+    if (properties.bnbo_completed_hectares && typeof properties.bnbo_completed_hectares === 'number' && properties.bnbo_completed_hectares > 0) {
+      data.push({ label: "BNBO gennemført", value: properties.bnbo_completed_hectares, unit: "ha" });
+    }
+
     // Show data relevant to current visualization mode
     switch (visualizationMode) {
       case 'total_pesticide_belastning':
@@ -368,46 +376,58 @@ export default function FieldAnalysisMap({
   // Add BNBO layers with cross-hatch pattern
   const addBNBOLayers = useCallback((map: MapInstance) => {
     if (map.getSource("bnbo") && !map.getLayer("bnbo-fill")) {
-      // Create cross-hatch pattern for BNBO
-      const createBNBOPattern = async () => {
+      // Create status-based patterns for BNBO
+      const createBNBOPatterns = async () => {
         try {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = 32;
-          canvas.height = 32;
+          // Create completed pattern (green with diagonal lines)
+          const completedCanvas = document.createElement('canvas');
+          const completedCtx = completedCanvas.getContext('2d');
+          completedCanvas.width = 32;
+          completedCanvas.height = 32;
 
-          if (ctx) {
-            // Fill with green background
-            ctx.fillStyle = '#10B981';
-            ctx.fillRect(0, 0, 32, 32);
-
-            // Add cross-hatch lines
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
+          if (completedCtx) {
+            completedCtx.fillStyle = '#10B981'; // Green background
+            completedCtx.fillRect(0, 0, 32, 32);
+            completedCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            completedCtx.lineWidth = 2;
+            completedCtx.beginPath();
             // Diagonal lines
-            ctx.moveTo(0, 0);
-            ctx.lineTo(32, 32);
-            ctx.moveTo(32, 0);
-            ctx.lineTo(0, 32);
-            // Grid lines
-            ctx.moveTo(16, 0);
-            ctx.lineTo(16, 32);
-            ctx.moveTo(0, 16);
-            ctx.lineTo(32, 16);
-            ctx.stroke();
-
-            const imageBitmap = await createImageBitmap(canvas);
-            map.addImage('bnbo-pattern', imageBitmap);
-
-            // Update layer to use pattern
-            if (map.getLayer("bnbo-fill")) {
-              map.setPaintProperty("bnbo-fill", "fill-pattern", "bnbo-pattern");
-              map.setPaintProperty("bnbo-fill", "fill-opacity", 0.5);
+            for (let i = -32; i <= 64; i += 8) {
+              completedCtx.moveTo(i, 0);
+              completedCtx.lineTo(i + 32, 32);
             }
+            completedCtx.stroke();
+
+            const completedBitmap = await createImageBitmap(completedCanvas);
+            map.addImage('bnbo-completed-pattern', completedBitmap);
+          }
+
+          // Create action required pattern (red with cross-hatch)
+          const actionCanvas = document.createElement('canvas');
+          const actionCtx = actionCanvas.getContext('2d');
+          actionCanvas.width = 32;
+          actionCanvas.height = 32;
+
+          if (actionCtx) {
+            actionCtx.fillStyle = '#EF4444'; // Red background
+            actionCtx.fillRect(0, 0, 32, 32);
+            actionCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            actionCtx.lineWidth = 2;
+            actionCtx.beginPath();
+            // Cross-hatch pattern
+            for (let i = -32; i <= 64; i += 8) {
+              actionCtx.moveTo(i, 0);
+              actionCtx.lineTo(i + 32, 32);
+              actionCtx.moveTo(i + 32, 0);
+              actionCtx.lineTo(i, 32);
+            }
+            actionCtx.stroke();
+
+            const actionBitmap = await createImageBitmap(actionCanvas);
+            map.addImage('bnbo-action-pattern', actionBitmap);
           }
         } catch (error) {
-          console.warn('Failed to create BNBO pattern:', error);
+          console.warn('Failed to create BNBO patterns:', error);
         }
       };
 
@@ -417,16 +437,38 @@ export default function FieldAnalysisMap({
         "source-layer": "bnbo",
         type: "fill",
         paint: {
-          "fill-color": "#10B981", // Fallback color
-          "fill-opacity": 0.5,
+          "fill-color": [
+            "case",
+            // If action is required (red)
+            [">", ["coalesce", ["get", "bnbo_action_required_hectares"], 0], 0],
+            "#EF4444",
+            // If completed (green)
+            [">", ["coalesce", ["get", "bnbo_completed_hectares"], 0], 0],
+            "#10B981",
+            // Default blue for general BNBO areas
+            "#2563EB"
+          ],
+          "fill-opacity": 0.6,
         },
         layout: {
           visibility: layerVisibility.bnbo ? "visible" : "none",
         },
       });
 
-      // Create pattern after layer is added
-      createBNBOPattern();
+      // Create patterns after layer is added
+      createBNBOPatterns().then(() => {
+        // Apply patterns based on status
+        if (map.getLayer("bnbo-fill")) {
+          map.setPaintProperty("bnbo-fill", "fill-pattern", [
+            "case",
+            [">", ["coalesce", ["get", "bnbo_action_required_hectares"], 0], 0],
+            "bnbo-action-pattern",
+            [">", ["coalesce", ["get", "bnbo_completed_hectares"], 0], 0],
+            "bnbo-completed-pattern",
+            "" // No pattern for general areas
+          ]);
+        }
+      });
 
       map.addLayer({
         id: "bnbo-outline",
@@ -434,8 +476,15 @@ export default function FieldAnalysisMap({
         "source-layer": "bnbo",
         type: "line",
         paint: {
-          "line-color": "#059669",
-          "line-width": 2,
+          "line-color": [
+            "case",
+            [">", ["coalesce", ["get", "bnbo_action_required_hectares"], 0], 0],
+            "#DC2626", // Darker red outline
+            [">", ["coalesce", ["get", "bnbo_completed_hectares"], 0], 0],
+            "#059669", // Darker green outline
+            "#1D4ED8"  // Darker blue outline
+          ],
+          "line-width": 1.5,
           "line-opacity": 0.9,
         },
         layout: {
