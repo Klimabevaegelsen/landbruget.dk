@@ -3,10 +3,10 @@
 import { useEffect } from 'react'
 import { useTemporalStore } from '@/stores/temporal-store'
 import { usePMTilesStore } from '@/stores/pmtiles-store'
-import { 
-  Play, 
-  Pause, 
-  ChevronLeft, 
+import {
+  Play,
+  Pause,
+  ChevronLeft,
   ChevronRight
 } from 'lucide-react'
 
@@ -27,18 +27,18 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
     canGoPrevious,
     getYearRange,
   } = useTemporalStore()
-  
+
   const { metadata } = usePMTilesStore()
-  
+
   // Update available years from metadata
   useEffect(() => {
     if (metadata?.years) {
       useTemporalStore.getState().setAvailableYears(metadata.years)
     }
   }, [metadata])
-  
+
   const yearRange = getYearRange()
-  
+
   return (
     <div className={`${className}`}>
       {/* Simple Controls */}
@@ -51,7 +51,7 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
         >
           <ChevronLeft className="w-4 h-4 text-white" />
         </button>
-        
+
         {/* Play/Pause */}
         <button
           onClick={isAnimating ? stopAnimation : startAnimation}
@@ -60,7 +60,7 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
         >
           {isAnimating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
         </button>
-        
+
         {/* Next */}
         <button
           onClick={goToNextYear}
@@ -70,7 +70,7 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
           <ChevronRight className="w-4 h-4 text-white" />
         </button>
       </div>
-      
+
       {/* Year Progress Bar */}
       {yearRange && (
         <div>
@@ -90,4 +90,4 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
       )}
     </div>
   )
-} 
+}

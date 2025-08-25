@@ -1,9 +1,9 @@
 import { supabase, handleSupabaseError, buildBboxQuery } from './supabase';
-import type { 
-  H3DataPoint, 
-  H3DataFilter, 
+import type {
+  H3DataPoint,
+  H3DataFilter,
   H3ProcessingConfig,
-  H3DataQuality 
+  H3DataQuality
 } from '@/types/h3-data';
 import type { BNBOArea, BNBODataFilter } from '@/types/bnbo-data';
 import type { BBRBuilding, BBRDataFilter } from '@/types/bbr-data';
@@ -21,13 +21,13 @@ export class DataManager {
    * Fetch H3 PFAS exposure data with filtering and aggregation
    */
   async fetchH3Data(
-    year: number, 
+    year: number,
     cumulativeMode: boolean = false,
     filter?: H3DataFilter,
     config?: H3ProcessingConfig
   ): Promise<H3DataPoint[]> {
     const cacheKey = this.buildCacheKey('h3', { year, cumulativeMode, filter, config });
-    
+
     // Check cache first
     const cachedData = this.getCachedData(cacheKey, CACHE_SETTINGS.H3_DATA_TTL);
     if (cachedData) {
@@ -98,7 +98,7 @@ export class DataManager {
 
       // Process and transform data
       let processedData: H3DataPoint[];
-      
+
       if (cumulativeMode) {
         const aggregatedData = this.aggregateH3DataByYear(data);
         processedData = this.transformAggregatedH3Data(aggregatedData, config);
@@ -108,7 +108,7 @@ export class DataManager {
 
       // Cache the results
       this.setCachedData(cacheKey, processedData);
-      
+
       return processedData;
 
     } catch (error) {
@@ -122,7 +122,7 @@ export class DataManager {
    */
   async fetchBNBOData(filter?: BNBODataFilter): Promise<BNBOArea[]> {
     const cacheKey = this.buildCacheKey('bnbo', { filter });
-    
+
     const cachedData = this.getCachedData(cacheKey, CACHE_SETTINGS.BNBO_DATA_TTL);
     if (cachedData) {
       return cachedData;
@@ -176,7 +176,7 @@ export class DataManager {
 
       const processedData = this.transformBNBOData(data);
       this.setCachedData(cacheKey, processedData);
-      
+
       return processedData;
 
     } catch (error) {
@@ -190,7 +190,7 @@ export class DataManager {
    */
   async fetchBBRData(filter?: BBRDataFilter): Promise<BBRBuilding[]> {
     const cacheKey = this.buildCacheKey('bbr', { filter });
-    
+
     const cachedData = this.getCachedData(cacheKey, CACHE_SETTINGS.BBR_DATA_TTL);
     if (cachedData) {
       return cachedData;
@@ -254,7 +254,7 @@ export class DataManager {
 
       const processedData = this.transformBBRData(data);
       this.setCachedData(cacheKey, processedData);
-      
+
       return processedData;
 
     } catch (error) {
@@ -268,7 +268,7 @@ export class DataManager {
    */
   async getH3DataQuality(year?: number): Promise<H3DataQuality> {
     const cacheKey = this.buildCacheKey('h3_quality', { year });
-    
+
     const cachedData = this.getCachedData(cacheKey, 3600); // Cache for 1 hour
     if (cachedData) {
       return cachedData;
@@ -276,7 +276,7 @@ export class DataManager {
 
     try {
       let query = supabase.from('h3_pfas_exposure');
-      
+
       if (year) {
         query = query.eq('year', year);
       }
@@ -313,9 +313,9 @@ export class DataManager {
           minLat: Math.min(...data.map(row => row.centroid_lat)),
           maxLat: Math.max(...data.map(row => row.centroid_lat))
         },
-        dataCompleteness: (data.filter(row => 
-          row.total_pesticide_load !== null && 
-          row.total_pfas_grams !== null && 
+        dataCompleteness: (data.filter(row =>
+          row.total_pesticide_load !== null &&
+          row.total_pfas_grams !== null &&
           row.geometry
         ).length / data.length) * 100,
         lastUpdated: new Date().toISOString()
@@ -335,8 +335,8 @@ export class DataManager {
    */
   private transformH3Data(rawData: Record<string, unknown>[], config?: H3ProcessingConfig): H3DataPoint[] {
     return rawData.map(row => {
-      const geometry = typeof row.geometry === 'string' 
-        ? JSON.parse(row.geometry) 
+      const geometry = typeof row.geometry === 'string'
+        ? JSON.parse(row.geometry)
         : row.geometry;
 
       const dataPoint: H3DataPoint = {
@@ -356,11 +356,11 @@ export class DataManager {
 
       // Add calculated intensity fields
       if (config?.includeIntensityCalculations !== false) {
-        dataPoint.pfas_intensity = dataPoint.agricultural_area_ha > 0 
-          ? dataPoint.total_pfas_grams / dataPoint.agricultural_area_ha 
+        dataPoint.pfas_intensity = dataPoint.agricultural_area_ha > 0
+          ? dataPoint.total_pfas_grams / dataPoint.agricultural_area_ha
           : 0;
-        dataPoint.pesticide_intensity = dataPoint.agricultural_area_ha > 0 
-          ? dataPoint.total_pesticide_load / dataPoint.agricultural_area_ha 
+        dataPoint.pesticide_intensity = dataPoint.agricultural_area_ha > 0
+          ? dataPoint.total_pesticide_load / dataPoint.agricultural_area_ha
           : 0;
       }
 
@@ -414,8 +414,8 @@ export class DataManager {
    */
   private transformAggregatedH3Data(aggregatedData: Record<string, unknown>[]): H3DataPoint[] {
     return aggregatedData.map(row => {
-      const geometry = typeof row.geometry === 'string' 
-        ? JSON.parse(row.geometry) 
+      const geometry = typeof row.geometry === 'string'
+        ? JSON.parse(row.geometry)
         : row.geometry;
 
       return {
@@ -431,11 +431,11 @@ export class DataManager {
         centroid_lon: row.centroid_lon,
         centroid_lat: row.centroid_lat,
         h3_resolution: row.h3_resolution || 10,
-        pfas_intensity: row.avg_agricultural_area_ha > 0 
-          ? row.total_pfas_grams / row.avg_agricultural_area_ha 
+        pfas_intensity: row.avg_agricultural_area_ha > 0
+          ? row.total_pfas_grams / row.avg_agricultural_area_ha
           : 0,
-        pesticide_intensity: row.avg_agricultural_area_ha > 0 
-          ? row.total_pesticide_load / row.avg_agricultural_area_ha 
+        pesticide_intensity: row.avg_agricultural_area_ha > 0
+          ? row.total_pesticide_load / row.avg_agricultural_area_ha
           : 0
       };
     });
@@ -451,8 +451,8 @@ export class DataManager {
       status_code: row.status_code,
       status_description: row.status_description,
       area_ha: row.area_ha || 0,
-      geometry: typeof row.geometry === 'string' 
-        ? JSON.parse(row.geometry) 
+      geometry: typeof row.geometry === 'string'
+        ? JSON.parse(row.geometry)
         : row.geometry,
       year: row.year || new Date().getFullYear(),
       created_at: row.created_at
@@ -470,8 +470,8 @@ export class DataManager {
       building_type: row.building_type || 'Other',
       construction_year: row.construction_year,
       floor_area: row.floor_area,
-      geometry: typeof row.geometry === 'string' 
-        ? JSON.parse(row.geometry) 
+      geometry: typeof row.geometry === 'string'
+        ? JSON.parse(row.geometry)
         : row.geometry,
       address: row.address,
       created_at: row.created_at
@@ -519,4 +519,4 @@ export class DataManager {
     this.cache.clear();
     this.cacheTimestamps.clear();
   }
-} 
+}

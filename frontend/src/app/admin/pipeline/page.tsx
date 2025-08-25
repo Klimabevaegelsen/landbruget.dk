@@ -21,11 +21,11 @@ export default function PipelinePage() {
                 H3 PFAS Exposure Analysis
               </h2>
               <p className="text-gray-600">
-                Process agricultural field data to analyze PFAS-containing pesticide exposure 
+                Process agricultural field data to analyze PFAS-containing pesticide exposure
                 at different spatial resolutions using H3 hexagonal grids and municipality boundaries.
               </p>
             </div>
-            
+
             <H3PfasTrigger />
           </section>
 
@@ -40,7 +40,7 @@ export default function PipelinePage() {
                   <h3 className="font-medium">H3 PFAS Analysis</h3>
                   <p className="text-sm text-gray-600">Last run: Check GitHub Actions</p>
                 </div>
-                <a 
+                <a
                   href="https://github.com/Klimabevaegelsen/landbruget.dk/actions/workflows/h3-pfas-analysis.yml"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -65,7 +65,7 @@ export default function PipelinePage() {
                 <li><strong>Parallel Execution:</strong> Up to 10 concurrent years processed simultaneously</li>
                 <li><strong>Comprehensive Output:</strong> Both H3 hexagon-level and municipality-level analysis</li>
               </ul>
-              
+
               <h3>Processing Time:</h3>
               <ul>
                 <li><strong>Single year:</strong> ~10-15 minutes</li>
@@ -86,4 +86,4 @@ export default function PipelinePage() {
       </div>
     </div>
   );
-} 
+}

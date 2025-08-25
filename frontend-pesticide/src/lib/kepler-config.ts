@@ -42,8 +42,8 @@ export function generateKeplerConfig(options: KeplerConfigOptions) {
             config: {
               dataId: 'h3_data',
               label: showPFAS ? 'PFAS Exposure (grams)' : 'Pesticide Load (kg/ha)',
-              color: showPFAS ? 
-                generateColorScale('pfas_grams') : 
+              color: showPFAS ?
+                generateColorScale('pfas_grams') :
                 generateColorScale('pesticide_load'),
               columns: {
                 hex_id: 'h3_id'
@@ -289,4 +289,4 @@ export const LAYER_PRESETS = {
     colorField: 'building_type',
     radius: 3
   }
-}; 
+};

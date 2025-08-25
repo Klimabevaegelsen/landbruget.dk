@@ -8,14 +8,14 @@ interface ResponsiveLayoutProps {
 
 export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
   const [isMobile, setIsMobile] = useState(false);
-  
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-  
+
   return (
     <div className={`h-screen w-screen flex ${isMobile ? 'flex-col' : 'flex-row'}`}>
       {/* Main content area */}
@@ -24,4 +24,4 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
       </div>
     </div>
   );
-} 
+}

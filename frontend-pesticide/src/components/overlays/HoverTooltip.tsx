@@ -49,7 +49,7 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
     if (hoverInfo) {
       setIsVisible(true);
       // Position tooltip offset from mouse to avoid covering it
-      setPosition({ 
+      setPosition({
         x: hoverInfo.pixel[0], // Use exact cursor position
         y: hoverInfo.pixel[1]  // Use exact cursor position
       });
@@ -86,7 +86,7 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
         const diquatGrams = Number(hoverInfo.data.diquat_grams || 0);
         const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams || 0);
         const area = Number(hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha || 0);
-        
+
         // Calculate intensities
         const pfasIntensity = Number(hoverInfo.data.pfas_intensity) || (area > 0 ? pfasGrams / area : 0);
         const pesticideIntensity = Number(hoverInfo.data.pesticide_intensity) || (area > 0 ? pesticideLoad / area : 0);
@@ -103,7 +103,7 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                   {area > 0 ? `${formatNumber(area, 1)} hectares` : 'Area data unavailable'}
                 </div>
               </div>
-              
+
               {/* Total Pesticide Load - Primary metric */}
               <div className="bg-orange-50 rounded-md px-3 py-2 border-l-4 border-orange-400">
                 <div className="flex items-center justify-between mb-1">
@@ -208,11 +208,11 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                   {hoverInfo.data.area_ha ? `${formatNumber(hoverInfo.data.area_ha, 1)} hectares` : 'Area data unavailable'}
                 </div>
               </div>
-              
+
               {/* Protection Status */}
               <div className="bg-slate-50 rounded-md px-3 py-2">
                 <div className="flex items-center space-x-2 mb-2">
-                  <div 
+                  <div
                     className="w-3 h-3 rounded border"
                     style={{ backgroundColor: getBNBOStatusColor(hoverInfo.data.status_code) }}
                   ></div>
@@ -243,11 +243,11 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                   {formatNumber(hoverInfo.data.floor_area, 0)} m² floor area
                 </div>
               </div>
-              
+
               {/* Building Details */}
               <div className="bg-slate-50 rounded-md px-3 py-2">
                 <div className="flex items-center space-x-2 mb-2">
-                  <div 
+                  <div
                     className="w-3 h-3 rounded border"
                     style={{ backgroundColor: getBBRTypeColor(hoverInfo.data.building_type) }}
                   ></div>
@@ -286,13 +286,13 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
   const tooltipHeight = 350;
   const tooltipDistance = 150; // Even larger distance from cursor to tooltip - creates clear gap
   const padding = 10; // Screen edge padding
-  
+
   // Determine the best position based on available space
   const spaceRight = window.innerWidth - position.x;
   const spaceLeft = position.x;
   const spaceBelow = window.innerHeight - position.y;
   const spaceAbove = position.y;
-  
+
   const adjustedPosition = {
     left: position.x + tooltipDistance,
     top: position.y + tooltipDistance
@@ -335,7 +335,7 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
     adjustedPosition.left,
     window.innerWidth - tooltipWidth - padding
   ));
-  
+
   adjustedPosition.top = Math.max(padding, Math.min(
     adjustedPosition.top,
     window.innerHeight - tooltipHeight - padding
@@ -362,7 +362,7 @@ export function useHoverTooltip() {
     if (info?.object && info?.coordinate && info?.pixel) {
       // Determine layer type based on data structure
       let layer: 'h3' | 'bnbo' | 'bbr' = 'h3';
-      
+
       if (info.object.bnbo_id) {
         layer = 'bnbo';
       } else if (info.object.bbr_id) {
@@ -392,4 +392,4 @@ export function useHoverTooltip() {
     clearHover,
     setHoverInfo
   };
-} 
+}

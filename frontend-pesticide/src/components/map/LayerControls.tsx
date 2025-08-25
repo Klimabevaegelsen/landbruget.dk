@@ -2,12 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Layers, 
-  Eye, 
-  EyeOff, 
-  Settings, 
-  ChevronDown, 
+import {
+  Layers,
+  Eye,
+  EyeOff,
+  Settings,
+  ChevronDown,
   ChevronUp,
   Palette
 } from 'lucide-react';
@@ -169,8 +169,8 @@ export function LayerControls({
                         <button
                           onClick={() => handleLayerToggle(layerId)}
                           className={`p-1 rounded transition-colors ${
-                            layer.visible 
-                              ? 'text-blue-600 hover:bg-blue-50' 
+                            layer.visible
+                              ? 'text-blue-600 hover:bg-blue-50'
                               : 'text-gray-400 hover:bg-gray-100'
                           }`}
                         >
@@ -180,9 +180,9 @@ export function LayerControls({
                             <EyeOff className="w-4 h-4" />
                           )}
                         </button>
-                        
+
                         <div className="flex items-center space-x-2">
-                          <div 
+                          <div
                             className="w-3 h-3 rounded-full"
                             style={{ backgroundColor: layer.color }}
                           />
@@ -336,8 +336,8 @@ export function LayerControls({
                 key={layerId}
                 onClick={() => handleLayerToggle(layerId)}
                 className={`p-1 rounded transition-colors ${
-                  layer.visible 
-                    ? 'text-blue-600 hover:bg-blue-50' 
+                  layer.visible
+                    ? 'text-blue-600 hover:bg-blue-50'
                     : 'text-gray-400 hover:bg-gray-100'
                 }`}
                 title={`Toggle ${layer.name}`}
@@ -367,7 +367,7 @@ export function LayerControls({
               <Palette className="w-4 h-4 text-gray-600" />
               <span className="text-sm font-medium text-gray-900">Legend</span>
             </div>
-            
+
             <div className="space-y-2 text-xs">
               {layers.h3.visible && (
                 <div className="flex items-center space-x-2">
@@ -375,7 +375,7 @@ export function LayerControls({
                   <span className="text-gray-700">PFAS/Pesticide Intensity</span>
                 </div>
               )}
-              
+
               {layers.bnbo.visible && (
                 <div className="space-y-1">
                   <div className="flex items-center space-x-2">
@@ -392,7 +392,7 @@ export function LayerControls({
                   </div>
                 </div>
               )}
-              
+
               {layers.bbr.visible && (
                 <div className="space-y-1">
                   <div className="flex items-center space-x-2">
@@ -415,4 +415,4 @@ export function LayerControls({
       </AnimatePresence>
     </div>
   );
-} 
+}

@@ -16,12 +16,12 @@ export function BasemapToggle() {
           <div className="text-xs text-gray-400">Buildings, Roads & Land Use</div>
         </div>
       </div>
-      
+
       <button
         onClick={() => setShowBasemap(!showBasemap)}
         className={`p-2 rounded-md transition-colors ${
-          showBasemap 
-            ? 'bg-blue-600 text-white hover:bg-blue-700' 
+          showBasemap
+            ? 'bg-blue-600 text-white hover:bg-blue-700'
             : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
         }`}
       >
@@ -33,4 +33,4 @@ export function BasemapToggle() {
       </button>
     </div>
   );
-} 
+}
