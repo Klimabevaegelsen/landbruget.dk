@@ -80,4 +80,4 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 python_classes = "Test*"
-addopts = "--cov=drive_data_pipeline --cov-report=term-missing -v" 
+addopts = "--cov=drive_data_pipeline --cov-report=term-missing -v"

@@ -295,9 +295,9 @@ class PDFTransformer(BaseTransformer, DuckDBProcessor):
                     # pattern detection
                     select_parts.append(f"""
                         CASE
-                            WHEN CAST({escaped_col_name} AS VARCHAR) ~ 
+                            WHEN CAST({escaped_col_name} AS VARCHAR) ~
                                     '^\\d{{2}}[/.-]\\d{{2}}[/.-]\\d{{4}}$' OR
-                                 CAST({escaped_col_name} AS VARCHAR) ~ 
+                                 CAST({escaped_col_name} AS VARCHAR) ~
                                     '^\\d{{4}}[/.-]\\d{{2}}[/.-]\\d{{2}}$'
                             THEN TRY_CAST(CAST({escaped_col_name} AS VARCHAR) AS DATE)::VARCHAR
                             ELSE CAST({escaped_col_name} AS VARCHAR)

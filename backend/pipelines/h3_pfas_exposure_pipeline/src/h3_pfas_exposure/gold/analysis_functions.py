@@ -300,8 +300,8 @@ async def run_cumulative_analysis(
 
             if result_count > 0:
                 logger.info(
-                    f"✅ Cumulative H3 analysis completed for resolution {resolution}: " +
-                    f"{result_count:,} records"
+                    f"✅ Cumulative H3 analysis completed for resolution {resolution}: "
+                    + f"{result_count:,} records"
                 )
             else:
                 logger.error(f"❌ Cumulative H3 analysis failed for resolution {resolution}")
@@ -628,8 +628,8 @@ async def run_cumulative_analysis_optimized(
                 continue
 
             logger.info(
-                f"📊 Loading and aggregating {len(available_year_results)} year(s) of existing results " +
-                f"for resolution {resolution}"
+                f"📊 Loading and aggregating {len(available_year_results)} year(s) of existing results "
+                + f"for resolution {resolution}"
             )
 
             # Initialize cumulative results table
@@ -812,8 +812,8 @@ async def run_cumulative_analysis_optimized(
 
             if result_count > 0:
                 logger.info(
-                    f"✅ Optimized cumulative H3 analysis completed for resolution {resolution}: " +
-                    f"{result_count:,} records"
+                    f"✅ Optimized cumulative H3 analysis completed for resolution {resolution}: "
+                    + f"{result_count:,} records"
                 )
             else:
                 logger.error(
@@ -2025,8 +2025,8 @@ async def run_cumulative_analysis_from_artifacts(
                 continue
 
             logger.info(
-                f"📊 Loading and aggregating {len(available_year_results)} year(s) from artifacts " +
-                f"for resolution {resolution}"
+                f"📊 Loading and aggregating {len(available_year_results)} year(s) from artifacts "
+                + f"for resolution {resolution}"
             )
 
             # Use the same aggregation logic as before
@@ -2210,8 +2210,8 @@ async def run_cumulative_analysis_from_artifacts(
 
             if result_count > 0:
                 logger.info(
-                    f"✅ Artifact-based cumulative H3 analysis completed for resolution {resolution}: " +
-                    f"{result_count:,} records"
+                    f"✅ Artifact-based cumulative H3 analysis completed for resolution {resolution}: "
+                    + f"{result_count:,} records"
                 )
             else:
                 logger.error(
@@ -2246,8 +2246,8 @@ async def run_cumulative_analysis_from_artifacts(
                 )
             else:
                 logger.info(
-                    f"📊 Loading and aggregating {len(available_kommune_results)} year(s) of kommune " +
-                    "results from artifacts"
+                    f"📊 Loading and aggregating {len(available_kommune_results)} year(s) of kommune "
+                    + "results from artifacts"
                 )
 
                 # Initialize cumulative kommune results table

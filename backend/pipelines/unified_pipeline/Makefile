@@ -1,5 +1,5 @@
 # Makefile for Unified Pipeline Operations
-# 
+#
 # This makefile provides convenient commands for running the property-cadastral merge pipeline
 # and other unified pipeline operations.
 

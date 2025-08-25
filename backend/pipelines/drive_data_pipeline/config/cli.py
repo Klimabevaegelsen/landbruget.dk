@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
         "--both",
         action="store_true",
         help="Run both layers with in-memory data passing "
-             "(bronze exports and passes data to silver in memory)",
+        "(bronze exports and passes data to silver in memory)",
     )
 
     # Output options
