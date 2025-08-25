@@ -11,6 +11,10 @@ Simple HTML/JavaScript password protection to temporarily hide the website.
    ```
    NEXT_PUBLIC_SITE_PASSWORD=your_secure_password_here
    ```
+   Or for email-based access:
+   ```
+   NEXT_PUBLIC_SITE_PASSWORD=@
+   ```
 3. **Start dev server**: `npm run dev`
 
 ### Production (Vercel)
@@ -26,6 +30,7 @@ Simple HTML/JavaScript password protection to temporarily hide the website.
 - Password overlay covers the entire site on load
 - Password comes from `NEXT_PUBLIC_SITE_PASSWORD` environment variable
 - Uses localStorage to remember authentication
+- **Flexible matching**: Any input containing the configured password will be accepted (e.g., set password to "@" to accept any email)
 
 ## To Remove Password Protection
 
