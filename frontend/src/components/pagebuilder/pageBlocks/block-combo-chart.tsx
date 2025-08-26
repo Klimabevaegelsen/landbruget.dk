@@ -20,6 +20,8 @@ import { useEffect, useState } from "react";
 import CustomLegend from "@/components/chart/custom-legend";
 import { VizColors } from "@/lib/utils";
 import { xAxisDefaultProps } from "./block-bar-chart";
+import { shouldShowPlaceholder } from "./chart-utils";
+import { PlaceholderChart } from "./placeholder-chart";
 
 // We can reuse the existing transformDataForRecharts function since it already handles our data structure
 const transformDataForRecharts = (chartData: ChartData) => {
@@ -38,6 +40,7 @@ const transformDataForRecharts = (chartData: ChartData) => {
 };
 
 export function BlockComboChart({ chart }: { chart: ComboChartType }) {
+  // Always call hooks first
   const transformedData = transformDataForRecharts(chart.data);
   const [yWidth, setYWidth] = useState(60);
 
@@ -57,6 +60,12 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
     // Add some padding to the width
     setYWidth(longestTick * 8 + 0);
   }, [transformedData]);
+
+  // Check if this chart should show a placeholder
+  const placeholderDataType = shouldShowPlaceholder(chart._key);
+  if (placeholderDataType) {
+    return <PlaceholderChart title={chart.title} dataType={placeholderDataType} />;
+  }
 
   if (!transformedData.length) {
     return <div>No data available for chart.</div>;

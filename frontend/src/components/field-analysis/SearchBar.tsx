@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, X, MapPin } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 
 interface DAWAResult {
   tekst: string;
@@ -34,49 +35,63 @@ export function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
+  const { addToast, removeToast } = useToast();
+
   const handleSelectResult = useCallback(async (result: DAWAResult) => {
     setQuery(result.tekst);
     setIsOpen(false);
     setSelectedIndex(-1);
 
+    // Show loading toast for address lookup
+    const toastId = addToast({
+      title: "Finder lokation",
+      description: `Henter koordinater for ${result.tekst}...`,
+      variant: "loading"
+    });
+
     let locationFound = false;
 
-    // Try to get detailed address information including coordinates
-    if (result.adresse?.href) {
-      try {
-        const response = await fetch(result.adresse.href);
-        if (response.ok) {
-          const detailData = await response.json();
-          if (detailData.adgangsadresse?.koordinater) {
-            const [lng, lat] = detailData.adgangsadresse.koordinater;
-            onLocationSelect({
-              lat,
-              lng,
-              address: result.tekst
-            });
-            locationFound = true;
+    try {
+      // Try to get detailed address information including coordinates
+      if (result.adresse?.href) {
+        try {
+          const response = await fetch(result.adresse.href);
+          if (response.ok) {
+            const detailData = await response.json();
+            if (detailData.adgangsadresse?.koordinater) {
+              const [lng, lat] = detailData.adgangsadresse.koordinater;
+              onLocationSelect({
+                lat,
+                lng,
+                address: result.tekst
+              });
+              locationFound = true;
+            }
           }
+        } catch (error) {
+          console.error('Error fetching address details:', error);
         }
-      } catch (error) {
-        console.error('Error fetching address details:', error);
       }
-    }
 
-    // Fall back to coordinates from autocomplete result if detailed fetch failed or had no coordinates
-    if (!locationFound && result.adresse?.x && result.adresse?.y) {
-      onLocationSelect({
-        lat: result.adresse.y,
-        lng: result.adresse.x,
-        address: result.tekst
-      });
-      locationFound = true;
-    }
+      // Fall back to coordinates from autocomplete result if detailed fetch failed or had no coordinates
+      if (!locationFound && result.adresse?.x && result.adresse?.y) {
+        onLocationSelect({
+          lat: result.adresse.y,
+          lng: result.adresse.x,
+          address: result.tekst
+        });
+        locationFound = true;
+      }
 
-    // Log if no coordinates were found at all
-    if (!locationFound) {
-      console.warn('No coordinates found for address:', result.tekst);
+      // Log if no coordinates were found at all
+      if (!locationFound) {
+        console.warn('No coordinates found for address:', result.tekst);
+      }
+    } finally {
+      // Always remove the loading toast
+      removeToast(toastId);
     }
-  }, [onLocationSelect]);
+  }, [onLocationSelect, addToast, removeToast]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

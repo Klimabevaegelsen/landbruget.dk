@@ -9,6 +9,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { apiFetch } from "@/services/supabase/config";
+import { useToast } from "@/components/ui/toast";
 
 export function GlobalSearch({
   className,
@@ -285,12 +286,23 @@ function SearchResultCard({
   result: SearchResult;
   onClick: () => void;
 }) {
+  const { addToast } = useToast();
+
+  const handleClick = () => {
+    // Show loading toast
+    addToast({
+      title: "Indlæser virksomhed",
+      description: `Henter data for ${result.name}...`,
+      variant: "loading"
+    });
+
+    onClick();
+  };
+
   return (
     <Link
       href={`/virksomhed/${result.id}`}
-      onClick={() => {
-        onClick();
-      }}
+      onClick={handleClick}
     >
       <div className="flex  gap-2 items-center justify-between hover:bg-gray-100 p-4 group">
         <div className="flex gap-2 items-center">
