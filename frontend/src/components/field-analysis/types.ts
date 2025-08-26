@@ -6,6 +6,9 @@ export interface FieldAnalysisData {
   crop_name: string;
   is_organic: boolean;
 
+  // Coordinates (added for GPS display and Skråfoto link)
+  click_coordinates?: { lat: number; lng: number };
+
   // Pesticide totals
   total_pesticide_belastning: number;
   total_pesticide_applications?: number;

@@ -33,6 +33,7 @@ interface FieldAnalysisMapProps {
   filterState: FilterState;
   onFieldSelect: (fieldData: FieldAnalysisData) => void;
   onLocationSelect?: (location: { lat: number; lng: number; address: string }) => void;
+  onMapClick?: (coordinates: { lat: number; lng: number }) => void;
 }
 
 interface TooltipInfo {
@@ -326,6 +327,7 @@ export default function FieldAnalysisMap({
   filterState,
   onFieldSelect,
   onLocationSelect,
+  onMapClick,
 }: FieldAnalysisMapProps) {
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -981,13 +983,24 @@ export default function FieldAnalysisMap({
     }
   }, [filterState.visualizationMode, filterState.colorUnit]);
 
-  // Handle click events for field selection
+  // Handle click events for field selection and coordinate capture
   const onClick = useCallback((event: MapLayerMouseEvent) => {
+    const coordinates = {
+      lat: event.lngLat.lat,
+      lng: event.lngLat.lng
+    };
+
+    // Always call onMapClick to capture coordinates
+    onMapClick?.(coordinates);
+
     const feature = event.features && event.features[0];
     if (feature && feature.layer.id.startsWith("fields-")) {
-      onFieldSelect(feature.properties as FieldAnalysisData);
+      // Add click coordinates to the field data
+      const fieldData = feature.properties as FieldAnalysisData;
+      fieldData.click_coordinates = coordinates;
+      onFieldSelect(fieldData);
     }
-  }, [onFieldSelect]);
+  }, [onFieldSelect, onMapClick]);
 
   // Get display name for layer
   const getLayerDisplayName = (layerId: string): string => {
@@ -1033,7 +1046,7 @@ export default function FieldAnalysisMap({
   return (
     <div className="relative w-full h-full">
       {/* Search Bar */}
-      <div className="absolute top-4 left-4 z-10 w-80 max-w-[calc(100vw-2rem)]">
+      <div className="absolute top-4 left-20 right-4 lg:left-4 lg:right-auto z-10 lg:w-80" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
         <SearchBar
           onLocationSelect={handleLocationSelect}
           placeholder="Søg adresser, byer, regioner..."
