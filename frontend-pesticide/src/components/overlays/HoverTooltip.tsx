@@ -121,53 +121,59 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                 </div>
               </div>
 
-              {/* PFAS - Clean warning design */}
-              <div className="bg-red-50 rounded-md px-3 py-2 border-l-4 border-red-400">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-red-800 text-sm font-medium">PFAS Active Ingredients</div>
-                  <div className="text-red-600 text-xs font-medium">Persistent</div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <div className="text-red-900 font-semibold text-base">{formatNumber(pfasGrams, 2)}</div>
-                    <div className="text-red-600">grams total</div>
+              {/* PFAS - only show if there are PFAS values > 0 */}
+              {pfasGrams > 0 && (
+                <div className="bg-red-50 rounded-md px-3 py-2 border-l-4 border-red-400">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-red-800 text-sm font-medium">PFAS Active Ingredients</div>
+                    <div className="text-red-600 text-xs font-medium">Persistent</div>
                   </div>
-                  <div>
-                    <div className="text-red-900 font-semibold text-base">{formatNumber(pfasIntensity, 2)}</div>
-                    <div className="text-red-600">grams per hectare</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <div className="text-red-900 font-semibold text-base">{formatNumber(pfasGrams, 2)}</div>
+                      <div className="text-red-600">grams total</div>
+                    </div>
+                    <div>
+                      <div className="text-red-900 font-semibold text-base">{formatNumber(pfasIntensity, 2)}</div>
+                      <div className="text-red-600">grams per hectare</div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Glyphosate - Clean design */}
-              <div className="bg-green-50 rounded-md px-3 py-2 border-l-4 border-green-400">
-                <div className="text-green-800 text-sm font-medium mb-1">Glyphosate Active Ingredients</div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateGrams, 2)}</div>
-                    <div className="text-green-600">grams total</div>
-                  </div>
-                  <div>
-                    <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateIntensity, 2)}</div>
-                    <div className="text-green-600">grams per hectare</div>
+              {/* Glyphosate - only show if there are glyphosate values > 0 */}
+              {glyphosateGrams > 0 && (
+                <div className="bg-green-50 rounded-md px-3 py-2 border-l-4 border-green-400">
+                  <div className="text-green-800 text-sm font-medium mb-1">Glyphosate Active Ingredients</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateGrams, 2)}</div>
+                      <div className="text-green-600">grams total</div>
+                    </div>
+                    <div>
+                      <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateIntensity, 2)}</div>
+                      <div className="text-green-600">grams per hectare</div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Diquat - Clean design */}
-              <div className="bg-amber-50 rounded-md px-3 py-2 border-l-4 border-amber-400">
-                <div className="text-amber-800 text-sm font-medium mb-1">Diquat Active Ingredients</div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatGrams, 2)}</div>
-                    <div className="text-amber-600">grams total</div>
-                  </div>
-                  <div>
-                    <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatIntensity, 2)}</div>
-                    <div className="text-amber-600">grams per hectare</div>
+              {/* Diquat - only show if there are diquat values > 0 */}
+              {diquatGrams > 0 && (
+                <div className="bg-amber-50 rounded-md px-3 py-2 border-l-4 border-amber-400">
+                  <div className="text-amber-800 text-sm font-medium mb-1">Diquat Active Ingredients</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatGrams, 2)}</div>
+                      <div className="text-amber-600">grams total</div>
+                    </div>
+                    <div>
+                      <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatIntensity, 2)}</div>
+                      <div className="text-amber-600">grams per hectare</div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Agricultural Activity - Minimal stats */}
               <div className="bg-slate-50 rounded-md px-3 py-2">

@@ -129,39 +129,47 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
                 </div>
               </div>
 
-              {/* PFAS */}
-              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-red-400/30">
-                <div className="text-center">
-                  <div className="text-base font-bold text-red-300 font-mono">{formatNumber(pfasGrams, 1)}</div>
-                  <div className="text-xs text-red-400/80 uppercase tracking-wide">PFAS (g)</div>
-                  <div className="text-xs text-red-300/70 mt-1 font-mono">{formatNumber(pfasIntensity, 1)} g/ha</div>
+              {/* PFAS - only show if there are PFAS values > 0 */}
+              {pfasGrams > 0 && (
+                <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-red-400/30">
+                  <div className="text-center">
+                    <div className="text-base font-bold text-red-300 font-mono">{formatNumber(pfasGrams, 1)}</div>
+                    <div className="text-xs text-red-400/80 uppercase tracking-wide">PFAS (g)</div>
+                    <div className="text-xs text-red-300/70 mt-1 font-mono">{formatNumber(pfasIntensity, 1)} g/ha</div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Expanded Content */}
             {isExpanded && (
               <div className="space-y-3 animate-in slide-in-from-bottom-2 duration-300">
-                {/* Additional Metrics */}
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Glyphosate */}
-                  <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-green-400/30">
-                    <div className="text-center">
-                      <div className="text-base font-bold text-green-300 font-mono">{formatNumber(glyphosateGrams, 1)}</div>
-                      <div className="text-xs text-green-400/80 uppercase tracking-wide">Glyphosate (g)</div>
-                      <div className="text-xs text-green-300/70 mt-1 font-mono">{formatNumber(glyphosateIntensity, 1)} g/ha</div>
-                    </div>
-                  </div>
+                {/* Additional Metrics - only show if there are values > 0 */}
+                {(glyphosateGrams > 0 || diquatGrams > 0) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Glyphosate - only show if there are glyphosate values > 0 */}
+                    {glyphosateGrams > 0 && (
+                      <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-green-400/30">
+                        <div className="text-center">
+                          <div className="text-base font-bold text-green-300 font-mono">{formatNumber(glyphosateGrams, 1)}</div>
+                          <div className="text-xs text-green-400/80 uppercase tracking-wide">Glyphosate (g)</div>
+                          <div className="text-xs text-green-300/70 mt-1 font-mono">{formatNumber(glyphosateIntensity, 1)} g/ha</div>
+                        </div>
+                      </div>
+                    )}
 
-                  {/* Diquat */}
-                  <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-amber-400/30">
-                    <div className="text-center">
-                      <div className="text-base font-bold text-amber-300 font-mono">{formatNumber(diquatGrams, 1)}</div>
-                      <div className="text-xs text-amber-400/80 uppercase tracking-wide">Diquat (g)</div>
-                      <div className="text-xs text-amber-300/70 mt-1 font-mono">{formatNumber(diquatIntensity, 1)} g/ha</div>
-                    </div>
+                    {/* Diquat - only show if there are diquat values > 0 */}
+                    {diquatGrams > 0 && (
+                      <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-amber-400/30">
+                        <div className="text-center">
+                          <div className="text-base font-bold text-amber-300 font-mono">{formatNumber(diquatGrams, 1)}</div>
+                          <div className="text-xs text-amber-400/80 uppercase tracking-wide">Diquat (g)</div>
+                          <div className="text-xs text-amber-300/70 mt-1 font-mono">{formatNumber(diquatIntensity, 1)} g/ha</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
 
                 {/* Activity Summary */}
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">

@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { FieldAnalysisData } from "./types";
+import { formatWgs84Coordinates, generateSkraafotoUrl, copyCoordinatesToClipboard } from "./coordinateUtils";
 
 interface FieldDetailsPanelProps {
   fieldData: FieldAnalysisData;
@@ -9,8 +10,25 @@ interface FieldDetailsPanelProps {
 }
 
 export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps) {
+  const [copiedCoordinates, setCopiedCoordinates] = useState(false);
+
   const formatNumber = (num: number, decimals: number = 2): string => {
     return num.toLocaleString("da-DK", { maximumFractionDigits: decimals });
+  };
+
+  // Handle coordinate copying
+  const handleCopyCoordinates = async () => {
+    if (!fieldData.click_coordinates) return;
+
+    const success = await copyCoordinatesToClipboard(
+      fieldData.click_coordinates.lat,
+      fieldData.click_coordinates.lng
+    );
+
+    if (success) {
+      setCopiedCoordinates(true);
+      setTimeout(() => setCopiedCoordinates(false), 2000);
+    }
   };
 
   // Parse pesticide detail strings (format: "ProductName:dosage; ProductName2:dosage2")
@@ -119,6 +137,48 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
         </div>
       </div>
 
+      {/* GPS Coordinates and Skråfoto */}
+      {fieldData.click_coordinates && (
+        <div className="mb-4">
+          <h3 className="text-base font-semibold text-gray-900 mb-2">Koordinater</h3>
+          <div className="bg-blue-50 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-blue-800">📍 GPS Position</span>
+              <button
+                onClick={handleCopyCoordinates}
+                className="text-xs bg-blue-100 hover:bg-blue-200 active:bg-blue-300 text-blue-700 px-2 py-1 rounded transition-colors min-h-[32px] flex items-center"
+                title="Kopier koordinater"
+              >
+                {copiedCoordinates ? "✓ Kopieret!" : "📋 Kopier"}
+              </button>
+            </div>
+            <div className="text-xs text-blue-700 font-mono mb-2">
+              {formatWgs84Coordinates(fieldData.click_coordinates.lat, fieldData.click_coordinates.lng)}
+            </div>
+            <div className="flex space-x-2">
+              <a
+                href={generateSkraafotoUrl(fieldData.click_coordinates.lat, fieldData.click_coordinates.lng)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-xs bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-3 py-2 rounded transition-colors text-center font-medium min-h-[36px] flex items-center justify-center"
+              >
+                🛩️ Åbn i Skråfoto
+              </a>
+              <button
+                onClick={() => {
+                  const coords = fieldData.click_coordinates!;
+                  const googleMapsUrl = `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
+                  window.open(googleMapsUrl, '_blank');
+                }}
+                className="flex-1 text-xs bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-3 py-2 rounded transition-colors text-center font-medium min-h-[36px] flex items-center justify-center"
+              >
+                🗺️ Google Maps
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pesticide Information */}
       <div className="mb-4">
         <h3 className="text-base font-semibold text-gray-900 mb-2">Pesticidforbrug</h3>
@@ -153,34 +213,39 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
           </div>
         )}
 
-        {/* Dosage Information */}
-        <div className="space-y-2">
-          {/* Show available dosage units */}
-          {fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0 && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Total dosering (kg):</span>
-              <span className="font-medium">{formatNumber(fieldData.total_dosage_kg, 2)} kg</span>
-            </div>
-          )}
-          {fieldData.total_dosage_liters && fieldData.total_dosage_liters > 0 && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Total dosering (L):</span>
-              <span className="font-medium">{formatNumber(fieldData.total_dosage_liters, 1)} L</span>
-            </div>
-          )}
-          {fieldData.total_dosage_grams && fieldData.total_dosage_grams > 0 && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Total dosering (g):</span>
-              <span className="font-medium">{formatNumber(fieldData.total_dosage_grams, 0)} g</span>
-            </div>
-          )}
-          {fieldData.total_dosage_tablets && fieldData.total_dosage_tablets > 0 && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Total dosering:</span>
-              <span className="font-medium">{fieldData.total_dosage_tablets} tabletter</span>
-            </div>
-          )}
-        </div>
+        {/* Dosage Information - only show if there are any non-zero values */}
+        {((fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0) ||
+          (fieldData.total_dosage_liters && fieldData.total_dosage_liters > 0) ||
+          (fieldData.total_dosage_grams && fieldData.total_dosage_grams > 0) ||
+          (fieldData.total_dosage_tablets && fieldData.total_dosage_tablets > 0)) && (
+          <div className="space-y-2">
+            {/* Show available dosage units */}
+            {fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Total dosering (kg):</span>
+                <span className="font-medium">{formatNumber(fieldData.total_dosage_kg, 2)} kg</span>
+              </div>
+            )}
+            {fieldData.total_dosage_liters && fieldData.total_dosage_liters > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Total dosering (L):</span>
+                <span className="font-medium">{formatNumber(fieldData.total_dosage_liters, 1)} L</span>
+              </div>
+            )}
+            {fieldData.total_dosage_grams && fieldData.total_dosage_grams > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Total dosering (g):</span>
+                <span className="font-medium">{formatNumber(fieldData.total_dosage_grams, 0)} g</span>
+              </div>
+            )}
+            {fieldData.total_dosage_tablets && fieldData.total_dosage_tablets > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Total dosering:</span>
+                <span className="font-medium">{fieldData.total_dosage_tablets} tabletter</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Detailed Pesticide Products */}
         {(fieldData.pesticides_kg_detail || fieldData.pesticides_liters_detail || fieldData.pesticides_grams_detail || fieldData.pesticides_ml_detail || fieldData.pesticides_tons_detail) && (
@@ -240,13 +305,13 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
                 <span className="text-sm font-bold text-red-800">{fieldData.pfas_applications} apps</span>
               </div>
               <div className="space-y-1 text-xs text-red-700">
-                {fieldData.total_pfas_active_ingredient_kg && (
+                {fieldData.total_pfas_active_ingredient_kg && fieldData.total_pfas_active_ingredient_kg > 0 && (
                   <div className="flex justify-between">
                     <span>Aktivstof:</span>
                     <span className="font-medium">{formatNumber(fieldData.total_pfas_active_ingredient_kg, 3)} kg</span>
                   </div>
                 )}
-                {fieldData.total_pfas_belastning && (
+                {fieldData.total_pfas_belastning && fieldData.total_pfas_belastning > 0 && (
                   <div className="flex justify-between">
                     <span>Belastning:</span>
                     <span className="font-medium">{formatNumber(fieldData.total_pfas_belastning)}</span>
@@ -263,7 +328,7 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
                 <span className="text-sm font-medium text-blue-800">💧 Diquat</span>
                 <span className="text-sm font-bold text-blue-800">{fieldData.diquat_applications} apps</span>
               </div>
-              {fieldData.total_diquat_belastning && (
+              {fieldData.total_diquat_belastning && fieldData.total_diquat_belastning > 0 && (
                 <div className="flex justify-between text-xs text-blue-700">
                   <span>Belastning:</span>
                   <span className="font-medium">{formatNumber(fieldData.total_diquat_belastning)}</span>
@@ -280,13 +345,13 @@ export function FieldDetailsPanel({ fieldData, onClose }: FieldDetailsPanelProps
                 <span className="text-sm font-bold text-green-800">{fieldData.glyphosate_applications} apps</span>
               </div>
               <div className="space-y-1 text-xs text-green-700">
-                {fieldData.total_glyphosate_active_ingredient_kg && (
+                {fieldData.total_glyphosate_active_ingredient_kg && fieldData.total_glyphosate_active_ingredient_kg > 0 && (
                   <div className="flex justify-between">
                     <span>Aktivstof:</span>
                     <span className="font-medium">{formatNumber(fieldData.total_glyphosate_active_ingredient_kg, 3)} kg</span>
                   </div>
                 )}
-                {fieldData.total_glyphosate_belastning && (
+                {fieldData.total_glyphosate_belastning && fieldData.total_glyphosate_belastning > 0 && (
                   <div className="flex justify-between">
                     <span>Belastning:</span>
                     <span className="font-medium">{formatNumber(fieldData.total_glyphosate_belastning)}</span>
