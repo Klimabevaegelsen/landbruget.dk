@@ -104,27 +104,7 @@ export function LayerControlPanel({
       <div className="border-t pt-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Filtre</h3>
 
-        {/* Kommune Filter */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Kommune
-          </label>
-          <select
-            multiple
-            value={filterState.kommune}
-            onChange={(e) => {
-              const values = Array.from(e.target.selectedOptions, (option) => option.value);
-              onFilterChange({ kommune: values });
-            }}
-            className="w-full px-3 py-3 lg:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base lg:text-sm"
-          >
-            <option value="">Alle kommuner</option>
-            <option value="copenhagen">København</option>
-            <option value="aarhus">Aarhus</option>
-            <option value="aalborg">Aalborg</option>
-            {/* Add more municipalities */}
-          </select>
-        </div>
+
 
         {/* Organic Filter */}
         <div className="mb-4">
@@ -139,35 +119,7 @@ export function LayerControlPanel({
           </label>
         </div>
 
-        {/* Area Range Filter */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Markareal (hektar)
-          </label>
-          <div className="flex items-center space-x-2">
-            <input
-              type="number"
-              placeholder="Min"
-              value={filterState.areaRange[0]}
-              onChange={(e) => {
-                const newMin = parseInt(e.target.value) || 0;
-                onFilterChange({ areaRange: [newMin, filterState.areaRange[1]] });
-              }}
-              className="w-24 lg:w-20 px-3 lg:px-2 py-2 lg:py-1 border border-gray-300 rounded text-base lg:text-sm"
-            />
-            <span className="text-gray-500">-</span>
-            <input
-              type="number"
-              placeholder="Max"
-              value={filterState.areaRange[1]}
-              onChange={(e) => {
-                const newMax = parseInt(e.target.value) || 1000;
-                onFilterChange({ areaRange: [filterState.areaRange[0], newMax] });
-              }}
-              className="w-24 lg:w-20 px-3 lg:px-2 py-2 lg:py-1 border border-gray-300 rounded text-base lg:text-sm"
-            />
-          </div>
-        </div>
+
 
         {/* Visualization Mode */}
         <div className="mb-4">
@@ -225,126 +177,14 @@ export function LayerControlPanel({
           </p>
         </div>
 
-        {/* Chemical Filter */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Kemisk filter
-          </label>
-          <select
-            value={filterState.chemicalFilter}
-            onChange={(e) => onFilterChange({ chemicalFilter: e.target.value as FilterState['chemicalFilter'] })}
-            className="w-full px-3 py-3 lg:py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base lg:text-sm"
-          >
-            <option value="all">Alle pesticider</option>
-            <option value="pfas">Kun PFAS</option>
-            <option value="diquat">Kun Diquat</option>
-            <option value="glyphosate">Kun Glyphosate</option>
-            <option value="none">Ingen pesticider</option>
-          </select>
-        </div>
 
-        {/* Pesticide Threshold */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Min. pesticidbelastning
-          </label>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={filterState.pesticideThreshold}
-            onChange={(e) => onFilterChange({ pesticideThreshold: parseInt(e.target.value) })}
-            className="w-full h-3 lg:h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer touch-manipulation"
-            style={{ minHeight: '44px' }}
-          />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>0</span>
-            <span className="font-medium">{filterState.pesticideThreshold}</span>
-            <span>100+</span>
-          </div>
-        </div>
 
-        {/* PFAS Threshold */}
-        {(filterState.chemicalFilter === 'all' || filterState.chemicalFilter === 'pfas') && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Min. PFAS indhold (g)
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="50"
-              value={filterState.pfasThreshold}
-              onChange={(e) => onFilterChange({ pfasThreshold: parseInt(e.target.value) })}
-              className="w-full h-3 lg:h-2 bg-red-200 rounded-lg appearance-none cursor-pointer touch-manipulation"
-              style={{ minHeight: '44px' }}
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>0g</span>
-              <span>{filterState.pfasThreshold}g</span>
-              <span>50+g</span>
-            </div>
-          </div>
-        )}
 
-        {/* Diquat Threshold */}
-        {(filterState.chemicalFilter === 'all' || filterState.chemicalFilter === 'diquat') && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Min. Diquat indhold (g)
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={filterState.diquatThreshold}
-              onChange={(e) => onFilterChange({ diquatThreshold: parseInt(e.target.value) })}
-              className="w-full h-3 lg:h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer touch-manipulation"
-              style={{ minHeight: '44px' }}
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>0g</span>
-              <span>{filterState.diquatThreshold}g</span>
-              <span>100+g</span>
-            </div>
-          </div>
-        )}
-
-        {/* Glyphosate Threshold */}
-        {(filterState.chemicalFilter === 'all' || filterState.chemicalFilter === 'glyphosate') && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Min. Glyphosate indhold (g)
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="500"
-              value={filterState.glyphosateThreshold}
-              onChange={(e) => onFilterChange({ glyphosateThreshold: parseInt(e.target.value) })}
-              className="w-full h-3 lg:h-2 bg-green-200 rounded-lg appearance-none cursor-pointer touch-manipulation"
-              style={{ minHeight: '44px' }}
-            />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>0g</span>
-              <span>{filterState.glyphosateThreshold}g</span>
-              <span>500+g</span>
-            </div>
-          </div>
-        )}
 
         {/* Reset Filters */}
         <button
           onClick={() => onFilterChange({
-            kommune: [],
-            cropTypes: [],
             organicOnly: false,
-            areaRange: [0, 1000],
-            pesticideThreshold: 0,
-            pfasThreshold: 0,
-            diquatThreshold: 0,
-            glyphosateThreshold: 0,
-            chemicalFilter: 'all',
             visualizationMode: 'total_pesticide_belastning',
             colorUnit: 'belastning',
             useDecileColoring: true,

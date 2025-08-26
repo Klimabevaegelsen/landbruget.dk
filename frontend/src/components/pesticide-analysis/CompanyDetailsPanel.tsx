@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Building2, MapPin, Calendar, Beaker, TrendingUp, Eye, Loader2 } from 'lucide-react';
+import { Building2, MapPin, Calendar, Beaker, TrendingUp, Loader2 } from 'lucide-react';
 import { CompanySummary, CompanyDetailsResponse, PesticideProduct } from './types';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,10 +12,9 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 interface CompanyDetailsPanelProps {
   company: CompanySummary;
-  onViewFields: () => void;
 }
 
-export default function CompanyDetailsPanel({ company, onViewFields }: CompanyDetailsPanelProps) {
+export default function CompanyDetailsPanel({ company }: CompanyDetailsPanelProps) {
   const [details, setDetails] = useState<CompanyDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -231,17 +230,6 @@ export default function CompanyDetailsPanel({ company, onViewFields }: CompanyDe
 
       {/* Actions */}
       <div className="space-y-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onViewFields}
-          className="w-full flex items-center gap-2"
-          disabled
-        >
-          <Eye className="h-4 w-4" />
-          Se Marker (kommer snart)
-        </Button>
-
         {details && details.yearly_breakdown.length > 0 && (
           <div className="text-xs text-gray-500 text-center">
             Detaljeret data tilgængelig for {details.yearly_breakdown.length} år
