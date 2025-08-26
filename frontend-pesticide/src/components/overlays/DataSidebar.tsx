@@ -77,59 +77,65 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
             </div>
           </div>
 
-          {/* PFAS */}
-          <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-red-400">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-red-300 font-medium text-sm">PFAS Active Ingredients</h4>
-              <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded-full font-medium border border-red-700">
-                Persistent
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <div className="text-lg font-bold text-red-200">{formatNumber(pfasGrams, 2)}</div>
-                <div className="text-xs text-red-400">grams total</div>
+          {/* PFAS - only show if there are PFAS values > 0 */}
+          {pfasGrams > 0 && (
+            <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-red-400">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-red-300 font-medium text-sm">PFAS Active Ingredients</h4>
+                <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded-full font-medium border border-red-700">
+                  Persistent
+                </span>
               </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-red-200">{formatNumber(pfasIntensity, 2)}</div>
-                <div className="text-xs text-red-400">grams per hectare</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-red-200">{formatNumber(pfasGrams, 2)}</div>
+                  <div className="text-xs text-red-400">grams total</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-red-200">{formatNumber(pfasIntensity, 2)}</div>
+                  <div className="text-xs text-red-400">grams per hectare</div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Glyphosate */}
-          <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-green-400">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-green-300 font-medium text-sm">Glyphosate Active Ingredients</h4>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <div className="text-lg font-bold text-green-200">{formatNumber(glyphosateGrams, 2)}</div>
-                <div className="text-xs text-green-400">grams total</div>
+          {/* Glyphosate - only show if there are glyphosate values > 0 */}
+          {glyphosateGrams > 0 && (
+            <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-green-400">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-green-300 font-medium text-sm">Glyphosate Active Ingredients</h4>
               </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-green-200">{formatNumber(glyphosateIntensity, 2)}</div>
-                <div className="text-xs text-green-400">grams per hectare</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-green-200">{formatNumber(glyphosateGrams, 2)}</div>
+                  <div className="text-xs text-green-400">grams total</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-green-200">{formatNumber(glyphosateIntensity, 2)}</div>
+                  <div className="text-xs text-green-400">grams per hectare</div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Diquat */}
-          <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-amber-400">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-amber-300 font-medium text-sm">Diquat Active Ingredients</h4>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <div className="text-lg font-bold text-amber-200">{formatNumber(diquatGrams, 2)}</div>
-                <div className="text-xs text-amber-400">grams total</div>
+          {/* Diquat - only show if there are diquat values > 0 */}
+          {diquatGrams > 0 && (
+            <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-amber-400">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-amber-300 font-medium text-sm">Diquat Active Ingredients</h4>
               </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-amber-200">{formatNumber(diquatIntensity, 2)}</div>
-                <div className="text-xs text-amber-400">grams per hectare</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center">
+                  <div className="text-lg font-bold text-amber-200">{formatNumber(diquatGrams, 2)}</div>
+                  <div className="text-xs text-amber-400">grams total</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-amber-200">{formatNumber(diquatIntensity, 2)}</div>
+                  <div className="text-xs text-amber-400">grams per hectare</div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Activity Summary */}
           <div className="bg-slate-800 rounded-lg p-3 border border-slate-600">
