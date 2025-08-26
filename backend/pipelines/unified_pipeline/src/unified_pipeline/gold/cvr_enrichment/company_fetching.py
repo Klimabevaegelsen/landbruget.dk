@@ -1358,21 +1358,21 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.unit_number'
                     )::BIGINT as unit_number,
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.person_type'
-                    )::VARCHAR as person_type,
+                    ) as person_type,
                     -- Get current name (first name marked as current, or first name if none marked)
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.names[0].name'
-                    )::VARCHAR as current_name,
+                    ) as current_name,
                     -- Get current address (first address marked as current,
                     -- or first address if none marked)
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.addresses[0].city'
-                    )::VARCHAR as current_city,
+                    ) as current_city,
                     TRY_CAST(
                         json_extract(
                             t.json_data,
@@ -1380,27 +1380,27 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                             '].person.addresses[0].postal_code'
                         ) AS INTEGER
                     ) as current_postal_code,
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].person.addresses[0].municipality_name'
-                    )::VARCHAR as current_municipality,
+                    ) as current_municipality,
                     -- Get role from organization
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].vaerdi'
-                    )::VARCHAR as role,
-                    json_extract(
+                    ) as role,
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigFra'
-                    )::VARCHAR as role_start_date,
-                    json_extract(
+                    ) as role_start_date,
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigTil'
-                    )::VARCHAR as role_end_date,
+                    ) as role_end_date,
                     json_extract(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].is_current'
@@ -1429,39 +1429,39 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 role,
                 -- Create a formatted role for display (simple title case for common roles)
                 CASE
-                    WHEN UPPER(TRIM(role, '"')) = 'DIREKTØR' THEN 'Direktør'
-                    WHEN UPPER(TRIM(role, '"')) = 'ADM. DIR.' THEN 'Adm. Dir.'
-                    WHEN UPPER(TRIM(role, '"')) = 'FORMAND' THEN 'Formand'
-                    WHEN UPPER(TRIM(role, '"')) = 'NÆSTFORMAND' THEN 'Næstformand'
-                    WHEN UPPER(TRIM(role, '"')) = 'BESTYRELSESMEDLEM' THEN 'Bestyrelsesmedlem'
-                    WHEN UPPER(TRIM(role, '"')) = 'LEDER' THEN 'Leder'
-                    WHEN UPPER(TRIM(role, '"')) = 'INTERESSENTER' THEN 'Interessenter'
-                    WHEN UPPER(TRIM(role, '"')) = 'REEL EJER' THEN 'Reel Ejer'
-                    WHEN UPPER(TRIM(role, '"')) = 'REVISION' THEN 'Revision'
-                    WHEN UPPER(TRIM(role, '"')) = 'STIFTERE' THEN 'Stiftere'
-                    WHEN UPPER(TRIM(role, '"')) = 'FORENINGSREPRÆSENTANT'
+                    WHEN UPPER(role) = 'DIREKTØR' THEN 'Direktør'
+                    WHEN UPPER(role) = 'ADM. DIR.' THEN 'Adm. Dir.'
+                    WHEN UPPER(role) = 'FORMAND' THEN 'Formand'
+                    WHEN UPPER(role) = 'NÆSTFORMAND' THEN 'Næstformand'
+                    WHEN UPPER(role) = 'BESTYRELSESMEDLEM' THEN 'Bestyrelsesmedlem'
+                    WHEN UPPER(role) = 'LEDER' THEN 'Leder'
+                    WHEN UPPER(role) = 'INTERESSENTER' THEN 'Interessenter'
+                    WHEN UPPER(role) = 'REEL EJER' THEN 'Reel Ejer'
+                    WHEN UPPER(role) = 'REVISION' THEN 'Revision'
+                    WHEN UPPER(role) = 'STIFTERE' THEN 'Stiftere'
+                    WHEN UPPER(role) = 'FORENINGSREPRÆSENTANT'
                         THEN 'Foreningsrepræsentant'
-                    WHEN UPPER(TRIM(role, '"')) = 'LIKVIDATOR' THEN 'Likvidator'
-                    ELSE TRIM(role, '"')  -- Keep original for unknown/mixed content roles
+                    WHEN UPPER(role) = 'LIKVIDATOR' THEN 'Likvidator'
+                    ELSE role  -- Keep original for unknown/mixed content roles
                 END as role_formatted,
                 role_start_date,
                 role_end_date,
                 COALESCE(is_current_role, true) as is_current_role,
                 -- Classify as leadership based on role (case-insensitive matching)
                 CASE
-                    WHEN UPPER(TRIM(role, '"')) IN (
+                    WHEN UPPER(role) IN (
                         'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND',
                         'BESTYRELSESMEDLEM', 'LEDER', 'INTERESSENTER'
                     ) THEN true
-                    WHEN UPPER(TRIM(role, '"')) IN (
+                    WHEN UPPER(role) IN (
                         'REEL EJER', 'REVISION', 'STIFTERE', 'FORENINGSREPRÆSENTANT', 'LIKVIDATOR'
                     ) THEN false
                     ELSE NULL
                 END as is_leadership,
                 -- Classify as owner based on role (case-insensitive matching)
                 CASE
-                    WHEN UPPER(TRIM(role, '"')) IN ('REEL EJER', 'INTERESSENTER') THEN true
-                    WHEN UPPER(TRIM(role, '"')) IN (
+                    WHEN UPPER(role) IN ('REEL EJER', 'INTERESSENTER') THEN true
+                    WHEN UPPER(role) IN (
                         'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM',
                         'REVISION', 'STIFTERE', 'FORENINGSREPRÆSENTANT', 'LIKVIDATOR', 'LEDER'
                     ) THEN false
