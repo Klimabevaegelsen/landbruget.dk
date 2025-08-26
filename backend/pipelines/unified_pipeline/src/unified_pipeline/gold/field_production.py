@@ -55,9 +55,7 @@ class FieldProductionGoldConfig(BaseJobConfig):
     # OPTIMIZED: Conservative memory configuration for GitHub Actions (16GB RAM, 4 CPU, 14GB SSD)
     # Leave 4GB buffer for OS and other processes (25% safety margin)
     memory_limit: str = "8GB"  # REDUCED: Use 50% of available 16GB for safer operation
-    max_temp_directory_size: str = (
-        "12GB"  # INCREASED: Use 86% of available 14GB SSD for complex spatial operations
-    )
+    max_temp_directory_size: str = "10GB"  # REDUCED: Use 71% of 14GB SSD, leaving buffer for OS
     thread_count: int = 2  # REDUCED: Use 50% of available cores to reduce memory pressure
 
     # CRITICAL: Aggressive memory management for resource-constrained environment
@@ -167,7 +165,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info("✅ Conservative GitHub Actions optimizations applied:")
             self.log.info(f"   Memory: {self.config.memory_limit} (50% of 16GB, 8GB OS buffer)")
             self.log.info(
-                f"   Temp storage: {self.config.max_temp_directory_size} (43% of 14GB SSD)"
+                f"   Temp storage: {self.config.max_temp_directory_size} (71% of 14GB SSD)"
             )
             self.log.info(f"   Threads: {self.config.thread_count} (50% of 4 cores)")
             self.log.info(f"   Checkpoint threshold: {checkpoint_threshold} (aggressive cleanup)")
@@ -581,7 +579,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self.log.info("📊 Resource-constrained optimizations applied:")
         self.log.info(f"   • Memory: {self.config.memory_limit} (50% of 16GB, 8GB OS buffer)")
         self.log.info(f"   • CPU: {self.config.thread_count} threads (50% of 4 cores)")
-        self.log.info(f"   • Temp storage: {self.config.max_temp_directory_size} (43% of 14GB SSD)")
+        self.log.info(f"   • Temp storage: {self.config.max_temp_directory_size} (71% of 14GB SSD)")
         self.log.info(
             f"   • Batch processing: {self.config.years_per_batch} year at a time (memory control)"
         )
@@ -680,7 +678,17 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
                 except Exception as year_e:
                     self.log.error(f"Error processing year {year}: {year_e}")
-                    # Continue with next year rather than failing entire pipeline
+                    # Check if this is a memory-related error that should fail the pipeline
+                    error_str = str(year_e).lower()
+                    if any(
+                        keyword in error_str
+                        for keyword in ["out of memory", "memory", "temp_directory_size"]
+                    ):
+                        self.log.error(f"Memory error detected for year {year} - failing pipeline")
+                        raise RuntimeError(
+                            f"Pipeline failed due to memory error in year {year}: {year_e}"
+                        ) from year_e
+                    # Continue with next year for non-memory errors
                     continue
 
                 # AGGRESSIVE: Clean up after each year
@@ -700,7 +708,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             if total_fields_processed == 0:
                 self.log.error("No fields were processed across all years")
-                return
+                raise RuntimeError("Pipeline failed: No fields were processed across all years")
 
             self.log.info(
                 f"Processed {total_fields_processed:,} fields across {len(available_years)} years"
@@ -1034,6 +1042,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     self.conn.execute(f"DROP TABLE IF EXISTS {table}")
                 except Exception:
                     pass
+
+            # Check if this is a memory-related error that should be re-raised
+            error_str = str(e).lower()
+            if any(
+                keyword in error_str
+                for keyword in ["out of memory", "memory", "temp_directory_size"]
+            ):
+                self.log.error(f"Memory error in year {year} processing - re-raising")
+                raise  # Re-raise the original memory error
+
             return 0
 
     def _perform_batched_spatial_join(self, year: int):
