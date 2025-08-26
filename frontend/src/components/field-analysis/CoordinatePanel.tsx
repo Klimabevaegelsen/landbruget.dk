@@ -14,7 +14,7 @@ export function CoordinatePanel({ coordinates, onClose }: CoordinatePanelProps) 
   // Handle coordinate copying
   const handleCopyCoordinates = async () => {
     const success = await copyCoordinatesToClipboard(coordinates.lat, coordinates.lng);
-    
+
     if (success) {
       setCopiedCoordinates(true);
       setTimeout(() => setCopiedCoordinates(false), 2000);
