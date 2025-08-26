@@ -47,7 +47,7 @@ type CompanyInfo = {
 };
 // --- Helper: Get Company Details (Lookup by ID - UUID) ---
 async function getCompanyDetails(supabase: SupabaseClient, companyId: string): Promise<CompanyInfo | null> {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(companyId)) {
     console.warn(`Received invalid format for company ID: ${companyId}`);
     return null;
@@ -1134,7 +1134,7 @@ serve(async (req)=>{
     });
     companyInfo = await getCompanyDetails(supabase, companyIdParam);
     if (!companyInfo) {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const errorMsg = uuidRegex.test(companyIdParam) ? `Company with ID ${companyIdParam} not found` : `Invalid Company ID format provided`;
       return new Response(JSON.stringify({
         error: errorMsg
