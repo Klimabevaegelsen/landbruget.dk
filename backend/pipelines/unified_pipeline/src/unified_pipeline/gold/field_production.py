@@ -56,7 +56,7 @@ class FieldProductionGoldConfig(BaseJobConfig):
     # Leave 4GB buffer for OS and other processes (25% safety margin)
     memory_limit: str = "8GB"  # REDUCED: Use 50% of available 16GB for safer operation
     max_temp_directory_size: str = (
-        "10GB"  # INCREASED: Use 71% of available 14GB SSD for complex spatial operations
+        "12GB"  # INCREASED: Use 86% of available 14GB SSD for complex spatial operations
     )
     thread_count: int = 2  # REDUCED: Use 50% of available cores to reduce memory pressure
 
@@ -866,10 +866,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Check memory after spatial join and cleanup
             self._check_emergency_memory_threshold()
 
-            # OPTIMIZED: Create production estimates using single-phase joins
+            # MEMORY-OPTIMIZED: Create production estimates using step-by-step approach
             yield_start = time.time()
-            self.log.info("  📊 Creating production estimates...")
+            self.log.info("  📊 Creating production estimates (memory-optimized approach)...")
 
+            # Step 1: Start with base fields data
             self.conn.execute("""
                 CREATE OR REPLACE TABLE year_production_estimates AS
                 SELECT
@@ -886,61 +887,109 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.landsdel_code,
                     f.landsdel_name,
                     f.dst_regions,
-                    -- YIELD DATA (optimized single lookup per field)
-                    COALESCE(
-                        hst77.harvest_value,
-                        gartn1.horticulture_value,
-                        fro.seed_value,
-                        halm1.straw_value,
-                        hst77_national.harvest_value
-                    ) as yield_estimate_hkg_ha,
-                    CASE
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
-                                     fro.seed_value, halm1.straw_value,
-                                     hst77_national.harvest_value) IS NOT NULL
-                        THEN 'dst_region_match'
-                        ELSE 'no_yield_data'
-                    END as yield_estimation_method,
-                    -- PRODUCTION ESTIMATE
-                    CASE
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
-                                     fro.seed_value, halm1.straw_value,
-                                     hst77_national.harvest_value) IS NOT NULL
-                        THEN f.area_ha * COALESCE(
-                            hst77.harvest_value, gartn1.horticulture_value,
-                            fro.seed_value, halm1.straw_value, hst77_national.harvest_value
-                        )
-                        ELSE NULL
-                    END as production_estimate_hkg,
-                    CASE
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value,
-                                     fro.seed_value, halm1.straw_value,
-                                     hst77_national.harvest_value) IS NOT NULL
-                        THEN 'hkg'
-                        ELSE NULL
-                    END as production_unit,
+                    -- Initialize yield columns
+                    NULL::DOUBLE as yield_estimate_hkg_ha,
+                    'no_yield_data' as yield_estimation_method,
+                    NULL::DOUBLE as production_estimate_hkg,
+                    NULL::VARCHAR as production_unit,
                     -- METADATA
                     current_timestamp as created_at,
                     -- FIELD UUID SUPPORT
                     f.field_uuid,
                     f.primary_field_id
                 FROM year_fields_with_zones f
-                LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions
-                    AND hst77.time_period = CAST(f.year AS VARCHAR)
-                    AND hst77.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions
-                    AND gartn1.time_period = CAST(f.year AS VARCHAR)
-                    AND gartn1.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR)
-                    AND fro.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions
-                    AND halm1.time_period = CAST(f.year AS VARCHAR)
-                    AND halm1.unit_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_hst77 hst77_national
-                    ON hst77_national.area_name ILIKE '%Hele landet%'
-                    AND hst77_national.time_period = CAST(f.year AS VARCHAR)
-                    AND hst77_national.measure_name ILIKE '%udbytte%'
             """)
+
+            # Step 2: Update with HST77 (harvest) data - most common
+            self.log.info("  🌾 Adding HST77 harvest yield data...")
+            self.conn.execute("""
+                UPDATE year_production_estimates
+                SET
+                    yield_estimate_hkg_ha = hst77.harvest_value,
+                    yield_estimation_method = 'dst_hst77_regional',
+                    production_estimate_hkg = area_ha * hst77.harvest_value,
+                    production_unit = 'hkg'
+                FROM dst_dst_hst77 hst77
+                WHERE hst77.area_name = year_production_estimates.dst_regions
+                    AND hst77.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                    AND hst77.measure_name ILIKE '%udbytte%'
+                    AND hst77.harvest_value IS NOT NULL
+            """)
+            self.conn.execute("CHECKPOINT")  # Free temp space after each step
+
+            # Step 3: Fill remaining with GARTN1 (horticulture) data
+            self.log.info("  🥕 Adding GARTN1 horticulture yield data...")
+            self.conn.execute("""
+                UPDATE year_production_estimates
+                SET
+                    yield_estimate_hkg_ha = gartn1.horticulture_value,
+                    yield_estimation_method = 'dst_gartn1_regional',
+                    production_estimate_hkg = area_ha * gartn1.horticulture_value,
+                    production_unit = 'hkg'
+                FROM dst_dst_gartn1 gartn1
+                WHERE gartn1.area_name = year_production_estimates.dst_regions
+                    AND gartn1.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                    AND gartn1.measure_name ILIKE '%udbytte%'
+                    AND gartn1.horticulture_value IS NOT NULL
+                    AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+            """)
+            self.conn.execute("CHECKPOINT")  # Free temp space after each step
+
+            # Step 4: Fill remaining with FRO (seed) data
+            self.log.info("  🌱 Adding FRO seed yield data...")
+            self.conn.execute("""
+                UPDATE year_production_estimates
+                SET
+                    yield_estimate_hkg_ha = fro.seed_value,
+                    yield_estimation_method = 'dst_fro_national',
+                    production_estimate_hkg = area_ha * fro.seed_value,
+                    production_unit = 'hkg'
+                FROM dst_dst_fro fro
+                WHERE fro.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                    AND fro.measure_name ILIKE '%udbytte%'
+                    AND fro.seed_value IS NOT NULL
+                    AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+            """)
+            self.conn.execute("CHECKPOINT")  # Free temp space after each step
+
+            # Step 5: Fill remaining with HALM1 (straw) data
+            self.log.info("  🌾 Adding HALM1 straw yield data...")
+            self.conn.execute("""
+                UPDATE year_production_estimates
+                SET
+                    yield_estimate_hkg_ha = halm1.straw_value,
+                    yield_estimation_method = 'dst_halm1_regional',
+                    production_estimate_hkg = area_ha * halm1.straw_value,
+                    production_unit = 'hkg'
+                FROM dst_dst_halm1 halm1
+                WHERE halm1.area_name = year_production_estimates.dst_regions
+                    AND halm1.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                    AND halm1.unit_name ILIKE '%udbytte%'
+                    AND halm1.straw_value IS NOT NULL
+                    AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+            """)
+            self.conn.execute("CHECKPOINT")  # Free temp space after each step
+
+            # Step 6: Final fallback with national HST77 data
+            self.log.info("  🇩🇰 Adding national HST77 fallback data...")
+            self.conn.execute("""
+                UPDATE year_production_estimates
+                SET
+                    yield_estimate_hkg_ha = hst77_national.harvest_value,
+                    yield_estimation_method = 'dst_hst77_national',
+                    production_estimate_hkg = area_ha * hst77_national.harvest_value,
+                    production_unit = 'hkg'
+                FROM dst_dst_hst77 hst77_national
+                WHERE hst77_national.area_name ILIKE '%Hele landet%'
+                    AND hst77_national.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                    AND hst77_national.measure_name ILIKE '%udbytte%'
+                    AND hst77_national.harvest_value IS NOT NULL
+                    AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+            """)
+            self.conn.execute("CHECKPOINT")  # Free temp space after each step
+
+            # Final checkpoint to ensure all data is persisted
+            self.conn.execute("CHECKPOINT")
 
             self._log_performance_metrics(f"yield_estimation_year_{year}", yield_start)
 

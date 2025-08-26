@@ -434,7 +434,7 @@ pageBuilder:
               isFilterable: true
             - key: "pesticide"
               label: "Pesticid"
-              column: "pesticide_name"
+              column: "product_name"
               isFilterable: true
             - key: "risk_details"
               label: "Specifik Risiko Detalje"
@@ -460,7 +460,7 @@ pageBuilder:
         orderBy:
           - column: "risk_category"
             direction: "asc"
-          - column: "pesticide_name"
+          - column: "product_name"
             direction: "asc"
     allowFiltering: true
 
