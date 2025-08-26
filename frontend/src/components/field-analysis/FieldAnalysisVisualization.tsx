@@ -107,7 +107,15 @@ export default function FieldAnalysisVisualization() {
   // Handle map clicks (for coordinates only)
   const handleMapClick = useCallback((coordinates: { lat: number; lng: number }) => {
     setClickedCoordinates(coordinates);
-  }, []);
+
+    // If a field is currently selected, update its click coordinates
+    if (selectedField) {
+      setSelectedField(prev => prev ? {
+        ...prev,
+        click_coordinates: coordinates
+      } : null);
+    }
+  }, [selectedField]);
 
   // Handle escape key and prevent body scroll
   useEffect(() => {
