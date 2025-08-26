@@ -634,18 +634,28 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     "No DST yield data available - production estimates will be limited"
                 )
 
-            # Create final results table
+            # Create final results table with explicit data types to prevent DECIMAL(2,1) inference
             self.conn.execute("DROP TABLE IF EXISTS final_production_estimates")
             self.conn.execute("""
-                CREATE TABLE final_production_estimates AS
-                SELECT * FROM (VALUES
-                    ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy',
-                     0.0, 'dummy', 0.0, 'dummy', current_timestamp, 'dummy', 'dummy')
-                ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming,
-                       landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha,
-                       yield_estimation_method, production_estimate_hkg, production_unit,
-                       created_at, field_uuid, primary_field_id)
-                WHERE false
+                CREATE TABLE final_production_estimates (
+                    field_id VARCHAR,
+                    block_id VARCHAR,
+                    cvr_number VARCHAR,
+                    year INTEGER,
+                    area_ha DOUBLE,  -- Explicitly DOUBLE to prevent DECIMAL(2,1) constraint
+                    crop_type VARCHAR,
+                    organic_farming BOOLEAN,
+                    landsdel_code VARCHAR,
+                    landsdel_name VARCHAR,
+                    dst_regions VARCHAR,
+                    yield_estimate_hkg_ha DOUBLE,
+                    yield_estimation_method VARCHAR,
+                    production_estimate_hkg DOUBLE,
+                    production_unit VARCHAR,
+                    created_at TIMESTAMP WITH TIME ZONE,
+                    field_uuid VARCHAR,
+                    primary_field_id VARCHAR
+                )
             """)
 
             self._log_performance_metrics("phase_1_setup", phase_start)
@@ -843,14 +853,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         f.field_uuid,
                         f.primary_field_id
                     FROM current_year_fields f
-                    LEFT JOIN (
-                        SELECT DISTINCT
-                            landsdel_code,
-                            landsdel_name,
-                            dst_regions,
-                            geometry
-                        FROM dst_zones
-                    ) z ON ST_Intersects(f.geometry, z.geometry)
+                    LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
                 """)
 
             # Verify SPATIAL_JOIN operator usage
@@ -1109,7 +1112,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 break
 
             # Perform spatial join for this batch - SPATIAL_JOIN operator compliant
-            # Use INNER JOIN first to get matches, then LEFT JOIN to preserve all records
+            # Clean table-to-table join structure as per PR #545 requirements
             self.conn.execute("""
                 INSERT INTO year_fields_with_zones
                 SELECT
@@ -1126,14 +1129,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.field_uuid,
                     f.primary_field_id
                 FROM current_batch f
-                LEFT JOIN (
-                    SELECT DISTINCT
-                        landsdel_code,
-                        landsdel_name,
-                        dst_regions,
-                        geometry
-                    FROM dst_zones
-                ) z ON ST_Intersects(f.geometry, z.geometry)
+                LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
             """)
 
             # Clean up batch table immediately
