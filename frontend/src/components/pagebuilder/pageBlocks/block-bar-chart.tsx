@@ -22,6 +22,8 @@ import CustomTooltip from "@/components/chart/custom-tooltip";
 import { useEffect, useState } from "react";
 import CustomLegend from "@/components/chart/custom-legend";
 import { VizColors } from "@/lib/utils";
+import { shouldShowPlaceholder } from "./chart-utils";
+import { PlaceholderChart } from "./placeholder-chart";
 
 export const xAxisDefaultProps: XAxisProps = {
   tickLine: true,
@@ -74,6 +76,7 @@ export function BlockBarChart({
 }: {
   chart: BarChartType | StackedBarChart | HorizontalStackedBarChart;
 }) {
+  // Always call hooks first
   const transformedData = transformDataForRecharts(chart.data, chart._type);
   const [yWidth, setYWidth] = useState(60);
   const isHorizontal = chart._type === "horizontalStackedBarChart";
@@ -108,6 +111,12 @@ export function BlockBarChart({
     // Add some padding to the width
     setYWidth(longestTick * 8 + 20);
   }, [transformedData, isHorizontal]);
+
+  // Check if this chart should show a placeholder
+  const placeholderDataType = shouldShowPlaceholder(chart._key);
+  if (placeholderDataType) {
+    return <PlaceholderChart title={chart.title} dataType={placeholderDataType} />;
+  }
 
   if (!transformedData.length) {
     return <div>No data available for chart.</div>;

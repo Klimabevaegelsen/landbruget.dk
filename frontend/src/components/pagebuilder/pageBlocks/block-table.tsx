@@ -8,8 +8,15 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
 } from "@heroicons/react/24/outline";
+import { shouldShowPlaceholder } from "./chart-utils";
+import { PlaceholderChart } from "./placeholder-chart";
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
+  // Check if this table should show a placeholder
+  const placeholderDataType = shouldShowPlaceholder(grid._key);
+  if (placeholderDataType) {
+    return <PlaceholderChart title={grid.title} dataType={placeholderDataType} />;
+  }
   const columns: ColumnDef<Record<string, string | number | boolean>>[] =
     grid.columns.map((col) => ({
       accessorKey: col.key,

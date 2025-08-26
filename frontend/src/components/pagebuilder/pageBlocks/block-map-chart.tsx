@@ -11,6 +11,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { MapChart, GeoJSONLayer } from "@/services/supabase/types";
 import { VizColors } from "@/lib/utils";
 import { MapErrorBoundary } from "./MapErrorBoundary";
+import { shouldShowPlaceholder } from "./chart-utils";
+import { PlaceholderChart } from "./placeholder-chart";
 
 const getLayerStyle = (style: string | undefined, index: number) => {
   // if style contains marker, return the default marker style
@@ -244,6 +246,12 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
 }
 
 export function BlockMapChart({ chart }: { chart: MapChart }) {
+  // Check if this chart should show a placeholder
+  const placeholderDataType = shouldShowPlaceholder(chart._key);
+  if (placeholderDataType) {
+    return <PlaceholderChart title={chart.title} dataType={placeholderDataType} />;
+  }
+
   return (
     <MapErrorBoundary>
       <BlockMapChartInner chart={chart} />
