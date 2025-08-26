@@ -51,6 +51,13 @@ export interface FieldAnalysisData {
   // Additional fields
   unique_pesticide_products?: number;
   is_partial_coverage?: boolean;
+
+  // Detailed pesticide product information
+  pesticides_kg_detail?: string;
+  pesticides_liters_detail?: string;
+  pesticides_grams_detail?: string;
+  pesticides_ml_detail?: string;
+  pesticides_tons_detail?: string;
 }
 
 export interface LayerVisibility {
@@ -73,15 +80,7 @@ export type VisualizationMode =
 export type ColorUnit = 'total' | 'belastning' | 'per_hectare' | 'applications';
 
 export interface FilterState {
-  kommune: string[];
-  cropTypes: string[];
   organicOnly: boolean;
-  areaRange: [number, number];
-  pesticideThreshold: number;
-  pfasThreshold: number;
-  diquatThreshold: number;
-  glyphosateThreshold: number;
-  chemicalFilter: 'all' | 'pfas' | 'diquat' | 'glyphosate' | 'none';
   visualizationMode: VisualizationMode;
   colorUnit: ColorUnit;
   useDecileColoring: boolean;

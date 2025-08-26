@@ -28,15 +28,7 @@ export default function FieldAnalysisVisualization() {
   });
 
   const [filterState, setFilterState] = useState<FilterState>({
-    kommune: [],
-    cropTypes: [],
     organicOnly: false,
-    areaRange: [0, 1000],
-    pesticideThreshold: 0,
-    pfasThreshold: 0,
-    diquatThreshold: 0,
-    glyphosateThreshold: 0,
-    chemicalFilter: 'all',
     visualizationMode: 'total_pesticide_belastning',
     colorUnit: 'belastning',
     useDecileColoring: true,
@@ -234,7 +226,7 @@ export default function FieldAnalysisVisualization() {
         <>
           <div className={`
             fixed lg:relative inset-0 lg:inset-auto
-            w-full lg:w-96 h-full lg:h-auto
+            w-full lg:w-80 h-full lg:h-auto
             bg-white shadow-lg z-30 lg:z-10
             overflow-y-auto
             lg:shadow-lg

@@ -235,10 +235,6 @@ export default function PesticideAnalysisVisualization() {
               {selectedCompany ? (
                 <CompanyDetailsPanel
                   company={selectedCompany}
-                  onViewFields={() => {
-                    // TODO: Implement field view integration
-                    console.log('View fields for company:', selectedCompany.cvr_number);
-                  }}
                 />
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
