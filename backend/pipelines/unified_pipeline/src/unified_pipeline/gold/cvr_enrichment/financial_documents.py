@@ -825,16 +825,16 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             )::VARCHAR as company_uuid,
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                             'Annual Report' as publication_type,
-                            json_extract(
+                            json_extract_string(
                                 json_data, '$.latest_reporting_date'
-                            )::VARCHAR as publication_time,
+                            ) as publication_time,
                             NULL as case_number,
-                            json_extract(
+                            json_extract_string(
                                 json_data, '$.latest_reporting_date'
-                            )::VARCHAR as reporting_period_start,
-                            json_extract(
+                            ) as reporting_period_start,
+                            json_extract_string(
                                 json_data, '$.latest_reporting_date'
-                            )::VARCHAR as reporting_period_end,
+                            ) as reporting_period_end,
                             json_extract(
                                 json_data, '$.document_count'
                             )::INTEGER as document_count,

@@ -618,6 +618,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             tables_to_save.extend(
                 [
                     f"{table_name}_leadership",
+                    f"{table_name}_ownership",
                     f"{table_name}_financial",
                     f"{table_name}_addresses",
                     f"{table_name}_industries",
@@ -1141,36 +1142,36 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             SELECT
                 company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                json_extract(json_data, '$.company_name')::VARCHAR as company_name,
-                json_extract(json_data, '$.company_type_description')::VARCHAR
+                json_extract_string(json_data, '$.company_name') as company_name,
+                json_extract_string(json_data, '$.company_type_description')
                     as company_type_description,
-                json_extract(json_data, '$.status')::VARCHAR as status,
-                json_extract(json_data, '$.founded_date')::VARCHAR as founded_date,
-                json_extract(json_data, '$.dissolution_date')::VARCHAR as dissolution_date,
+                json_extract_string(json_data, '$.status') as status,
+                json_extract_string(json_data, '$.founded_date') as founded_date,
+                json_extract_string(json_data, '$.dissolution_date') as dissolution_date,
                 json_extract(json_data, '$.advertisement_protection')::BOOLEAN
                     as advertisement_protection,
                 json_extract(json_data, '$.primary_address_geometry.latitude')::DOUBLE
                     as address_latitude,
                 json_extract(json_data, '$.primary_address_geometry.longitude')::DOUBLE
                     as address_longitude,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_system')::VARCHAR
+                json_extract_string(json_data, '$.primary_address_geometry.coordinate_system')
                     as address_coordinate_system,
                 json_extract(json_data, '$.primary_address_geometry.srid')::INTEGER as address_srid,
-                json_extract(json_data, '$.primary_address_geometry.geometry_wkt')::VARCHAR
+                json_extract_string(json_data, '$.primary_address_geometry.geometry_wkt')
                     as address_geom_wkt,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_quality')::VARCHAR
+                json_extract_string(json_data, '$.primary_address_geometry.coordinate_quality')
                     as address_coordinate_quality,
-                json_extract(json_data, '$.primary_address_geometry.coordinate_source')::VARCHAR
+                json_extract_string(json_data, '$.primary_address_geometry.coordinate_source')
                     as address_coordinate_source,
-                json_extract(json_data, '$.data_source')::VARCHAR as data_source,
-                json_extract(json_data, '$.fetch_timestamp')::VARCHAR as fetch_timestamp,
+                json_extract_string(json_data, '$.data_source') as data_source,
+                json_extract_string(json_data, '$.fetch_timestamp') as fetch_timestamp,
                 json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
                 json_extract(json_data, '$.source_pipeline_count')::INTEGER
                     as source_pipeline_count,
                 json_extract(json_data, '$.financial_document_count')::INTEGER
                     as financial_document_count,
-                json_extract(json_data, '$.processing_timestamp')::VARCHAR as processing_timestamp,
-                json_extract(json_data, '$.pipeline_run_id')::VARCHAR as pipeline_run_id
+                json_extract_string(json_data, '$.processing_timestamp') as processing_timestamp,
+                json_extract_string(json_data, '$.pipeline_run_id') as pipeline_run_id
             FROM unnest($1) as t(json_data)
         """,
             [json_strings],
@@ -1848,6 +1849,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             leadership_count = self.conn.execute(
                 f"SELECT COUNT(*) FROM {table_name}_leadership"
             ).fetchone()[0]
+            ownership_count = self.conn.execute(
+                f"SELECT COUNT(*) FROM {table_name}_ownership"
+            ).fetchone()[0]
             financial_count = self.conn.execute(
                 f"SELECT COUNT(*) FROM {table_name}_financial"
             ).fetchone()[0]
@@ -1879,6 +1883,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.info("🎉 Successfully created normalized CVR tables using chunked processing!")
             self.log.info(f"   📋 Companies: {main_count}")
             self.log.info(f"   👥 Leadership entries: {leadership_count}")
+            self.log.info(f"   🏢 Ownership entries: {ownership_count}")
             self.log.info(f"   💰 Financial documents: {financial_count}")
             self.log.info(f"   📍 Address entries: {addresses_count} ({geocoded_count} geocoded)")
             self.log.info(f"   🏭 Industry entries: {industries_count}")
@@ -1913,5 +1918,14 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 financial_document_count INTEGER,
                 processing_timestamp VARCHAR,
                 pipeline_run_id VARCHAR
+            )
+        """)
+
+        # Create empty ownership table
+        self.conn.execute(f"""
+            CREATE TABLE {table_name}_ownership (
+                company_uuid VARCHAR,
+                cvr_number INTEGER,
+                ownership_data JSON
             )
         """)
