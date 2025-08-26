@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { LayerControlPanel } from "./LayerControlPanel";
 import { FieldDetailsPanel } from "./FieldDetailsPanel";
+import { CoordinatePanel } from "./CoordinatePanel";
 import { LoadingState } from "./LoadingState";
 import { FieldAnalysisData, LayerVisibility, FilterState } from "./types";
 
@@ -35,6 +36,7 @@ export default function FieldAnalysisVisualization() {
   });
 
   const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(null);
+  const [clickedCoordinates, setClickedCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
@@ -102,6 +104,11 @@ export default function FieldAnalysisVisualization() {
     setMobileControlsOpen(false);
   }, []);
 
+  // Handle map clicks (for coordinates only)
+  const handleMapClick = useCallback((coordinates: { lat: number; lng: number }) => {
+    setClickedCoordinates(coordinates);
+  }, []);
+
   // Handle escape key and prevent body scroll
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -110,12 +117,14 @@ export default function FieldAnalysisVisualization() {
           setSelectedField(null);
         } else if (mobileControlsOpen) {
           setMobileControlsOpen(false);
+        } else if (clickedCoordinates) {
+          setClickedCoordinates(null);
         }
       }
     };
 
     // Prevent body scroll when modals are open
-    if (mobileControlsOpen || selectedField) {
+    if (mobileControlsOpen || selectedField || clickedCoordinates) {
       document.body.style.overflow = 'hidden';
       document.addEventListener('keydown', handleKeyDown);
     } else {
@@ -126,7 +135,7 @@ export default function FieldAnalysisVisualization() {
       document.body.style.overflow = 'unset';
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [mobileControlsOpen, selectedField]);
+  }, [mobileControlsOpen, selectedField, clickedCoordinates]);
 
   if (error) {
     return (
@@ -217,6 +226,7 @@ export default function FieldAnalysisVisualization() {
             layerVisibility={layerVisibility}
             filterState={filterState}
             onFieldSelect={handleFieldSelect}
+            onMapClick={handleMapClick}
           />
         )}
       </div>
@@ -244,6 +254,33 @@ export default function FieldAnalysisVisualization() {
           <div
             className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
             onClick={() => setSelectedField(null)}
+          />
+        </>
+      )}
+
+      {/* Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
+      {!selectedField && clickedCoordinates && (
+        <>
+          <div className={`
+            fixed lg:relative inset-0 lg:inset-auto
+            w-full lg:w-80 h-full lg:h-auto
+            bg-white shadow-lg z-30 lg:z-10
+            overflow-y-auto
+            lg:shadow-lg
+          `} style={{
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)'
+          }}>
+            <CoordinatePanel
+              coordinates={clickedCoordinates}
+              onClose={() => setClickedCoordinates(null)}
+            />
+          </div>
+
+          {/* Mobile Coordinate Panel Backdrop */}
+          <div
+            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+            onClick={() => setClickedCoordinates(null)}
           />
         </>
       )}

@@ -1164,6 +1164,20 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         else:
             crop_type_select = "'unknown' as crop_type"
 
+        # Handle organic farming column - check if is_organic exists in FVM data
+        if "is_organic" in column_names:
+            organic_farming_select = "COALESCE(is_organic, false) as organic_farming"
+            self.log.info(
+                f"✅ Found is_organic column in FVM data for year {year} - "
+                f"organic fields will be used"
+            )
+        else:
+            organic_farming_select = "false as organic_farming"
+            self.log.warning(
+                f"⚠️ No is_organic column found in FVM data for year {year} - "
+                f"assuming all fields are non-organic"
+            )
+
         # Handle geometry column
         if "geometry" in column_names:
             geometry_select = "geometry"
@@ -1181,7 +1195,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 {cvr_number_select},
                 area_ha,
                 {crop_type_select},
-                false as organic_farming,
+                {organic_farming_select},
                 {year} as year,
                 {geometry_select},
                 {field_uuid_select},
@@ -1213,6 +1227,20 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         else:
             crop_type_select = "'unknown' as crop_type"
 
+        # Handle organic farming column - check if is_organic exists in FVM data
+        if "is_organic" in column_names:
+            organic_farming_select = "COALESCE(is_organic, false) as organic_farming"
+            self.log.info(
+                f"✅ Found is_organic column in FVM data for year {year} - "
+                f"organic fields will be used"
+            )
+        else:
+            organic_farming_select = "false as organic_farming"
+            self.log.warning(
+                f"⚠️ No is_organic column found in FVM data for year {year} - "
+                f"assuming all fields are non-organic"
+            )
+
         # Handle geometry column
         if "geometry" in column_names:
             geometry_select = "geometry"
@@ -1230,7 +1258,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 {cvr_number_select},
                 area_ha,
                 {crop_type_select},
-                false as organic_farming,
+                {organic_farming_select},
                 {year} as year,
                 {geometry_select},
                 {field_uuid_select},
