@@ -19,6 +19,7 @@ import psutil
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+from unified_pipeline.gold.dst_field_crop_mapping import get_dst_category
 from unified_pipeline.util.log_util import Logger
 
 # DST functionality is now integrated into the unified pipeline
@@ -911,92 +912,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 FROM year_fields_with_zones f
             """)
 
-            # Step 2: Update with HST77 (harvest) data - most common
-            self.log.info("  🌾 Adding HST77 harvest yield data...")
-            self.conn.execute("""
-                UPDATE year_production_estimates
-                SET
-                    yield_estimate_hkg_ha = hst77.harvest_value,
-                    yield_estimation_method = 'dst_hst77_regional',
-                    production_estimate_hkg = area_ha * hst77.harvest_value,
-                    production_unit = 'hkg'
-                FROM dst_dst_hst77 hst77
-                WHERE hst77.area_name = year_production_estimates.dst_regions
-                    AND hst77.time_period = CAST(year_production_estimates.year AS VARCHAR)
-                    AND hst77.measure_name ILIKE '%udbytte%'
-                    AND hst77.harvest_value IS NOT NULL
-            """)
-            self.conn.execute("CHECKPOINT")  # Free temp space after each step
-
-            # Step 3: Fill remaining with GARTN1 (horticulture) data
-            self.log.info("  🥕 Adding GARTN1 horticulture yield data...")
-            self.conn.execute("""
-                UPDATE year_production_estimates
-                SET
-                    yield_estimate_hkg_ha = gartn1.horticulture_value,
-                    yield_estimation_method = 'dst_gartn1_regional',
-                    production_estimate_hkg = area_ha * gartn1.horticulture_value,
-                    production_unit = 'hkg'
-                FROM dst_dst_gartn1 gartn1
-                WHERE gartn1.area_name = year_production_estimates.dst_regions
-                    AND gartn1.time_period = CAST(year_production_estimates.year AS VARCHAR)
-                    AND gartn1.measure_name ILIKE '%udbytte%'
-                    AND gartn1.horticulture_value IS NOT NULL
-                    AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-            """)
-            self.conn.execute("CHECKPOINT")  # Free temp space after each step
-
-            # Step 4: Fill remaining with FRO (seed) data
-            self.log.info("  🌱 Adding FRO seed yield data...")
-            self.conn.execute("""
-                UPDATE year_production_estimates
-                SET
-                    yield_estimate_hkg_ha = fro.seed_value,
-                    yield_estimation_method = 'dst_fro_national',
-                    production_estimate_hkg = area_ha * fro.seed_value,
-                    production_unit = 'hkg'
-                FROM dst_dst_fro fro
-                WHERE fro.time_period = CAST(year_production_estimates.year AS VARCHAR)
-                    AND fro.measure_name ILIKE '%udbytte%'
-                    AND fro.seed_value IS NOT NULL
-                    AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-            """)
-            self.conn.execute("CHECKPOINT")  # Free temp space after each step
-
-            # Step 5: Fill remaining with HALM1 (straw) data
-            self.log.info("  🌾 Adding HALM1 straw yield data...")
-            self.conn.execute("""
-                UPDATE year_production_estimates
-                SET
-                    yield_estimate_hkg_ha = halm1.straw_value,
-                    yield_estimation_method = 'dst_halm1_regional',
-                    production_estimate_hkg = area_ha * halm1.straw_value,
-                    production_unit = 'hkg'
-                FROM dst_dst_halm1 halm1
-                WHERE halm1.area_name = year_production_estimates.dst_regions
-                    AND halm1.time_period = CAST(year_production_estimates.year AS VARCHAR)
-                    AND halm1.unit_name ILIKE '%udbytte%'
-                    AND halm1.straw_value IS NOT NULL
-                    AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-            """)
-            self.conn.execute("CHECKPOINT")  # Free temp space after each step
-
-            # Step 6: Final fallback with national HST77 data
-            self.log.info("  🇩🇰 Adding national HST77 fallback data...")
-            self.conn.execute("""
-                UPDATE year_production_estimates
-                SET
-                    yield_estimate_hkg_ha = hst77_national.harvest_value,
-                    yield_estimation_method = 'dst_hst77_national',
-                    production_estimate_hkg = area_ha * hst77_national.harvest_value,
-                    production_unit = 'hkg'
-                FROM dst_dst_hst77 hst77_national
-                WHERE hst77_national.area_name ILIKE '%Hele landet%'
-                    AND hst77_national.time_period = CAST(year_production_estimates.year AS VARCHAR)
-                    AND hst77_national.measure_name ILIKE '%udbytte%'
-                    AND hst77_national.harvest_value IS NOT NULL
-                    AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-            """)
+            # Apply DST yields using comprehensive crop mapping
+            self._apply_dst_yields_with_mapping(year)
             self.conn.execute("CHECKPOINT")  # Free temp space after each step
 
             # Final checkpoint to ensure all data is persisted
@@ -1157,10 +1074,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         cvr_number_select = "cvr_number" if "cvr_number" in column_names else "NULL as cvr_number"
         field_uuid_select = "field_uuid" if "field_uuid" in column_names else "NULL as field_uuid"
 
-        if "crop_type" in column_names:
+        if "crop_name" in column_names:
+            crop_type_select = "crop_name as crop_type"
+        elif "crop_type" in column_names:
             crop_type_select = "crop_type"
-        elif "layer_type" in column_names:
-            crop_type_select = "layer_type as crop_type"
         else:
             crop_type_select = "'unknown' as crop_type"
 
@@ -1220,10 +1137,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         cvr_number_select = "cvr_number" if "cvr_number" in column_names else "NULL as cvr_number"
         field_uuid_select = "field_uuid" if "field_uuid" in column_names else "NULL as field_uuid"
 
-        if "crop_type" in column_names:
+        if "crop_name" in column_names:
+            crop_type_select = "crop_name as crop_type"
+        elif "crop_type" in column_names:
             crop_type_select = "crop_type"
-        elif "layer_type" in column_names:
-            crop_type_select = "layer_type as crop_type"
         else:
             crop_type_select = "'unknown' as crop_type"
 
@@ -1471,3 +1388,175 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         except Exception as e:
             self.log.error(f"Error saving results: {e}")
             raise
+
+    def _apply_dst_yields_with_mapping(self, year: int) -> None:
+        """
+        Apply DST yields using the comprehensive crop mapping table.
+        This replaces the old hard-coded matching with intelligent crop mapping.
+        """
+        self.log.info(f"  🎯 Applying DST yields with crop mapping for {year}...")
+        
+        # Get unique crop types that need yield estimates
+        crop_types = self.conn.execute("""
+            SELECT DISTINCT crop_type 
+            FROM year_production_estimates 
+            WHERE yield_estimate_hkg_ha IS NULL
+        """).fetchall()
+        
+        total_crops = len(crop_types)
+        matched_crops = 0
+        
+        self.log.info(f"  📊 Processing {total_crops} unique crop types...")
+        
+        # Process each crop type through the mapping
+        for (crop_type,) in crop_types:
+            mapping_info = get_dst_category(crop_type)
+            
+            if not mapping_info:
+                continue
+                
+            dst_table = mapping_info["dst_table"]
+            dst_category = mapping_info["dst_category"]
+            match_quality = mapping_info["match_quality"]
+            
+            # Apply yields based on DST table
+            if dst_table == "HST77":
+                self._apply_hst77_yields(year, crop_type, dst_category, match_quality)
+            elif dst_table == "GARTN1":
+                self._apply_gartn1_yields(year, crop_type, dst_category, match_quality)
+            elif dst_table == "FRO":
+                self._apply_fro_yields(year, crop_type, dst_category, match_quality)
+            elif dst_table == "HALM1":
+                self._apply_halm1_yields(year, crop_type, dst_category, match_quality)
+                
+            matched_crops += 1
+        
+        self.log.info(
+            f"  ✅ Successfully mapped {matched_crops}/{total_crops} crop types to DST data"
+        )
+        
+        # Apply fallback for unmapped crops
+        self._apply_fallback_yields(year)
+
+    def _apply_hst77_yields(
+        self, year: int, crop_type: str, dst_category: str, match_quality: str
+    ) -> None:
+        """Apply HST77 yields for a specific crop type and DST category."""
+        # Regional first
+        self.conn.execute("""
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = hst77.harvest_value,
+                yield_estimation_method = 'dst_hst77_regional_' || ?,
+                production_estimate_hkg = area_ha * hst77.harvest_value,
+                production_unit = 'hkg'
+            FROM dst_dst_hst77 hst77
+            WHERE hst77.area_name = year_production_estimates.dst_regions
+                AND hst77.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND hst77.measure_name ILIKE '%udbytte%'
+                AND LOWER(hst77.crop_name) = LOWER(?)
+                AND hst77.harvest_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """, [match_quality, dst_category, crop_type])
+        
+        # National fallback
+        self.conn.execute("""
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = hst77.harvest_value,
+                yield_estimation_method = 'dst_hst77_national_' || ?,
+                production_estimate_hkg = area_ha * hst77.harvest_value,
+                production_unit = 'hkg'
+            FROM dst_dst_hst77 hst77
+            WHERE hst77.area_name ILIKE '%Hele landet%'
+                AND hst77.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND hst77.measure_name ILIKE '%udbytte%'
+                AND LOWER(hst77.crop_name) = LOWER(?)
+                AND hst77.harvest_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """, [match_quality, dst_category, crop_type])
+
+    def _apply_gartn1_yields(
+        self, year: int, crop_type: str, dst_category: str, match_quality: str
+    ) -> None:
+        """Apply GARTN1 yields for a specific crop type and DST category."""
+        self.conn.execute("""
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = gartn1.horticulture_value,
+                yield_estimation_method = 'dst_gartn1_regional_' || ?,
+                production_estimate_hkg = area_ha * gartn1.horticulture_value,
+                production_unit = 'hkg'
+            FROM dst_dst_gartn1 gartn1
+            WHERE gartn1.area_name = year_production_estimates.dst_regions
+                AND gartn1.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND gartn1.measure_name ILIKE '%udbytte%'
+                AND LOWER(gartn1.crop_name) = LOWER(?)
+                AND gartn1.horticulture_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """, [match_quality, dst_category, crop_type])
+
+    def _apply_fro_yields(
+        self, year: int, crop_type: str, dst_category: str, match_quality: str
+    ) -> None:
+        """Apply FRO yields for a specific crop type and DST category."""
+        self.conn.execute("""
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = fro.seed_value,
+                yield_estimation_method = 'dst_fro_national_' || ?,
+                production_estimate_hkg = area_ha * fro.seed_value,
+                production_unit = 'hkg'
+            FROM dst_dst_fro fro
+            WHERE fro.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND fro.measure_name ILIKE '%udbytte%'
+                AND LOWER(fro.crop_name) = LOWER(?)
+                AND fro.seed_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """, [match_quality, dst_category, crop_type])
+
+    def _apply_halm1_yields(
+        self, year: int, crop_type: str, dst_category: str, match_quality: str
+    ) -> None:
+        """Apply HALM1 yields for a specific crop type and DST category."""
+        self.conn.execute("""
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = halm1.straw_value,
+                yield_estimation_method = 'dst_halm1_regional_' || ?,
+                production_estimate_hkg = area_ha * halm1.straw_value,
+                production_unit = 'hkg'
+            FROM dst_dst_halm1 halm1
+            WHERE halm1.area_name = year_production_estimates.dst_regions
+                AND halm1.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND halm1.unit_name ILIKE '%udbytte%'
+                AND LOWER(halm1.crop_name) = LOWER(?)
+                AND halm1.straw_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """, [match_quality, dst_category, crop_type])
+
+    def _apply_fallback_yields(self, year: int) -> None:
+        """Apply fallback yields for unmapped crops."""
+        unmapped_count = self.conn.execute("""
+            SELECT COUNT(*) FROM year_production_estimates 
+            WHERE yield_estimate_hkg_ha IS NULL
+        """).fetchone()[0]
+        
+        if unmapped_count > 0:
+            self.log.info(f"  ⚠️  Applying fallback yields for {unmapped_count} unmapped fields...")
+            
+            # Use a conservative national average as fallback
+            self.conn.execute("""
+                UPDATE year_production_estimates
+                SET
+                    yield_estimate_hkg_ha = 2.6,
+                    yield_estimation_method = 'fallback_national_average',
+                    production_estimate_hkg = area_ha * 2.6,
+                    production_unit = 'hkg'
+                WHERE yield_estimate_hkg_ha IS NULL
+            """)
