@@ -1395,30 +1395,30 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         This replaces the old hard-coded matching with intelligent crop mapping.
         """
         self.log.info(f"  🎯 Applying DST yields with crop mapping for {year}...")
-        
+
         # Get unique crop types that need yield estimates
         crop_types = self.conn.execute("""
-            SELECT DISTINCT crop_type 
-            FROM year_production_estimates 
+            SELECT DISTINCT crop_type
+            FROM year_production_estimates
             WHERE yield_estimate_hkg_ha IS NULL
         """).fetchall()
-        
+
         total_crops = len(crop_types)
         matched_crops = 0
-        
+
         self.log.info(f"  📊 Processing {total_crops} unique crop types...")
-        
+
         # Process each crop type through the mapping
         for (crop_type,) in crop_types:
             mapping_info = get_dst_category(crop_type)
-            
+
             if not mapping_info:
                 continue
-                
+
             dst_table = mapping_info["dst_table"]
             dst_category = mapping_info["dst_category"]
             match_quality = mapping_info["match_quality"]
-            
+
             # Apply yields based on DST table
             if dst_table == "HST77":
                 self._apply_hst77_yields(year, crop_type, dst_category, match_quality)
@@ -1428,13 +1428,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self._apply_fro_yields(year, crop_type, dst_category, match_quality)
             elif dst_table == "HALM1":
                 self._apply_halm1_yields(year, crop_type, dst_category, match_quality)
-                
+
             matched_crops += 1
-        
+
         self.log.info(
             f"  ✅ Successfully mapped {matched_crops}/{total_crops} crop types to DST data"
         )
-        
+
         # Apply fallback for unmapped crops
         self._apply_fallback_yields(year)
 
@@ -1443,7 +1443,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     ) -> None:
         """Apply HST77 yields for a specific crop type and DST category."""
         # Regional first
-        self.conn.execute("""
+        self.conn.execute(
+            """
             UPDATE year_production_estimates
             SET
                 yield_estimate_hkg_ha = hst77.harvest_value,
@@ -1458,10 +1459,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 AND hst77.harvest_value IS NOT NULL
                 AND year_production_estimates.crop_type = ?
                 AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-        """, [match_quality, dst_category, crop_type])
-        
+        """,
+            [match_quality, dst_category, crop_type],
+        )
+
         # National fallback
-        self.conn.execute("""
+        self.conn.execute(
+            """
             UPDATE year_production_estimates
             SET
                 yield_estimate_hkg_ha = hst77.harvest_value,
@@ -1476,13 +1480,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 AND hst77.harvest_value IS NOT NULL
                 AND year_production_estimates.crop_type = ?
                 AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-        """, [match_quality, dst_category, crop_type])
+        """,
+            [match_quality, dst_category, crop_type],
+        )
 
     def _apply_gartn1_yields(
         self, year: int, crop_type: str, dst_category: str, match_quality: str
     ) -> None:
         """Apply GARTN1 yields for a specific crop type and DST category."""
-        self.conn.execute("""
+        self.conn.execute(
+            """
             UPDATE year_production_estimates
             SET
                 yield_estimate_hkg_ha = gartn1.horticulture_value,
@@ -1497,13 +1504,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 AND gartn1.horticulture_value IS NOT NULL
                 AND year_production_estimates.crop_type = ?
                 AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-        """, [match_quality, dst_category, crop_type])
+        """,
+            [match_quality, dst_category, crop_type],
+        )
 
     def _apply_fro_yields(
         self, year: int, crop_type: str, dst_category: str, match_quality: str
     ) -> None:
         """Apply FRO yields for a specific crop type and DST category."""
-        self.conn.execute("""
+        self.conn.execute(
+            """
             UPDATE year_production_estimates
             SET
                 yield_estimate_hkg_ha = fro.seed_value,
@@ -1517,13 +1527,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 AND fro.seed_value IS NOT NULL
                 AND year_production_estimates.crop_type = ?
                 AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-        """, [match_quality, dst_category, crop_type])
+        """,
+            [match_quality, dst_category, crop_type],
+        )
 
     def _apply_halm1_yields(
         self, year: int, crop_type: str, dst_category: str, match_quality: str
     ) -> None:
         """Apply HALM1 yields for a specific crop type and DST category."""
-        self.conn.execute("""
+        self.conn.execute(
+            """
             UPDATE year_production_estimates
             SET
                 yield_estimate_hkg_ha = halm1.straw_value,
@@ -1538,18 +1551,20 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 AND halm1.straw_value IS NOT NULL
                 AND year_production_estimates.crop_type = ?
                 AND year_production_estimates.yield_estimate_hkg_ha IS NULL
-        """, [match_quality, dst_category, crop_type])
+        """,
+            [match_quality, dst_category, crop_type],
+        )
 
     def _apply_fallback_yields(self, year: int) -> None:
         """Apply fallback yields for unmapped crops."""
         unmapped_count = self.conn.execute("""
-            SELECT COUNT(*) FROM year_production_estimates 
+            SELECT COUNT(*) FROM year_production_estimates
             WHERE yield_estimate_hkg_ha IS NULL
         """).fetchone()[0]
-        
+
         if unmapped_count > 0:
             self.log.info(f"  ⚠️  Applying fallback yields for {unmapped_count} unmapped fields...")
-            
+
             # Use a conservative national average as fallback
             self.conn.execute("""
                 UPDATE year_production_estimates
