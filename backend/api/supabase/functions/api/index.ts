@@ -720,7 +720,12 @@ async function processCategoryChart(supabase: SupabaseClient, companyId: string,
   let chartData: ChartData = {};
   const categories = [...new Set(data.map((d: any)=>d[categoryColumn]))]; // Get unique categories from the fetched (potentially limited by topN) data
   if (stackByColumn) {
-    const stackKeys = [...new Set(data.map((d: any)=>d[stackByColumn]))].sort(); // Unique stack keys
+    // Handle NULL values in stackByColumn (treat as false for is_organic)
+    const processedData = data.map((d: any) => ({
+      ...d,
+      [stackByColumn]: stackByColumn === 'is_organic' && d[stackByColumn] === null ? false : d[stackByColumn]
+    }));
+    const stackKeys = [...new Set(processedData.map((d: any)=>d[stackByColumn]))].sort(); // Unique stack keys
     chartData.yAxis = {
       label: categoryColumn,
       values: categories
@@ -728,7 +733,7 @@ async function processCategoryChart(supabase: SupabaseClient, companyId: string,
     chartData.series = stackKeys.map((stack: any)=>({
         name: formatValue(stack, 'boolean'),
         data: categories.map((cat: any)=>{
-          const point = data.find((d: any)=>d[categoryColumn] === cat && d[stackByColumn] === stack);
+          const point = processedData.find((d: any)=>d[categoryColumn] === cat && d[stackByColumn] === stack);
           return point ? point[valueColumn] : 0; // Value for this category/stack combo
         })
       }));
@@ -949,7 +954,7 @@ function formatValue(value: any, format: any): string {
   try {
     switch(format){
       case 'boolean':
-        return value ? 'Ja' : 'Nej';
+        return value ? 'Økologisk' : 'Konventionel';
       case 'date':
         return new Date(value).toISOString().split('T')[0];
       case 'datetime':

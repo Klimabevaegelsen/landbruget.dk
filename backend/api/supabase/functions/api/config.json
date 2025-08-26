@@ -280,7 +280,7 @@
     {
       "_key": "land-use-crop-distribution",
       "_type": "horizontalStackedBarChart",
-      "title": "Afgrødefordeling (Seneste År, Øko/Konv)",
+      "title": "Afgrødefordeling i Hektar (Seneste År, Øko/Konv)",
       "dataSource": {
         "params": {
           "source": "field_yearly_data",
