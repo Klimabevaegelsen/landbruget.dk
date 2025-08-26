@@ -24,20 +24,20 @@ export function CompanyHero({ company }: { company: CompanyResponse }) {
           </div>
 
           {/* Company Identity Info */}
-          <div className="space-y-3">
+          <div className="bg-black/20 backdrop-blur-sm rounded-lg p-6 space-y-4">
             {companyIdentity && companyIdentity._type === 'infoCard' && (
               <>
-                <h1 className="text-3xl font-bold text-white">
+                <h1 className="text-4xl font-bold text-white drop-shadow-lg">
                   {companyIdentity.items.find(item => item.label === 'Navn')?.value || 'Virksomhed'}
                 </h1>
-                <div className="space-y-2 text-white/90">
-                  <p className="text-lg">
+                <div className="space-y-2">
+                  <p className="text-xl font-semibold text-white drop-shadow-md">
                     CVR: {companyIdentity.items.find(item => item.label === 'CVR')?.value}
                   </p>
-                  <p className="text-base">
+                  <p className="text-lg text-white drop-shadow-md">
                     {companyIdentity.items.find(item => item.label === 'Adresse')?.value}
                   </p>
-                  <p className="text-base">
+                  <p className="text-lg text-white drop-shadow-md">
                     {companyIdentity.items.find(item => item.label === 'Postnummer')?.value} {companyIdentity.items.find(item => item.label === 'By')?.value}
                   </p>
                 </div>
@@ -53,7 +53,7 @@ export function CompanyHero({ company }: { company: CompanyResponse }) {
           </div>
         </div>
 
-        <div className="w-full relative">
+thih c        <div className="w-full relative">
           {/* Company Map */}
           {companyMap && companyMap._type === 'mapChart' && (
             <BlockMapChart chart={companyMap} />
