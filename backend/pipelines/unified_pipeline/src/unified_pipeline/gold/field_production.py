@@ -1436,7 +1436,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             # Export directly from DuckDB table to GCS
             self.gcs_access.upload_from_duckdb_table(
-                self.conn,
                 "final_production_estimates",
                 output_path,
                 compression="zstd",
