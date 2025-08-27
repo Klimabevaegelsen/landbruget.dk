@@ -8,10 +8,12 @@ const ToastProvider = React.createContext<{
   toasts: Toast[]
   addToast: (toast: Omit<Toast, 'id'>) => string
   removeToast: (id: string) => void
+  clearLoadingToasts: () => void
 }>({
   toasts: [],
   addToast: () => '',
   removeToast: () => {},
+  clearLoadingToasts: () => {},
 })
 
 export interface Toast {
@@ -45,8 +47,12 @@ export function ToastProvider_({ children }: { children: React.ReactNode }) {
     setToasts(prev => prev.filter(toast => toast.id !== id))
   }, [])
 
+  const clearLoadingToasts = React.useCallback(() => {
+    setToasts(prev => prev.filter(toast => toast.variant !== 'loading'))
+  }, [])
+
   return (
-    <ToastProvider.Provider value={{ toasts, addToast, removeToast }}>
+    <ToastProvider.Provider value={{ toasts, addToast, removeToast, clearLoadingToasts }}>
       {children}
       <ToastViewport />
     </ToastProvider.Provider>

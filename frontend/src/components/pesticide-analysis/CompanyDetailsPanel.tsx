@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Building2, MapPin, Calendar, Beaker, TrendingUp, Loader2 } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import { CompanySummary, CompanyDetailsResponse, PesticideProduct } from './types';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -18,11 +19,27 @@ export default function CompanyDetailsPanel({ company }: CompanyDetailsPanelProp
   const [details, setDetails] = useState<CompanyDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentDetailsToastId, setCurrentDetailsToastId] = useState<string | null>(null);
+
+  const { addToast, removeToast } = useToast();
 
   // Fetch detailed company data
   useEffect(() => {
     const fetchDetails = async () => {
       if (!SUPABASE_URL || !company.cvr_number) return;
+
+      // Remove any existing details toast
+      if (currentDetailsToastId) {
+        removeToast(currentDetailsToastId);
+      }
+
+      // Show loading toast for company details
+      const toastId = addToast({
+        title: "Indlæser virksomhedsdetaljer",
+        description: `Henter detaljer for ${company.name}...`,
+        variant: "loading"
+      });
+      setCurrentDetailsToastId(toastId);
 
       setLoading(true);
       setError(null);
@@ -49,11 +66,16 @@ export default function CompanyDetailsPanel({ company }: CompanyDetailsPanelProp
         console.error('Company details error:', err);
       } finally {
         setLoading(false);
+        // Remove loading toast when details fetch completes
+        if (currentDetailsToastId) {
+          removeToast(currentDetailsToastId);
+          setCurrentDetailsToastId(null);
+        }
       }
     };
 
     fetchDetails();
-  }, [company.cvr_number]);
+  }, [company.cvr_number, company.name, currentDetailsToastId, addToast, removeToast]);
 
   const formatBelastning = (value: number) => {
     return value.toLocaleString('da-DK', {

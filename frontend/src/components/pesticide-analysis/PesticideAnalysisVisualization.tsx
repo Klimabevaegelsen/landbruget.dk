@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Search, Filter, BarChart3 } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import CompanyFilterPanel from './CompanyFilterPanel';
 import CompanyListView from './CompanyListView';
 import CompanyDetailsPanel from './CompanyDetailsPanel';
@@ -28,6 +29,9 @@ export default function PesticideAnalysisVisualization() {
   const [selectedCompany, setSelectedCompany] = useState<CompanySummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentLoadingToastId, setCurrentLoadingToastId] = useState<string | null>(null);
+
+  const { addToast, removeToast } = useToast();
 
   // Fetch data from API
   const fetchData = useCallback(async () => {
@@ -35,6 +39,19 @@ export default function PesticideAnalysisVisualization() {
       setError('Supabase URL not configured');
       return;
     }
+
+    // Remove any existing loading toast
+    if (currentLoadingToastId) {
+      removeToast(currentLoadingToastId);
+    }
+
+    // Show loading toast for data fetch
+    const toastId = addToast({
+      title: "Indlæser pesticiddata",
+      description: "Henter analysedata...",
+      variant: "loading"
+    });
+    setCurrentLoadingToastId(toastId);
 
     setLoading(true);
     setError(null);
@@ -65,8 +82,13 @@ export default function PesticideAnalysisVisualization() {
       console.error('API Error:', err);
     } finally {
       setLoading(false);
+      // Remove loading toast when data fetch completes
+      if (currentLoadingToastId) {
+        removeToast(currentLoadingToastId);
+        setCurrentLoadingToastId(null);
+      }
     }
-  }, [filters]);
+  }, [filters, currentLoadingToastId, addToast, removeToast]);
 
   // Fetch data when filters change
   useEffect(() => {
@@ -75,6 +97,11 @@ export default function PesticideAnalysisVisualization() {
 
   // Update filters
   const updateFilters = (newFilters: Partial<PesticideAnalysisFilters>) => {
+    // Remove any existing loading toast when filters change (new search)
+    if (currentLoadingToastId) {
+      removeToast(currentLoadingToastId);
+      setCurrentLoadingToastId(null);
+    }
     setFilters(prev => ({ ...prev, ...newFilters, page: 1 })); // Reset to page 1 when filters change
   };
 

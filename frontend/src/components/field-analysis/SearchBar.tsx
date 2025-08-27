@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, X, MapPin } from 'lucide-react';
-import { useToast } from '@/components/ui/toast';
+import { useLoadingToast } from '@/hooks/useLoadingToast';
 
 interface DAWAResult {
   tekst: string;
@@ -35,7 +35,7 @@ export function SearchBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
-  const { addToast, removeToast } = useToast();
+  const { showLoadingToast, hideLoadingToast } = useLoadingToast();
 
   const handleSelectResult = useCallback(async (result: DAWAResult) => {
     setQuery(result.tekst);
@@ -43,11 +43,7 @@ export function SearchBar({
     setSelectedIndex(-1);
 
     // Show loading toast for address lookup
-    const toastId = addToast({
-      title: "Finder lokation",
-      description: `Henter koordinater for ${result.tekst}...`,
-      variant: "loading"
-    });
+    showLoadingToast("Finder lokation", `Henter koordinater for ${result.tekst}...`);
 
     let locationFound = false;
 
@@ -89,9 +85,9 @@ export function SearchBar({
       }
     } finally {
       // Always remove the loading toast
-      removeToast(toastId);
+      hideLoadingToast();
     }
-  }, [onLocationSelect, addToast, removeToast]);
+  }, [onLocationSelect, showLoadingToast, hideLoadingToast]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -201,6 +197,10 @@ export function SearchBar({
     setResults([]);
     setIsOpen(false);
     setSelectedIndex(-1);
+
+    // Remove any existing location toast when clearing search
+    hideLoadingToast();
+
     inputRef.current?.focus();
   };
 
