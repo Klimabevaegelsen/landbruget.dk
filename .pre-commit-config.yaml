@@ -31,13 +31,38 @@ repos:
 
   - repo: local
     hooks:
-      # ESLint for frontend
+      # Prettier for frontend projects
+      - id: prettier-frontend
+        name: Prettier (Frontend)
+        entry: bash
+        args: [-c, "cd frontend && npm run format"]
+        language: system
+        files: '^frontend/.*\.(ts|tsx|js|jsx|json|md|css)$'
+        pass_filenames: false
+
+      - id: prettier-frontend-pesticide
+        name: Prettier (Frontend Pesticide)
+        entry: bash
+        args: [-c, "cd frontend-pesticide && npm run format"]
+        language: system
+        files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
+        pass_filenames: false
+
+      # ESLint for frontend (restored original)
       - id: eslint
         name: ESLint
         entry: bash
         args: [-c, "cd frontend && npm run lint"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
+      - id: eslint-frontend-pesticide
+        name: ESLint (Frontend Pesticide)
+        entry: bash
+        args: [-c, "cd frontend-pesticide && npm run lint"]
+        language: system
+        files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
       # Custom hook to prevent committing to data directories
