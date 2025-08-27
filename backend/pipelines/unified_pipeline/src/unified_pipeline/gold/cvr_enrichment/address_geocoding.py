@@ -1137,13 +1137,34 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             gcs_path = (
                 f"gs://{self.config.bucket}/gold/cvr_enrichment_companies/{timestamp}/data.parquet"
             )
-            self.gcs_access.upload_from_duckdb_table(company_table, gcs_path)
-            self.log.info(f"✅ Saved to GCS: {gcs_path}")
+
+            # 🔧 FIX: Ensure the companies table is actually saved after geocoding updates
+            try:
+                self.gcs_access.upload_from_duckdb_table(company_table, gcs_path)
+                self.log.info(f"✅ Saved updated companies table to GCS: {gcs_path}")
+
+                # Verify the upload worked by checking table count
+                table_count = self.conn.execute(f"SELECT COUNT(*) FROM {company_table}").fetchone()[
+                    0
+                ]
+                self.log.info(
+                    f"📊 Verified: {table_count:,} companies saved with geocoding updates"
+                )
+
+            except Exception as upload_error:
+                self.log.error(f"❌ Failed to save updated companies table: {upload_error}")
+                # Re-raise to make the pipeline fail rather than silently continue
+                raise Exception(
+                    f"Company table geocoding update failed: {upload_error}"
+                ) from upload_error
 
             self.log.info("Updated company table with geocoding data")
 
         except Exception as e:
-            self.log.error(f"Failed to update company table with geocoding: {e}")
+            self.log.error(f"❌ CRITICAL: Failed to update company table with geocoding: {e}")
+            self.log.error("❌ This means companies will not have municipality data!")
+            # Re-raise the exception to fail the pipeline rather than silently continue
+            raise Exception(f"Company table geocoding update failed: {e}") from e
 
     def _update_pnumber_table_with_geocoding(self, processed_data: Dict[str, Any]) -> None:
         """
