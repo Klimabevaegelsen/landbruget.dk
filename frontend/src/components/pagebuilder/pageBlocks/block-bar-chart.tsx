@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import {
   BarChart as RechartsBarChart,
@@ -11,19 +11,19 @@ import {
   Tooltip,
   XAxisProps,
   YAxisProps,
-} from "recharts";
+} from 'recharts';
 import {
   BarChart as BarChartType,
   ChartData,
   HorizontalStackedBarChart,
   StackedBarChart,
-} from "@/services/supabase/types";
-import CustomTooltip from "@/components/chart/custom-tooltip";
-import { useEffect, useState } from "react";
-import CustomLegend from "@/components/chart/custom-legend";
-import { VizColors } from "@/lib/utils";
-import { shouldShowPlaceholder } from "./chart-utils";
-import { PlaceholderChart } from "./placeholder-chart";
+} from '@/services/supabase/types';
+import CustomTooltip from '@/components/chart/custom-tooltip';
+import { useEffect, useState } from 'react';
+import CustomLegend from '@/components/chart/custom-legend';
+import { VizColors } from '@/lib/utils';
+import { shouldShowPlaceholder } from './chart-utils';
+import { PlaceholderChart } from './placeholder-chart';
 
 export const xAxisDefaultProps: XAxisProps = {
   tickLine: true,
@@ -41,7 +41,7 @@ export const yAxisDefaultProps: YAxisProps = {
 // Helper function to transform your data into the format Recharts expects
 const transformDataForRecharts = (chartData: ChartData, chartType: string) => {
   // For horizontal charts, we use yAxis.values as our categories
-  if (chartType === "horizontalStackedBarChart") {
+  if (chartType === 'horizontalStackedBarChart') {
     const { yAxis, series } = chartData;
     if (!yAxis?.values || !series) return [];
 
@@ -79,7 +79,7 @@ export function BlockBarChart({
   // Always call hooks first
   const transformedData = transformDataForRecharts(chart.data, chart._type);
   const [yWidth, setYWidth] = useState(60);
-  const isHorizontal = chart._type === "horizontalStackedBarChart";
+  const isHorizontal = chart._type === 'horizontalStackedBarChart';
 
   // Calculate y-axis width based on the longest value
   useEffect(() => {
@@ -88,20 +88,20 @@ export function BlockBarChart({
         // For horizontal charts, we need to consider the category name length
         const categoryLength = String(dataPoint.category).length;
         const valueLengths = Object.entries(dataPoint)
-          .filter(([key]) => key !== "category")
+          .filter(([key]) => key !== 'category')
           .map(([, value]) =>
-            typeof value === "number"
-              ? value.toLocaleString("da-DK").length
+            typeof value === 'number'
+              ? value.toLocaleString('da-DK').length
               : String(value).length
           );
         return Math.max(max, categoryLength, ...valueLengths);
       } else {
         // For vertical charts, we only need to consider the value lengths
         const valueLengths = Object.entries(dataPoint)
-          .filter(([key]) => key !== "name")
+          .filter(([key]) => key !== 'name')
           .map(([, value]) =>
-            typeof value === "number"
-              ? value.toLocaleString("da-DK").length
+            typeof value === 'number'
+              ? value.toLocaleString('da-DK').length
               : String(value).length
           );
         return Math.max(max, ...valueLengths);
@@ -115,7 +115,9 @@ export function BlockBarChart({
   // Check if this chart should show a placeholder
   const placeholderDataType = shouldShowPlaceholder(chart._key);
   if (placeholderDataType) {
-    return <PlaceholderChart title={chart.title} dataType={placeholderDataType} />;
+    return (
+      <PlaceholderChart title={chart.title} dataType={placeholderDataType} />
+    );
   }
 
   if (!transformedData.length) {
@@ -129,20 +131,20 @@ export function BlockBarChart({
   return (
     <div>
       <div
-        style={{ width: "100%", height: 400, minHeight: 400, minWidth: 100 }}
+        style={{ width: '100%', height: 400, minHeight: 400, minWidth: 100 }}
         className="mt-4"
       >
         <ResponsiveContainer>
           <RechartsBarChart
             data={transformedData}
-            layout={isHorizontal ? "vertical" : "horizontal"}
-            {...{ overflow: "visible" }}
+            layout={isHorizontal ? 'vertical' : 'horizontal'}
+            {...{ overflow: 'visible' }}
           >
             <CartesianGrid vertical={false} />
             {isHorizontal ? (
               <XAxis
                 type="number"
-                tickFormatter={(tick) => tick.toLocaleString("da-DK")}
+                tickFormatter={(tick) => tick.toLocaleString('da-DK')}
                 {...xAxisDefaultProps}
               />
             ) : (
@@ -158,13 +160,13 @@ export function BlockBarChart({
             ) : (
               <YAxis
                 tickFormatter={(tick) => {
-                  return tick.toLocaleString("DA-dk");
+                  return tick.toLocaleString('DA-dk');
                 }}
                 {...yAxisDefaultProps}
                 width={yWidth}
               />
             )}
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: "#eef8f2" }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#eef8f2' }} />
             <Legend content={<CustomLegend />} />
             {chart.data.series.map((s, index) => (
               <Bar
@@ -172,7 +174,7 @@ export function BlockBarChart({
                 dataKey={s.name}
                 fill={barColors[index % barColors.length]}
                 stackId={
-                  chart._type === "stackedBarChart" ? "stack" : undefined
+                  chart._type === 'stackedBarChart' ? 'stack' : undefined
                 }
               />
             ))}

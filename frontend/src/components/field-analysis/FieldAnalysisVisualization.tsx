@@ -1,20 +1,18 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect, useCallback } from "react";
-import dynamic from "next/dynamic";
-import { LayerControlPanel } from "./LayerControlPanel";
-import { FieldDetailsPanel } from "./FieldDetailsPanel";
-import { CoordinatePanel } from "./CoordinatePanel";
-import { LoadingState } from "./LoadingState";
-import { FieldAnalysisData, LayerVisibility, FilterState } from "./types";
+import React, { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+import { LayerControlPanel } from './LayerControlPanel';
+import { FieldDetailsPanel } from './FieldDetailsPanel';
+import { CoordinatePanel } from './CoordinatePanel';
+import { LoadingState } from './LoadingState';
+import { FieldAnalysisData, LayerVisibility, FilterState } from './types';
 
 // Dynamically import the map component to avoid SSR issues
-const FieldAnalysisMap = dynamic(() => import("./FieldAnalysisMap"), {
+const FieldAnalysisMap = dynamic(() => import('./FieldAnalysisMap'), {
   ssr: false,
   loading: () => <LoadingState message="Indlæser kort..." />,
 });
-
-
 
 export default function FieldAnalysisVisualization() {
   const [isClient, setIsClient] = useState(false);
@@ -35,8 +33,13 @@ export default function FieldAnalysisVisualization() {
     useDecileColoring: true,
   });
 
-  const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(null);
-  const [clickedCoordinates, setClickedCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(
+    null
+  );
+  const [clickedCoordinates, setClickedCoordinates] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
@@ -63,7 +66,8 @@ export default function FieldAnalysisVisualization() {
     };
 
     window.addEventListener('orientationchange', handleOrientationChange);
-    return () => window.removeEventListener('orientationchange', handleOrientationChange);
+    return () =>
+      window.removeEventListener('orientationchange', handleOrientationChange);
   }, []);
 
   // Initialize visualization
@@ -76,7 +80,9 @@ export default function FieldAnalysisVisualization() {
         // Kepler.gl will handle PMTiles loading
         setIsLoading(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Fejl ved indlæsning af data");
+        setError(
+          err instanceof Error ? err.message : 'Fejl ved indlæsning af data'
+        );
         setIsLoading(false);
       }
     };
@@ -86,7 +92,7 @@ export default function FieldAnalysisVisualization() {
 
   // Handle layer visibility changes
   const handleLayerToggle = useCallback((layerName: keyof LayerVisibility) => {
-    setLayerVisibility(prev => ({
+    setLayerVisibility((prev) => ({
       ...prev,
       [layerName]: !prev[layerName],
     }));
@@ -94,7 +100,7 @@ export default function FieldAnalysisVisualization() {
 
   // Handle filter changes
   const handleFilterChange = useCallback((newFilters: Partial<FilterState>) => {
-    setFilterState(prev => ({ ...prev, ...newFilters }));
+    setFilterState((prev) => ({ ...prev, ...newFilters }));
   }, []);
 
   // Handle field selection
@@ -105,17 +111,24 @@ export default function FieldAnalysisVisualization() {
   }, []);
 
   // Handle map clicks (for coordinates only)
-  const handleMapClick = useCallback((coordinates: { lat: number; lng: number }) => {
-    setClickedCoordinates(coordinates);
+  const handleMapClick = useCallback(
+    (coordinates: { lat: number; lng: number }) => {
+      setClickedCoordinates(coordinates);
 
-    // If a field is currently selected, update its click coordinates
-    if (selectedField) {
-      setSelectedField(prev => prev ? {
-        ...prev,
-        click_coordinates: coordinates
-      } : null);
-    }
-  }, [selectedField]);
+      // If a field is currently selected, update its click coordinates
+      if (selectedField) {
+        setSelectedField((prev) =>
+          prev
+            ? {
+                ...prev,
+                click_coordinates: coordinates,
+              }
+            : null
+        );
+      }
+    },
+    [selectedField]
+  );
 
   // Handle escape key and prevent body scroll
   useEffect(() => {
@@ -147,13 +160,13 @@ export default function FieldAnalysisVisualization() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50 p-4">
-        <div className="text-center max-w-md">
-          <div className="text-red-600 text-xl mb-2">⚠️ Fejl</div>
-          <div className="text-gray-700 mb-4 text-sm lg:text-base">{error}</div>
+      <div className="flex h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md text-center">
+          <div className="mb-2 text-xl text-red-600">⚠️ Fejl</div>
+          <div className="mb-4 text-sm text-gray-700 lg:text-base">{error}</div>
           <button
             onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors text-base font-medium min-h-[44px]"
+            className="min-h-[44px] rounded-lg bg-blue-600 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
           >
             Genindlæs
           </button>
@@ -168,42 +181,65 @@ export default function FieldAnalysisVisualization() {
   }
 
   return (
-    <div className="relative h-screen flex flex-col lg:flex-row">
+    <div className="relative flex h-screen flex-col lg:flex-row">
       {/* Mobile Control Panel Toggle */}
-      <div className="lg:hidden absolute top-4 left-4 z-30" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+      <div
+        className="absolute top-4 left-4 z-30 lg:hidden"
+        style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
+      >
         <button
           onClick={() => setMobileControlsOpen(!mobileControlsOpen)}
-          className="bg-white shadow-lg rounded-lg p-3 hover:bg-gray-50 active:bg-gray-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-white p-3 shadow-lg transition-colors hover:bg-gray-50 active:bg-gray-100"
           aria-label="Toggle controls"
         >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          <svg
+            className="h-6 w-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 6h16M4 12h16M4 18h16"
+            />
           </svg>
         </button>
       </div>
 
       {/* Left Control Panel - Desktop: sidebar, Mobile: overlay */}
-      <div className={`
-        ${mobileControlsOpen ? 'block' : 'hidden'} lg:block
-        fixed lg:relative inset-0 lg:inset-auto
-        w-full lg:w-80 h-full lg:h-auto
-        bg-white shadow-lg z-30 lg:z-10
-        overflow-y-auto
-        lg:shadow-lg
-      `} style={{
-        paddingTop: mobileControlsOpen ? 'env(safe-area-inset-top)' : undefined,
-        paddingBottom: mobileControlsOpen ? 'env(safe-area-inset-bottom)' : undefined
-      }}>
+      <div
+        className={` ${mobileControlsOpen ? 'block' : 'hidden'} fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-auto lg:w-80 lg:shadow-lg`}
+        style={{
+          paddingTop: mobileControlsOpen
+            ? 'env(safe-area-inset-top)'
+            : undefined,
+          paddingBottom: mobileControlsOpen
+            ? 'env(safe-area-inset-bottom)'
+            : undefined,
+        }}
+      >
         {/* Mobile close button */}
-        <div className="lg:hidden flex justify-between items-center p-4 border-b bg-white sticky top-0 z-10">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4 lg:hidden">
           <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
           <button
             onClick={() => setMobileControlsOpen(false)}
-            className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 hover:bg-gray-100 active:bg-gray-200"
             aria-label="Luk kontrolpanel"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -219,13 +255,13 @@ export default function FieldAnalysisVisualization() {
       {/* Mobile Controls Backdrop */}
       {mobileControlsOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+          className="bg-opacity-50 fixed inset-0 z-20 bg-black lg:hidden"
           onClick={() => setMobileControlsOpen(false)}
         />
       )}
 
       {/* Main Map Area */}
-      <div className="flex-1 relative">
+      <div className="relative flex-1">
         {isLoading ? (
           <LoadingState message="Indlæser kortdata..." />
         ) : (
@@ -242,16 +278,13 @@ export default function FieldAnalysisVisualization() {
       {/* Right Details Panel - Desktop: sidebar, Mobile: overlay */}
       {selectedField && (
         <>
-          <div className={`
-            fixed lg:relative inset-0 lg:inset-auto
-            w-full lg:w-80 h-full lg:h-auto
-            bg-white shadow-lg z-30 lg:z-10
-            overflow-y-auto
-            lg:shadow-lg
-          `} style={{
-            paddingTop: 'env(safe-area-inset-top)',
-            paddingBottom: 'env(safe-area-inset-bottom)'
-          }}>
+          <div
+            className={`fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-auto lg:w-80 lg:shadow-lg`}
+            style={{
+              paddingTop: 'env(safe-area-inset-top)',
+              paddingBottom: 'env(safe-area-inset-bottom)',
+            }}
+          >
             <FieldDetailsPanel
               fieldData={selectedField}
               onClose={() => setSelectedField(null)}
@@ -260,7 +293,7 @@ export default function FieldAnalysisVisualization() {
 
           {/* Mobile Details Backdrop */}
           <div
-            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+            className="bg-opacity-50 fixed inset-0 z-20 bg-black lg:hidden"
             onClick={() => setSelectedField(null)}
           />
         </>
@@ -269,16 +302,13 @@ export default function FieldAnalysisVisualization() {
       {/* Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
       {!selectedField && clickedCoordinates && (
         <>
-          <div className={`
-            fixed lg:relative inset-0 lg:inset-auto
-            w-full lg:w-80 h-full lg:h-auto
-            bg-white shadow-lg z-30 lg:z-10
-            overflow-y-auto
-            lg:shadow-lg
-          `} style={{
-            paddingTop: 'env(safe-area-inset-top)',
-            paddingBottom: 'env(safe-area-inset-bottom)'
-          }}>
+          <div
+            className={`fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-auto lg:w-80 lg:shadow-lg`}
+            style={{
+              paddingTop: 'env(safe-area-inset-top)',
+              paddingBottom: 'env(safe-area-inset-bottom)',
+            }}
+          >
             <CoordinatePanel
               coordinates={clickedCoordinates}
               onClose={() => setClickedCoordinates(null)}
@@ -287,7 +317,7 @@ export default function FieldAnalysisVisualization() {
 
           {/* Mobile Coordinate Panel Backdrop */}
           <div
-            className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-20"
+            className="bg-opacity-50 fixed inset-0 z-20 bg-black lg:hidden"
             onClick={() => setClickedCoordinates(null)}
           />
         </>

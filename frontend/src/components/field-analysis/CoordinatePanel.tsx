@@ -1,19 +1,29 @@
-"use client";
+'use client';
 
-import React, { useState } from "react";
-import { formatWgs84Coordinates, generateSkraafotoUrl, copyCoordinatesToClipboard } from "./coordinateUtils";
+import React, { useState } from 'react';
+import {
+  formatWgs84Coordinates,
+  generateSkraafotoUrl,
+  copyCoordinatesToClipboard,
+} from './coordinateUtils';
 
 interface CoordinatePanelProps {
   coordinates: { lat: number; lng: number };
   onClose: () => void;
 }
 
-export function CoordinatePanel({ coordinates, onClose }: CoordinatePanelProps) {
+export function CoordinatePanel({
+  coordinates,
+  onClose,
+}: CoordinatePanelProps) {
   const [copiedCoordinates, setCopiedCoordinates] = useState(false);
 
   // Handle coordinate copying
   const handleCopyCoordinates = async () => {
-    const success = await copyCoordinatesToClipboard(coordinates.lat, coordinates.lng);
+    const success = await copyCoordinatesToClipboard(
+      coordinates.lat,
+      coordinates.lng
+    );
 
     if (success) {
       setCopiedCoordinates(true);
@@ -48,38 +58,55 @@ export function CoordinatePanel({ coordinates, onClose }: CoordinatePanelProps) 
   };
 
   return (
-    <div className="p-4 lg:p-6 h-full overflow-y-auto" onTouchStart={handleTouchStart}>
+    <div
+      className="h-full overflow-y-auto p-4 lg:p-6"
+      onTouchStart={handleTouchStart}
+    >
       {/* Mobile swipe indicator */}
-      <div className="lg:hidden w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
+      <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-gray-300 lg:hidden"></div>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 lg:mb-6">
-        <h2 className="text-lg lg:text-xl font-bold text-gray-900">Koordinater</h2>
+      <div className="mb-4 flex items-center justify-between lg:mb-6">
+        <h2 className="text-lg font-bold text-gray-900 lg:text-xl">
+          Koordinater
+        </h2>
         <button
           onClick={onClose}
-          className="p-2 hover:bg-gray-100 active:bg-gray-200 rounded-full transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors hover:bg-gray-100 active:bg-gray-200"
           aria-label="Luk panel"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       </div>
 
       {/* GPS Coordinates and Links */}
       <div className="mb-4">
-        <div className="bg-blue-50 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-blue-800">📍 GPS Position</span>
+        <div className="rounded-lg bg-blue-50 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-blue-800">
+              📍 GPS Position
+            </span>
             <button
               onClick={handleCopyCoordinates}
-              className="text-xs bg-blue-100 hover:bg-blue-200 active:bg-blue-300 text-blue-700 px-2 py-1 rounded transition-colors min-h-[32px] flex items-center"
+              className="flex min-h-[32px] items-center rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-200 active:bg-blue-300"
               title="Kopier koordinater"
             >
-              {copiedCoordinates ? "✓ Kopieret!" : "📋 Kopier"}
+              {copiedCoordinates ? '✓ Kopieret!' : '📋 Kopier'}
             </button>
           </div>
-          <div className="text-xs text-blue-700 font-mono mb-3">
+          <div className="mb-3 font-mono text-xs text-blue-700">
             {formatWgs84Coordinates(coordinates.lat, coordinates.lng)}
           </div>
           <div className="space-y-2">
@@ -87,7 +114,7 @@ export function CoordinatePanel({ coordinates, onClose }: CoordinatePanelProps) 
               href={generateSkraafotoUrl(coordinates.lat, coordinates.lng)}
               target="_blank"
               rel="noopener noreferrer"
-              className="block text-xs bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white px-3 py-2 rounded transition-colors text-center font-medium min-h-[36px] flex items-center justify-center"
+              className="block flex min-h-[36px] items-center justify-center rounded bg-blue-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
             >
               🛩️ Åbn i Skråfoto
             </a>
@@ -96,7 +123,7 @@ export function CoordinatePanel({ coordinates, onClose }: CoordinatePanelProps) 
                 const googleMapsUrl = `https://www.google.com/maps?q=${coordinates.lat},${coordinates.lng}`;
                 window.open(googleMapsUrl, '_blank');
               }}
-              className="w-full text-xs bg-green-600 hover:bg-green-700 active:bg-green-800 text-white px-3 py-2 rounded transition-colors text-center font-medium min-h-[36px] flex items-center justify-center"
+              className="flex min-h-[36px] w-full items-center justify-center rounded bg-green-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-green-700 active:bg-green-800"
             >
               🗺️ Google Maps
             </button>

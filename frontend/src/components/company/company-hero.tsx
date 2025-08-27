@@ -1,18 +1,22 @@
-import { CompanyResponse } from "@/services/supabase/types";
-import { Container } from "../layout/container";
-import { Button } from "../ui/button";
-import { ArrowLeftIcon, ArrowDownIcon } from "@heroicons/react/24/outline";
-import { BlockMapChart } from "../pagebuilder/pageBlocks/block-map-chart";
+import { CompanyResponse } from '@/services/supabase/types';
+import { Container } from '../layout/container';
+import { Button } from '../ui/button';
+import { ArrowLeftIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
+import { BlockMapChart } from '../pagebuilder/pageBlocks/block-map-chart';
 
 export function CompanyHero({ company }: { company: CompanyResponse }) {
   // Find the company identity and map components from pageBuilder
-  const companyIdentity = company.pageBuilder.find(block => block._key === 'company-identity');
-  const companyMap = company.pageBuilder.find(block => block._key === 'company-map-overview');
+  const companyIdentity = company.pageBuilder.find(
+    (block) => block._key === 'company-identity'
+  );
+  const companyMap = company.pageBuilder.find(
+    (block) => block._key === 'company-map-overview'
+  );
 
   return (
-    <Container className="bg-foreground-darker " section>
-      <div className="flex flex-col  md:flex-row gap-20">
-        <div className="flex flex-col  gap-4 w-full ">
+    <Container className="bg-foreground-darker" section>
+      <div className="flex flex-col gap-20 md:flex-row">
+        <div className="flex w-full flex-col gap-4">
           <div>
             <Button variant="secondary">
               <ArrowLeftIcon
@@ -28,17 +32,34 @@ export function CompanyHero({ company }: { company: CompanyResponse }) {
             {companyIdentity && companyIdentity._type === 'infoCard' && (
               <>
                 <h1 className="text-4xl font-bold text-gray-800">
-                  {companyIdentity.items.find(item => item.label === 'Navn')?.value || 'Virksomhed'}
+                  {companyIdentity.items.find((item) => item.label === 'Navn')
+                    ?.value || 'Virksomhed'}
                 </h1>
                 <div className="space-y-1">
                   <p className="text-lg text-gray-700">
-                    CVR: {companyIdentity.items.find(item => item.label === 'CVR')?.value}
+                    CVR:{' '}
+                    {
+                      companyIdentity.items.find((item) => item.label === 'CVR')
+                        ?.value
+                    }
                   </p>
                   <p className="text-base text-gray-600">
-                    {companyIdentity.items.find(item => item.label === 'Adresse')?.value}
+                    {
+                      companyIdentity.items.find(
+                        (item) => item.label === 'Adresse'
+                      )?.value
+                    }
                   </p>
                   <p className="text-base text-gray-600">
-                    {companyIdentity.items.find(item => item.label === 'Postnummer')?.value} {companyIdentity.items.find(item => item.label === 'By')?.value}
+                    {
+                      companyIdentity.items.find(
+                        (item) => item.label === 'Postnummer'
+                      )?.value
+                    }{' '}
+                    {
+                      companyIdentity.items.find((item) => item.label === 'By')
+                        ?.value
+                    }
                   </p>
                 </div>
               </>
@@ -53,7 +74,7 @@ export function CompanyHero({ company }: { company: CompanyResponse }) {
           </div>
         </div>
 
-        <div className="w-full relative">
+        <div className="relative w-full">
           {/* Company Map */}
           {companyMap && companyMap._type === 'mapChart' && (
             <BlockMapChart chart={companyMap} />

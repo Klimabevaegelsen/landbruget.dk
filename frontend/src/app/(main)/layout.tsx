@@ -1,6 +1,6 @@
-import { NavBanner } from "@/components/layout/templates/nav-banner";
-import { Navbar } from "@/components/layout/templates/navbar";
-import { Footer } from "@/components/layout/templates/footer";
+import { NavBanner } from '@/components/layout/templates/nav-banner';
+import { Navbar } from '@/components/layout/templates/navbar';
+import { Footer } from '@/components/layout/templates/footer';
 export default function MainLayout({
   children,
 }: {

@@ -12,7 +12,10 @@
  * Uses a simplified conversion suitable for Denmark
  * For more precise conversion, consider using a dedicated projection library
  */
-export function wgs84ToUtm32(lat: number, lng: number): { x: number; y: number } {
+export function wgs84ToUtm32(
+  lat: number,
+  lng: number
+): { x: number; y: number } {
   // Convert degrees to radians
   const latRad = (lat * Math.PI) / 180;
   const lngRad = (lng * Math.PI) / 180;
@@ -38,25 +41,39 @@ export function wgs84ToUtm32(lat: number, lng: number): { x: number; y: number }
 
   // Calculate M (meridional arc)
   // const e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2)); // Not used in current calculation
-  const M = a * (
-    (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 * e2 * e2 / 256) * latRad -
-    (3 * e2 / 8 + 3 * e2 * e2 / 32 + 45 * e2 * e2 * e2 / 1024) * Math.sin(2 * latRad) +
-    (15 * e2 * e2 / 256 + 45 * e2 * e2 * e2 / 1024) * Math.sin(4 * latRad) -
-    (35 * e2 * e2 * e2 / 3072) * Math.sin(6 * latRad)
-  );
+  const M =
+    a *
+    ((1 - e2 / 4 - (3 * e2 * e2) / 64 - (5 * e2 * e2 * e2) / 256) * latRad -
+      ((3 * e2) / 8 + (3 * e2 * e2) / 32 + (45 * e2 * e2 * e2) / 1024) *
+        Math.sin(2 * latRad) +
+      ((15 * e2 * e2) / 256 + (45 * e2 * e2 * e2) / 1024) *
+        Math.sin(4 * latRad) -
+      ((35 * e2 * e2 * e2) / 3072) * Math.sin(6 * latRad));
 
   // Calculate UTM coordinates
-  const x = k0 * N * (
-    A + (1 - T + C) * A * A * A / 6 +
-    (5 - 18 * T + T * T + 72 * C - 58 * e2p) * A * A * A * A * A / 120
-  ) + 500000; // False easting
+  const x =
+    k0 *
+      N *
+      (A +
+        ((1 - T + C) * A * A * A) / 6 +
+        ((5 - 18 * T + T * T + 72 * C - 58 * e2p) * A * A * A * A * A) / 120) +
+    500000; // False easting
 
-  const y = k0 * (
-    M + N * Math.tan(latRad) * (
-      A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24 +
-      (61 - 58 * T + T * T + 600 * C - 330 * e2p) * A * A * A * A * A * A / 720
-    )
-  );
+  const y =
+    k0 *
+    (M +
+      N *
+        Math.tan(latRad) *
+        ((A * A) / 2 +
+          ((5 - T + 9 * C + 4 * C * C) * A * A * A * A) / 24 +
+          ((61 - 58 * T + T * T + 600 * C - 330 * e2p) *
+            A *
+            A *
+            A *
+            A *
+            A *
+            A) /
+            720));
 
   return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
 }
@@ -84,7 +101,10 @@ export function generateSkraafotoUrl(lat: number, lng: number): string {
 /**
  * Copy coordinates to clipboard
  */
-export async function copyCoordinatesToClipboard(lat: number, lng: number): Promise<boolean> {
+export async function copyCoordinatesToClipboard(
+  lat: number,
+  lng: number
+): Promise<boolean> {
   try {
     const formatted = formatWgs84Coordinates(lat, lng);
     await navigator.clipboard.writeText(formatted);

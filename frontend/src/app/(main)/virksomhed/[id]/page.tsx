@@ -1,6 +1,6 @@
-import { Company } from "@/components/company/company";
-import { getCompanyById } from "@/services/supabase/company";
-import { notFound } from "next/navigation";
+import { Company } from '@/components/company/company';
+import { getCompanyById } from '@/services/supabase/company';
+import { notFound } from 'next/navigation';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -19,8 +19,6 @@ export default async function CompanyPage({ params }: Props) {
   if (!company) {
     return notFound();
   }
-
-
 
   return <Company company={company} />;
 }

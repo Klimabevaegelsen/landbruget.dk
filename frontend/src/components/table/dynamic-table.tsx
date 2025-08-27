@@ -1,5 +1,5 @@
-"use client";
-import * as React from "react";
+'use client';
+import * as React from 'react';
 import {
   ColumnDef,
   SortingState,
@@ -9,7 +9,7 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
-} from "@tanstack/react-table";
+} from '@tanstack/react-table';
 
 import {
   Table,
@@ -18,11 +18,11 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from '@/components/ui/table';
 
-import { Input } from "@/components/ui/input";
-import { DataTablePagination } from "./data-table-pagination";
-import { cn } from "@/lib/utils";
+import { Input } from '@/components/ui/input';
+import { DataTablePagination } from './data-table-pagination';
+import { cn } from '@/lib/utils';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -36,7 +36,7 @@ export function DynamicDataTable<TData, TValue>({
   filterable,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = React.useState<string>("");
+  const [globalFilter, setGlobalFilter] = React.useState<string>('');
 
   const rowCount = data.length;
 
@@ -48,7 +48,7 @@ export function DynamicDataTable<TData, TValue>({
     onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    globalFilterFn: "includesString",
+    globalFilterFn: 'includesString',
     state: {
       sorting,
       globalFilter,
@@ -62,16 +62,16 @@ export function DynamicDataTable<TData, TValue>({
         <div className="flex items-center py-4">
           <Input
             placeholder="Filtrering"
-            value={globalFilter ?? ""}
+            value={globalFilter ?? ''}
             onChange={(e) => table.setGlobalFilter(String(e.target.value))}
-            className="max-w-sm "
+            className="max-w-sm"
           />
         </div>
       )}
       <div
         className={cn(
-          "border rounded border-slate-300 ",
-          rowCount > 10 && "min-h-[575px]"
+          'rounded border border-slate-300',
+          rowCount > 10 && 'min-h-[575px]'
         )}
       >
         <Table>
@@ -99,7 +99,7 @@ export function DynamicDataTable<TData, TValue>({
                 <TableRow
                   index={index}
                   key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
+                  data-state={row.getIsSelected() && 'selected'}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>

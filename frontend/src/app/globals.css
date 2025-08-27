@@ -1,5 +1,5 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -32,7 +32,9 @@
 
 @layer utilities {
   .animate-typing {
-    animation: typing 2s steps(20, end), blink 0.75s step-end infinite;
+    animation:
+      typing 2s steps(20, end),
+      blink 0.75s step-end infinite;
   }
   .animate-morph {
     animation: morphShape 5s ease-in-out infinite;
@@ -128,7 +130,7 @@
   }
 
   .skeleton-item {
-    @apply bg-gray-200 rounded-md;
+    @apply rounded-md bg-gray-200;
   }
 
   /* Mobile safe area support */
@@ -149,7 +151,10 @@
 
   /* Improve touch targets for mobile */
   @media (max-width: 1024px) {
-    button, input, select, textarea {
+    button,
+    input,
+    select,
+    textarea {
       min-height: 44px;
     }
   }

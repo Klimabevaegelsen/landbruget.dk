@@ -35,8 +35,8 @@ export async function POST(request: NextRequest) {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Accept': 'application/vnd.github.v3+json',
-        'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+        Accept: 'application/vnd.github.v3+json',
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -59,11 +59,13 @@ export async function POST(request: NextRequest) {
       message: 'H3 PFAS pipeline triggered successfully',
       config: workflowInputs,
     });
-
   } catch (error) {
     console.error('Error triggering H3 PFAS pipeline:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     );
   }

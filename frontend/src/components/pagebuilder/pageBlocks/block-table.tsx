@@ -1,21 +1,23 @@
-"use client";
+'use client';
 
-import { BaseDataGrid } from "@/services/supabase/types";
-import { DynamicDataTable } from "@/components/table/dynamic-table";
-import { ColumnDef } from "@tanstack/react-table";
+import { BaseDataGrid } from '@/services/supabase/types';
+import { DynamicDataTable } from '@/components/table/dynamic-table';
+import { ColumnDef } from '@tanstack/react-table';
 import {
   ArrowsUpDownIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-} from "@heroicons/react/24/outline";
-import { shouldShowPlaceholder } from "./chart-utils";
-import { PlaceholderChart } from "./placeholder-chart";
+} from '@heroicons/react/24/outline';
+import { shouldShowPlaceholder } from './chart-utils';
+import { PlaceholderChart } from './placeholder-chart';
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   // Check if this table should show a placeholder
   const placeholderDataType = shouldShowPlaceholder(grid._key);
   if (placeholderDataType) {
-    return <PlaceholderChart title={grid.title} dataType={placeholderDataType} />;
+    return (
+      <PlaceholderChart title={grid.title} dataType={placeholderDataType} />
+    );
   }
   const columns: ColumnDef<Record<string, string | number | boolean>>[] =
     grid.columns.map((col) => ({
@@ -23,13 +25,13 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
       header: ({ column }) => {
         return (
           <div
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-            className="flex items-center cursor-pointer group"
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+            className="group flex cursor-pointer items-center"
           >
             {col.label}
-            {column.getIsSorted() === "asc" ? (
+            {column.getIsSorted() === 'asc' ? (
               <ArrowUpIcon className="ml-2 size-3 text-black" />
-            ) : column.getIsSorted() === "desc" ? (
+            ) : column.getIsSorted() === 'desc' ? (
               <ArrowDownIcon className="ml-2 size-3 text-black" />
             ) : (
               <div className="ml-2 size-3">

@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import React from "react";
+import React from 'react';
 
 interface MapErrorBoundaryState {
   hasError: boolean;
@@ -28,11 +28,14 @@ export class MapErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // Log the error for debugging
-    console.error("MapErrorBoundary caught an error:", error, errorInfo);
+    console.error('MapErrorBoundary caught an error:', error, errorInfo);
 
     // Log specific MapLibre GL JS errors
-    if (error.message.includes("missing required property")) {
-      console.error("MapLibre data validation error - likely missing GeoJSON data:", error.message);
+    if (error.message.includes('missing required property')) {
+      console.error(
+        'MapLibre data validation error - likely missing GeoJSON data:',
+        error.message
+      );
     }
   }
 
@@ -41,10 +44,10 @@ export class MapErrorBoundary extends React.Component<
       // Render fallback UI
       return (
         this.props.fallback || (
-          <div className="p-8 text-center bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-            <div className="text-gray-600 mb-2">
+          <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center">
+            <div className="mb-2 text-gray-600">
               <svg
-                className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                className="mx-auto mb-4 h-12 w-12 text-gray-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -56,18 +59,20 @@ export class MapErrorBoundary extends React.Component<
                   d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 01.553-.894L9 2l6 3 5.447-2.724A1 1 0 0121 3.382v10.764a1 1 0 01-.553.894L15 18l-6-3z"
                 />
               </svg>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <h3 className="mb-2 text-lg font-medium text-gray-900">
                 Kort kunne ikke indlæses
               </h3>
               <p className="text-sm text-gray-500">
                 Der opstod en fejl under indlæsning af kortdata.
-                {this.state.error?.message.includes("missing required property")
-                  ? " Kortdata mangler eller er ikke korrekt formateret."
-                  : ""}
+                {this.state.error?.message.includes('missing required property')
+                  ? ' Kortdata mangler eller er ikke korrekt formateret.'
+                  : ''}
               </p>
               <button
-                onClick={() => this.setState({ hasError: false, error: undefined })}
-                className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                onClick={() =>
+                  this.setState({ hasError: false, error: undefined })
+                }
+                className="mt-4 inline-flex items-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
               >
                 Prøv igen
               </button>

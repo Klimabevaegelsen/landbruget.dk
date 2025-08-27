@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import {
   ComposedChart,
@@ -10,18 +10,18 @@ import {
   Legend,
   ResponsiveContainer,
   Tooltip,
-} from "recharts";
+} from 'recharts';
 import {
   ComboChart as ComboChartType,
   ChartData,
-} from "@/services/supabase/types";
-import CustomTooltip from "@/components/chart/custom-tooltip";
-import { useEffect, useState } from "react";
-import CustomLegend from "@/components/chart/custom-legend";
-import { VizColors } from "@/lib/utils";
-import { xAxisDefaultProps } from "./block-bar-chart";
-import { shouldShowPlaceholder } from "./chart-utils";
-import { PlaceholderChart } from "./placeholder-chart";
+} from '@/services/supabase/types';
+import CustomTooltip from '@/components/chart/custom-tooltip';
+import { useEffect, useState } from 'react';
+import CustomLegend from '@/components/chart/custom-legend';
+import { VizColors } from '@/lib/utils';
+import { xAxisDefaultProps } from './block-bar-chart';
+import { shouldShowPlaceholder } from './chart-utils';
+import { PlaceholderChart } from './placeholder-chart';
 
 // We can reuse the existing transformDataForRecharts function since it already handles our data structure
 const transformDataForRecharts = (chartData: ChartData) => {
@@ -48,10 +48,10 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   useEffect(() => {
     const longestTick = transformedData.reduce((max, dataPoint) => {
       const valueLengths = Object.entries(dataPoint)
-        .filter(([key]) => key !== "name")
+        .filter(([key]) => key !== 'name')
         .map(([, value]) =>
-          typeof value === "number"
-            ? value.toLocaleString("da-DK").length
+          typeof value === 'number'
+            ? value.toLocaleString('da-DK').length
             : String(value).length
         );
       return Math.max(max, ...valueLengths);
@@ -64,7 +64,9 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   // Check if this chart should show a placeholder
   const placeholderDataType = shouldShowPlaceholder(chart._key);
   if (placeholderDataType) {
-    return <PlaceholderChart title={chart.title} dataType={placeholderDataType} />;
+    return (
+      <PlaceholderChart title={chart.title} dataType={placeholderDataType} />
+    );
   }
 
   if (!transformedData.length) {
@@ -72,8 +74,8 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   }
 
   // Separate series by type and yAxis
-  const barSeries = chart.data.series.filter((s) => s.type === "bar");
-  const lineSeries = chart.data.series.filter((s) => s.type === "line");
+  const barSeries = chart.data.series.filter((s) => s.type === 'bar');
+  const lineSeries = chart.data.series.filter((s) => s.type === 'line');
 
   // Get the colors for each axis
   const leftAxisColor = barSeries.length > 0 ? VizColors[0] : undefined;
@@ -82,7 +84,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
 
   return (
     <div>
-      <div style={{ width: "100%", height: 400 }} className="mt-4">
+      <div style={{ width: '100%', height: 400 }} className="mt-4">
         <ResponsiveContainer>
           <ComposedChart data={transformedData}>
             <CartesianGrid vertical={false} />
@@ -95,7 +97,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
               axisLine={{ stroke: leftAxisColor }}
               tickLine={{ stroke: leftAxisColor }}
               tick={{ fill: leftAxisColor }}
-              tickFormatter={(tick) => tick.toLocaleString("da-DK")}
+              tickFormatter={(tick) => tick.toLocaleString('da-DK')}
               width={yWidth}
             />
 
@@ -106,11 +108,11 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
               axisLine={{ stroke: rightAxisColor }}
               tickLine={{ stroke: rightAxisColor }}
               tick={{ fill: rightAxisColor }}
-              tickFormatter={(tick) => tick.toLocaleString("da-DK")}
+              tickFormatter={(tick) => tick.toLocaleString('da-DK')}
               width={yWidth}
             />
 
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: "#eef8f2" }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#eef8f2' }} />
             <Legend content={<CustomLegend />} />
 
             {/* Render bar series */}

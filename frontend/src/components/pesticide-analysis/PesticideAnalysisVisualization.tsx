@@ -8,7 +8,11 @@ import { useToast } from '@/components/ui/toast';
 import CompanyFilterPanel from './CompanyFilterPanel';
 import CompanyListView from './CompanyListView';
 import CompanyDetailsPanel from './CompanyDetailsPanel';
-import { PesticideAnalysisFilters, CompanySummary, PesticideAnalysisResponse } from './types';
+import {
+  PesticideAnalysisFilters,
+  CompanySummary,
+  PesticideAnalysisResponse,
+} from './types';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -22,14 +26,18 @@ export default function PesticideAnalysisVisualization() {
     page: 1,
     limit: 50,
     sortBy: 'belastning',
-    sortOrder: 'desc'
+    sortOrder: 'desc',
   });
 
   const [data, setData] = useState<PesticideAnalysisResponse | null>(null);
-  const [selectedCompany, setSelectedCompany] = useState<CompanySummary | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<CompanySummary | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentLoadingToastId, setCurrentLoadingToastId] = useState<string | null>(null);
+  const [currentLoadingToastId, setCurrentLoadingToastId] = useState<
+    string | null
+  >(null);
 
   const { addToast, removeToast } = useToast();
 
@@ -47,9 +55,9 @@ export default function PesticideAnalysisVisualization() {
 
     // Show loading toast for data fetch
     const toastId = addToast({
-      title: "Indlæser pesticiddata",
-      description: "Henter analysedata...",
-      variant: "loading"
+      title: 'Indlæser pesticiddata',
+      description: 'Henter analysedata...',
+      variant: 'loading',
     });
     setCurrentLoadingToastId(toastId);
 
@@ -64,12 +72,15 @@ export default function PesticideAnalysisVisualization() {
         }
       });
 
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/pesticide-analysis?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetch(
+        `${SUPABASE_URL}/functions/v1/pesticide-analysis?${params}`,
+        {
+          headers: {
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`API request failed: ${response.status}`);
@@ -102,7 +113,7 @@ export default function PesticideAnalysisVisualization() {
       removeToast(currentLoadingToastId);
       setCurrentLoadingToastId(null);
     }
-    setFilters(prev => ({ ...prev, ...newFilters, page: 1 })); // Reset to page 1 when filters change
+    setFilters((prev) => ({ ...prev, ...newFilters, page: 1 })); // Reset to page 1 when filters change
   };
 
   // Handle company selection
@@ -112,22 +123,26 @@ export default function PesticideAnalysisVisualization() {
 
   // Handle pagination
   const handlePageChange = (newPage: number) => {
-    setFilters(prev => ({ ...prev, page: newPage }));
+    setFilters((prev) => ({ ...prev, page: newPage }));
   };
 
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
       {data && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Virksomheder</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">
+                Virksomheder
+              </CardTitle>
+              <BarChart3 className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{data.total_count.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">
+              <div className="text-2xl font-bold">
+                {data.total_count.toLocaleString()}
+              </div>
+              <p className="text-muted-foreground text-xs">
                 Viser {data.companies.length} af {data.total_count}
               </p>
             </CardContent>
@@ -135,29 +150,33 @@ export default function PesticideAnalysisVisualization() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pesticidbelastning</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">
+                Pesticidbelastning
+              </CardTitle>
+              <BarChart3 className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {data.companies.reduce((sum, c) => sum + c.total_belastning, 0).toFixed(1)}
+                {data.companies
+                  .reduce((sum, c) => sum + c.total_belastning, 0)
+                  .toFixed(1)}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Total belastning
-              </p>
+              <p className="text-muted-foreground text-xs">Total belastning</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">PFAS Anvendelse</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">
+                PFAS Anvendelse
+              </CardTitle>
+              <BarChart3 className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {data.companies.filter(c => c.pfas_belastning > 0).length}
+                {data.companies.filter((c) => c.pfas_belastning > 0).length}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Virksomheder med PFAS
               </p>
             </CardContent>
@@ -166,13 +185,16 @@ export default function PesticideAnalysisVisualization() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Glyphosat</CardTitle>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              <BarChart3 className="text-muted-foreground h-4 w-4" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {data.companies.filter(c => c.glyphosate_belastning > 0).length}
+                {
+                  data.companies.filter((c) => c.glyphosate_belastning > 0)
+                    .length
+                }
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Virksomheder med glyphosat
               </p>
             </CardContent>
@@ -181,7 +203,7 @@ export default function PesticideAnalysisVisualization() {
       )}
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Filter Panel */}
         <div className="lg:col-span-3">
           <Card>
@@ -195,7 +217,9 @@ export default function PesticideAnalysisVisualization() {
               <CompanyFilterPanel
                 filters={filters}
                 availableYears={data?.filters.available_years || []}
-                availableMunicipalities={data?.filters.available_municipalities || []}
+                availableMunicipalities={
+                  data?.filters.available_municipalities || []
+                }
                 onFiltersChange={updateFilters}
               />
             </CardContent>
@@ -214,7 +238,7 @@ export default function PesticideAnalysisVisualization() {
             </CardHeader>
             <CardContent>
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700">
                   {error}
                   <Button
                     variant="outline"
@@ -238,7 +262,9 @@ export default function PesticideAnalysisVisualization() {
                   selectedCompany={selectedCompany}
                   sortBy={filters.sortBy}
                   sortOrder={filters.sortOrder}
-                  onSortChange={(sortBy, sortOrder) => updateFilters({ sortBy, sortOrder })}
+                  onSortChange={(sortBy, sortOrder) =>
+                    updateFilters({ sortBy, sortOrder })
+                  }
                 />
               )}
 
@@ -260,12 +286,10 @@ export default function PesticideAnalysisVisualization() {
             </CardHeader>
             <CardContent>
               {selectedCompany ? (
-                <CompanyDetailsPanel
-                  company={selectedCompany}
-                />
+                <CompanyDetailsPanel company={selectedCompany} />
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <div className="text-muted-foreground py-8 text-center">
+                  <Search className="mx-auto mb-4 h-12 w-12 opacity-50" />
                   <p>Vælg en virksomhed for at se detaljer</p>
                 </div>
               )}
