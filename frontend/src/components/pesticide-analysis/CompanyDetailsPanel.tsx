@@ -36,7 +36,7 @@ export default function CompanyDetailsPanel({ company }: CompanyDetailsPanelProp
       // Show loading toast for company details
       const toastId = addToast({
         title: "Indlæser virksomhedsdetaljer",
-        description: `Henter detaljer for ${company.name}...`,
+        description: `Henter detaljer for ${company.company_name}...`,
         variant: "loading"
       });
       setCurrentDetailsToastId(toastId);
@@ -75,7 +75,7 @@ export default function CompanyDetailsPanel({ company }: CompanyDetailsPanelProp
     };
 
     fetchDetails();
-  }, [company.cvr_number, company.name, currentDetailsToastId, addToast, removeToast]);
+  }, [company.cvr_number, company.company_name, currentDetailsToastId, addToast, removeToast]);
 
   const formatBelastning = (value: number) => {
     return value.toLocaleString('da-DK', {

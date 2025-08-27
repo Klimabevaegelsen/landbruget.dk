@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect } from "react";
 import { CompanyResponse } from "@/services/supabase/types";
 import { CompanyHero } from "./company-hero";
