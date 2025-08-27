@@ -9,7 +9,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { apiFetch } from "@/services/supabase/config";
-import { useToast } from "@/components/ui/toast";
+import { useLoadingToast } from "@/hooks/useLoadingToast";
 
 export function GlobalSearch({
   className,
@@ -121,12 +121,18 @@ function SearchOverlay({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { showLoadingToast, hideLoadingToast } = useLoadingToast();
+
   // Debounced search function
   const performSearch = useCallback(async (query: string) => {
     if (!query || query.trim().length < 2) {
       setSearchResults([]);
+      hideLoadingToast();
       return;
     }
+
+    // Show loading toast for search
+    showLoadingToast("Søger", `Søger efter "${query.trim()}"...`);
 
     setIsLoading(true);
     setError(null);
@@ -156,8 +162,9 @@ function SearchOverlay({
       setSearchResults([]);
     } finally {
       setIsLoading(false);
+      hideLoadingToast();
     }
-  }, [activeTab]);
+  }, [activeTab, showLoadingToast, hideLoadingToast]);
 
   // Debounce search
   useEffect(() => {
@@ -286,15 +293,11 @@ function SearchResultCard({
   result: SearchResult;
   onClick: () => void;
 }) {
-  const { addToast } = useToast();
+  const { showLoadingToast } = useLoadingToast();
 
   const handleClick = () => {
     // Show loading toast
-    addToast({
-      title: "Indlæser virksomhed",
-      description: `Henter data for ${result.name}...`,
-      variant: "loading"
-    });
+    showLoadingToast("Indlæser virksomhed", `Henter data for ${result.name}...`);
 
     onClick();
   };
