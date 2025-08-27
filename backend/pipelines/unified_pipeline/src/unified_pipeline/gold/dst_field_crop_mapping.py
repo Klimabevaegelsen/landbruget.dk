@@ -1214,6 +1214,24 @@ DST_FIELD_MAPPING = {
         "notes": "Chinese cabbage - other cabbage category",
     },
     # =============================================================================
+    # STRAW/FIBER CROPS (HALM1) - Straw Production
+    # =============================================================================
+    # Hemp and flax for fiber/straw production
+    "Hamp": {
+        "dst_table": "HALM1",
+        "dst_category": "Alle afgrøder",
+        "match_quality": "approximate",
+        "field_count": 70,
+        "notes": "Hemp for fiber - maps to all crops category",
+    },
+    "Oliehør": {
+        "dst_table": "HALM1",
+        "dst_category": "Alle afgrøder",
+        "match_quality": "approximate",
+        "field_count": 22,
+        "notes": "Oil flax - maps to all crops category for straw production",
+    },
+    # =============================================================================
     # ADDITIONAL MAPPABLE CROPS FROM UNMAPPED ANALYSIS
     # =============================================================================
     # Additional Grass/Forage Crops (HST77)
