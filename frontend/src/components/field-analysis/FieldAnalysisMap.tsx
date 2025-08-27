@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Map, {
   MapLayerMouseEvent,
   NavigationControl,
-} from "react-map-gl/maplibre";
-import "maplibre-gl/dist/maplibre-gl.css";
-import { LayerVisibility, FilterState, FieldAnalysisData } from "./types";
-import { getDecileBreakpoints, getColorScheme } from "./colorUtils";
-import { SearchBar } from "./SearchBar";
+} from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { LayerVisibility, FilterState, FieldAnalysisData } from './types';
+import { getDecileBreakpoints, getColorScheme } from './colorUtils';
+import { SearchBar } from './SearchBar';
 
 // Type for MapLibre map instance
 interface MapInstance {
@@ -18,7 +18,10 @@ interface MapInstance {
   setLayoutProperty: (id: string, prop: string, value: string) => void;
   setPaintProperty: (id: string, prop: string, value: unknown) => void;
   addSource: (id: string, source: unknown) => void;
-  addImage: (id: string, image: HTMLCanvasElement | ImageBitmap | ImageData) => void;
+  addImage: (
+    id: string,
+    image: HTMLCanvasElement | ImageBitmap | ImageData
+  ) => void;
 }
 
 interface FieldAnalysisMapProps {
@@ -32,7 +35,11 @@ interface FieldAnalysisMapProps {
   layerVisibility: LayerVisibility;
   filterState: FilterState;
   onFieldSelect: (fieldData: FieldAnalysisData) => void;
-  onLocationSelect?: (location: { lat: number; lng: number; address: string }) => void;
+  onLocationSelect?: (location: {
+    lat: number;
+    lng: number;
+    address: string;
+  }) => void;
   onMapClick?: (coordinates: { lat: number; lng: number }) => void;
 }
 
@@ -45,10 +52,19 @@ interface TooltipInfo {
   colorUnit: FilterState['colorUnit'];
 }
 
-function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit }: TooltipInfo) {
+function MapTooltip({
+  x,
+  y,
+  properties,
+  layerName,
+  visualizationMode,
+  colorUnit,
+}: TooltipInfo) {
   const formatValue = (value: unknown, unit?: string): string => {
-    if (typeof value === "number") {
-      const formatted = value.toLocaleString("da-DK", { maximumFractionDigits: 2 });
+    if (typeof value === 'number') {
+      const formatted = value.toLocaleString('da-DK', {
+        maximumFractionDigits: 2,
+      });
       return unit ? `${formatted} ${unit}` : formatted;
     }
     return String(value);
@@ -59,49 +75,59 @@ function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit 
 
     // Always show basic field info
     if (properties.crop_name) {
-      data.push({ label: "Afgrøde", value: properties.crop_name });
+      data.push({ label: 'Afgrøde', value: properties.crop_name });
     }
 
     if (properties.area_hectares) {
-      data.push({ label: "Areal", value: properties.area_hectares, unit: "ha" });
+      data.push({
+        label: 'Areal',
+        value: properties.area_hectares,
+        unit: 'ha',
+      });
     }
 
     if (properties.is_organic !== undefined) {
-      data.push({ label: "Økologisk", value: properties.is_organic ? "Ja" : "Nej" });
+      data.push({
+        label: 'Økologisk',
+        value: properties.is_organic ? 'Ja' : 'Nej',
+      });
     }
 
     if (properties.kommune) {
-      data.push({ label: "Kommune", value: properties.kommune });
+      data.push({ label: 'Kommune', value: properties.kommune });
     }
 
     // Show BNBO status if available
     if (properties.status_category) {
-      const statusLabel = properties.status_category === "Action Required"
-        ? "BNBO handling påkrævet"
-        : properties.status_category === "Completed"
-        ? "BNBO gennemført"
-        : "BNBO status";
+      const statusLabel =
+        properties.status_category === 'Action Required'
+          ? 'BNBO handling påkrævet'
+          : properties.status_category === 'Completed'
+            ? 'BNBO gennemført'
+            : 'BNBO status';
       data.push({ label: statusLabel, value: properties.status_category });
     }
 
     // Show building-specific data if available
-    if (layerName === "Bygning") {
+    if (layerName === 'Bygning') {
       if (properties.address) {
-        data.push({ label: "Adresse", value: properties.address });
+        data.push({ label: 'Adresse', value: properties.address });
       }
 
       // Show category group with Danish labels
       if (properties.category_group) {
         const categoryLabels: Record<string, string> = {
-          'residential': 'Bolig',
-          'agricultural': 'Landbrug',
-          'publicServices': 'Offentlig service'
+          residential: 'Bolig',
+          agricultural: 'Landbrug',
+          publicServices: 'Offentlig service',
         };
-        const categoryLabel = categoryLabels[properties.category_group as string] || properties.category_group;
-        data.push({ label: "Kategori", value: categoryLabel });
+        const categoryLabel =
+          categoryLabels[properties.category_group as string] ||
+          properties.category_group;
+        data.push({ label: 'Kategori', value: categoryLabel });
       }
 
-            // Show BBR usage code with official Danish labels
+      // Show BBR usage code with official Danish labels
       if (properties.bbr_usage_code) {
         const bbrUsageLabels: Record<string, string> = {
           // Boliger (100-199)
@@ -168,48 +194,63 @@ function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit 
           '950': 'Bygning til pelsdyravl',
           '960': 'Bygning til fiskeopdræt',
           '970': 'Skovbrugsbygning',
-          '990': 'Anden landbrugs- eller skovbrugsbygning'
+          '990': 'Anden landbrugs- eller skovbrugsbygning',
         };
 
-        const usageLabel = bbrUsageLabels[properties.bbr_usage_code as string] || `BBR kode ${properties.bbr_usage_code}`;
-        data.push({ label: "BBR anvendelse", value: usageLabel });
+        const usageLabel =
+          bbrUsageLabels[properties.bbr_usage_code as string] ||
+          `BBR kode ${properties.bbr_usage_code}`;
+        data.push({ label: 'BBR anvendelse', value: usageLabel });
       }
 
       // Show detailed INSPIRE usage as fallback
       else if (properties.inspire_current_use) {
         const usageLabels: Record<string, string> = {
-          'individualResidence': 'Enfamilieboliger',
-          'agriculture': 'Landbrugsbygninger',
-          'collectiveResidence': 'Flerfamilieboliger',
-          'twoDwellings': 'Tofamiliehuse',
-          'publicServices': 'Offentlige bygninger'
+          individualResidence: 'Enfamilieboliger',
+          agriculture: 'Landbrugsbygninger',
+          collectiveResidence: 'Flerfamilieboliger',
+          twoDwellings: 'Tofamiliehuse',
+          publicServices: 'Offentlige bygninger',
         };
-        const usageLabel = usageLabels[properties.inspire_current_use as string] || properties.inspire_current_use;
-        data.push({ label: "Anvendelse", value: usageLabel });
+        const usageLabel =
+          usageLabels[properties.inspire_current_use as string] ||
+          properties.inspire_current_use;
+        data.push({ label: 'Anvendelse', value: usageLabel });
       }
 
       if (properties.building_type) {
-        data.push({ label: "Bygningstype", value: properties.building_type });
+        data.push({ label: 'Bygningstype', value: properties.building_type });
       }
 
       if (properties.inspire_construction_year) {
-        data.push({ label: "Byggeår", value: properties.inspire_construction_year });
+        data.push({
+          label: 'Byggeår',
+          value: properties.inspire_construction_year,
+        });
       }
 
       if (properties.inspire_floor_area) {
-        data.push({ label: "Etageareal", value: properties.inspire_floor_area, unit: "m²" });
+        data.push({
+          label: 'Etageareal',
+          value: properties.inspire_floor_area,
+          unit: 'm²',
+        });
       }
 
       if (properties.inspire_floors) {
-        data.push({ label: "Etager", value: properties.inspire_floors });
+        data.push({ label: 'Etager', value: properties.inspire_floors });
       }
 
       if (properties.inspire_dwellings) {
-        data.push({ label: "Boliger", value: properties.inspire_dwellings });
+        data.push({ label: 'Boliger', value: properties.inspire_dwellings });
       }
 
       if (properties.distance_m) {
-        data.push({ label: "Afstand til mark", value: properties.distance_m, unit: "m" });
+        data.push({
+          label: 'Afstand til mark',
+          value: properties.distance_m,
+          unit: 'm',
+        });
       }
     }
 
@@ -218,73 +259,103 @@ function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit 
       case 'total_pesticide_belastning':
         if (properties.total_pesticide_belastning) {
           data.push({
-            label: "Total pesticidbelastning",
+            label: 'Total pesticidbelastning',
             value: properties.total_pesticide_belastning,
-            unit: colorUnit === 'per_hectare' ? 'per ha' : ''
+            unit: colorUnit === 'per_hectare' ? 'per ha' : '',
           });
         }
         if (properties.total_pesticide_applications) {
-          data.push({ label: "Antal applikationer", value: properties.total_pesticide_applications });
+          data.push({
+            label: 'Antal applikationer',
+            value: properties.total_pesticide_applications,
+          });
         }
         break;
 
       case 'pfas_belastning':
         if (properties.total_pfas_belastning) {
           data.push({
-            label: "PFAS belastning",
+            label: 'PFAS belastning',
             value: properties.total_pfas_belastning,
-            unit: colorUnit === 'per_hectare' ? 'per ha' : ''
+            unit: colorUnit === 'per_hectare' ? 'per ha' : '',
           });
         }
         if (properties.total_pfas_active_ingredient_kg) {
-          data.push({ label: "PFAS aktivstof", value: properties.total_pfas_active_ingredient_kg, unit: "kg" });
+          data.push({
+            label: 'PFAS aktivstof',
+            value: properties.total_pfas_active_ingredient_kg,
+            unit: 'kg',
+          });
         }
         if (properties.pfas_applications) {
-          data.push({ label: "PFAS applikationer", value: properties.pfas_applications });
+          data.push({
+            label: 'PFAS applikationer',
+            value: properties.pfas_applications,
+          });
         }
         break;
 
       case 'diquat_belastning':
         if (properties.total_diquat_belastning) {
           data.push({
-            label: "Diquat belastning",
+            label: 'Diquat belastning',
             value: properties.total_diquat_belastning,
-            unit: colorUnit === 'per_hectare' ? 'per ha' : ''
+            unit: colorUnit === 'per_hectare' ? 'per ha' : '',
           });
         }
         if (properties.diquat_applications) {
-          data.push({ label: "Diquat applikationer", value: properties.diquat_applications });
+          data.push({
+            label: 'Diquat applikationer',
+            value: properties.diquat_applications,
+          });
         }
         break;
 
       case 'glyphosate_belastning':
         if (properties.total_glyphosate_belastning) {
           data.push({
-            label: "Glyphosate belastning",
+            label: 'Glyphosate belastning',
             value: properties.total_glyphosate_belastning,
-            unit: colorUnit === 'per_hectare' ? 'per ha' : ''
+            unit: colorUnit === 'per_hectare' ? 'per ha' : '',
           });
         }
         if (properties.total_glyphosate_active_ingredient_kg) {
-          data.push({ label: "Glyphosate aktivstof", value: properties.total_glyphosate_active_ingredient_kg, unit: "kg" });
+          data.push({
+            label: 'Glyphosate aktivstof',
+            value: properties.total_glyphosate_active_ingredient_kg,
+            unit: 'kg',
+          });
         }
         if (properties.glyphosate_applications) {
-          data.push({ label: "Glyphosate applikationer", value: properties.glyphosate_applications });
+          data.push({
+            label: 'Glyphosate applikationer',
+            value: properties.glyphosate_applications,
+          });
         }
         break;
 
       case 'applications_count':
         if (properties.total_pesticide_applications) {
-          data.push({ label: "Total applikationer", value: properties.total_pesticide_applications });
+          data.push({
+            label: 'Total applikationer',
+            value: properties.total_pesticide_applications,
+          });
         }
         if (properties.unique_pesticide_products) {
-          data.push({ label: "Unikke produkter", value: properties.unique_pesticide_products });
+          data.push({
+            label: 'Unikke produkter',
+            value: properties.unique_pesticide_products,
+          });
         }
         break;
 
       case 'area_size':
         if (properties.area_hectares) {
-          data.push({ label: "Markareal", value: properties.area_hectares, unit: "ha" });
+          data.push({
+            label: 'Markareal',
+            value: properties.area_hectares,
+            unit: 'ha',
+          });
         }
         break;
     }
@@ -296,22 +367,20 @@ function MapTooltip({ x, y, properties, layerName, visualizationMode, colorUnit 
 
   return (
     <div
-      className="absolute p-3 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-w-xs"
+      className="absolute z-50 max-w-xs rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
       style={{
         left: x,
         top: y,
-        transform: "translate(-50%, -100%)",
+        transform: 'translate(-50%, -100%)',
         marginTop: -10,
       }}
     >
-      <p className="text-sm font-semibold text-gray-900 mb-2">{layerName}</p>
+      <p className="mb-2 text-sm font-semibold text-gray-900">{layerName}</p>
       <div className="space-y-1 text-xs">
         {relevantData.map(({ label, value, unit }, index) => (
           <div key={index} className="flex justify-between">
-            <span className="text-gray-600">
-              {label}:
-            </span>
-            <span className="font-medium text-gray-900 ml-2">
+            <span className="text-gray-600">{label}:</span>
+            <span className="ml-2 font-medium text-gray-900">
               {formatValue(value, unit)}
             </span>
           </div>
@@ -335,23 +404,30 @@ export default function FieldAnalysisMap({
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
 
   // Handle location selection from search
-  const handleLocationSelect = useCallback((location: { lat: number; lng: number; address: string }) => {
-    if (!mapRef.current) return;
+  const handleLocationSelect = useCallback(
+    (location: { lat: number; lng: number; address: string }) => {
+      if (!mapRef.current) return;
 
-    const map = mapRef.current.getMap() as unknown as {
-      flyTo: (options: { center: [number, number]; zoom: number; duration?: number }) => void;
-    };
+      const map = mapRef.current.getMap() as unknown as {
+        flyTo: (options: {
+          center: [number, number];
+          zoom: number;
+          duration?: number;
+        }) => void;
+      };
 
-    // Fly to the selected location
-    map.flyTo({
-      center: [location.lng, location.lat],
-      zoom: 14,
-      duration: 1500
-    });
+      // Fly to the selected location
+      map.flyTo({
+        center: [location.lng, location.lat],
+        zoom: 14,
+        duration: 1500,
+      });
 
-    // Call the parent callback if provided
-    onLocationSelect?.(location);
-  }, [onLocationSelect]);
+      // Call the parent callback if provided
+      onLocationSelect?.(location);
+    },
+    [onLocationSelect]
+  );
 
   // Initialize PMTiles protocol
   useEffect(() => {
@@ -360,23 +436,28 @@ export default function FieldAnalysisMap({
         // Import MapLibre GL dynamically to avoid SSR issues
         const [maplibregl, { Protocol }] = await Promise.all([
           import('maplibre-gl'),
-          import('pmtiles')
+          import('pmtiles'),
         ]);
 
         console.log('✅ MapLibre and PMTiles loaded successfully');
 
         // Register PMTiles protocol with MapLibre (only once globally)
-        if (!(window as unknown as { __pmtiles_protocol_registered?: boolean }).__pmtiles_protocol_registered) {
+        if (
+          !(window as unknown as { __pmtiles_protocol_registered?: boolean })
+            .__pmtiles_protocol_registered
+        ) {
           const protocol = new Protocol();
           maplibregl.default.addProtocol('pmtiles', protocol.tile);
-          (window as unknown as { __pmtiles_protocol_registered?: boolean }).__pmtiles_protocol_registered = true;
+          (
+            window as unknown as { __pmtiles_protocol_registered?: boolean }
+          ).__pmtiles_protocol_registered = true;
           console.log('✅ PMTiles protocol registered');
         }
 
         setIsLoading(false);
       } catch (err) {
-        console.error("❌ Failed to initialize PMTiles:", err);
-        setError("Kunne ikke indlæse kortdata");
+        console.error('❌ Failed to initialize PMTiles:', err);
+        setError('Kunne ikke indlæse kortdata');
         setIsLoading(false);
       }
     };
@@ -392,455 +473,511 @@ export default function FieldAnalysisMap({
     // Handle organic status visualization with symbols
     if (visualizationMode === 'organic_status') {
       return {
-            "fill-color": [
-              "case",
-              ["==", ["get", "is_organic"], true],
-          "transparent", // Transparent fill for organic fields - will use symbols instead
-          "#f3f4f6" // Light gray for non-organic
+        'fill-color': [
+          'case',
+          ['==', ['get', 'is_organic'], true],
+          'transparent', // Transparent fill for organic fields - will use symbols instead
+          '#f3f4f6', // Light gray for non-organic
         ],
-        "fill-opacity": 0.6,
+        'fill-opacity': 0.6,
       };
     }
 
     // Get the appropriate field name for the visualization mode
     const getFieldName = (mode: FilterState['visualizationMode']) => {
       switch (mode) {
-        case 'total_pesticide_belastning': return 'total_pesticide_belastning';
-        case 'pfas_belastning': return 'total_pfas_belastning';
-        case 'diquat_belastning': return 'total_diquat_belastning';
-        case 'glyphosate_belastning': return 'total_glyphosate_belastning';
-        case 'applications_count': return 'total_pesticide_applications';
-        case 'area_size': return 'area_hectares';
-        default: return 'total_pesticide_belastning';
+        case 'total_pesticide_belastning':
+          return 'total_pesticide_belastning';
+        case 'pfas_belastning':
+          return 'total_pfas_belastning';
+        case 'diquat_belastning':
+          return 'total_diquat_belastning';
+        case 'glyphosate_belastning':
+          return 'total_glyphosate_belastning';
+        case 'applications_count':
+          return 'total_pesticide_applications';
+        case 'area_size':
+          return 'area_hectares';
+        default:
+          return 'total_pesticide_belastning';
       }
     };
 
     const fieldName = getFieldName(visualizationMode);
-    console.log('🎨 Color generation:', { visualizationMode, fieldName, colorScheme: colorScheme.name });
+    console.log('🎨 Color generation:', {
+      visualizationMode,
+      fieldName,
+      colorScheme: colorScheme.name,
+    });
 
-            if (useDecileColoring) {
+    if (useDecileColoring) {
       // Use decile-based coloring with step function
       const breakpoints = getDecileBreakpoints(visualizationMode, colorUnit);
       const colors = colorScheme.colors;
 
       return {
-        "fill-color": [
-          "case",
-          ["<=", ["coalesce", ["get", fieldName], 0], 0],
-          "#f3f4f6", // Light gray for zero/negative values
+        'fill-color': [
+          'case',
+          ['<=', ['coalesce', ['get', fieldName], 0], 0],
+          '#f3f4f6', // Light gray for zero/negative values
           [
-            "step",
-            ["coalesce", ["get", fieldName], 0],
+            'step',
+            ['coalesce', ['get', fieldName], 0],
             colors[0], // Base color for lowest values
-            breakpoints[0], colors[1],
-            breakpoints[1], colors[2],
-            breakpoints[2], colors[3],
-            breakpoints[3], colors[4],
-            breakpoints[4], colors[5],
-            breakpoints[5], colors[6],
-            breakpoints[6], colors[7],
-            breakpoints[7], colors[8],
-            breakpoints[8], colors[9]
-          ]
+            breakpoints[0],
+            colors[1],
+            breakpoints[1],
+            colors[2],
+            breakpoints[2],
+            colors[3],
+            breakpoints[3],
+            colors[4],
+            breakpoints[4],
+            colors[5],
+            breakpoints[5],
+            colors[6],
+            breakpoints[6],
+            colors[7],
+            breakpoints[7],
+            colors[8],
+            breakpoints[8],
+            colors[9],
+          ],
         ],
-        "fill-opacity": 0.7,
+        'fill-opacity': 0.7,
       };
     } else {
       // Use linear interpolation with proper structure
       const colors = colorScheme.colors;
       return {
-        "fill-color": [
-          "case",
-          ["<=", ["coalesce", ["get", fieldName], 0], 0],
-          "#f3f4f6", // Light gray for zero/negative values
-              [
-                "interpolate",
-                ["linear"],
-            ["coalesce", ["get", fieldName], 0],
-            0.1, colors[0],
-            1, colors[2],
-            10, colors[4],
-            50, colors[6],
-            100, colors[8],
-            500, colors[9]
-              ]
-            ],
-            "fill-opacity": 0.7,
+        'fill-color': [
+          'case',
+          ['<=', ['coalesce', ['get', fieldName], 0], 0],
+          '#f3f4f6', // Light gray for zero/negative values
+          [
+            'interpolate',
+            ['linear'],
+            ['coalesce', ['get', fieldName], 0],
+            0.1,
+            colors[0],
+            1,
+            colors[2],
+            10,
+            colors[4],
+            50,
+            colors[6],
+            100,
+            colors[8],
+            500,
+            colors[9],
+          ],
+        ],
+        'fill-opacity': 0.7,
       };
     }
   }, [filterState]);
 
   // Add field analysis layers
-  const addFieldsLayers = useCallback((map: MapInstance) => {
-    if (map.getSource("fields") && !map.getLayer("fields-fill")) {
-      const paintProps = generateFieldsPaint();
+  const addFieldsLayers = useCallback(
+    (map: MapInstance) => {
+      if (map.getSource('fields') && !map.getLayer('fields-fill')) {
+        const paintProps = generateFieldsPaint();
 
-      // Main fields layer
-      map.addLayer({
-        id: "fields-fill",
-        source: "fields",
-        "source-layer": "fields",
-        type: "fill",
-        paint: paintProps,
-        layout: {
-          visibility: layerVisibility.fields ? "visible" : "none",
-        },
-      });
-
-      // Fields outline
-      map.addLayer({
-        id: "fields-outline",
-        source: "fields",
-        "source-layer": "fields",
-        type: "line",
-        paint: {
-          "line-color": "#374151",
-          "line-width": 0.5,
-          "line-opacity": 0.8,
-        },
-        layout: {
-          visibility: layerVisibility.fields ? "visible" : "none",
-        },
-      });
-
-      // Add organic symbols layer
-      if (filterState.visualizationMode === 'organic_status') {
+        // Main fields layer
         map.addLayer({
-          id: "organic-symbols",
-          source: "fields",
-          "source-layer": "fields",
-          type: "symbol",
-          filter: ["==", ["get", "is_organic"], true],
+          id: 'fields-fill',
+          source: 'fields',
+          'source-layer': 'fields',
+          type: 'fill',
+          paint: paintProps,
+          layout: {
+            visibility: layerVisibility.fields ? 'visible' : 'none',
+          },
+        });
+
+        // Fields outline
+        map.addLayer({
+          id: 'fields-outline',
+          source: 'fields',
+          'source-layer': 'fields',
+          type: 'line',
           paint: {
-            "text-color": "#16a34a",
-            "text-halo-color": "#ffffff",
-            "text-halo-width": 1,
+            'line-color': '#374151',
+            'line-width': 0.5,
+            'line-opacity': 0.8,
           },
           layout: {
-            "text-field": "🌿",
-            "text-size": 16,
-            "text-allow-overlap": false,
-            "text-ignore-placement": false,
-            visibility: layerVisibility.fields ? "visible" : "none",
+            visibility: layerVisibility.fields ? 'visible' : 'none',
+          },
+        });
+
+        // Add organic symbols layer
+        if (filterState.visualizationMode === 'organic_status') {
+          map.addLayer({
+            id: 'organic-symbols',
+            source: 'fields',
+            'source-layer': 'fields',
+            type: 'symbol',
+            filter: ['==', ['get', 'is_organic'], true],
+            paint: {
+              'text-color': '#16a34a',
+              'text-halo-color': '#ffffff',
+              'text-halo-width': 1,
+            },
+            layout: {
+              'text-field': '🌿',
+              'text-size': 16,
+              'text-allow-overlap': false,
+              'text-ignore-placement': false,
+              visibility: layerVisibility.fields ? 'visible' : 'none',
+            },
+          });
+        }
+      }
+    },
+    [layerVisibility.fields, generateFieldsPaint, filterState.visualizationMode]
+  );
+
+  // Add BNBO layers with cross-hatch pattern
+  const addBNBOLayers = useCallback(
+    (map: MapInstance) => {
+      if (map.getSource('bnbo') && !map.getLayer('bnbo-fill')) {
+        // Create status-based patterns for BNBO
+        const createBNBOPatterns = async () => {
+          try {
+            // Create completed pattern (green with diagonal lines)
+            const completedCanvas = document.createElement('canvas');
+            const completedCtx = completedCanvas.getContext('2d');
+            completedCanvas.width = 32;
+            completedCanvas.height = 32;
+
+            if (completedCtx) {
+              completedCtx.fillStyle = '#10B981'; // Green background
+              completedCtx.fillRect(0, 0, 32, 32);
+              completedCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+              completedCtx.lineWidth = 2;
+              completedCtx.beginPath();
+              // Diagonal lines
+              for (let i = -32; i <= 64; i += 8) {
+                completedCtx.moveTo(i, 0);
+                completedCtx.lineTo(i + 32, 32);
+              }
+              completedCtx.stroke();
+
+              const completedBitmap = await createImageBitmap(completedCanvas);
+              map.addImage('bnbo-completed-pattern', completedBitmap);
+            }
+
+            // Create action required pattern (red with cross-hatch)
+            const actionCanvas = document.createElement('canvas');
+            const actionCtx = actionCanvas.getContext('2d');
+            actionCanvas.width = 32;
+            actionCanvas.height = 32;
+
+            if (actionCtx) {
+              actionCtx.fillStyle = '#EAB308'; // Yellow background
+              actionCtx.fillRect(0, 0, 32, 32);
+              actionCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+              actionCtx.lineWidth = 2;
+              actionCtx.beginPath();
+              // Cross-hatch pattern
+              for (let i = -32; i <= 64; i += 8) {
+                actionCtx.moveTo(i, 0);
+                actionCtx.lineTo(i + 32, 32);
+                actionCtx.moveTo(i + 32, 0);
+                actionCtx.lineTo(i, 32);
+              }
+              actionCtx.stroke();
+
+              const actionBitmap = await createImageBitmap(actionCanvas);
+              map.addImage('bnbo-action-pattern', actionBitmap);
+            }
+          } catch (error) {
+            console.warn('Failed to create BNBO patterns:', error);
+          }
+        };
+
+        map.addLayer({
+          id: 'bnbo-fill',
+          source: 'bnbo',
+          'source-layer': 'bnbo',
+          type: 'fill',
+          paint: {
+            'fill-color': [
+              'case',
+              // If action is required (yellow)
+              ['==', ['get', 'status_category'], 'Action Required'],
+              '#EAB308',
+              // If completed (green)
+              ['==', ['get', 'status_category'], 'Completed'],
+              '#10B981',
+              // Default blue for general BNBO areas
+              '#2563EB',
+            ],
+            'fill-opacity': 0.6,
+          },
+          layout: {
+            visibility: layerVisibility.bnbo ? 'visible' : 'none',
+          },
+        });
+
+        // Create patterns after layer is added
+        createBNBOPatterns().then(() => {
+          // Apply patterns based on status
+          if (map.getLayer('bnbo-fill')) {
+            map.setPaintProperty('bnbo-fill', 'fill-pattern', [
+              'case',
+              ['==', ['get', 'status_category'], 'Action Required'],
+              'bnbo-action-pattern',
+              ['==', ['get', 'status_category'], 'Completed'],
+              'bnbo-completed-pattern',
+              '', // No pattern for general areas
+            ]);
+          }
+        });
+
+        map.addLayer({
+          id: 'bnbo-outline',
+          source: 'bnbo',
+          'source-layer': 'bnbo',
+          type: 'line',
+          paint: {
+            'line-color': [
+              'case',
+              ['==', ['get', 'status_category'], 'Action Required'],
+              '#DC2626', // Darker red outline
+              ['==', ['get', 'status_category'], 'Completed'],
+              '#059669', // Darker green outline
+              '#1D4ED8', // Darker blue outline
+            ],
+            'line-width': 1.5,
+            'line-opacity': 0.9,
+          },
+          layout: {
+            visibility: layerVisibility.bnbo ? 'visible' : 'none',
           },
         });
       }
-    }
-  }, [layerVisibility.fields, generateFieldsPaint, filterState.visualizationMode]);
-
-  // Add BNBO layers with cross-hatch pattern
-  const addBNBOLayers = useCallback((map: MapInstance) => {
-    if (map.getSource("bnbo") && !map.getLayer("bnbo-fill")) {
-      // Create status-based patterns for BNBO
-      const createBNBOPatterns = async () => {
-        try {
-          // Create completed pattern (green with diagonal lines)
-          const completedCanvas = document.createElement('canvas');
-          const completedCtx = completedCanvas.getContext('2d');
-          completedCanvas.width = 32;
-          completedCanvas.height = 32;
-
-          if (completedCtx) {
-            completedCtx.fillStyle = '#10B981'; // Green background
-            completedCtx.fillRect(0, 0, 32, 32);
-            completedCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            completedCtx.lineWidth = 2;
-            completedCtx.beginPath();
-            // Diagonal lines
-            for (let i = -32; i <= 64; i += 8) {
-              completedCtx.moveTo(i, 0);
-              completedCtx.lineTo(i + 32, 32);
-            }
-            completedCtx.stroke();
-
-            const completedBitmap = await createImageBitmap(completedCanvas);
-            map.addImage('bnbo-completed-pattern', completedBitmap);
-          }
-
-          // Create action required pattern (red with cross-hatch)
-          const actionCanvas = document.createElement('canvas');
-          const actionCtx = actionCanvas.getContext('2d');
-          actionCanvas.width = 32;
-          actionCanvas.height = 32;
-
-          if (actionCtx) {
-            actionCtx.fillStyle = '#EAB308'; // Yellow background
-            actionCtx.fillRect(0, 0, 32, 32);
-            actionCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-            actionCtx.lineWidth = 2;
-            actionCtx.beginPath();
-            // Cross-hatch pattern
-            for (let i = -32; i <= 64; i += 8) {
-              actionCtx.moveTo(i, 0);
-              actionCtx.lineTo(i + 32, 32);
-              actionCtx.moveTo(i + 32, 0);
-              actionCtx.lineTo(i, 32);
-            }
-            actionCtx.stroke();
-
-            const actionBitmap = await createImageBitmap(actionCanvas);
-            map.addImage('bnbo-action-pattern', actionBitmap);
-          }
-        } catch (error) {
-          console.warn('Failed to create BNBO patterns:', error);
-        }
-      };
-
-      map.addLayer({
-        id: "bnbo-fill",
-        source: "bnbo",
-        "source-layer": "bnbo",
-          type: "fill",
-          paint: {
-            "fill-color": [
-              "case",
-            // If action is required (yellow)
-            ["==", ["get", "status_category"], "Action Required"],
-            "#EAB308",
-            // If completed (green)
-              ["==", ["get", "status_category"], "Completed"],
-            "#10B981",
-            // Default blue for general BNBO areas
-            "#2563EB"
-            ],
-            "fill-opacity": 0.6,
-        },
-        layout: {
-          visibility: layerVisibility.bnbo ? "visible" : "none",
-        },
-      });
-
-      // Create patterns after layer is added
-      createBNBOPatterns().then(() => {
-        // Apply patterns based on status
-        if (map.getLayer("bnbo-fill")) {
-          map.setPaintProperty("bnbo-fill", "fill-pattern", [
-            "case",
-            ["==", ["get", "status_category"], "Action Required"],
-            "bnbo-action-pattern",
-            ["==", ["get", "status_category"], "Completed"],
-            "bnbo-completed-pattern",
-            "" // No pattern for general areas
-          ]);
-        }
-      });
-
-      map.addLayer({
-        id: "bnbo-outline",
-        source: "bnbo",
-        "source-layer": "bnbo",
-        type: "line",
-          paint: {
-          "line-color": [
-              "case",
-            ["==", ["get", "status_category"], "Action Required"],
-            "#DC2626", // Darker red outline
-            ["==", ["get", "status_category"], "Completed"],
-            "#059669", // Darker green outline
-            "#1D4ED8"  // Darker blue outline
-          ],
-          "line-width": 1.5,
-          "line-opacity": 0.9,
-        },
-        layout: {
-          visibility: layerVisibility.bnbo ? "visible" : "none",
-        },
-      });
-    }
-  }, [layerVisibility.bnbo]);
+    },
+    [layerVisibility.bnbo]
+  );
 
   // Add wetlands layers with wave pattern
-  const addWetlandsLayers = useCallback((map: MapInstance) => {
-    if (map.getSource("wetlands") && !map.getLayer("wetlands-fill")) {
-      // Create wave pattern for wetlands
-      const createWetlandsPattern = async () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = 24;
-          canvas.height = 16;
+  const addWetlandsLayers = useCallback(
+    (map: MapInstance) => {
+      if (map.getSource('wetlands') && !map.getLayer('wetlands-fill')) {
+        // Create wave pattern for wetlands
+        const createWetlandsPattern = async () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 24;
+            canvas.height = 16;
 
-          if (ctx) {
-            // Fill with blue background
-            ctx.fillStyle = '#3B82F6';
-            ctx.fillRect(0, 0, 24, 16);
+            if (ctx) {
+              // Fill with blue background
+              ctx.fillStyle = '#3B82F6';
+              ctx.fillRect(0, 0, 24, 16);
 
-            // Add wave pattern
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            // Top wave
-            ctx.moveTo(0, 4);
-            ctx.quadraticCurveTo(6, 2, 12, 4);
-            ctx.quadraticCurveTo(18, 6, 24, 4);
-            // Middle wave
-            ctx.moveTo(0, 8);
-            ctx.quadraticCurveTo(6, 6, 12, 8);
-            ctx.quadraticCurveTo(18, 10, 24, 8);
-            // Bottom wave
-            ctx.moveTo(0, 12);
-            ctx.quadraticCurveTo(6, 10, 12, 12);
-            ctx.quadraticCurveTo(18, 14, 24, 12);
-            ctx.stroke();
+              // Add wave pattern
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+              ctx.lineWidth = 1.5;
+              ctx.beginPath();
+              // Top wave
+              ctx.moveTo(0, 4);
+              ctx.quadraticCurveTo(6, 2, 12, 4);
+              ctx.quadraticCurveTo(18, 6, 24, 4);
+              // Middle wave
+              ctx.moveTo(0, 8);
+              ctx.quadraticCurveTo(6, 6, 12, 8);
+              ctx.quadraticCurveTo(18, 10, 24, 8);
+              // Bottom wave
+              ctx.moveTo(0, 12);
+              ctx.quadraticCurveTo(6, 10, 12, 12);
+              ctx.quadraticCurveTo(18, 14, 24, 12);
+              ctx.stroke();
 
-            const imageBitmap = await createImageBitmap(canvas);
-            map.addImage('wetlands-pattern', imageBitmap);
+              const imageBitmap = await createImageBitmap(canvas);
+              map.addImage('wetlands-pattern', imageBitmap);
 
-            // Update layer to use pattern
-            if (map.getLayer("wetlands-fill")) {
-              map.setPaintProperty("wetlands-fill", "fill-pattern", "wetlands-pattern");
-              map.setPaintProperty("wetlands-fill", "fill-opacity", 0.4);
-            }
-          }
-        } catch (error) {
-          console.warn('Failed to create wetlands pattern:', error);
-        }
-      };
-
-      map.addLayer({
-        id: "wetlands-fill",
-        source: "wetlands",
-        "source-layer": "wetlands",
-          type: "fill",
-          paint: {
-          "fill-color": "#3B82F6", // Fallback color
-          "fill-opacity": 0.4,
-        },
-        layout: {
-          visibility: layerVisibility.wetlands ? "visible" : "none",
-        },
-      });
-
-      // Create pattern after layer is added
-      createWetlandsPattern();
-
-      map.addLayer({
-        id: "wetlands-outline",
-        source: "wetlands",
-        "source-layer": "wetlands",
-        type: "line",
-        paint: {
-          "line-color": "#1E40AF",
-          "line-width": 1.5,
-          "line-opacity": 0.8,
-        },
-        layout: {
-          visibility: layerVisibility.wetlands ? "visible" : "none",
-        },
-      });
-    }
-  }, [layerVisibility.wetlands]);
-
-  // Add water projects layers with dot pattern
-  const addWaterProjectsLayers = useCallback((map: MapInstance) => {
-    if (map.getSource("water_projects") && !map.getLayer("water-projects-fill")) {
-      // Create dot pattern for water projects
-      const createWaterProjectsPattern = async () => {
-        try {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = 20;
-          canvas.height = 20;
-
-          if (ctx) {
-            // Fill with teal background
-            ctx.fillStyle = '#14B8A6';
-            ctx.fillRect(0, 0, 20, 20);
-
-            // Add dot pattern
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-            // Create dots in a grid pattern
-            const dotSize = 2;
-            const spacing = 6;
-            for (let x = spacing/2; x < 20; x += spacing) {
-              for (let y = spacing/2; y < 20; y += spacing) {
-                ctx.beginPath();
-                ctx.arc(x, y, dotSize, 0, 2 * Math.PI);
-                ctx.fill();
+              // Update layer to use pattern
+              if (map.getLayer('wetlands-fill')) {
+                map.setPaintProperty(
+                  'wetlands-fill',
+                  'fill-pattern',
+                  'wetlands-pattern'
+                );
+                map.setPaintProperty('wetlands-fill', 'fill-opacity', 0.4);
               }
             }
-
-            const imageBitmap = await createImageBitmap(canvas);
-            map.addImage('water-projects-pattern', imageBitmap);
-
-            // Update layer to use pattern
-            if (map.getLayer("water-projects-fill")) {
-              map.setPaintProperty("water-projects-fill", "fill-pattern", "water-projects-pattern");
-              map.setPaintProperty("water-projects-fill", "fill-opacity", 0.5);
-            }
+          } catch (error) {
+            console.warn('Failed to create wetlands pattern:', error);
           }
-        } catch (error) {
-          console.warn('Failed to create water projects pattern:', error);
-        }
-      };
+        };
 
-      map.addLayer({
-        id: "water-projects-fill",
-        source: "water_projects",
-        "source-layer": "water_projects",
-        type: "fill",
-        paint: {
-          "fill-color": "#14B8A6", // Fallback color
-          "fill-opacity": 0.5,
-        },
-        layout: {
-          visibility: layerVisibility.water_projects ? "visible" : "none",
-        },
-      });
+        map.addLayer({
+          id: 'wetlands-fill',
+          source: 'wetlands',
+          'source-layer': 'wetlands',
+          type: 'fill',
+          paint: {
+            'fill-color': '#3B82F6', // Fallback color
+            'fill-opacity': 0.4,
+          },
+          layout: {
+            visibility: layerVisibility.wetlands ? 'visible' : 'none',
+          },
+        });
 
-      // Create pattern after layer is added
-      createWaterProjectsPattern();
+        // Create pattern after layer is added
+        createWetlandsPattern();
 
-      map.addLayer({
-        id: "water-projects-outline",
-        source: "water_projects",
-        "source-layer": "water_projects",
-        type: "line",
-        paint: {
-          "line-color": "#0F766E",
-          "line-width": 2,
-          "line-opacity": 0.9,
-        },
-        layout: {
-          visibility: layerVisibility.water_projects ? "visible" : "none",
-        },
-      });
-    }
-  }, [layerVisibility.water_projects]);
+        map.addLayer({
+          id: 'wetlands-outline',
+          source: 'wetlands',
+          'source-layer': 'wetlands',
+          type: 'line',
+          paint: {
+            'line-color': '#1E40AF',
+            'line-width': 1.5,
+            'line-opacity': 0.8,
+          },
+          layout: {
+            visibility: layerVisibility.wetlands ? 'visible' : 'none',
+          },
+        });
+      }
+    },
+    [layerVisibility.wetlands]
+  );
+
+  // Add water projects layers with dot pattern
+  const addWaterProjectsLayers = useCallback(
+    (map: MapInstance) => {
+      if (
+        map.getSource('water_projects') &&
+        !map.getLayer('water-projects-fill')
+      ) {
+        // Create dot pattern for water projects
+        const createWaterProjectsPattern = async () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 20;
+            canvas.height = 20;
+
+            if (ctx) {
+              // Fill with teal background
+              ctx.fillStyle = '#14B8A6';
+              ctx.fillRect(0, 0, 20, 20);
+
+              // Add dot pattern
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+              // Create dots in a grid pattern
+              const dotSize = 2;
+              const spacing = 6;
+              for (let x = spacing / 2; x < 20; x += spacing) {
+                for (let y = spacing / 2; y < 20; y += spacing) {
+                  ctx.beginPath();
+                  ctx.arc(x, y, dotSize, 0, 2 * Math.PI);
+                  ctx.fill();
+                }
+              }
+
+              const imageBitmap = await createImageBitmap(canvas);
+              map.addImage('water-projects-pattern', imageBitmap);
+
+              // Update layer to use pattern
+              if (map.getLayer('water-projects-fill')) {
+                map.setPaintProperty(
+                  'water-projects-fill',
+                  'fill-pattern',
+                  'water-projects-pattern'
+                );
+                map.setPaintProperty(
+                  'water-projects-fill',
+                  'fill-opacity',
+                  0.5
+                );
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to create water projects pattern:', error);
+          }
+        };
+
+        map.addLayer({
+          id: 'water-projects-fill',
+          source: 'water_projects',
+          'source-layer': 'water_projects',
+          type: 'fill',
+          paint: {
+            'fill-color': '#14B8A6', // Fallback color
+            'fill-opacity': 0.5,
+          },
+          layout: {
+            visibility: layerVisibility.water_projects ? 'visible' : 'none',
+          },
+        });
+
+        // Create pattern after layer is added
+        createWaterProjectsPattern();
+
+        map.addLayer({
+          id: 'water-projects-outline',
+          source: 'water_projects',
+          'source-layer': 'water_projects',
+          type: 'line',
+          paint: {
+            'line-color': '#0F766E',
+            'line-width': 2,
+            'line-opacity': 0.9,
+          },
+          layout: {
+            visibility: layerVisibility.water_projects ? 'visible' : 'none',
+          },
+        });
+      }
+    },
+    [layerVisibility.water_projects]
+  );
 
   // Add buildings layers
-  const addBuildingsLayers = useCallback((map: MapInstance) => {
-    if (map.getSource("buildings") && !map.getLayer("buildings-fill")) {
-      map.addLayer({
-        id: "buildings-fill",
-        source: "buildings",
-        "source-layer": "buildings",
-        type: "fill",
-        paint: {
-          "fill-color": "#4A90E2",
-          "fill-opacity": 0.6,
-        },
-        layout: {
-          visibility: layerVisibility.buildings ? "visible" : "none",
-        },
-      });
+  const addBuildingsLayers = useCallback(
+    (map: MapInstance) => {
+      if (map.getSource('buildings') && !map.getLayer('buildings-fill')) {
+        map.addLayer({
+          id: 'buildings-fill',
+          source: 'buildings',
+          'source-layer': 'buildings',
+          type: 'fill',
+          paint: {
+            'fill-color': '#4A90E2',
+            'fill-opacity': 0.6,
+          },
+          layout: {
+            visibility: layerVisibility.buildings ? 'visible' : 'none',
+          },
+        });
 
-      map.addLayer({
-        id: "buildings-outline",
-        source: "buildings",
-        "source-layer": "buildings",
-        type: "line",
-        paint: {
-          "line-color": "#2563EB",
-          "line-width": 1,
-          "line-opacity": 0.8,
-        },
-        layout: {
-          visibility: layerVisibility.buildings ? "visible" : "none",
-        },
-      });
-    }
-  }, [layerVisibility.buildings]);
+        map.addLayer({
+          id: 'buildings-outline',
+          source: 'buildings',
+          'source-layer': 'buildings',
+          type: 'line',
+          paint: {
+            'line-color': '#2563EB',
+            'line-width': 1,
+            'line-opacity': 0.8,
+          },
+          layout: {
+            visibility: layerVisibility.buildings ? 'visible' : 'none',
+          },
+        });
+      }
+    },
+    [layerVisibility.buildings]
+  );
 
   // Handle map load and add sources
   const onMapLoad = useCallback(() => {
@@ -853,9 +990,9 @@ export default function FieldAnalysisMap({
       Object.entries(pmtilesUrls).forEach(([layerName, url]) => {
         if (url && !map.getSource(layerName)) {
           map.addSource(layerName, {
-        type: "vector",
-        url: `pmtiles://${url}`,
-      });
+            type: 'vector',
+            url: `pmtiles://${url}`,
+          });
           console.log(`✅ Added ${layerName} source:`, url);
         }
       });
@@ -866,11 +1003,17 @@ export default function FieldAnalysisMap({
       addWetlandsLayers(map);
       addWaterProjectsLayers(map);
       addBuildingsLayers(map);
-
     } catch (err) {
-      console.error("Error adding map sources/layers:", err);
+      console.error('Error adding map sources/layers:', err);
     }
-  }, [pmtilesUrls, addFieldsLayers, addBNBOLayers, addWetlandsLayers, addWaterProjectsLayers, addBuildingsLayers]);
+  }, [
+    pmtilesUrls,
+    addFieldsLayers,
+    addBNBOLayers,
+    addWetlandsLayers,
+    addWaterProjectsLayers,
+    addBuildingsLayers,
+  ]);
 
   // Update layer visibility and styling when props change
   useEffect(() => {
@@ -879,40 +1022,85 @@ export default function FieldAnalysisMap({
     const map = mapRef.current.getMap();
 
     // Update fields layers
-    if (map.getLayer("fields-fill")) {
-      map.setLayoutProperty("fields-fill", "visibility", layerVisibility.fields ? "visible" : "none");
-      map.setLayoutProperty("fields-outline", "visibility", layerVisibility.fields ? "visible" : "none");
+    if (map.getLayer('fields-fill')) {
+      map.setLayoutProperty(
+        'fields-fill',
+        'visibility',
+        layerVisibility.fields ? 'visible' : 'none'
+      );
+      map.setLayoutProperty(
+        'fields-outline',
+        'visibility',
+        layerVisibility.fields ? 'visible' : 'none'
+      );
 
       // Update organic symbols visibility
-      if (map.getLayer("organic-symbols")) {
-        map.setLayoutProperty("organic-symbols", "visibility",
-          layerVisibility.fields && filterState.visualizationMode === 'organic_status' ? "visible" : "none"
+      if (map.getLayer('organic-symbols')) {
+        map.setLayoutProperty(
+          'organic-symbols',
+          'visibility',
+          layerVisibility.fields &&
+            filterState.visualizationMode === 'organic_status'
+            ? 'visible'
+            : 'none'
         );
       }
     }
 
     // Update BNBO layers
-    if (map.getLayer("bnbo-fill")) {
-      map.setLayoutProperty("bnbo-fill", "visibility", layerVisibility.bnbo ? "visible" : "none");
-      map.setLayoutProperty("bnbo-outline", "visibility", layerVisibility.bnbo ? "visible" : "none");
+    if (map.getLayer('bnbo-fill')) {
+      map.setLayoutProperty(
+        'bnbo-fill',
+        'visibility',
+        layerVisibility.bnbo ? 'visible' : 'none'
+      );
+      map.setLayoutProperty(
+        'bnbo-outline',
+        'visibility',
+        layerVisibility.bnbo ? 'visible' : 'none'
+      );
     }
 
     // Update wetlands layers
-    if (map.getLayer("wetlands-fill")) {
-      map.setLayoutProperty("wetlands-fill", "visibility", layerVisibility.wetlands ? "visible" : "none");
-      map.setLayoutProperty("wetlands-outline", "visibility", layerVisibility.wetlands ? "visible" : "none");
+    if (map.getLayer('wetlands-fill')) {
+      map.setLayoutProperty(
+        'wetlands-fill',
+        'visibility',
+        layerVisibility.wetlands ? 'visible' : 'none'
+      );
+      map.setLayoutProperty(
+        'wetlands-outline',
+        'visibility',
+        layerVisibility.wetlands ? 'visible' : 'none'
+      );
     }
 
     // Update water projects layers
-    if (map.getLayer("water-projects-fill")) {
-      map.setLayoutProperty("water-projects-fill", "visibility", layerVisibility.water_projects ? "visible" : "none");
-      map.setLayoutProperty("water-projects-outline", "visibility", layerVisibility.water_projects ? "visible" : "none");
+    if (map.getLayer('water-projects-fill')) {
+      map.setLayoutProperty(
+        'water-projects-fill',
+        'visibility',
+        layerVisibility.water_projects ? 'visible' : 'none'
+      );
+      map.setLayoutProperty(
+        'water-projects-outline',
+        'visibility',
+        layerVisibility.water_projects ? 'visible' : 'none'
+      );
     }
 
     // Update buildings layers
-    if (map.getLayer("buildings-fill")) {
-      map.setLayoutProperty("buildings-fill", "visibility", layerVisibility.buildings ? "visible" : "none");
-      map.setLayoutProperty("buildings-outline", "visibility", layerVisibility.buildings ? "visible" : "none");
+    if (map.getLayer('buildings-fill')) {
+      map.setLayoutProperty(
+        'buildings-fill',
+        'visibility',
+        layerVisibility.buildings ? 'visible' : 'none'
+      );
+      map.setLayoutProperty(
+        'buildings-outline',
+        'visibility',
+        layerVisibility.buildings ? 'visible' : 'none'
+      );
     }
   }, [layerVisibility, filterState.visualizationMode]);
 
@@ -922,101 +1110,119 @@ export default function FieldAnalysisMap({
 
     const map = mapRef.current.getMap();
 
-    if (map.getLayer("fields-fill")) {
+    if (map.getLayer('fields-fill')) {
       const paintProps = generateFieldsPaint();
 
       // Update the fill color
-      map.setPaintProperty("fields-fill", "fill-color", paintProps["fill-color"]);
-      map.setPaintProperty("fields-fill", "fill-opacity", paintProps["fill-opacity"]);
+      map.setPaintProperty(
+        'fields-fill',
+        'fill-color',
+        paintProps['fill-color']
+      );
+      map.setPaintProperty(
+        'fields-fill',
+        'fill-opacity',
+        paintProps['fill-opacity']
+      );
 
       // Handle organic symbols layer
       if (filterState.visualizationMode === 'organic_status') {
         // Add organic symbols if not exists
-        if (!map.getLayer("organic-symbols")) {
+        if (!map.getLayer('organic-symbols')) {
           map.addLayer({
-            id: "organic-symbols",
-            source: "fields",
-            "source-layer": "fields",
-            type: "symbol",
-            filter: ["==", ["get", "is_organic"], true],
+            id: 'organic-symbols',
+            source: 'fields',
+            'source-layer': 'fields',
+            type: 'symbol',
+            filter: ['==', ['get', 'is_organic'], true],
             paint: {
-              "text-color": "#16a34a",
-              "text-halo-color": "#ffffff",
-              "text-halo-width": 1,
+              'text-color': '#16a34a',
+              'text-halo-color': '#ffffff',
+              'text-halo-width': 1,
             },
             layout: {
-              "text-field": "🌿",
-              "text-size": 16,
-              "text-allow-overlap": false,
-              "text-ignore-placement": false,
-              visibility: layerVisibility.fields ? "visible" : "none",
+              'text-field': '🌿',
+              'text-size': 16,
+              'text-allow-overlap': false,
+              'text-ignore-placement': false,
+              visibility: layerVisibility.fields ? 'visible' : 'none',
             },
           });
         } else {
-          map.setLayoutProperty("organic-symbols", "visibility", layerVisibility.fields ? "visible" : "none");
+          map.setLayoutProperty(
+            'organic-symbols',
+            'visibility',
+            layerVisibility.fields ? 'visible' : 'none'
+          );
         }
       } else {
         // Hide organic symbols for other modes
-        if (map.getLayer("organic-symbols")) {
-          map.setLayoutProperty("organic-symbols", "visibility", "none");
+        if (map.getLayer('organic-symbols')) {
+          map.setLayoutProperty('organic-symbols', 'visibility', 'none');
         }
       }
     }
   }, [filterState, layerVisibility.fields, generateFieldsPaint]);
 
   // Handle hover events
-  const onHover = useCallback((event: MapLayerMouseEvent) => {
-    const feature = event.features && event.features[0];
-    if (feature) {
-      const layerName = getLayerDisplayName(feature.layer.id);
+  const onHover = useCallback(
+    (event: MapLayerMouseEvent) => {
+      const feature = event.features && event.features[0];
+      if (feature) {
+        const layerName = getLayerDisplayName(feature.layer.id);
 
-      setHoverInfo({
-        x: event.point.x,
-        y: event.point.y,
-        properties: feature.properties || {},
-        layerName,
-        visualizationMode: filterState.visualizationMode,
-        colorUnit: filterState.colorUnit,
-      });
-    } else {
-      setHoverInfo(null);
-    }
-  }, [filterState.visualizationMode, filterState.colorUnit]);
+        setHoverInfo({
+          x: event.point.x,
+          y: event.point.y,
+          properties: feature.properties || {},
+          layerName,
+          visualizationMode: filterState.visualizationMode,
+          colorUnit: filterState.colorUnit,
+        });
+      } else {
+        setHoverInfo(null);
+      }
+    },
+    [filterState.visualizationMode, filterState.colorUnit]
+  );
 
   // Handle click events for field selection and coordinate capture
-  const onClick = useCallback((event: MapLayerMouseEvent) => {
-    const coordinates = {
-      lat: event.lngLat.lat,
-      lng: event.lngLat.lng
-    };
+  const onClick = useCallback(
+    (event: MapLayerMouseEvent) => {
+      const coordinates = {
+        lat: event.lngLat.lat,
+        lng: event.lngLat.lng,
+      };
 
-    // Always call onMapClick to capture coordinates
-    onMapClick?.(coordinates);
+      // Always call onMapClick to capture coordinates
+      onMapClick?.(coordinates);
 
-    const feature = event.features && event.features[0];
-    if (feature && feature.layer.id.startsWith("fields-")) {
-      // Add click coordinates to the field data
-      const fieldData = feature.properties as FieldAnalysisData;
-      fieldData.click_coordinates = coordinates;
-      onFieldSelect(fieldData);
-    }
-  }, [onFieldSelect, onMapClick]);
+      const feature = event.features && event.features[0];
+      if (feature && feature.layer.id.startsWith('fields-')) {
+        // Add click coordinates to the field data
+        const fieldData = feature.properties as FieldAnalysisData;
+        fieldData.click_coordinates = coordinates;
+        onFieldSelect(fieldData);
+      }
+    },
+    [onFieldSelect, onMapClick]
+  );
 
   // Get display name for layer
   const getLayerDisplayName = (layerId: string): string => {
-    if (layerId.startsWith("fields-")) return "Landbrugsmark";
-    if (layerId.startsWith("bnbo-")) return "BNBO Område";
-    if (layerId.startsWith("wetlands-")) return "Lavbundsområde";
-    if (layerId.startsWith("water-projects-")) return "Vandprojekt";
-    if (layerId.startsWith("buildings-")) return "Bygning";
-    return "Ukendt lag";
+    if (layerId.startsWith('fields-')) return 'Landbrugsmark';
+    if (layerId.startsWith('bnbo-')) return 'BNBO Område';
+    if (layerId.startsWith('wetlands-')) return 'Lavbundsområde';
+    if (layerId.startsWith('water-projects-')) return 'Vandprojekt';
+    if (layerId.startsWith('buildings-')) return 'Bygning';
+    return 'Ukendt lag';
   };
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full bg-red-50">
+      <div className="flex h-full items-center justify-center bg-red-50">
         <div className="text-center">
-          <div className="text-red-600 text-xl mb-2">⚠️ Fejl</div>
+          <div className="mb-2 text-xl text-red-600">⚠️ Fejl</div>
           <div className="text-gray-700">{error}</div>
         </div>
       </div>
@@ -1025,10 +1231,12 @@ export default function FieldAnalysisMap({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full bg-gray-50">
+      <div className="flex h-full items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="text-lg font-medium text-gray-900 mb-2">Indlæser kortdata...</div>
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <div className="mb-2 text-lg font-medium text-gray-900">
+            Indlæser kortdata...
+          </div>
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
         </div>
       </div>
     );
@@ -1036,17 +1244,20 @@ export default function FieldAnalysisMap({
 
   // Interactive layer IDs for hover/click events
   const interactiveLayerIds = [
-    "fields-fill",
-    "bnbo-fill",
-    "wetlands-fill",
-    "water-projects-fill",
-    "buildings-fill"
+    'fields-fill',
+    'bnbo-fill',
+    'wetlands-fill',
+    'water-projects-fill',
+    'buildings-fill',
   ];
 
   return (
-    <div className="relative w-full h-full">
+    <div className="relative h-full w-full">
       {/* Search Bar */}
-      <div className="absolute top-4 left-20 right-4 lg:left-4 lg:right-auto z-10 lg:w-80" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+      <div
+        className="absolute top-4 right-4 left-20 z-10 lg:right-auto lg:left-4 lg:w-80"
+        style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
+      >
         <SearchBar
           onLocationSelect={handleLocationSelect}
           placeholder="Søg adresser, byer, regioner..."
@@ -1055,13 +1266,13 @@ export default function FieldAnalysisMap({
       </div>
 
       <Map
-      ref={mapRef}
+        ref={mapRef}
         initialViewState={{
           longitude: 9.501785,
           latitude: 56.26392,
           zoom: 7,
         }}
-        style={{ width: "100%", height: "100%" }}
+        style={{ width: '100%', height: '100%' }}
         mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
         interactiveLayerIds={interactiveLayerIds}
         onLoad={onMapLoad}

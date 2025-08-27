@@ -55,7 +55,7 @@ export interface ChartData {
 }
 
 export interface GeoJSONFeature {
-  type: "Feature";
+  type: 'Feature';
   geometry: {
     type: string;
     crs: {
@@ -74,7 +74,7 @@ export interface GeoJSONLayer {
   type: string;
   style: string | undefined;
   data: {
-    type: "FeatureCollection";
+    type: 'FeatureCollection';
     features: GeoJSONFeature[];
   };
 }
@@ -109,60 +109,60 @@ export interface BaseDataGrid {
 // Component types
 export interface InfoCard {
   _key: string;
-  _type: "infoCard";
+  _type: 'infoCard';
   title: string;
   items: InfoCardItem[];
 }
 
 export interface DataGrid extends BaseDataGrid {
-  _type: "dataGrid";
+  _type: 'dataGrid';
 }
 
 export interface KPIGroup {
   _key: string;
-  _type: "kpiGroup";
+  _type: 'kpiGroup';
   title: string;
   kpis: KPI[];
 }
 
 export interface MapChart {
   _key: string;
-  _type: "mapChart";
+  _type: 'mapChart';
   title: string;
   data: MapData;
 }
 
 export interface BarChart {
   _key: string;
-  _type: "barChart";
+  _type: 'barChart';
   title: string;
   data: ChartData;
 }
 
 export interface StackedBarChart {
   _key: string;
-  _type: "stackedBarChart";
+  _type: 'stackedBarChart';
   title: string;
   data: ChartData;
 }
 
 export interface HorizontalStackedBarChart {
   _key: string;
-  _type: "horizontalStackedBarChart";
+  _type: 'horizontalStackedBarChart';
   title: string;
   data: ChartData;
 }
 
 export interface ComboChart {
   _key: string;
-  _type: "comboChart";
+  _type: 'comboChart';
   title: string;
   data: ChartData;
 }
 
 export interface Timeline {
   _key: string;
-  _type: "timeline";
+  _type: 'timeline';
   title: string;
   events: TimelineEvent[];
   config: TimelineConfig;
@@ -170,7 +170,7 @@ export interface Timeline {
 
 export interface IteratedSection {
   _key: string;
-  _type: "iteratedSection";
+  _type: 'iteratedSection';
   title: string;
   iterationConfig: {
     layout: string;

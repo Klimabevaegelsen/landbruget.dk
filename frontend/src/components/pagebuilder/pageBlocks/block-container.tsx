@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { cn } from "@/lib/utils";
-import { LinkIcon } from "@heroicons/react/24/outline";
-import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { cn } from '@/lib/utils';
+import { LinkIcon } from '@heroicons/react/24/outline';
+import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 
 export function BlockContainer({
   children,
@@ -25,36 +25,36 @@ export function BlockContainer({
       const updateHeaderHeight = () => {
         const height = headerRef.current?.offsetHeight ?? 0;
         document.documentElement.style.setProperty(
-          "--sticky-header-height",
+          '--sticky-header-height',
           `${height}px`
         );
       };
 
       updateHeaderHeight();
-      window.addEventListener("resize", updateHeaderHeight);
-      return () => window.removeEventListener("resize", updateHeaderHeight);
+      window.addEventListener('resize', updateHeaderHeight);
+      return () => window.removeEventListener('resize', updateHeaderHeight);
     }
   }, [stickyTitle]);
 
   return (
-    <div className="flex flex-col gap-3 relative">
+    <div className="relative flex flex-col gap-3">
       <div
         ref={headerRef}
         className={cn(
-          "flex flex-col md:flex-row md:items-center gap-2 group overflow-hidden",
-          stickyTitle && "sticky top-0 z-40 bg-white py-4"
+          'group flex flex-col gap-2 overflow-hidden md:flex-row md:items-center',
+          stickyTitle && 'sticky top-0 z-40 bg-white py-4'
         )}
       >
-        <h2 className="text-xl md:text-2xl font-bold">{title}</h2>
+        <h2 className="text-xl font-bold md:text-2xl">{title}</h2>
         <div className="flex items-center gap-2">
           <Link
             href={href}
-            className="md:hidden group-hover:block items-center gap-2"
+            className="items-center gap-2 group-hover:block md:hidden"
           >
-            <LinkIcon className="size-6 text-primary" />
+            <LinkIcon className="text-primary size-6" />
           </Link>
           {secondaryTitle && (
-            <h3 className="text-xs  italic">{secondaryTitle}</h3>
+            <h3 className="text-xs italic">{secondaryTitle}</h3>
           )}
         </div>
       </div>

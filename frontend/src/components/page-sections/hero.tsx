@@ -1,10 +1,10 @@
-import { GlobalSearch } from "../global-search";
+import { GlobalSearch } from '../global-search';
 
 export default function Hero() {
   return (
     <div className="relative isolate px-6 pt-14 lg:px-8">
       <div className="mx-auto max-w-4xl py-18 sm:py-28 lg:py-40">
-        <div className="text-center flex flex-col gap-6">
+        <div className="flex flex-col gap-6 text-center">
           <h1 className="text-5xl font-bold tracking-tight text-balance text-white sm:text-5xl">
             Dansk landbrugsdata - samlet ét sted
           </h1>
@@ -13,7 +13,7 @@ export default function Hero() {
               <GlobalSearch
                 className=""
                 borderless
-                searchSuggestions={["Arla foods", "Fyn", "John Andersen"]}
+                searchSuggestions={['Arla foods', 'Fyn', 'John Andersen']}
               />
             </div>
           </div>

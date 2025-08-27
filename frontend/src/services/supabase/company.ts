@@ -1,5 +1,5 @@
-import { apiFetch } from "./config";
-import { CompanyResponse } from "./types";
+import { apiFetch } from './config';
+import { CompanyResponse } from './types';
 
 export interface Company {
   id: string;
@@ -8,7 +8,7 @@ export interface Company {
 
 export async function getCompanyById(id: string): Promise<CompanyResponse> {
   try {
-    console.log("Fetching company by id:", id);
+    console.log('Fetching company by id:', id);
 
     const response = await apiFetch(`/functions/v1/api?id=${id}`);
 
@@ -19,7 +19,7 @@ export async function getCompanyById(id: string): Promise<CompanyResponse> {
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error("Error fetching company:", error);
+    console.error('Error fetching company:', error);
     throw error;
   }
 }

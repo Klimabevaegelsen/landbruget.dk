@@ -14,26 +14,26 @@ export function LoadingToastDemo() {
   const [simulateDelay, setSimulateDelay] = useState(2000);
 
   const handleSimulateDataLoad = async () => {
-    showLoadingToast("Indlæser data", "Simulerer data indlæsning...");
+    showLoadingToast('Indlæser data', 'Simulerer data indlæsning...');
 
     // Simulate data loading
-    await new Promise(resolve => setTimeout(resolve, simulateDelay));
+    await new Promise((resolve) => setTimeout(resolve, simulateDelay));
 
     hideLoadingToast();
   };
 
   const handleSimulateSearch = async () => {
-    showLoadingToast("Søger", "Simulerer søgning...");
+    showLoadingToast('Søger', 'Simulerer søgning...');
 
     // Simulate search
-    await new Promise(resolve => setTimeout(resolve, simulateDelay));
+    await new Promise((resolve) => setTimeout(resolve, simulateDelay));
 
     hideLoadingToast();
   };
 
   const handleNewSearchOverride = () => {
     // This should override any existing loading toast
-    showLoadingToast("Ny søgning", "Ny søgning erstatter den forrige...");
+    showLoadingToast('Ny søgning', 'Ny søgning erstatter den forrige...');
 
     setTimeout(() => {
       hideLoadingToast();
@@ -47,7 +47,7 @@ export function LoadingToastDemo() {
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-2">
+          <label className="mb-2 block text-sm font-medium">
             Delay (ms): {simulateDelay}
           </label>
           <input

@@ -15,24 +15,27 @@ export function useLoadingToast() {
     toastIdRef.current = currentToastId;
   }, [currentToastId]);
 
-  const showLoadingToast = useCallback((title: string, description?: string) => {
-    // Remove any existing loading toast first
-    if (toastIdRef.current) {
-      removeToast(toastIdRef.current);
-    }
+  const showLoadingToast = useCallback(
+    (title: string, description?: string) => {
+      // Remove any existing loading toast first
+      if (toastIdRef.current) {
+        removeToast(toastIdRef.current);
+      }
 
-    // Show new loading toast
-    const toastId = addToast({
-      title,
-      description,
-      variant: "loading"
-    });
+      // Show new loading toast
+      const toastId = addToast({
+        title,
+        description,
+        variant: 'loading',
+      });
 
-    setCurrentToastId(toastId);
-    toastIdRef.current = toastId;
+      setCurrentToastId(toastId);
+      toastIdRef.current = toastId;
 
-    return toastId;
-  }, [addToast, removeToast]);
+      return toastId;
+    },
+    [addToast, removeToast]
+  );
 
   const hideLoadingToast = useCallback(() => {
     if (toastIdRef.current) {
@@ -55,6 +58,6 @@ export function useLoadingToast() {
     showLoadingToast,
     hideLoadingToast,
     currentToastId,
-    isLoading: currentToastId !== null
+    isLoading: currentToastId !== null,
   };
 }

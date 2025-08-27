@@ -5,7 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Search, X } from 'lucide-react';
 import { PesticideAnalysisFilters } from './types';
 
@@ -20,7 +26,7 @@ export default function CompanyFilterPanel({
   filters,
   availableYears,
   availableMunicipalities,
-  onFiltersChange
+  onFiltersChange,
 }: CompanyFilterPanelProps) {
   const [cvrInput, setCvrInput] = useState(filters.cvr);
 
@@ -43,18 +49,22 @@ export default function CompanyFilterPanel({
     <div className="space-y-6">
       {/* Geography Filter */}
       <div>
-        <Label className="text-sm font-medium mb-3 block">Geografi</Label>
+        <Label className="mb-3 block text-sm font-medium">Geografi</Label>
         <RadioGroup
           value={filters.geography}
           onValueChange={(value) => onFiltersChange({ geography: value })}
         >
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="country" id="country" />
-            <Label htmlFor="country" className="text-sm">Hele landet</Label>
+            <Label htmlFor="country" className="text-sm">
+              Hele landet
+            </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="municipality" id="municipality" />
-            <Label htmlFor="municipality" className="text-sm">Specifik kommune</Label>
+            <Label htmlFor="municipality" className="text-sm">
+              Specifik kommune
+            </Label>
           </div>
         </RadioGroup>
 
@@ -69,7 +79,7 @@ export default function CompanyFilterPanel({
               </SelectTrigger>
               <SelectContent>
                 {availableMunicipalities
-                  .filter(m => m && m !== 'Municipality TBD')
+                  .filter((m) => m && m !== 'Municipality TBD')
                   .sort()
                   .map((municipality) => (
                     <SelectItem key={municipality} value={municipality}>
@@ -84,57 +94,75 @@ export default function CompanyFilterPanel({
 
       {/* Time Period Filter */}
       <div>
-        <Label className="text-sm font-medium mb-3 block">Tidsperiode</Label>
+        <Label className="mb-3 block text-sm font-medium">Tidsperiode</Label>
         <RadioGroup
           value={filters.year === 'all' ? 'all' : filters.year.toString()}
-          onValueChange={(value) => onFiltersChange({
-            year: value === 'all' ? 'all' : parseInt(value)
-          })}
+          onValueChange={(value) =>
+            onFiltersChange({
+              year: value === 'all' ? 'all' : parseInt(value),
+            })
+          }
         >
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="all" id="all-years" />
-            <Label htmlFor="all-years" className="text-sm">Alle år</Label>
+            <Label htmlFor="all-years" className="text-sm">
+              Alle år
+            </Label>
           </div>
-          {availableYears.sort((a, b) => b - a).map((year) => (
-            <div key={year} className="flex items-center space-x-2">
-              <RadioGroupItem value={year.toString()} id={`year-${year}`} />
-              <Label htmlFor={`year-${year}`} className="text-sm">{year}</Label>
-            </div>
-          ))}
+          {availableYears
+            .sort((a, b) => b - a)
+            .map((year) => (
+              <div key={year} className="flex items-center space-x-2">
+                <RadioGroupItem value={year.toString()} id={`year-${year}`} />
+                <Label htmlFor={`year-${year}`} className="text-sm">
+                  {year}
+                </Label>
+              </div>
+            ))}
         </RadioGroup>
       </div>
 
       {/* Pesticide Type Filter */}
       <div>
-        <Label className="text-sm font-medium mb-3 block">Pesticidtype</Label>
+        <Label className="mb-3 block text-sm font-medium">Pesticidtype</Label>
         <RadioGroup
           value={filters.type}
-          onValueChange={(value) => onFiltersChange({
-            type: value as 'total' | 'pfas' | 'diquat' | 'glyphosate'
-          })}
+          onValueChange={(value) =>
+            onFiltersChange({
+              type: value as 'total' | 'pfas' | 'diquat' | 'glyphosate',
+            })
+          }
         >
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="total" id="total" />
-            <Label htmlFor="total" className="text-sm">Total belastning</Label>
+            <Label htmlFor="total" className="text-sm">
+              Total belastning
+            </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="pfas" id="pfas" />
-            <Label htmlFor="pfas" className="text-sm">PFAS</Label>
+            <Label htmlFor="pfas" className="text-sm">
+              PFAS
+            </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="diquat" id="diquat" />
-            <Label htmlFor="diquat" className="text-sm">Diquat</Label>
+            <Label htmlFor="diquat" className="text-sm">
+              Diquat
+            </Label>
           </div>
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="glyphosate" id="glyphosate" />
-            <Label htmlFor="glyphosate" className="text-sm">Glyphosat</Label>
+            <Label htmlFor="glyphosate" className="text-sm">
+              Glyphosat
+            </Label>
           </div>
         </RadioGroup>
       </div>
 
       {/* CVR Search */}
       <div>
-        <Label htmlFor="cvr-search" className="text-sm font-medium mb-3 block">
+        <Label htmlFor="cvr-search" className="mb-3 block text-sm font-medium">
           CVR-nummer
         </Label>
         <div className="flex gap-2">
@@ -166,7 +194,7 @@ export default function CompanyFilterPanel({
           )}
         </div>
         {filters.cvr && (
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-xs">
             Filtreret på CVR: {filters.cvr}
           </p>
         )}
@@ -174,7 +202,9 @@ export default function CompanyFilterPanel({
 
       {/* Results per page */}
       <div>
-        <Label className="text-sm font-medium mb-3 block">Resultater per side</Label>
+        <Label className="mb-3 block text-sm font-medium">
+          Resultater per side
+        </Label>
         <Select
           value={filters.limit.toString()}
           onValueChange={(value) => onFiltersChange({ limit: parseInt(value) })}

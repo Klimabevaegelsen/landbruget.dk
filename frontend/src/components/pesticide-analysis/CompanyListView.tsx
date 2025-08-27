@@ -2,7 +2,16 @@
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown, Building2, MapPin, Beaker } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Building2,
+  MapPin,
+  Beaker,
+} from 'lucide-react';
 import { CompanySummary } from './types';
 
 interface CompanyListViewProps {
@@ -15,7 +24,10 @@ interface CompanyListViewProps {
   selectedCompany: CompanySummary | null;
   sortBy: 'belastning' | 'applications' | 'area';
   sortOrder: 'asc' | 'desc';
-  onSortChange: (sortBy: 'belastning' | 'applications' | 'area', sortOrder: 'asc' | 'desc') => void;
+  onSortChange: (
+    sortBy: 'belastning' | 'applications' | 'area',
+    sortOrder: 'asc' | 'desc'
+  ) => void;
 }
 
 export default function CompanyListView({
@@ -28,7 +40,7 @@ export default function CompanyListView({
   selectedCompany,
   sortBy,
   sortOrder,
-  onSortChange
+  onSortChange,
 }: CompanyListViewProps) {
   const totalPages = Math.ceil(totalCount / limit);
   const startResult = (currentPage - 1) * limit + 1;
@@ -48,17 +60,19 @@ export default function CompanyListView({
     if (sortBy !== column) {
       return <ArrowUpDown className="h-4 w-4 text-gray-400" />;
     }
-    return sortOrder === 'asc' ?
-      <ArrowUp className="h-4 w-4 text-blue-600" /> :
-      <ArrowDown className="h-4 w-4 text-blue-600" />;
+    return sortOrder === 'asc' ? (
+      <ArrowUp className="h-4 w-4 text-blue-600" />
+    ) : (
+      <ArrowDown className="h-4 w-4 text-blue-600" />
+    );
   };
 
   const formatBelastning = (value: number) => {
     return value.toLocaleString('da-DK', {
       minimumFractionDigits: 1,
-      maximumFractionDigits: 1
-    }  );
-};
+      maximumFractionDigits: 1,
+    });
+  };
 
   const getChemicalBadges = (company: CompanySummary) => {
     const badges = [];
@@ -89,7 +103,7 @@ export default function CompanyListView({
   return (
     <div className="space-y-4">
       {/* Sort Controls */}
-      <div className="flex flex-wrap gap-2 pb-2 border-b">
+      <div className="flex flex-wrap gap-2 border-b pb-2">
         <Button
           variant="ghost"
           size="sm"
@@ -124,21 +138,23 @@ export default function CompanyListView({
         {companies.map((company) => (
           <div
             key={company.cvr_number}
-            className={`p-4 border rounded-lg cursor-pointer transition-all hover:shadow-md ${
+            className={`cursor-pointer rounded-lg border p-4 transition-all hover:shadow-md ${
               selectedCompany?.cvr_number === company.cvr_number
                 ? 'border-blue-500 bg-blue-50'
                 : 'border-gray-200 hover:border-gray-300'
             }`}
             onClick={() => onCompanySelect(company)}
           >
-            <div className="flex items-start justify-between mb-2">
+            <div className="mb-2 flex items-start justify-between">
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-gray-500" />
                 <div>
-                  <h3 className="font-semibold text-sm">
+                  <h3 className="text-sm font-semibold">
                     {company.company_name || `Virksomhed ${company.cvr_number}`}
                   </h3>
-                  <p className="text-xs text-gray-500">CVR: {company.cvr_number}</p>
+                  <p className="text-xs text-gray-500">
+                    CVR: {company.cvr_number}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
@@ -149,17 +165,22 @@ export default function CompanyListView({
               </div>
             </div>
 
-            <div className="flex items-center gap-4 text-xs text-gray-600 mb-2">
+            <div className="mb-2 flex items-center gap-4 text-xs text-gray-600">
               <div className="flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
-                {company.municipality !== 'Municipality TBD' ? company.municipality : 'Ukendt kommune'}
+                {company.municipality !== 'Municipality TBD'
+                  ? company.municipality
+                  : 'Ukendt kommune'}
               </div>
               <div className="flex items-center gap-1">
                 <Beaker className="h-3 w-3" />
                 {company.total_applications} anvendelser
               </div>
               <div>
-                {company.total_treated_area_ha.toLocaleString('da-DK', { maximumFractionDigits: 0 })} ha
+                {company.total_treated_area_ha.toLocaleString('da-DK', {
+                  maximumFractionDigits: 0,
+                })}{' '}
+                ha
               </div>
             </div>
 
@@ -179,9 +200,10 @@ export default function CompanyListView({
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between pt-4 border-t">
+      <div className="flex items-center justify-between border-t pt-4">
         <div className="text-sm text-gray-600">
-          Viser {startResult}-{endResult} af {totalCount.toLocaleString()} virksomheder
+          Viser {startResult}-{endResult} af {totalCount.toLocaleString()}{' '}
+          virksomheder
         </div>
 
         <div className="flex items-center gap-2">
@@ -195,7 +217,7 @@ export default function CompanyListView({
             Forrige
           </Button>
 
-          <span className="text-sm px-2">
+          <span className="px-2 text-sm">
             Side {currentPage} af {totalPages}
           </span>
 

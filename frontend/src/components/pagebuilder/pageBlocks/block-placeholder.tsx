@@ -1,5 +1,5 @@
-import { PageBuilderItem } from "@/services/supabase/types";
-import { JsonRender } from "@/components/common/json-render";
+import { PageBuilderItem } from '@/services/supabase/types';
+import { JsonRender } from '@/components/common/json-render';
 
 export function BlockPlaceholder({ block }: { block: PageBuilderItem }) {
   return (
