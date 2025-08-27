@@ -1053,7 +1053,7 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
                     a.municipality_name as current_municipality_name,
                     a.address_type as current_address_type,
                     a.coordinate_source,
-                    -- Create PostGIS geometry from coordinates for Supabase compatibility
+                    -- Create proper geometry using DuckDB spatial extension (WGS84)
                     CASE
                         WHEN a.latitude IS NOT NULL AND a.longitude IS NOT NULL THEN
                             ST_Point(a.longitude, a.latitude)
