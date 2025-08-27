@@ -261,189 +261,10 @@ jobs:
           echo "❌ Failed to process field production estimates for year ${{ matrix.year }}"
           exit 1
 
-  consolidate-results:
-    needs: [discover-years, process-years]
-    runs-on: ubuntu-latest
-    if: always() && needs.discover-years.result == 'success'
 
-    permissions:
-      contents: "read"
-      id-token: "write"
-
-    name: Consolidate Field Production Results
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Install dependencies
-        run: |
-          cd backend/pipelines/unified_pipeline
-          uv pip install --system -e .
-
-      - id: "auth"
-        name: "Authenticate to Google Cloud"
-        uses: "google-github-actions/auth@v2"
-        with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
-
-      - name: "Set up Cloud SDK"
-        uses: "google-github-actions/setup-gcloud@v2"
-        with:
-          install_components: "gke-gcloud-auth-plugin"
-
-      - name: Consolidate all years into single dataset
-        env:
-          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        run: |
-          cd backend/pipelines/unified_pipeline
-          echo "📊 Consolidating field production estimates from all years..."
-
-          # Create consolidation script
-          cat > consolidate_field_production.py << 'EOF'
-          #!/usr/bin/env python3
-          """
-          Consolidate field production estimates from all processed years into a single dataset.
-          """
-          import os
-          import sys
-          from pathlib import Path
-
-          # Add unified pipeline to path
-          sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-          from unified_pipeline.util.gcs_access import GCSDataAccess
-          from unified_pipeline.util.log_util import Logger
-          import duckdb
-
-          def consolidate_field_production():
-              """Consolidate all year-specific field production estimates."""
-              logger = Logger.get_logger()
-              gcs_access = GCSDataAccess()
-              bucket = os.getenv('GCS_BUCKET', 'landbrugsdata-raw-data')
-
-              # Create DuckDB connection
-              conn = duckdb.connect(":memory:")
-              conn.execute("INSTALL spatial")
-              conn.execute("LOAD spatial")
-
-              try:
-                  # Find all year-specific field production datasets
-                  pattern = f"gs://{bucket}/gold/field_production_*/"
-                  directories = gcs_access.list_directories(pattern)
-
-                  consolidated_files = []
-                  years_found = []
-
-                  for directory in directories:
-                      # Look for data.parquet files in each year directory
-                      try:
-                          data_files = gcs_access.list_files(f"{directory}*/data.parquet")
-                          if data_files:
-                              latest_file = sorted(data_files)[-1]  # Get latest timestamp
-                              consolidated_files.append(latest_file)
-
-                              # Extract year from directory name
-                              parts = directory.rstrip('/').split('/')
-                              dataset_name = parts[-1] if parts else ''
-                              if dataset_name.startswith('field_production_'):
-                                  year_str = dataset_name.replace('field_production_', '')
-                                  years_found.append(year_str)
-
-                              logger.info(f"Found field production data: {latest_file}")
-                      except Exception as e:
-                          logger.warning(f"Could not process directory {directory}: {e}")
-                          continue
-
-                  if not consolidated_files:
-                      logger.error("No field production data found to consolidate")
-                      return False
-
-                  logger.info(f"Consolidating {len(consolidated_files)} field production datasets")
-                  logger.info(f"Years found: {sorted(years_found)}")
-
-                  # Create consolidated table
-                  conn.execute("DROP TABLE IF EXISTS consolidated_field_production")
-
-                  for i, file_path in enumerate(consolidated_files):
-                      logger.info(f"Loading file {i+1}/{len(consolidated_files)}: {file_path}")
-
-                      # Download and load each file
-                      with gcs_access._temp_download(file_path) as temp_file:
-                          if i == 0:
-                              # Create table with first file
-                              conn.execute(f"""
-                                  CREATE TABLE consolidated_field_production AS
-                                  SELECT * FROM read_parquet('{temp_file}')
-                              """)
-                          else:
-                              # Insert additional files
-                              conn.execute(f"""
-                                  INSERT INTO consolidated_field_production
-                                  SELECT * FROM read_parquet('{temp_file}')
-                              """)
-
-                  # Get summary statistics
-                  total_records = conn.execute("SELECT COUNT(*) FROM consolidated_field_production").fetchone()[0]
-                  years_in_data = conn.execute("SELECT COUNT(DISTINCT year) FROM consolidated_field_production").fetchone()[0]
-                  year_range = conn.execute("SELECT MIN(year), MAX(year) FROM consolidated_field_production").fetchone()
-
-                  logger.info(f"Consolidated dataset statistics:")
-                  logger.info(f"  Total records: {total_records:,}")
-                  logger.info(f"  Years covered: {years_in_data} ({year_range[0]}-{year_range[1]})")
-
-                  # Save consolidated dataset
-                  output_path = f"gs://{bucket}/gold/field_production/latest/data.parquet"
-                  gcs_access.upload_from_duckdb_table(
-                      conn,
-                      "consolidated_field_production",
-                      output_path,
-                      compression="zstd",
-                      row_group_size=100000,
-                  )
-
-                  logger.info(f"✅ Consolidated field production data saved to: {output_path}")
-                  logger.info(f"📊 Final dataset: {total_records:,} records across {years_in_data} years")
-
-                  return True
-
-              except Exception as e:
-                  logger.error(f"Error consolidating field production data: {e}")
-                  return False
-
-              finally:
-                  conn.close()
-
-          if __name__ == "__main__":
-              success = consolidate_field_production()
-              sys.exit(0 if success else 1)
-          EOF
-
-          python consolidate_field_production.py
-
-      - name: Report consolidation completion
-        if: success()
-        run: |
-          echo "✅ Successfully consolidated field production estimates from all years"
-          echo "Final dataset saved to: gs://landbrugsdata-raw-data/gold/field_production/latest/data.parquet"
-
-      - name: Report consolidation failure
-        if: failure()
-        run: |
-          echo "❌ Failed to consolidate field production estimates"
-          exit 1
 
   summary:
-    needs: [discover-years, process-years, consolidate-results]
+    needs: [discover-years, process-years]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -476,9 +297,9 @@ jobs:
           echo "- **SPATIAL_JOIN Compliance**: Optimized for DuckDB Spatial PR #545" >> $GITHUB_STEP_SUMMARY
           echo "- **Memory Management**: 10GB temp directory, 50k spatial join batches" >> $GITHUB_STEP_SUMMARY
           echo "- **No Geometry Text**: Eliminated ST_AsText() memory waste" >> $GITHUB_STEP_SUMMARY
-          echo "- **Consolidated Output**: All years merged into single gold dataset" >> $GITHUB_STEP_SUMMARY
+          echo "- **Individual Year Storage**: Each year saved independently for optimal access" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Data Location" >> $GITHUB_STEP_SUMMARY
           echo "- **Individual Years**: \`gs://landbrugsdata-raw-data/gold/field_production_YYYY/\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Consolidated**: \`gs://landbrugsdata-raw-data/gold/field_production/latest/data.parquet\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Access Pattern**: Query individual years or combine multiple years as needed" >> $GITHUB_STEP_SUMMARY
