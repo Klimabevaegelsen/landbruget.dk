@@ -1094,7 +1094,27 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             for col in existing_columns:
                 if col in geocoding_fields:
                     # Use geocoding data if available, otherwise keep existing value
-                    select_clauses.append(f"COALESCE(g.{col}, c.{col}) as {col}")
+                    # Add explicit casting to handle type mismatches
+                    if col in ["current_postal_code", "current_municipality_code"]:
+                        # These can be INTEGER in existing table but VARCHAR in geocoding
+                        select_clauses.append(
+                            f"COALESCE(g.{col}::VARCHAR, c.{col}::VARCHAR) as {col}"
+                        )
+                    elif col in ["latitude", "longitude"]:
+                        # These should be DOUBLE
+                        select_clauses.append(
+                            f"COALESCE(g.{col}::DOUBLE, c.{col}::DOUBLE) as {col}"
+                        )
+                    elif col == "dawa_enriched":
+                        # This should be BOOLEAN
+                        select_clauses.append(
+                            f"COALESCE(g.{col}::BOOLEAN, c.{col}::BOOLEAN) as {col}"
+                        )
+                    else:
+                        # Default to VARCHAR for text fields
+                        select_clauses.append(
+                            f"COALESCE(g.{col}::VARCHAR, c.{col}::VARCHAR) as {col}"
+                        )
                 else:
                     # Keep existing column as-is
                     select_clauses.append(f"c.{col}")
