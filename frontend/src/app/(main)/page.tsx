@@ -1,5 +1,6 @@
 import { Container } from '@/components/layout/container';
 import Hero from '@/components/page-sections/hero';
+import HomepageRankings from '@/components/homepage/HomepageRankings';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -13,11 +14,8 @@ export default function Home() {
       <Container className="bg-primary-darker">
         <Hero />
       </Container>
-      <Container className="">
-        <div className="flex min-h-[500px] flex-col items-center justify-center">
-          <p className="text-4xl">🚜</p>
-          <h1 className="italic">Cool section to come </h1>
-        </div>
+      <Container className="py-12">
+        <HomepageRankings />
       </Container>
     </div>
   );
