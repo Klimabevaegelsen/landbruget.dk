@@ -1451,7 +1451,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 yield_estimation_method = 'dst_hst77_regional_' || ?,
                 production_estimate_hkg = area_ha * hst77.harvest_value,
                 production_unit = 'hkg'
-            FROM dst_hst77 hst77
+            FROM dst_dst_hst77 hst77
             WHERE hst77.area_name = year_production_estimates.dst_regions
                 AND hst77.time_period = CAST(year_production_estimates.year AS VARCHAR)
                 AND hst77.measure_name = 'Gennemsnitsudbytte, hkg pr. hektar'
@@ -1472,7 +1472,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 yield_estimation_method = 'dst_hst77_national_' || ?,
                 production_estimate_hkg = area_ha * hst77.harvest_value,
                 production_unit = 'hkg'
-            FROM dst_hst77 hst77
+            FROM dst_dst_hst77 hst77
             WHERE hst77.area_name = 'Hele landet'
                 AND hst77.time_period = CAST(year_production_estimates.year AS VARCHAR)
                 AND hst77.measure_name = 'Gennemsnitsudbytte, hkg pr. hektar'
@@ -1496,7 +1496,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 yield_estimation_method = 'dst_gartn1_regional_' || ?,
                 production_estimate_hkg = area_ha * gartn1.horticulture_value,
                 production_unit = 'hkg'
-            FROM dst_gartn1 gartn1
+            FROM dst_dst_gartn1 gartn1
             WHERE gartn1.area_name = year_production_estimates.dst_regions
                 AND gartn1.time_period = CAST(year_production_estimates.year AS VARCHAR)
                 AND gartn1.measure_name = 'Produktion, tons'
@@ -1520,7 +1520,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 yield_estimation_method = 'dst_fro_national_' || ?,
                 production_estimate_hkg = area_ha * fro.seed_value,
                 production_unit = 'hkg'
-            FROM dst_fro fro
+            FROM dst_dst_fro fro
             WHERE fro.time_period = CAST(year_production_estimates.year AS VARCHAR)
                 AND fro.measure_name = 'Gennemsnitsudbytte, hkg pr. hektar'
                 AND LOWER(fro.crop_name) = LOWER(?)
@@ -1543,7 +1543,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 yield_estimation_method = 'dst_halm1_regional_' || ?,
                 production_estimate_hkg = area_ha * halm1.straw_value,
                 production_unit = 'hkg'
-            FROM dst_halm1 halm1
+            FROM dst_dst_halm1 halm1
             WHERE halm1.area_name = year_production_estimates.dst_regions
                 AND halm1.time_period = CAST(year_production_estimates.year AS VARCHAR)
                 AND halm1.unit_name = 'Mængde (mio. kilo)'
