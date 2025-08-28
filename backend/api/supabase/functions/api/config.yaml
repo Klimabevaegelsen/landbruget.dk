@@ -96,18 +96,22 @@ pageBuilder:
           timeContext: "last_n_years"
           n: 1
           metrics:
-            - key: "revenue"
-              label: "Omsætning"
-              column: "revenue"
+            - key: "net_profit"
+              label: "Nettoresultat"
+              column: "net_profit_loss"
               format: "currency"
-            - key: "profit"
-              label: "Resultat"
-              column: "profit"
+            - key: "operating_profit"
+              label: "Driftsresultat"
+              column: "operating_profit_loss"
               format: "currency"
-            - key: "subsidies"
-              label: "Tilskud (Total)"
-              column: "total_subsidies"
+            - key: "total_assets"
+              label: "Samlede Aktiver"
+              column: "total_assets"
               format: "currency"
+            - key: "equity_ratio"
+              label: "Soliditetsgrad"
+              column: "equity_ratio"
+              format: "percentage"
 
   - _key: financials-history
     _type: barChart
@@ -116,20 +120,55 @@ pageBuilder:
       params:
         source: "yearly_financials"
         timeSeries:
-          timeColumn: "year"
+          timeColumn: "reporting_year"
           metrics:
-            - key: "revenue"
-              column: "revenue"
-              seriesName: "Omsætning"
-            - key: "profit"
-              column: "profit"
-              seriesName: "Resultat"
-            - key: "subsidies"
-              column: "total_subsidies"
-              seriesName: "Tilskud"
+            - key: "net_profit"
+              column: "net_profit_loss"
+              seriesName: "Nettoresultat"
+            - key: "operating_profit"
+              column: "operating_profit_loss"
+              seriesName: "Driftsresultat"
+            - key: "total_assets"
+              column: "total_assets"
+              seriesName: "Samlede Aktiver"
         orderBy:
-          - column: "year"
+          - column: "reporting_year"
             direction: "asc"
+
+  - _key: financials-detailed-kpis
+    _type: kpiGroup
+    title: "Detaljerede Finansielle Nøgletal"
+    dataSource:
+      params:
+        source: "yearly_financials"
+        kpis:
+          timeContext: "last_n_years"
+          n: 1
+          metrics:
+            - key: "total_equity"
+              label: "Egenkapital"
+              column: "total_equity"
+              format: "currency"
+            - key: "employee_costs"
+              label: "Lønomkostninger"
+              column: "employee_benefits_expense"
+              format: "currency"
+            - key: "employees"
+              label: "Antal Medarbejdere"
+              column: "average_number_of_employees"
+              format: "number"
+            - key: "cash"
+              label: "Likvide Midler"
+              column: "cash_and_cash_equivalents"
+              format: "currency"
+            - key: "return_on_assets"
+              label: "Forrentning af Aktiver"
+              column: "return_on_assets"
+              format: "percentage"
+            - key: "profit_per_employee"
+              label: "Resultat pr. Medarbejder"
+              column: "profit_per_employee"
+              format: "currency"
 
   - _key: subsidies-history-stacked
     _type: stackedBarChart
