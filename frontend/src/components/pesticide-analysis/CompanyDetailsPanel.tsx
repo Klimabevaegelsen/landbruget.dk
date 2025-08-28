@@ -231,52 +231,49 @@ export default function CompanyDetailsPanel({
         </div>
       </div>
 
-      {/* Chemical Breakdown */}
-      <div>
-        <h4 className="mb-2 flex items-center gap-1 text-sm font-medium">
-          <Beaker className="h-4 w-4" />
-          Kemikalier
-        </h4>
-        <div className="space-y-2 text-xs">
-          {company.pfas_belastning > 0 && (
-            <div className="flex items-center justify-between">
-              <Badge variant="destructive" className="text-xs">
-                PFAS
-              </Badge>
-              <span className="font-medium">
-                {formatBelastning(company.pfas_belastning)}
-              </span>
-            </div>
-          )}
-          {company.diquat_belastning > 0 && (
-            <div className="flex items-center justify-between">
-              <Badge variant="destructive" className="text-xs">
-                Diquat
-              </Badge>
-              <span className="font-medium">
-                {formatBelastning(company.diquat_belastning)}
-              </span>
-            </div>
-          )}
-          {company.glyphosate_belastning > 0 && (
-            <div className="flex items-center justify-between">
-              <Badge variant="secondary" className="text-xs">
-                Glyphosat
-              </Badge>
-              <span className="font-medium">
-                {formatBelastning(company.glyphosate_belastning)}
-              </span>
-            </div>
-          )}
-          {company.pfas_belastning === 0 &&
-            company.diquat_belastning === 0 &&
-            company.glyphosate_belastning === 0 && (
-              <div className="text-xs text-gray-500">
-                Ingen særlige kemikalier registreret
+      {/* Chemical Breakdown - only show if any chemicals have values > 0 */}
+      {(company.pfas_belastning > 0 ||
+        company.diquat_belastning > 0 ||
+        company.glyphosate_belastning > 0) && (
+        <div>
+          <h4 className="mb-2 flex items-center gap-1 text-sm font-medium">
+            <Beaker className="h-4 w-4" />
+            Kemikalier
+          </h4>
+          <div className="space-y-2 text-xs">
+            {company.pfas_belastning > 0 && (
+              <div className="flex items-center justify-between">
+                <Badge variant="destructive" className="text-xs">
+                  PFAS
+                </Badge>
+                <span className="font-medium">
+                  {formatBelastning(company.pfas_belastning)}
+                </span>
               </div>
             )}
+            {company.diquat_belastning > 0 && (
+              <div className="flex items-center justify-between">
+                <Badge variant="destructive" className="text-xs">
+                  Diquat
+                </Badge>
+                <span className="font-medium">
+                  {formatBelastning(company.diquat_belastning)}
+                </span>
+              </div>
+            )}
+            {company.glyphosate_belastning > 0 && (
+              <div className="flex items-center justify-between">
+                <Badge variant="secondary" className="text-xs">
+                  Glyphosat
+                </Badge>
+                <span className="font-medium">
+                  {formatBelastning(company.glyphosate_belastning)}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Years Active */}
       {company.years_active.length > 0 && (
