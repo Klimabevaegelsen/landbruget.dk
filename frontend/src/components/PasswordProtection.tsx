@@ -18,11 +18,24 @@ export default function PasswordProtection() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const correctPassword = process.env.NEXT_PUBLIC_SITE_PASSWORD;
+    const requiredWords = process.env.NEXT_PUBLIC_SITE_PASSWORD;
 
-    if (correctPassword && password.includes(correctPassword)) {
-      localStorage.setItem('authenticated', 'true');
-      setIsVisible(false);
+    if (requiredWords) {
+      // Split the environment variable by comma to get the possible words
+      const wordsToCheck = requiredWords.split(',').map((word) => word.trim());
+
+      // Check if ANY of the required words is present in the entered password
+      const anyWordPresent = wordsToCheck.some((word) =>
+        password.toLowerCase().includes(word.toLowerCase())
+      );
+
+      if (anyWordPresent) {
+        localStorage.setItem('authenticated', 'true');
+        setIsVisible(false);
+      } else {
+        alert('Forkert adgangskode');
+        setPassword('');
+      }
     } else {
       alert('Forkert adgangskode');
       setPassword('');
