@@ -145,11 +145,22 @@ export default function FieldAnalysisVisualization() {
     };
 
     // Prevent body scroll when modals are open
-    if (mobileControlsOpen || selectedField || clickedCoordinates) {
+    // On mobile: prevent scroll for all panels (they're overlays)
+    // On desktop: only prevent scroll for mobile controls (panels are sidebars)
+    const isMobile = window.innerWidth < 1024; // lg breakpoint
+    if (
+      mobileControlsOpen ||
+      (isMobile && (selectedField || clickedCoordinates))
+    ) {
       document.body.style.overflow = 'hidden';
       document.addEventListener('keydown', handleKeyDown);
     } else {
       document.body.style.overflow = 'unset';
+    }
+
+    // Add keydown listener for desktop panels without preventing body scroll
+    if (!isMobile && (selectedField || clickedCoordinates)) {
+      document.addEventListener('keydown', handleKeyDown);
     }
 
     return () => {

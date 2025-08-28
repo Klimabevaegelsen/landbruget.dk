@@ -12,17 +12,7 @@ import {
   Line,
 } from 'recharts';
 import { EnvironmentalComplianceOverview } from '../../environmental/EnvironmentalStatusIndicator';
-
-interface ChartData {
-  series: Array<{
-    name: string;
-    data: Array<{
-      name: string;
-      value: number;
-    }>;
-  }>;
-  categories?: string[];
-}
+import { ChartData } from '@/services/supabase/types';
 
 interface EnvironmentalChartProps {
   chart: {
@@ -35,28 +25,21 @@ interface EnvironmentalChartProps {
 
 // Transform environmental data for better visualization
 const transformEnvironmentalData = (data: ChartData) => {
-  if (!data || !data.series) return [];
+  if (!data || !data.series || !data.xAxis) return [];
 
   // For environmental charts, we want to show Danish labels and proper color coding
-  return (
-    data.series[0]?.data?.map(
-      (item: { name: string; value: number }, index: number) => {
-        const dataPoint: Record<string, string | number> = { name: item.name };
+  return data.xAxis.values.map((xValue, index) => {
+    const dataPoint: Record<string, string | number> = {
+      name: String(xValue),
+    };
 
-        data.series.forEach(
-          (series: {
-            name: string;
-            data: Array<{ name: string; value: number }>;
-          }) => {
-            const value = series.data[index]?.value || 0;
-            dataPoint[series.name] = value;
-          }
-        );
+    data.series.forEach((series) => {
+      const value = series.data[index] || 0;
+      dataPoint[series.name] = value;
+    });
 
-        return dataPoint;
-      }
-    ) || []
-  );
+    return dataPoint;
+  });
 };
 
 // Enhanced tooltip for environmental data
