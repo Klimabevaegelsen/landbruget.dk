@@ -46,6 +46,7 @@ serve(async (req) => {
     const url = new URL(req.url)
     const category = url.searchParams.get('category') // 'all', 'financial', 'field', 'environment', 'animal', 'worker'
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 50) // Max 50 per table
+    const rankingId = url.searchParams.get('rankingId') // Optional: fetch only specific ranking
 
     // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -614,12 +615,12 @@ serve(async (req) => {
           .in('chr', chrList)
           .eq('year', 2024)
 
-        const chrMap = new Map(chrToCvr?.map(item => [
+                const chrMap = new Map(chrToCvr?.map(item => [
           item.chr.toString(),
           {
             cvr_number: item.owner_cvr.toString(),
-            company_id: item.companies.id,
-            company_name: item.companies.company_name
+            company_id: item.companies?.id || '',
+            company_name: item.companies?.company_name || ''
           }
         ]) || [])
 
@@ -671,12 +672,12 @@ serve(async (req) => {
           .in('chr', chrList)
           .eq('year', 2024)
 
-        const chrMap = new Map(chrToCvr?.map(item => [
+                const chrMap = new Map(chrToCvr?.map(item => [
           item.chr.toString(),
           {
             cvr_number: item.owner_cvr.toString(),
-            company_id: item.companies.id,
-            company_name: item.companies.company_name
+            company_id: item.companies?.id || '',
+            company_name: item.companies?.company_name || ''
           }
         ]) || [])
 
@@ -928,11 +929,16 @@ serve(async (req) => {
       }
     }
 
+    // Filter to specific ranking if requested
+    const filteredRankings = rankingId
+      ? rankings.filter(ranking => ranking.id === rankingId)
+      : rankings
+
     const response: HomepageRankingsResponse = {
-      rankings,
+      rankings: filteredRankings,
       metadata: {
         generated_at: new Date().toISOString(),
-        total_tables: rankings.length
+        total_tables: filteredRankings.length
       }
     }
 

@@ -1,6 +1,6 @@
 import { Container } from '@/components/layout/container';
 import Hero from '@/components/page-sections/hero';
-import HomepageRankings from '@/components/homepage/HomepageRankings';
+import AllRankings from '@/components/homepage/AllRankings';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export default function Home() {
         <Hero />
       </Container>
       <Container className="py-12">
-        <HomepageRankings />
+        <AllRankings />
       </Container>
     </div>
   );
