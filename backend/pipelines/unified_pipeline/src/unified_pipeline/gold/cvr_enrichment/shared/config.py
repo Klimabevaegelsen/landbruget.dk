@@ -68,7 +68,7 @@ class CVREnrichmentSharedConfig(BaseModel):
     )
 
     max_financial_documents: int = Field(
-        default=10, description="Maximum number of financial documents to fetch per company"
+        default=20, description="Maximum number of financial documents to fetch per company"
     )
 
     parse_financial_xml: bool = Field(
