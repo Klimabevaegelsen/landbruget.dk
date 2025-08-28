@@ -275,16 +275,17 @@ export function FieldDetailsPanel({
                   {fieldData.unique_pesticide_products}
                 </span>
               </div>
-              {fieldData.total_pesticide_applications && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-blue-600">
-                    Total applikationer
-                  </span>
-                  <span className="text-xs font-medium text-blue-800">
-                    {fieldData.total_pesticide_applications}
-                  </span>
-                </div>
-              )}
+              {fieldData.total_pesticide_applications &&
+                fieldData.total_pesticide_applications > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-blue-600">
+                      Total applikationer
+                    </span>
+                    <span className="text-xs font-medium text-blue-800">
+                      {fieldData.total_pesticide_applications}
+                    </span>
+                  </div>
+                )}
             </div>
           )}
 
@@ -293,6 +294,7 @@ export function FieldDetailsPanel({
           (fieldData.total_dosage_liters &&
             fieldData.total_dosage_liters > 0) ||
           (fieldData.total_dosage_grams && fieldData.total_dosage_grams > 0) ||
+          (fieldData.total_dosage_ml && fieldData.total_dosage_ml > 0) ||
           (fieldData.total_dosage_tablets &&
             fieldData.total_dosage_tablets > 0)) && (
           <div className="space-y-2">
@@ -323,6 +325,14 @@ export function FieldDetailsPanel({
                   </span>
                 </div>
               )}
+            {fieldData.total_dosage_ml && fieldData.total_dosage_ml > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Total dosering (ml):</span>
+                <span className="font-medium">
+                  {formatNumber(fieldData.total_dosage_ml, 0)} ml
+                </span>
+              </div>
+            )}
             {fieldData.total_dosage_tablets &&
               fieldData.total_dosage_tablets > 0 && (
                 <div className="flex items-center justify-between text-sm">
