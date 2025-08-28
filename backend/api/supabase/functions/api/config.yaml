@@ -250,75 +250,156 @@ pageBuilder:
                 - "is_organic"
               style: "field_detailed"
 
-  - _key: land-use-bnbo-chart
-    _type: horizontalStackedBarChart
-    title: "BNBO Status Fordeling (Snapshot)"
-    dataSource:
-      params:
-        source: "bnbo_summary"
-        category:
-          timeContext: "last_n_years"
-          n: 1
-          categoryColumn: "status"
-          valueColumn: "area_ha"
-
-  - _key: land-use-bnbo-kpis
+  - _key: environmental-compliance-overview
     _type: kpiGroup
-    title: "BNBO Nøgletal & Placering"
+    title: "Miljøoverholdelse - Oversigt"
     dataSource:
       params:
-        source: "bnbo_summary"
+        source: "environmental_compliance_summary"
         kpis:
           timeContext: "last_n_years"
           n: 1
-          filter:
-            status: "not_dealt_with"
           metrics:
-            - key: "ha_not_dealt_with"
-              label: "Hektar ikke håndteret"
-              column: "area_ha"
+            - key: "total_problematic_ha"
+              label: "Problematiske Områder (Ha)"
+              column: "total_problematic_hectares"
               format: "number"
-            - key: "rank_dk_bnbo_not_dealt_with"
-              label: "Placering DK (BNBO)"
-              column: "rank_dk_area_not_dealt_with"
-            - key: "rank_mun_bnbo_not_dealt_with"
-              label: "Placering Kommune (BNBO)"
-              column: "rank_municipality_area_not_dealt_with"
+            - key: "total_dealt_with_ha"
+              label: "Håndterede Områder (Ha)"
+              column: "total_dealt_with_hectares"
+              format: "number"
+            - key: "compliance_percentage"
+              label: "Overholdelsesgrad"
+              column: "compliance_percentage"
+              format: "percentage"
+            - key: "water_coverage_percentage"
+              label: "Areal til Klima- eller Miljøprojekter"
+              column: "water_coverage_percentage"
+              format: "percentage"
 
-  - _key: land-use-wetlands-chart
-    _type: horizontalStackedBarChart
-    title: "Vådområder Status Fordeling (Snapshot)"
+  - _key: bnbo-environmental-status-chart
+    _type: comboChart
+    title: "BNBO Miljøstatus - Områder og Klima- eller Miljøprojekter"
     dataSource:
       params:
-        source: "wetlands_summary"
+        source: "bnbo_environmental_status"
+        timeSeries:
+          timeColumn: "year"
+          metrics:
+            - key: "action_required"
+              seriesName: "Kræver Handling (Ha)"
+              column: "action_required_hectares"
+              type: "bar"
+              yAxis: "left"
+            - key: "completed"
+              seriesName: "Gennemført (Ha)"
+              column: "completed_hectares"
+              type: "bar"
+              yAxis: "left"
+            - key: "water_covered"
+              seriesName: "Areal til Klima- eller Miljøprojekter (Ha)"
+              column: "water_covered_hectares"
+              type: "bar"
+              yAxis: "left"
+            - key: "compliance_rate"
+              seriesName: "Overholdelsesgrad (%)"
+              column: "compliance_rate"
+              type: "line"
+              yAxis: "right"
+        orderBy:
+          - column: "year"
+            direction: "asc"
+
+  - _key: wetlands-environmental-status-chart
+    _type: comboChart
+    title: "Lavbundsjorde Miljøstatus - Områder og Klima- eller Miljøprojekter"
+    dataSource:
+      params:
+        source: "wetlands_environmental_status"
+        timeSeries:
+          timeColumn: "year"
+          metrics:
+            - key: "action_required"
+              seriesName: "Kræver Handling (Ha)"
+              column: "action_required_hectares"
+              type: "bar"
+              yAxis: "left"
+            - key: "completed"
+              seriesName: "Gennemført (Ha)"
+              column: "completed_hectares"
+              type: "bar"
+              yAxis: "left"
+            - key: "water_covered"
+              seriesName: "Areal til Klima- eller Miljøprojekter (Ha)"
+              column: "water_covered_hectares"
+              type: "bar"
+              yAxis: "left"
+            - key: "protection_rate"
+              seriesName: "Beskyttelsesgrad (%)"
+              column: "protection_rate"
+              type: "line"
+              yAxis: "right"
+        orderBy:
+          - column: "year"
+            direction: "asc"
+
+  - _key: environmental-action-status-chart
+    _type: horizontalStackedBarChart
+    title: "Miljøhandlingsstatus - Fordeling på Område Type"
+    dataSource:
+      params:
+        source: "environmental_action_status"
         category:
           timeContext: "last_n_years"
           n: 1
-          categoryColumn: "status"
-          valueColumn: "area_ha"
+          categoryColumn: "area_type"
+          valueColumn: "area_hectares"
+          stackByColumn: "action_status"
 
-  - _key: land-use-wetlands-kpis
-    _type: kpiGroup
-    title: "Vådområder Nøgletal & Placering"
+  - _key: water-coverage-effectiveness-chart
+    _type: stackedBarChart
+    title: "Miljø- og Klimaprojekt Effektivitet pr. År"
     dataSource:
       params:
-        source: "wetlands_summary"
+        source: "water_coverage_effectiveness"
+        timeSeries:
+          timeColumn: "year"
+          valueColumn: "coverage_hectares"
+          groupByColumn: "coverage_type"
+        orderBy:
+          - column: "year"
+            direction: "asc"
+
+  - _key: environmental-compliance-kpis
+    _type: kpiGroup
+    title: "Miljøoverholdelse Nøgletal & Placering"
+    dataSource:
+      params:
+        source: "environmental_compliance_ranking"
         kpis:
           timeContext: "last_n_years"
           n: 1
-          filter:
-            status: "not_dealt_with"
           metrics:
-            - key: "ha_not_dealt_with"
-              label: "Hektar ikke håndteret"
-              column: "area_ha"
+            - key: "total_non_compliant_ha"
+              label: "Ikke-Overholdelse (Ha)"
+              column: "total_non_compliant_hectares"
               format: "number"
-            - key: "rank_dk_wetlands_not_dealt_with"
-              label: "Placering DK (Vådomr.)"
-              column: "rank_dk_area_not_dealt_with"
-            - key: "rank_mun_wetlands_not_dealt_with"
-              label: "Placering Kommune (Vådomr.)"
-              column: "rank_municipality_area_not_dealt_with"
+            - key: "environmental_risk_score"
+              label: "Miljørisiko Score"
+              column: "environmental_risk_score"
+              format: "number"
+            - key: "rank_dk_compliance"
+              label: "Placering DK (Overholdelse)"
+              column: "rank_dk_compliance"
+            - key: "rank_mun_compliance"
+              label: "Placering Kommune (Overholdelse)"
+              column: "rank_municipality_compliance"
+            - key: "rank_dk_water_coverage"
+              label: "Placering DK (Klima- eller Miljøprojekter)"
+              column: "rank_dk_water_coverage"
+            - key: "rank_mun_water_coverage"
+              label: "Placering Kommune (Klima- eller Miljøprojekter)"
+              column: "rank_municipality_water_coverage"
 
   - _key: environment-kpis
     _type: kpiGroup
