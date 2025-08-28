@@ -24,7 +24,6 @@ from tqdm import tqdm
 from unified_pipeline.util.cvr_pii_filter import (
     filter_cvr_pii,
 )
-from unified_pipeline.util.dawa_api_client import DAWAAPIClient
 from unified_pipeline.util.log_util import Logger
 
 
@@ -113,10 +112,16 @@ class CVRAPIClient:
         self.last_request_time = 0
         self.min_request_interval = 0.1  # 100ms between requests
 
-        # Initialize DAWA client for address geocoding
+        # Initialize cached DAWA client for address geocoding
         self.enable_geocoding = enable_geocoding
         self.geocode_current_only = geocode_current_only
-        self.dawa_client = DAWAAPIClient() if enable_geocoding else None
+
+        if enable_geocoding:
+            from unified_pipeline.util.cached_dawa_api_client import CachedDAWAAPIClient
+
+            self.dawa_client = CachedDAWAAPIClient()
+        else:
+            self.dawa_client = None
 
         self.log.info("CVR API client initialized")
 
