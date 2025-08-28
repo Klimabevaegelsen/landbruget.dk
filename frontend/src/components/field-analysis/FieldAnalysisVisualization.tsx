@@ -210,7 +210,7 @@ export default function FieldAnalysisVisualization() {
 
       {/* Left Control Panel - Desktop: sidebar, Mobile: overlay */}
       <div
-        className={` ${mobileControlsOpen ? 'block' : 'hidden'} fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:overflow-hidden lg:shadow-lg`}
+        className={` ${mobileControlsOpen ? 'block' : 'hidden'} fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:shadow-lg`}
         style={{
           paddingTop: mobileControlsOpen
             ? 'env(safe-area-inset-top)'
@@ -279,7 +279,7 @@ export default function FieldAnalysisVisualization() {
       {selectedField && (
         <>
           <div
-            className={`fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:overflow-hidden lg:shadow-lg`}
+            className={`fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
@@ -303,7 +303,7 @@ export default function FieldAnalysisVisualization() {
       {!selectedField && clickedCoordinates && (
         <>
           <div
-            className={`fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:overflow-hidden lg:shadow-lg`}
+            className={`fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
