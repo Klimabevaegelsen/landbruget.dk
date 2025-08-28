@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
-from unified_pipeline.util.dawa_api_client import DAWAAPIClient
+from unified_pipeline.util.cached_dawa_api_client import CachedDAWAAPIClient
 from unified_pipeline.util.timing import timed
 
 from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_step_input_paths
@@ -92,14 +92,15 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
         """
         super().__init__(config)
 
-        # Initialize DAWA API client
-        self.dawa_client = DAWAAPIClient()
+        # Initialize cached DAWA API client
+        self.dawa_client = CachedDAWAAPIClient()
 
-        self.log.info("Address geocoding step initialized")
+        self.log.info("Address geocoding step initialized with caching")
         self.log.info("📋 Configuration:")
         self.log.info("   • Processing mode: Single job (no batching)")
         self.log.info(f"   • Geocode current only: {self.config.geocode_current_only}")
         self.log.info(f"   • Max addresses per batch: {self.config.max_addresses_per_batch}")
+        self.log.info("   • Geocoding cache: ENABLED")
 
     @timed(name="Address geocoding processing")
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
@@ -131,6 +132,9 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
             self._update_company_table_with_geocoding(processed_data)
             self._update_pnumber_table_with_geocoding(processed_data)
 
+            # Step 6: Save geocoding cache and log performance
+            self.dawa_client.cleanup()
+
             self.log.info(
                 "Address geocoding completed successfully. "
                 "Tables updated: companies, pnumbers, addresses"
@@ -139,6 +143,11 @@ class AddressGeocoding(BaseSource[AddressGeocodingConfig], GoldJobInterface):
 
         except Exception as e:
             self.log.error(f"Address geocoding failed: {e}")
+            # Ensure cache is saved even on failure
+            try:
+                self.dawa_client.cleanup()
+            except Exception as cache_e:
+                self.log.warning(f"Failed to save geocoding cache: {cache_e}")
             raise
 
     @timed(name="Extracting addresses from data")
