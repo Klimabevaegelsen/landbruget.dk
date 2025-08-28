@@ -10,7 +10,6 @@ import { BlockTimeline } from './pageBlocks/block-timeline';
 import { BlockKpiGroup } from './pageBlocks/block-kpi-group';
 import { BlockMapChart } from './pageBlocks/block-map-chart';
 import { BlockIteratedSection } from './pageBlocks/block-iterated-section';
-import { BlockEnvironmentalChart } from './pageBlocks/block-environmental-chart';
 
 export function PageBlock({
   block,
@@ -19,19 +18,8 @@ export function PageBlock({
   block: PageBuilderItem;
   level?: number;
 }) {
-  // Check if this is an environmental chart based on the key
-  const isEnvironmentalChart =
-    block._key?.includes('environmental') ||
-    block._key?.includes('bnbo') ||
-    block._key?.includes('wetlands') ||
-    block._key?.includes('water-coverage');
-
   switch (block._type) {
     case 'kpiGroup':
-      // Use environmental component for environmental KPI groups
-      if (isEnvironmentalChart) {
-        return <BlockEnvironmentalChart chart={block} />;
-      }
       return <BlockKpiGroup kpiGroup={block} />;
     case 'infoCard':
       return <BlockInfoCard infoCard={block} />;
@@ -40,16 +28,8 @@ export function PageBlock({
     case 'stackedBarChart':
     case 'horizontalStackedBarChart':
     case 'barChart':
-      // Use environmental component for environmental charts
-      if (isEnvironmentalChart) {
-        return <BlockEnvironmentalChart chart={block} />;
-      }
       return <BlockBarChart chart={block} />;
     case 'comboChart':
-      // Use environmental component for environmental combo charts
-      if (isEnvironmentalChart) {
-        return <BlockEnvironmentalChart chart={block} />;
-      }
       return <BlockComboChart chart={block} />;
     case 'timeline':
       return <BlockTimeline timeline={block} />;
