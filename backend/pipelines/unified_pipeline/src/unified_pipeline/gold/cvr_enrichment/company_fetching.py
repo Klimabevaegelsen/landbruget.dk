@@ -1260,6 +1260,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             # Create normalized persons table from leadership data
             self._create_persons_table(json_strings)
 
+            # Create normalized ownership table from ownership data
+            self._create_ownership_table(json_strings)
+
             # Create normalized employment table from employment data
             self._create_employment_table(json_strings)
 
@@ -1483,10 +1486,114 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self.log.info(f"Created persons table with {person_count} person-company relationships")
         self.log.info(f"Representing {unique_persons} unique persons")
 
-        # Save persons table to GCS
+    def _create_ownership_table(self, json_strings: List[str]) -> None:
+        """Create normalized ownership table from ownership data."""
+
+        self.log.info("Creating normalized ownership table from ownership data")
+
+        # Create ownership table
+        ownership_table = "cvr_ownership"
+        self.conn.execute(f"DROP TABLE IF EXISTS {ownership_table}")
+
+        self.conn.execute(
+            f"""
+            CREATE TABLE {ownership_table} AS
+            WITH ownership_flattened AS (
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    idx as ownership_idx
+                FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
+                        WHEN json_array_length(json_extract(json_data, '$.ownership')) > 0
+                        THEN (
+                            json_array_length(json_extract(json_data, '$.ownership')) - 1
+                        )::BIGINT
+                        ELSE 0::BIGINT
+                    END) as t(idx)
+                WHERE json_extract(json_data, '$.ownership') IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.ownership')) > 0
+            ),
+            ownership_extracted AS (
+                SELECT
+                    of.cvr_number,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].person_uuid'
+                    ) as person_uuid,
+                    json_extract(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].unit_number'
+                    )::BIGINT as unit_number,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].owner_name'
+                    ) as owner_name,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].owner_type'
+                    ) as owner_type,
+                    json_extract(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].ownership_percentage'
+                    )::DOUBLE as ownership_percentage,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].period_start'
+                    ) as period_start,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].period_end'
+                    ) as period_end,
+                    json_extract(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].is_current'
+                    )::BOOLEAN as is_current,
+                    NOW()::VARCHAR as processing_timestamp
+                FROM ownership_flattened of
+                JOIN unnest($1) as t(json_data) ON (
+                    json_extract(t.json_data, '$.cvr_number')::INTEGER = of.cvr_number
+                )
+                WHERE json_extract(
+                    t.json_data, '$.ownership[' || of.ownership_idx || '].owner_name'
+                ) IS NOT NULL
+            )
+            SELECT
+                -- Generate ownership UUID based on company + unit number + period for consistency
+                md5(CONCAT(cvr_number::VARCHAR, '_',
+                          COALESCE(unit_number::VARCHAR, 'unknown'), '_',
+                          COALESCE(period_start, 'no_start')))::VARCHAR as ownership_uuid,
+                -- Generate company UUID for consistency with other tables
+                md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                cvr_number,
+                person_uuid,
+                unit_number,
+                owner_name,
+                owner_type,
+                ownership_percentage,
+                period_start,
+                period_end,
+                COALESCE(is_current, true) as is_current,
+                processing_timestamp
+            FROM ownership_extracted
+            WHERE owner_name IS NOT NULL
+        """,
+            [json_strings],
+        )
+
+        # Get count for logging
+        ownership_count = self.conn.execute(f"SELECT COUNT(*) FROM {ownership_table}").fetchone()[0]
+        current_ownership_count = self.conn.execute(
+            f"SELECT COUNT(*) FROM {ownership_table} WHERE is_current = true"
+        ).fetchone()[0]
+
+        self.log.info(f"Created ownership table with {ownership_count} ownership records")
+        self.log.info(f"Including {current_ownership_count} current ownership relationships")
+
+        # Save ownership table to GCS
         self._save_data(
-            data=persons_table,
-            dataset="cvr_persons",
+            data=ownership_table,
+            dataset="cvr_ownership",
             bucket=self.config.bucket,
             stage="gold",
         )
