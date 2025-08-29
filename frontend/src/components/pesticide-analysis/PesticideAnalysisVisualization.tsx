@@ -15,7 +15,6 @@ import {
 } from './types';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export default function PesticideAnalysisVisualization() {
   const [filters, setFilters] = useState<PesticideAnalysisFilters>({
@@ -73,13 +72,7 @@ export default function PesticideAnalysisVisualization() {
       });
 
       const response = await fetch(
-        `${SUPABASE_URL}/functions/v1/pesticide-analysis?${params}`,
-        {
-          headers: {
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-        }
+        `/api/supabase/functions/pesticide-analysis?${params}`
       );
 
       if (!response.ok) {

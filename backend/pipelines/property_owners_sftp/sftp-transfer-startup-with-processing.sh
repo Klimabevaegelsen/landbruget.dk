@@ -90,7 +90,6 @@ import json
 import ijson
 import pyarrow as pa
 import pyarrow.parquet as pq
-import uuid
 import zipfile
 import geopandas as gpd
 from shapely.geometry import shape
@@ -98,6 +97,15 @@ from pyproj import Transformer, CRS
 from datetime import datetime
 from pathlib import Path
 from google.cloud import storage, secretmanager
+
+# Import UUID utilities
+try:
+    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+except ImportError:
+    # Fallback for different import paths
+    import sys
+    sys.path.append('/home/landbrugsdata/backend/pipelines/unified_pipeline/src')
+    from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 import subprocess
 import sys
 import traceback
@@ -233,11 +241,12 @@ class PropertyDataProcessor:
             return geometry  # Return original if transformation fails
 
     def generate_uuid_for_cpr(self, cpr_id):
-        """Generate consistent UUID for CPR numbers."""
+        """Generate consistent deterministic UUID for CPR numbers."""
         if not cpr_id:
             return None
         if cpr_id not in self.cpr_to_uuid_mapping:
-            self.cpr_to_uuid_mapping[cpr_id] = str(uuid.uuid4())
+            # Generate deterministic UUID based on CPR number
+            self.cpr_to_uuid_mapping[cpr_id] = LandbrugsdataUUID.generate_deterministic_uuid("cpr", str(cpr_id))
         return self.cpr_to_uuid_mapping[cpr_id]
 
     def has_foreign_address(self, person_data):

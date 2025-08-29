@@ -11,6 +11,7 @@ import json
 import logging
 import sys
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from io import StringIO
@@ -120,17 +121,17 @@ class SupabaseMigrationPipeline:
                 "transform_func": self._transform_company_owners,
             },
             "field_yearly_data": {
-                "source": "field_analysis_2025",
+                "source": "field_environmental_analysis_fields_2025",
                 "key_fields": ["field_uuid", "year"],
                 "transform_func": self._transform_field_yearly_data,
             },
             "field_bnbo_areas": {
-                "source": "field_environmental_analysis_fields_2024",
+                "source": "field_environmental_analysis_fields_2025",
                 "key_fields": ["field_uuid", "year"],
                 "transform_func": self._transform_field_bnbo_areas,
             },
             "field_wetland_areas": {
-                "source": "field_analysis_2024",
+                "source": "field_environmental_analysis_fields_2025",
                 "key_fields": ["field_uuid", "year"],
                 "transform_func": self._transform_field_wetland_areas,
             },
@@ -163,6 +164,11 @@ class SupabaseMigrationPipeline:
                 "source": "Landbrugsvisum_statistik",
                 "key_fields": ["company_id", "year", "nationality"],
                 "transform_func": self._transform_visa_yearly_counts,
+            },
+            "worker_yearly_summary": {
+                "source": "worker_safety",
+                "key_fields": ["cvr_number", "year"],
+                "transform_func": self._transform_worker_yearly_summary,
             },
             "incidents": {
                 "source": ["worker_safety", "arbejdstilsynet_inspections"],
@@ -509,19 +515,177 @@ class SupabaseMigrationPipeline:
         pass
 
     async def _transform_field_yearly_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Transform field environmental analysis data"""
-        # Implementation for comprehensive field environmental data
-        pass
+        """Transform field environmental analysis data to field_yearly_data table"""
+        try:
+            self.logger.info(f"🔄 Transforming {len(df)} field environmental records...")
+
+            # Generate UUIDs for records
+            df["id"] = df.apply(lambda _: str(uuid.uuid4()), axis=1)
+
+            # Convert CVR number to string and generate company UUIDs
+            df["cvr_number"] = df["cvr_number"].astype(str)
+            df["company_id"] = df["cvr_number"].apply(
+                lambda cvr: str(uuid.uuid5(uuid.NAMESPACE_DNS, f"company.landbruget.dk.{cvr}"))
+            )
+
+            # Convert field_uuid to string if not already
+            df["field_uuid"] = df["field_uuid"].astype(str)
+
+            # Convert area from m2 to hectares
+            df["area_ha"] = df["field_area_m2"] / 10000
+
+            # Add timestamps
+            current_time = datetime.now()
+            df["created_at"] = current_time
+            df["updated_at"] = current_time
+
+            # Select and rename columns for field_yearly_data table
+            field_yearly_cols = {
+                "id": "id",
+                "field_uuid": "field_uuid",
+                "cvr_number": "cvr_number",
+                "block_id": "block_id",
+                "field_id": "field_id",
+                "year": "year",
+                "area_ha": "area_ha",
+                "created_at": "created_at",
+                "updated_at": "updated_at",
+                "company_id": "company_id",
+            }
+
+            # Add crop_name and is_organic as NULL for now (not in environmental data)
+            df["crop_name"] = None
+            df["is_organic"] = None
+            df["n_leached_kg"] = None
+            df["pesticide_load_index"] = None
+
+            field_yearly_cols.update(
+                {
+                    "crop_name": "crop_name",
+                    "is_organic": "is_organic",
+                    "n_leached_kg": "n_leached_kg",
+                    "pesticide_load_index": "pesticide_load_index",
+                }
+            )
+
+            result_df = df[list(field_yearly_cols.keys())].rename(columns=field_yearly_cols)
+
+            self.logger.info(f"✅ Transformed to {len(result_df)} field_yearly_data records")
+            return result_df
+
+        except Exception as e:
+            self.logger.error(f"❌ Error transforming field_yearly_data: {e}")
+            raise
 
     async def _transform_field_bnbo_areas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Transform BNBO area data"""
-        # Implementation for BNBO status and area calculations
-        pass
+        """Transform BNBO area data from field environmental analysis"""
+        try:
+            self.logger.info(f"🔄 Transforming {len(df)} records for BNBO areas...")
+
+            # Filter records that have BNBO data
+            bnbo_df = df[df["field_bnbo_coverage_pct"] > 0].copy()
+
+            if len(bnbo_df) == 0:
+                self.logger.warning("⚠️ No BNBO area data found")
+                return pd.DataFrame()
+
+            # Generate UUIDs for records
+            bnbo_df["id"] = bnbo_df.apply(lambda _: str(uuid.uuid4()), axis=1)
+
+            # Convert field_uuid to string
+            bnbo_df["field_uuid"] = bnbo_df["field_uuid"].astype(str)
+
+            # Convert areas from m2 to hectares
+            bnbo_df["area_hectares"] = bnbo_df["field_bnbo_total_m2"] / 10000
+            bnbo_df["water_covered_hectares"] = bnbo_df["field_bnbo_water_covered_m2"] / 10000
+
+            # Add timestamps
+            current_time = datetime.now()
+            bnbo_df["created_at"] = current_time
+            bnbo_df["updated_at"] = current_time
+
+            # Select columns for field_bnbo_areas table
+            bnbo_cols = {
+                "id": "id",
+                "field_uuid": "field_uuid",
+                "year": "year",
+                "area_hectares": "area_hectares",
+                "water_covered_hectares": "water_covered_hectares",
+                "field_bnbo_coverage_pct": "coverage_percentage",
+                "field_bnbo_water_coverage_pct": "water_coverage_percentage",
+                "bnbo_status_categories": "status_categories",
+                "bnbo_action_required_hectares": "action_required_hectares",
+                "bnbo_completed_hectares": "completed_hectares",
+                "bnbo_action_required_water_covered_hectares": "action_required_water_hectares",
+                "bnbo_completed_water_covered_hectares": "completed_water_hectares",
+                "bnbo_status_count": "status_count",
+                "created_at": "created_at",
+                "updated_at": "updated_at",
+            }
+
+            result_df = bnbo_df[list(bnbo_cols.keys())].rename(columns=bnbo_cols)
+
+            self.logger.info(f"✅ Transformed to {len(result_df)} field_bnbo_areas records")
+            return result_df
+
+        except Exception as e:
+            self.logger.error(f"❌ Error transforming field_bnbo_areas: {e}")
+            raise
 
     async def _transform_field_wetland_areas(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Transform wetland area data"""
-        # Implementation for wetland restoration status
-        pass
+        """Transform wetland area data from field environmental analysis"""
+        try:
+            self.logger.info(f"🔄 Transforming {len(df)} records for wetland areas...")
+
+            # Filter records that have wetland data
+            wetland_df = df[df["field_wetland_coverage_pct"] > 0].copy()
+
+            if len(wetland_df) == 0:
+                self.logger.warning("⚠️ No wetland area data found")
+                return pd.DataFrame()
+
+            # Generate UUIDs for records
+            wetland_df["id"] = wetland_df.apply(lambda _: str(uuid.uuid4()), axis=1)
+
+            # Convert field_uuid to string
+            wetland_df["field_uuid"] = wetland_df["field_uuid"].astype(str)
+
+            # Convert areas from m2 to hectares
+            wetland_df["area_hectares"] = wetland_df["field_wetland_total_m2"] / 10000
+            wetland_df["water_covered_hectares"] = wetland_df["field_wetland_water_covered_m2"] / 10000
+
+            # Add timestamps
+            current_time = datetime.now()
+            wetland_df["created_at"] = current_time
+            wetland_df["updated_at"] = current_time
+
+            # Add placeholder fields that might be in the schema
+            wetland_df["restoration_status"] = "unknown"  # Default status
+            wetland_df["restoration_year"] = None
+
+            # Select columns for field_wetland_areas table
+            wetland_cols = {
+                "id": "id",
+                "field_uuid": "field_uuid",
+                "year": "year",
+                "area_hectares": "area_hectares",
+                "water_covered_hectares": "water_covered_hectares",
+                "field_wetland_coverage_pct": "coverage_percentage",
+                "field_wetland_water_coverage_pct": "water_coverage_percentage",
+                "restoration_status": "restoration_status",
+                "restoration_year": "restoration_year",
+                "created_at": "created_at",
+                "updated_at": "updated_at",
+            }
+
+            result_df = wetland_df[list(wetland_cols.keys())].rename(columns=wetland_cols)
+
+            self.logger.info(f"✅ Transformed to {len(result_df)} field_wetland_areas records")
+            return result_df
+
+        except Exception as e:
+            self.logger.error(f"❌ Error transforming field_wetland_areas: {e}")
+            raise
 
     async def _transform_pesticide_applications(self, df: pd.DataFrame) -> pd.DataFrame:
         """Transform pesticide proximity analysis data"""
@@ -551,6 +715,11 @@ class SupabaseMigrationPipeline:
     async def _transform_visa_yearly_counts(self, df: pd.DataFrame) -> pd.DataFrame:
         """Transform agricultural visa statistics"""
         # Implementation for work permit data
+        pass
+
+    async def _transform_worker_yearly_summary(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Transform worker safety data into yearly summary format"""
+        # Implementation for worker safety aggregation
         pass
 
     async def _transform_incidents(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -636,8 +805,8 @@ class SupabaseMigrationPipeline:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO migration_metadata 
-                (migration_name, source_dataset, target_table, records_processed, 
+                INSERT INTO migration_metadata
+                (migration_name, source_dataset, target_table, records_processed,
                  records_success, records_failed, completed_at, status, performance_stats)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
@@ -697,16 +866,17 @@ def main():
     results = asyncio.run(pipeline.run_full_migration(args.tables))
 
     # Print summary
-    print("\n" + "=" * 80)
-    print("MIGRATION SUMMARY")
-    print("=" * 80)
+    logger = logging.getLogger("supabase_migration")
+    logger.info("\n" + "=" * 80)
+    logger.info("MIGRATION SUMMARY")
+    logger.info("=" * 80)
     for table, stats in results.items():
         status = (
             "✅ SUCCESS" if stats.failed_records == 0 else "⚠️  PARTIAL" if stats.successful_records > 0 else "❌ FAILED"
         )
-        print(f"{status} {table}: {stats.successful_records}/{stats.total_records} records")
+        logger.info(f"{status} {table}: {stats.successful_records}/{stats.total_records} records")
         if stats.errors:
-            print(f"   Errors: {len(stats.errors)}")
+            logger.info(f"   Errors: {len(stats.errors)}")
 
 
 if __name__ == "__main__":
