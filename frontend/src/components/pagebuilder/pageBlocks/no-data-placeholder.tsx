@@ -15,12 +15,12 @@ export function NoDataPlaceholder() {
     <div className="relative">
       {/* Placeholder chart area */}
       <div
-        style={{ width: '100%', height: 400, minHeight: 400, minWidth: 100 }}
+        style={{ width: '100%', height: 250, minHeight: 250, minWidth: 100 }}
         className="mt-4 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50"
       >
         <ResponsiveContainer>
-          <div className="flex h-full flex-col items-center justify-center p-8 text-center">
-            <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-lg bg-gray-200">
+          <div className="flex h-full flex-col items-center justify-center p-6 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-gray-200">
               <svg
                 className="h-10 w-10 text-gray-400"
                 fill="none"
