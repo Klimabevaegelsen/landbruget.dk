@@ -115,39 +115,15 @@ async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: st
     head: false
   });
 
-  // --- DEBUGGING for site_species_production_ranked ---
-  if (sourceTable === 'site_species_production_ranked') {
-    console.log(`DEBUG_SSPR: getLatestYearForCompany for ${sourceTable}`);
-    console.log(`DEBUG_SSPR: filterContext:`, filterContext);
-    const hasChrCol = await tableHasColumn(supabase, sourceTable, 'chr');
-    console.log(`DEBUG_SSPR: await tableHasColumn(supabase, '${sourceTable}', 'chr') result: ${hasChrCol}`);
-    const hasCompanyIdCol = await tableHasColumn(supabase, sourceTable, 'company_id');
-    console.log(`DEBUG_SSPR: await tableHasColumn(supabase, '${sourceTable}', 'company_id') result: ${hasCompanyIdCol}`);
-    if (filterContext?.chr) {
-        console.log(`DEBUG_SSPR: filterContext.chr value: ${filterContext.chr}`);
-    }
-  }
-  // --- END DEBUGGING ---
 
-  // Apply context filter (CHR for site-specific latest year)
-  if (filterContext?.chr && await tableHasColumn(supabase, sourceTable, 'chr')) {
+
+  // Apply context filter (CHR for site-specific latest year) - simplified
+  if (filterContext?.chr) {
     query = query.eq('chr', filterContext.chr);
     console.log(`getLatestYearForCompany: Filtering by CHR ${filterContext.chr} for ${sourceTable}`);
-  } else if (await tableHasColumn(supabase, sourceTable, 'company_id')) {
-    // Fallback to company_id if CHR not applicable/available
-    query = query.eq('company_id', companyId);
-  } else if (await tableHasColumn(supabase, sourceTable, 'cvr_number')) {
-    // Get CVR number from company details and filter by that
-    const companyDetails = await getCompanyDetails(supabase, companyId);
-    if (companyDetails?.cvr_number) {
-      query = query.eq('cvr_number', companyDetails.cvr_number);
-      console.log(`getLatestYearForCompany: Filtering by CVR ${companyDetails.cvr_number} for ${sourceTable}`);
-    } else {
-      console.warn(`getLatestYearForCompany: Cannot get CVR for company ${companyId}`);
-    }
   } else {
-    // If no company_id, CVR, or CHR, we can't reliably get the latest year *for this entity*
-    console.warn(`getLatestYearForCompany: Cannot filter ${sourceTable} by companyId, CVR, or context CHR. Finding global latest year (may be inaccurate).`);
+    // Fallback to company_id - simplified
+    query = query.eq('company_id', companyId);
   }
   const { data, error } = await query.order(yearColumn, {
     ascending: false
@@ -163,29 +139,7 @@ async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: st
   latestYearCache.set(cacheKey, latestYear); // Store in cache
   return latestYear;
 }
-// --- Helper: Check if table has a column (simple check, needs improvement/caching) ---
-const columnExistenceCache = new Map();
-async function tableHasColumn(supabase: SupabaseClient, tableName: string, columnName: string): Promise<boolean> {
-  const cacheKey = `${tableName}.${columnName}`;
-  if (columnExistenceCache.has(cacheKey)) {
-    return columnExistenceCache.get(cacheKey);
-  }
-  try {
-    // console.log(`Checking column existence: ${cacheKey}`);
-    const { error } = await supabase.from(tableName).select(columnName, {
-      count: 'exact',
-      head: true
-    }).limit(0);
-    const exists = !error || error && !error.message.includes("does not exist") && !error.message.includes("relation") && !error.message.includes("missing FROM-clause");
-    // console.log(`Column check result for ${cacheKey}: ${exists} (Error: ${error?.message})`);
-    columnExistenceCache.set(cacheKey, exists);
-    return exists;
-  } catch (e) {
-    console.warn(`Error checking column existence for ${cacheKey}:`, e);
-    columnExistenceCache.set(cacheKey, false);
-    return false;
-  }
-}
+
 // --- Data Processing Functions ---
 async function processInfoCard(supabase: SupabaseClient, companyId: string, municipality: string, params: any, context: Record<string, any> | null) {
   const { source, record } = params;
@@ -194,10 +148,10 @@ async function processInfoCard(supabase: SupabaseClient, companyId: string, muni
   console.log(`processInfoCard: Source=${source}, Context=${JSON.stringify(context)}, Filter=${JSON.stringify(recordFilter)}`);
   const selectColumns = mappings.map((m: any) => m.column).join(',');
   let query = supabase.from(source).select(selectColumns);
-  // Apply company_id or primary ID filter
+  // Apply company_id or primary ID filter - simplified
   if (source === 'companies') {
     query = query.eq('id', companyId);
-  } else if (await tableHasColumn(supabase, source, 'company_id')) {
+  } else {
     query = query.eq('company_id', companyId);
   }
   // Apply specific record filters (potentially using context)
@@ -267,17 +221,9 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
   const selectColumns = columns.map((c: any) => c.column).join(',');
   let query: any = supabase.from(source).select(selectColumns);
 
-  // Apply company filter - check for both company_id and cvr_number
-  const companyInfo = await getCompanyDetails(supabase, companyId);
-  if (await tableHasColumn(supabase, source, 'company_id')) {
-    console.log(`processDataGrid: Applying company_id filter for ${source}`);
-    query = query.eq('company_id', companyId);
-  } else if (await tableHasColumn(supabase, source, 'cvr_number') && companyInfo?.cvr_number) {
-    console.log(`processDataGrid: Applying cvr_number filter for ${source} (CVR: ${companyInfo.cvr_number})`);
-    query = query.eq('cvr_number', companyInfo.cvr_number);
-  } else {
-    console.log(`processDataGrid: Skipping company filter for ${source} - no company_id or cvr_number column`);
-  }
+  // Apply company filter - now simplified to only use company_id
+  console.log(`processDataGrid: Applying company_id filter for ${source}`);
+  query = query.eq('company_id', companyId);
 
   // Apply initial filters (potentially using context)
   if (initialFilter) {
@@ -300,24 +246,14 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
          // Check latest year based on the source table
         const latestYear = await getLatestYearForCompany(supabase, source, companyId, 'year', context);
         if (latestYear) {
-           if (await tableHasColumn(supabase, source, 'year')) {
-               query = query.eq('year', latestYear);
-           } else {
-               console.warn(`processDataGrid: Cannot apply 'latest' year filter. 'year' column not found on source ${source}.`);
-               return { rows: [], columns: columns, allowFiltering };
-           }
+           query = query.eq('year', latestYear);
         } else {
           console.warn(`processDataGrid: Cannot apply 'latest' filter for ${source}, no year found for context ${JSON.stringify(context)}.`);
           return { rows: [], columns: columns, allowFiltering };
         }
       } else {
-        // Apply other filters
-        if (await tableHasColumn(supabase, source, key)){
-             query = query.eq(key, filterValue);
-        } else {
-             console.warn(`processDataGrid: Cannot apply filter ${key}=${filterValue}. Column not found on source ${source}.`);
-             // Skip filter if column doesn't exist
-        }
+        // Apply other filters - simplified without column existence check
+        query = query.eq(key, filterValue);
       }
     }
   }
@@ -397,16 +333,10 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
     ...kpiFilter ? Object.keys(kpiFilter).map((k: any)=>k) : []
   ].filter((v, i, a)=>a.indexOf(v) === i).join(',');
   let query = supabase.from(source).select(selectColumns);
-  // Apply company filter - check for both company_id and cvr_number
-  const companyInfo = await getCompanyDetails(supabase, companyId);
-  if (await tableHasColumn(supabase, source, 'company_id')) {
-    query = query.eq('company_id', companyId);
-  } else if (await tableHasColumn(supabase, source, 'cvr_number') && companyInfo?.cvr_number) {
-    console.log(`processKpiGroup: Applying cvr_number filter for ${source} (CVR: ${companyInfo.cvr_number})`);
-    query = query.eq('cvr_number', companyInfo.cvr_number);
-  }
-  // Apply municipality filter ONLY if source table expects it
-  if (TABLES_WITH_MUNICIPALITY_SUMMARY.includes(source) && await tableHasColumn(supabase, source, 'municipality')) {
+  // Apply company filter - simplified to only use company_id
+  query = query.eq('company_id', companyId);
+  // Apply municipality filter ONLY if source table expects it - simplified
+  if (TABLES_WITH_MUNICIPALITY_SUMMARY.includes(source)) {
     console.log(`processKpiGroup: Applying municipality filter for ${source}`);
     query = query.eq('municipality', municipality);
   } else {
@@ -523,13 +453,8 @@ async function processTimeSeriesChart(supabase: SupabaseClient, companyId: strin
   // --- End special handling ---
   // Apply standard company filter if applicable and not already handled
   if (!appliedCompanyFilter) {
-    const companyInfo = await getCompanyDetails(supabase, companyId);
-    if (await tableHasColumn(supabase, source, 'company_id')) {
-      query = query.eq('company_id', companyId);
-    } else if (await tableHasColumn(supabase, source, 'cvr_number') && companyInfo?.cvr_number) {
-      console.log(`processTimeSeriesChart: Applying cvr_number filter for ${source} (CVR: ${companyInfo.cvr_number})`);
-      query = query.eq('cvr_number', companyInfo.cvr_number);
-    }
+    // Apply company filter - simplified
+    query = query.eq('company_id', companyId);
   }
   // Apply specific filters (potentially using context)
   if (filter) {
@@ -566,6 +491,20 @@ async function processTimeSeriesChart(supabase: SupabaseClient, companyId: strin
   const { data, error } = await query;
   if (error) {
     console.error(`Error fetching data for ${chartType} (${source}):`, error);
+
+    // Special handling for missing tables that should show placeholders
+    if (source === 'environment_summary' && error.message?.includes('does not exist')) {
+      console.log(`Table ${source} does not exist - returning placeholder data for ${chartType}`);
+      // Return placeholder data structure that will be handled by frontend
+      return {
+        data: {
+          xAxis: { label: timeColumn, values: [] },
+          series: [],
+          yAxis: { label: "Value" }
+        }
+      };
+    }
+
     return {
       data: {},
       error: `Database error: ${error.message}`
@@ -651,20 +590,10 @@ async function processCategoryChart(supabase: SupabaseClient, companyId: string,
     ...new Set(selectList)
   ];
   let query = supabase.from(source).select(selectList.join(','));
-  // Apply company filter - check for both company_id and cvr_number
-  const companyInfo = await getCompanyDetails(supabase, companyId);
-  if (await tableHasColumn(supabase, source, 'company_id')) {
-    query = query.eq('company_id', companyId);
-  } else if (await tableHasColumn(supabase, source, 'cvr_number') && companyInfo?.cvr_number) {
-    console.log(`processCategoryChart: Applying cvr_number filter for ${source} (CVR: ${companyInfo.cvr_number})`);
-    query = query.eq('cvr_number', companyInfo.cvr_number);
-  }
-  // Apply year filter
-  if (await tableHasColumn(supabase, source, 'year')) {
-    query = query.eq('year', filterYear);
-  } else {
-    console.warn(`processCategoryChart: Source table ${source} does not have a 'year' column for filtering.`);
-  }
+  // Apply company filter - simplified
+  query = query.eq('company_id', companyId);
+  // Apply year filter - simplified
+  query = query.eq('year', filterYear);
   // Apply specific filters (potentially using context)
   if (filter) {
     for(const key in filter){
@@ -784,7 +713,7 @@ async function processMapChart(supabase: SupabaseClient, companyId: string, _mun
     if (source === 'companies') {
       query = query.eq('id', companyId); // Filter companies by PRIMARY id
       console.log(`processMapChart: Applying filter id=${companyId} for ${source}`);
-    } else if (await tableHasColumn(supabase, source, 'company_id')) {
+    } else {
       query = query.eq('company_id', companyId);
       console.log(`processMapChart: Applying filter company_id=${companyId} for ${source}`);
     }
@@ -877,13 +806,13 @@ async function processTimeline(supabase: SupabaseClient, companyId: string, _mun
     ...new Set(selectList)
   ];
   let query = supabase.from(source).select(selectList.join(','));
-  // Apply company_id or CHR filter based on source and context
+  // Apply company_id or CHR filter based on source and context - simplified
   let appliedContextFilter = false;
-  if (context?.chr && await tableHasColumn(supabase, source, 'chr')) {
+  if (context?.chr) {
     query = query.eq('chr', context.chr);
     appliedContextFilter = true;
     console.log(`processTimeline: Applied context CHR filter: ${context.chr}`);
-  } else if (await tableHasColumn(supabase, source, 'company_id')) {
+  } else {
     query = query.eq('company_id', companyId);
     appliedContextFilter = true;
     console.log(`processTimeline: Applied company_id filter: ${companyId}`);
@@ -1002,8 +931,8 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
 
       let iterQuery = supabase.from(iterSource).select(iterColumns.join(','));
 
-      // Apply base company_id filter to iterator source if applicable AND source is not the problematic one
-      if (iterSource !== 'site_species_production_ranked' && await tableHasColumn(supabase, iterSource, 'company_id')) {
+      // Apply base company_id filter to iterator source - simplified
+      if (iterSource !== 'site_species_production_ranked') {
         iterQuery = iterQuery.eq('company_id', companyId);
       }
 
