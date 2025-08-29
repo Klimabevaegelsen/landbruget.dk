@@ -201,7 +201,7 @@
               {
                 "key": "total_assets",
                 "column": "total_assets",
-                "seriesName": "Samlede Aktiver"
+                "seriesName": "Samlede aktiver"
               }
             ]
           },
@@ -437,21 +437,21 @@
             "metrics": [
               {
                 "key": "action_required",
-                "seriesName": "Kræver Handling (Ha)",
+                "seriesName": "Kræver handling (ha)",
                 "column": "action_required_hectares",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "completed",
-                "seriesName": "Gennemført (Ha)",
+                "seriesName": "Gennemført (ha)",
                 "column": "completed_hectares",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "water_covered",
-                "seriesName": "Areal til Klima- eller Miljøprojekter (Ha)",
+                "seriesName": "Areal til klima- eller miljøprojekter (ha)",
                 "column": "water_covered_hectares",
                 "type": "bar",
                 "yAxis": "left"
@@ -486,21 +486,21 @@
             "metrics": [
               {
                 "key": "action_required",
-                "seriesName": "Kræver Handling (Ha)",
+                "seriesName": "Kræver handling (ha)",
                 "column": "action_required_hectares",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "completed",
-                "seriesName": "Gennemført (Ha)",
+                "seriesName": "Gennemført (ha)",
                 "column": "completed_hectares",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "water_covered",
-                "seriesName": "Areal til Klima- eller Miljøprojekter (Ha)",
+                "seriesName": "Areal til klima- eller miljøprojekter (ha)",
                 "column": "water_covered_hectares",
                 "type": "bar",
                 "yAxis": "left"
@@ -715,14 +715,14 @@
             "metrics": [
               {
                 "key": "total_n",
-                "seriesName": "Total Kg N Udledt",
+                "seriesName": "Total kg N udledt",
                 "column": "total_n_leached_kg",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "n_per_ha",
-                "seriesName": "Kg N Udledt pr. Ha",
+                "seriesName": "Kg N udledt pr. ha",
                 "column": "n_leached_kg_per_ha",
                 "type": "line",
                 "yAxis": "right"
@@ -796,14 +796,14 @@
             "metrics": [
               {
                 "key": "total_load",
-                "seriesName": "Total Belastning",
+                "seriesName": "Total belastning",
                 "column": "total_pesticide_load_index",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "load_per_ha",
-                "seriesName": "Belastning pr. Ha",
+                "seriesName": "Belastning pr. ha",
                 "column": "pesticide_load_index_per_ha",
                 "type": "line",
                 "yAxis": "right"
@@ -936,7 +936,7 @@
               {
                 "key": "employee_count",
                 "column": "employee_count",
-                "seriesName": "Antal Ansatte"
+                "seriesName": "Antal ansatte"
               }
             ]
           },
@@ -1100,7 +1100,7 @@
             "metrics": [
               {
                 "key": "total_usage",
-                "seriesName": "Total Forbrug (DDD)",
+                "seriesName": "Total forbrug (DDD)",
                 "column": "total_ddd_usage",
                 "type": "bar",
                 "yAxis": "left"
