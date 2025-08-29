@@ -2,11 +2,7 @@
 
 import { ResponsiveContainer } from 'recharts';
 
-interface NoDataPlaceholderProps {
-  title?: string;
-}
-
-export function NoDataPlaceholder({ title }: NoDataPlaceholderProps) {
+export function NoDataPlaceholder() {
   const handleClick = () => {
     window.open(
       'https://github.com/klimabevaegelsen/landbruget.dk/issues',
@@ -17,9 +13,6 @@ export function NoDataPlaceholder({ title }: NoDataPlaceholderProps) {
 
   return (
     <div className="relative">
-      {/* Chart title */}
-      {title && <h3 className="mb-4 text-lg font-semibold">{title}</h3>}
-
       {/* Placeholder chart area */}
       <div
         style={{ width: '100%', height: 400, minHeight: 400, minWidth: 100 }}

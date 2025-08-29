@@ -6,7 +6,7 @@
     {
       "_key": "company-identity",
       "_type": "infoCard",
-      "title": "Virksomhed Identitet",
+      "title": "Virksomhed identitet",
       "dataSource": {
         "params": {
           "source": "companies",
@@ -45,7 +45,7 @@
     {
       "_key": "company-ownership",
       "_type": "dataGrid",
-      "title": "Ejerforhold (Oversigt)",
+      "title": "Ejerforhold (oversigt)",
       "dataSource": {
         "params": {
           "source": "company_owners",
@@ -99,7 +99,7 @@
     {
       "_key": "company-map-overview",
       "_type": "mapChart",
-      "title": "Kort: Bygninger, Marker, Virksomhedens adresse",
+      "title": "Kort: bygninger, marker, virksomhedens adresse",
       "dataSource": {
         "params": {
           "map": {
@@ -141,7 +141,7 @@
     {
       "_key": "financials-latest-kpis",
       "_type": "kpiGroup",
-      "title": "Finansielle Nøgletal (Seneste År)",
+      "title": "Finansielle nøgletal (seneste år)",
       "dataSource": {
         "params": {
           "source": "yearly_financials",
@@ -181,7 +181,7 @@
     {
       "_key": "financials-history",
       "_type": "barChart",
-      "title": "Økonomisk Udvikling (pr. År)",
+      "title": "Økonomisk udvikling (pr. år)",
       "dataSource": {
         "params": {
           "source": "yearly_financials",
@@ -217,7 +217,7 @@
     {
       "_key": "financials-detailed-kpis",
       "_type": "kpiGroup",
-      "title": "Detaljerede Finansielle Nøgletal",
+      "title": "Detaljerede finansielle nøgletal",
       "dataSource": {
         "params": {
           "source": "yearly_financials",
@@ -269,7 +269,7 @@
     {
       "_key": "subsidies-history-stacked",
       "_type": "stackedBarChart",
-      "title": "Tilskud Fordelt på Type (pr. År)",
+      "title": "Tilskud fordelt på type (pr. år)",
       "dataSource": {
         "params": {
           "source": "subsidy_details",
@@ -290,7 +290,7 @@
     {
       "_key": "land-use-kpis",
       "_type": "kpiGroup",
-      "title": "Arealanvendelse Nøgletal",
+      "title": "Arealanvendelse nøgletal",
       "dataSource": {
         "params": {
           "source": "land_use_summary",
@@ -338,7 +338,7 @@
     {
       "_key": "land-use-crop-distribution",
       "_type": "horizontalStackedBarChart",
-      "title": "Afgrødefordeling i Hektar (Seneste År, Øko/Konv)",
+      "title": "Afgrødefordeling i hektar (seneste år, øko/konv)",
       "dataSource": {
         "params": {
           "source": "field_yearly_data",
@@ -362,7 +362,7 @@
     {
       "_key": "land-use-field-map",
       "_type": "mapChart",
-      "title": "Markernes Placering & Status (Seneste År)",
+      "title": "Markernes placering & status (seneste år)",
       "dataSource": {
         "params": {
           "map": {
@@ -388,7 +388,7 @@
     {
       "_key": "environmental-compliance-overview",
       "_type": "kpiGroup",
-      "title": "Miljøoverholdelse - Oversigt",
+      "title": "Miljøoverholdelse - oversigt",
       "dataSource": {
         "params": {
           "source": "environmental_compliance_summary",
@@ -428,7 +428,7 @@
     {
       "_key": "bnbo-environmental-status-chart",
       "_type": "comboChart",
-      "title": "BNBO Miljøstatus - Områder og Klima- eller Miljøprojekter",
+      "title": "BNBO miljøstatus - områder og klima- eller miljøprojekter",
       "dataSource": {
         "params": {
           "source": "bnbo_environmental_status",
@@ -477,7 +477,7 @@
     {
       "_key": "wetlands-environmental-status-chart",
       "_type": "comboChart",
-      "title": "Lavbundsjorde Miljøstatus - Områder og Klima- eller Miljøprojekter",
+      "title": "Lavbundsjorde miljøstatus - områder og klima- eller miljøprojekter",
       "dataSource": {
         "params": {
           "source": "wetlands_environmental_status",
@@ -526,7 +526,7 @@
     {
       "_key": "environmental-action-status-chart",
       "_type": "horizontalStackedBarChart",
-      "title": "Miljøhandlingsstatus - Fordeling på Område Type",
+      "title": "Miljøhandlingsstatus - fordeling på område type",
       "dataSource": {
         "params": {
           "source": "environmental_action_status",
@@ -543,7 +543,7 @@
     {
       "_key": "water-coverage-effectiveness-chart",
       "_type": "stackedBarChart",
-      "title": "Miljø- og Klimaprojekt Effektivitet pr. År",
+      "title": "Miljø- og klimaprojekt effektivitet pr. år",
       "dataSource": {
         "params": {
           "source": "water_coverage_effectiveness",
@@ -564,7 +564,7 @@
     {
       "_key": "environmental-compliance-kpis",
       "_type": "kpiGroup",
-      "title": "Miljøoverholdelse Nøgletal & Placering",
+      "title": "Miljøoverholdelse nøgletal & placering",
       "dataSource": {
         "params": {
           "source": "environmental_compliance_ranking",
@@ -612,7 +612,7 @@
     {
       "_key": "environment-kpis",
       "_type": "kpiGroup",
-      "title": "Miljø Nøgletal",
+      "title": "Miljø nøgletal",
       "dataSource": {
         "params": {
           "source": "environment_summary",
@@ -683,7 +683,7 @@
     {
       "_key": "environment-slurry-incidents",
       "_type": "timeline",
-      "title": "Hændelser med Gylleudslip",
+      "title": "Hændelser med gylleudslip",
       "dataSource": {
         "params": {
           "source": "incidents",
@@ -706,7 +706,7 @@
     {
       "_key": "environment-nitrogen-leaching",
       "_type": "comboChart",
-      "title": "Kvælstofudvaskning (Total og pr. Hektar)",
+      "title": "Kvælstofudvaskning (total og pr. hektar)",
       "dataSource": {
         "params": {
           "source": "environment_summary",
@@ -741,7 +741,7 @@
     {
       "_key": "environment-nitrogen-per-field",
       "_type": "dataGrid",
-      "title": "Kvælstofudvaskning pr. Mark (Detaljeret)",
+      "title": "Kvælstofudvaskning pr. mark (detaljeret)",
       "dataSource": {
         "params": {
           "source": "field_yearly_data",
@@ -787,7 +787,7 @@
     {
       "_key": "environment-pesticide-load",
       "_type": "comboChart",
-      "title": "Pesticidbelastning (Total og pr. Hektar)",
+      "title": "Pesticidbelastning (total og pr. hektar)",
       "dataSource": {
         "params": {
           "source": "environment_summary",
@@ -822,7 +822,7 @@
     {
       "_key": "environment-pesticide-risks",
       "_type": "dataGrid",
-      "title": "Pesticidanvendelse Detaljer og Risici",
+      "title": "Pesticidanvendelse detaljer og risici",
       "dataSource": {
         "params": {
           "source": "pesticide_applications",
@@ -900,7 +900,7 @@
     {
       "_key": "worker-welfare-kpis",
       "_type": "kpiGroup",
-      "title": "Medarbejderforhold Nøgletal (Seneste)",
+      "title": "Medarbejderforhold nøgletal (seneste)",
       "dataSource": {
         "params": {
           "source": "worker_yearly_summary",
@@ -926,7 +926,7 @@
     {
       "_key": "worker-welfare-employees-monthly",
       "_type": "barChart",
-      "title": "Antal Ansatte pr. Måned",
+      "title": "Antal ansatte pr. måned",
       "dataSource": {
         "params": {
           "source": "employee_monthly_counts",
@@ -952,7 +952,7 @@
     {
       "_key": "worker-welfare-visas",
       "_type": "stackedBarChart",
-      "title": "Førstegangstilladelser pr. År (Fordelt på Nationalitet)",
+      "title": "Førstegangstilladelser pr. år (fordelt på nationalitet)",
       "dataSource": {
         "params": {
           "source": "visa_yearly_counts",
@@ -973,7 +973,7 @@
     {
       "_key": "worker-welfare-injuries",
       "_type": "dataGrid",
-      "title": "Arbejdsskader pr. År (Rapporteret Antal)",
+      "title": "Arbejdsskader pr. år (rapporteret antal)",
       "dataSource": {
         "params": {
           "source": "worker_yearly_summary",
@@ -1004,7 +1004,7 @@
     {
       "_key": "animal-welfare-kpis-overall",
       "_type": "kpiGroup",
-      "title": "Dyrevelærd Nøgletal (Samlet)",
+      "title": "Dyrevelærd nøgletal (samlet)",
       "dataSource": {
         "params": {
           "source": "animal_welfare_summary",
@@ -1070,7 +1070,7 @@
     {
       "_key": "animal-welfare-production-species-chart",
       "_type": "stackedBarChart",
-      "title": "Dyreproduktion pr. År (Samlet, Fordelt på Art)",
+      "title": "Dyreproduktion pr. år (samlet, fordelt på art)",
       "dataSource": {
         "params": {
           "source": "site_species_production_ranked",
@@ -1091,7 +1091,7 @@
     {
       "_key": "animal-welfare-antibiotics-usage-chart",
       "_type": "comboChart",
-      "title": "Antibiotikaforbrug (Samlet, Total og Rate)",
+      "title": "Antibiotikaforbrug (samlet, total og rate)",
       "dataSource": {
         "params": {
           "source": "animal_welfare_summary",
@@ -1126,7 +1126,7 @@
     {
       "_key": "animal-welfare-site-map",
       "_type": "mapChart",
-      "title": "Produktionssteder (Sites)",
+      "title": "Produktionssteder (sites)",
       "dataSource": {
         "params": {
           "source": "production_sites",
@@ -1151,7 +1151,7 @@
     {
       "_key": "animal-welfare-sites-iteration",
       "_type": "iteratedSection",
-      "title": "Detaljer pr. Produktionssted (Site)",
+      "title": "Detaljer pr. produktionssted (site)",
       "iteratorDataSource": {
         "params": {
           "source": "production_sites",
@@ -1169,7 +1169,7 @@
         {
           "_key": "site-details-{iteratorContext.chr}",
           "_type": "infoCard",
-          "title": "Site Basis Info ({iteratorContext.site_name})",
+          "title": "Site basis info ({iteratorContext.site_name})",
           "dataSource": {
             "params": {
               "source": "site_details_summary_ranked",
@@ -1207,7 +1207,7 @@
         {
           "_key": "site-kpis-{iteratorContext.chr}",
           "_type": "kpiGroup",
-          "title": "Site Nøgletal & Placering",
+          "title": "Site nøgletal & placering",
           "dataSource": {
             "params": {
               "source": "site_details_summary_ranked",
@@ -1255,7 +1255,7 @@
         {
           "_key": "site-vet-events-{iteratorContext.chr}",
           "_type": "timeline",
-          "title": "Site Veterinære Hændelser",
+          "title": "Site veterinære hændelser",
           "dataSource": {
             "params": {
               "source": "vet_events",
@@ -1284,7 +1284,7 @@
         {
           "_key": "site-species-iteration-{iteratorContext.chr}",
           "_type": "iteratedSection",
-          "title": "Detaljer pr. Dyreart på Site",
+          "title": "Detaljer pr. dyreart på site",
           "iteratorDataSource": {
             "params": {
               "source": "site_species_production_ranked",
@@ -1305,7 +1305,7 @@
             {
               "_key": "species-kpis-{iteratorContext.chr}-{iteratorContext.species_id}",
               "_type": "kpiGroup",
-              "title": "{iteratorContext.species_name} Produktion & Placering",
+              "title": "{iteratorContext.species_name} produktion & placering",
               "dataSource": {
                 "params": {
                   "source": "site_species_production_ranked",
@@ -1339,7 +1339,7 @@
             {
               "_key": "species-age-chart-{iteratorContext.chr}-{iteratorContext.species_id}",
               "_type": "stackedBarChart",
-              "title": "{iteratorContext.species_name} Produktion pr. År (Kategori)",
+              "title": "{iteratorContext.species_name} produktion pr. år (kategori)",
               "dataSource": {
                 "params": {
                   "source": "animal_capacity_log",
@@ -1368,7 +1368,7 @@
     {
       "_key": "animal-welfare-transport-chart",
       "_type": "stackedBarChart",
-      "title": "Dyretransporter pr. Uge (Samlet, Fordelt på Destination)",
+      "title": "Dyretransporter pr. uge (samlet, fordelt på destination)",
       "dataSource": {
         "params": {
           "source": "animal_transport_weekly_summary",
@@ -1389,7 +1389,7 @@
     {
       "_key": "carbon-accounting-kpis",
       "_type": "kpiGroup",
-      "title": "Klimaregnskab Nøgletal (Seneste År)",
+      "title": "Klimaregnskab nøgletal (seneste år)",
       "dataSource": {
         "params": {
           "source": "carbon_summary",
@@ -1420,7 +1420,7 @@
     {
       "_key": "carbon-accounting-history",
       "_type": "stackedBarChart",
-      "title": "CO2e Emissioner pr. År (Fordelt på Kilde)",
+      "title": "CO2e emissioner pr. år (fordelt på kilde)",
       "dataSource": {
         "params": {
           "source": "carbon_emission_details_yearly",
@@ -1441,7 +1441,7 @@
     {
       "_key": "carbon-accounting-details",
       "_type": "dataGrid",
-      "title": "Detaljeret Klimaregnskab (Kilde x Faktor pr. År)",
+      "title": "Detaljeret klimaregnskab (kilde x faktor pr. år)",
       "dataSource": {
         "params": {
           "source": "carbon_emission_factors",

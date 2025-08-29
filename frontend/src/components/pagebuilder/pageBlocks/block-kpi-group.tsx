@@ -6,9 +6,7 @@ export function BlockKpiGroup({ kpiGroup }: { kpiGroup: KPIGroup }) {
   // Check if this KPI group should show a placeholder
   const placeholderDataType = shouldShowPlaceholder(kpiGroup._key);
   if (placeholderDataType) {
-    return (
-      <PlaceholderChart title={kpiGroup.title} dataType={placeholderDataType} />
-    );
+    return <PlaceholderChart dataType={placeholderDataType} />;
   }
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
