@@ -694,7 +694,7 @@ serve(async (req) => {
 
     // Animal/Pig Focus Rankings
     if (!category || category === 'all' || category === 'animal') {
-      // 16. Largest Pig Production (species_code 11 = pigs)
+      // 16. Largest Pig Production (species_code 15 = pigs)
       const { data: pigData } = await supabase
         .from('site_species_production_ranked')
         .select(`
@@ -705,7 +705,7 @@ serve(async (req) => {
           rank_dk_species_production,
           year
         `)
-        .eq('species_code', '11')
+        .eq('species_code', '15')
         .eq('year', 2024)
         .order('rank_dk_species_production', { ascending: true })
         .limit(limit)
@@ -752,7 +752,7 @@ serve(async (req) => {
         })
       }
 
-      // 17. Largest Cattle Production (species_code 10 = cattle)
+      // 17. Largest Cattle Production (species_code 12 = cattle)
       const { data: cattleData } = await supabase
         .from('site_species_production_ranked')
         .select(`
@@ -763,7 +763,7 @@ serve(async (req) => {
           rank_dk_species_production,
           year
         `)
-        .eq('species_code', '10')
+        .eq('species_code', '12')
         .eq('year', 2024)
         .order('rank_dk_species_production', { ascending: true })
         .limit(limit)
