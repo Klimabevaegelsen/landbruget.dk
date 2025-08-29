@@ -709,7 +709,7 @@ serve(async (req) => {
           year
         `)
         .eq('species_code', '15')
-        .eq('year', 2024)
+        .eq('year', 2025)
         .order('rank_dk_species_production', { ascending: true })
         .limit(limit)
 
@@ -720,7 +720,7 @@ serve(async (req) => {
           .from('site_yearly_summary')
           .select('chr, owner_cvr, companies!inner(id, company_name)')
           .in('chr', chrList)
-          .eq('year', 2024)
+          .eq('year', 2025)
 
                 const chrMap = new Map(chrToCvr?.map((item: any) => [
           item.chr.toString(),
@@ -735,7 +735,7 @@ serve(async (req) => {
           id: 'largest_pig_production',
           title: 'Størst Svineproduktion',
           category: 'animal',
-          description: 'Produktionssteder med den største svineproduktion i 2024',
+          description: 'Produktionssteder med den største svineproduktion i 2025',
           unit: 'svin',
           items: pigData
             .map((item) => {
