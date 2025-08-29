@@ -190,9 +190,9 @@ serve(async (req) => {
           unit: 'hektar',
           items: landAreaData.map((item) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: item.rank_dk_total_area,
             value: item.total_area_ha,
             formatted_value: `${item.total_area_ha.toFixed(1)} ha`,
@@ -225,9 +225,9 @@ serve(async (req) => {
           unit: 'hektar',
           items: organicAreaData.map((item) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: item.rank_dk_organic_area,
             value: item.organic_area_ha,
             formatted_value: `${item.organic_area_ha.toFixed(1)} ha`,
@@ -261,9 +261,9 @@ serve(async (req) => {
           unit: 'procent',
           items: organicPercentData.map((item, index) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: index + 1,
             value: item.organic_percentage,
             formatted_value: `${item.organic_percentage.toFixed(1)}%`,
@@ -294,9 +294,9 @@ serve(async (req) => {
           unit: 'marker',
           items: fieldsData.map((item, index) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: index + 1,
             value: item.total_fields,
             formatted_value: `${item.total_fields} marker`,
@@ -452,104 +452,149 @@ serve(async (req) => {
       }
 
       // 12. Most BNBO Area Not Completed AND Not Covered by Projects
-      const { data: bnboNotDealtData } = await supabase
+      console.log('🔍 Querying BNBO Action Required data...')
+      const { data: bnboNotDealtData, error: bnboError1 } = await supabase
         .from('bnbo_summary')
         .select(`
           company_id,
           area_ha,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
         .eq('status', 'Action Required')
-        .eq('year', 2024)
+        .eq('year', 2025)
         .order('area_ha', { ascending: false })
         .limit(limit)
 
-      if (bnboNotDealtData) {
+      console.log('BNBO Action Required result:', { data: bnboNotDealtData?.length || 0, error: bnboError1 })
+
+      if (bnboNotDealtData?.length) {
+        // Step 2: Get company details for the BNBO data
+        const companyIds = bnboNotDealtData.map(item => item.company_id)
+        const { data: bnboCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(bnboCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'most_bnbo_not_dealt_with',
           title: 'Mest BNBO-areal Ikke Håndteret',
           category: 'environment',
-          description: 'Virksomheder med mest boringsnært beskyttelsesområde-areal der kræver handling i 2024',
+          description: 'Virksomheder med mest boringsnært beskyttelsesområde-areal der kræver handling i 2025',
           unit: 'hektar',
-          items: bnboNotDealtData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
-            rank: index + 1,
-            value: item.area_ha,
-            formatted_value: `${item.area_ha.toFixed(1)} ha`,
-            year: item.year
-          }))
+          items: bnboNotDealtData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.area_ha,
+              formatted_value: `${item.area_ha.toFixed(1)} ha`,
+              year: item.year
+            }
+          })
         })
       }
 
       // 13. Most BNBO Area Dealt With OR Covered by Projects
-      const { data: bnboCompletedData } = await supabase
+      console.log('🔍 Querying BNBO Completed data...')
+      const { data: bnboCompletedData, error: bnboError2 } = await supabase
         .from('bnbo_summary')
         .select(`
           company_id,
           area_ha,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
         .in('status', ['Completed', 'Action Required, Completed'])
-        .eq('year', 2024)
+        .eq('year', 2025)
         .order('area_ha', { ascending: false })
         .limit(limit)
 
-      if (bnboCompletedData) {
+      console.log('BNBO Completed result:', { data: bnboCompletedData?.length || 0, error: bnboError2 })
+
+      if (bnboCompletedData?.length) {
+        // Step 2: Get company details for the BNBO completed data
+        const companyIds = bnboCompletedData.map(item => item.company_id)
+        const { data: bnboCompletedCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(bnboCompletedCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'most_bnbo_dealt_with',
           title: 'Mest BNBO-areal Håndteret',
           category: 'environment',
-          description: 'Virksomheder med mest boringsnært beskyttelsesområde-areal der er håndteret i 2024',
+          description: 'Virksomheder med mest boringsnært beskyttelsesområde-areal der er håndteret i 2025',
           unit: 'hektar',
-          items: bnboCompletedData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
-            rank: index + 1,
-            value: item.area_ha,
-            formatted_value: `${item.area_ha.toFixed(1)} ha`,
-            year: item.year
-          }))
+          items: bnboCompletedData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.area_ha,
+              formatted_value: `${item.area_ha.toFixed(1)} ha`,
+              year: item.year
+            }
+          })
         })
       }
 
       // 14. Most Low-lying Area Not Covered by Projects
-      const { data: wetlandNotRestoredData } = await supabase
+      console.log('🔍 Querying wetlands data...')
+      const { data: wetlandNotRestoredData, error: wetlandError1 } = await supabase
         .from('wetlands_summary')
         .select(`
           company_id,
           area_ha,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
-        .eq('status', 'needs_restoration')
-        .eq('year', 2024)
+        .eq('status', 'present')
+        .eq('year', 2025)
         .order('area_ha', { ascending: false })
         .limit(limit)
 
-      if (wetlandNotRestoredData) {
+      console.log('Wetlands result:', { data: wetlandNotRestoredData?.length || 0, error: wetlandError1 })
+
+      if (wetlandNotRestoredData?.length) {
+        // Step 2: Get company details for the wetlands data
+        const companyIds = wetlandNotRestoredData.map(item => item.company_id)
+        const { data: wetlandCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(wetlandCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'most_wetland_not_restored',
           title: 'Mest Lavbundsjorde Ikke Genoprettet',
           category: 'environment',
-          description: 'Virksomheder med mest lavbundsjorde-areal der har behov for genopretning i 2024',
+          description: 'Virksomheder med mest lavbundsjorde-areal der har behov for genopretning i 2025',
           unit: 'hektar',
-          items: wetlandNotRestoredData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
-            rank: index + 1,
-            value: item.area_ha,
-            formatted_value: `${item.area_ha.toFixed(1)} ha`,
-            year: item.year
-          }))
+          items: wetlandNotRestoredData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.area_ha,
+              formatted_value: `${item.area_ha.toFixed(1)} ha`,
+              year: item.year
+            }
+          })
         })
       }
 
@@ -559,31 +604,43 @@ serve(async (req) => {
         .select(`
           company_id,
           area_ha,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
-        .in('status', ['fully_restored', 'partially_restored'])
-        .eq('year', 2024)
+        .eq('status', 'present')
+        .eq('year', 2025)
         .order('area_ha', { ascending: false })
         .limit(limit)
 
-      if (wetlandRestoredData) {
+      if (wetlandRestoredData?.length) {
+        // Step 2: Get company details for the wetlands restored data
+        const companyIds = wetlandRestoredData.map(item => item.company_id)
+        const { data: wetlandRestoredCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(wetlandRestoredCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'most_wetland_restored',
           title: 'Mest Lavbundsjorde Genoprettet',
           category: 'environment',
-          description: 'Virksomheder med mest lavbundsjorde-areal der er helt eller delvist genoprettet i 2024',
+          description: 'Virksomheder med mest lavbundsjorde-areal der er helt eller delvist genoprettet i 2025',
           unit: 'hektar',
-          items: wetlandRestoredData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
-            rank: index + 1,
-            value: item.area_ha,
-            formatted_value: `${item.area_ha.toFixed(1)} ha`,
-            year: item.year
-          }))
+          items: wetlandRestoredData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.area_ha,
+              formatted_value: `${item.area_ha.toFixed(1)} ha`,
+              year: item.year
+            }
+          })
         })
       }
     }
@@ -615,7 +672,7 @@ serve(async (req) => {
           .in('chr', chrList)
           .eq('year', 2024)
 
-                const chrMap = new Map(chrToCvr?.map(item => [
+                const chrMap = new Map(chrToCvr?.map((item: any) => [
           item.chr.toString(),
           {
             cvr_number: item.owner_cvr.toString(),
@@ -672,7 +729,7 @@ serve(async (req) => {
           .in('chr', chrList)
           .eq('year', 2024)
 
-                const chrMap = new Map(chrToCvr?.map(item => [
+                const chrMap = new Map(chrToCvr?.map((item: any) => [
           item.chr.toString(),
           {
             cvr_number: item.owner_cvr.toString(),
@@ -728,9 +785,9 @@ serve(async (req) => {
           unit: 'DDD',
           items: antibioticData.map((item, index) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: index + 1,
             value: item.total_ddd_usage,
             formatted_value: `${item.total_ddd_usage.toLocaleString()} DDD`,
@@ -761,9 +818,9 @@ serve(async (req) => {
           unit: 'steder',
           items: sitesData.map((item, index) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: index + 1,
             value: item.site_count,
             formatted_value: `${item.site_count} steder`,
@@ -849,9 +906,9 @@ serve(async (req) => {
           unit: 'ansatte',
           items: workerEmployeeData.map((item, index) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: index + 1,
             value: item.average_employee_count,
             formatted_value: `${item.average_employee_count} ansatte`,
@@ -883,9 +940,9 @@ serve(async (req) => {
           unit: 'tilladelser',
           items: visaData.map((item, index) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: index + 1,
             value: item.active_visa_count,
             formatted_value: `${item.active_visa_count} tilladelser`,
@@ -917,9 +974,9 @@ serve(async (req) => {
           unit: 'ulykker',
           items: injuryData.map((item, index) => ({
             company_id: item.company_id,
-            cvr_number: item.companies.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
+            company_name: item.companies?.company_name || 'Ukendt virksomhed',
+            municipality: item.companies?.municipality || 'Ukendt kommune',
             rank: index + 1,
             value: item.injury_count_reported,
             formatted_value: `${item.injury_count_reported} ulykker`,
