@@ -4,7 +4,6 @@ import re
 import shutil
 import sys
 import tempfile
-import uuid
 from datetime import datetime
 
 import ibis
@@ -28,6 +27,7 @@ try:
     if project_root and str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
+    from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
     from unified_pipeline.util.cvr_api_client import CVRAPIClient
     from unified_pipeline.util.cvr_collection import save_pipeline_cvr_numbers
 
@@ -36,6 +36,7 @@ except ImportError as e:
     # Graceful fallback if CVR collection is not available
     save_pipeline_cvr_numbers = None
     CVRAPIClient = None
+    LandbrugsdataUUID = None
     CVR_COLLECTION_AVAILABLE = False
     logging.warning(f"CVR collection not available: {e}")
 
@@ -437,12 +438,26 @@ class SilverPipeline:
                     if self.df[col].astype(str).str.contains(r"\b\d{10}\b").any():
                         self.logger.warning(f"⚠️ Potential PII detected in column: {col}")
                         pii_found = True
-                        # Replace with UUIDv4 if found
-                        self.df[col] = (
-                            self.df[col]
-                            .astype(str)
-                            .apply(lambda v: str(uuid.uuid4()) if re.match(r"\b\d{10}\b", str(v)) else v)
-                        )
+                        # Replace with deterministic UUID if found
+                        if LandbrugsdataUUID:
+                            self.df[col] = (
+                                self.df[col]
+                                .astype(str)
+                                .apply(
+                                    lambda v: LandbrugsdataUUID.generate_deterministic_uuid("cvr-anonymized", str(v))
+                                    if re.match(r"\b\d{10}\b", str(v))
+                                    else v
+                                )
+                            )
+                        else:
+                            # Fallback to random UUID if LandbrugsdataUUID not available
+                            import uuid
+
+                            self.df[col] = (
+                                self.df[col]
+                                .astype(str)
+                                .apply(lambda v: str(uuid.uuid4()) if re.match(r"\b\d{10}\b", str(v)) else v)
+                            )
 
             if not pii_found:
                 self.logger.info("No potential PII detected")

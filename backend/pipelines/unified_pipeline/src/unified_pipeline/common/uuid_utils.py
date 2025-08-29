@@ -219,16 +219,18 @@ class LandbrugsdataUUID:
 
             # Create UUID5 function using MD5 hash (DuckDB doesn't have built-in uuid5)
             namespace = cls._get_namespace()
+            # Create UUID5 function with shorter lines
+            hash_expr = f"crypto_hash('md5', CONCAT('{namespace}', entity_type, '-', identifier))"
             conn.execute(f"""
                 CREATE OR REPLACE FUNCTION landbrugsdata_uuid5(entity_type, identifier) AS (
                     SELECT CASE
                         WHEN entity_type IS NULL OR identifier IS NULL THEN NULL
                         ELSE CONCAT(
-                            SUBSTR(crypto_hash('md5', CONCAT('{namespace}', entity_type, '-', identifier)), 1, 8), '-',
-                            SUBSTR(crypto_hash('md5', CONCAT('{namespace}', entity_type, '-', identifier)), 9, 4), '-',
-                            '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', entity_type, '-', identifier)), 13, 3), '-',
-                            CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', entity_type, '-', identifier)), 16, 3)), '-',
-                            SUBSTR(crypto_hash('md5', CONCAT('{namespace}', entity_type, '-', identifier)), 19, 12)
+                            SUBSTR({hash_expr}, 1, 8), '-',
+                            SUBSTR({hash_expr}, 9, 4), '-',
+                            '5', SUBSTR({hash_expr}, 13, 3), '-',
+                            CONCAT('8', SUBSTR({hash_expr}, 16, 3)), '-',
+                            SUBSTR({hash_expr}, 19, 12)
                         )
                     END
                 )
@@ -238,9 +240,11 @@ class LandbrugsdataUUID:
             conn.execute("""
                 CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
                     SELECT CASE
-                        WHEN cvr_number IS NULL 
+                        WHEN cvr_number IS NULL
                              OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
-                             OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
+                             OR NOT REGEXP_MATCHES(
+                                 TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$'
+                             )
                         THEN NULL
                         ELSE landbrugsdata_uuid5('company-cvr', TRIM(CAST(cvr_number AS VARCHAR)))
                     END
@@ -269,9 +273,9 @@ class LandbrugsdataUUID:
                 CREATE OR REPLACE FUNCTION chr_uuid(chr_number) AS (
                     SELECT CASE
                         WHEN chr_number IS NULL THEN NULL
-                        ELSE landbrugsdata_uuid5('chr', 
-                            CASE 
-                                WHEN TRIM(CAST(chr_number AS VARCHAR)) LIKE 'CHR%' 
+                        ELSE landbrugsdata_uuid5('chr',
+                            CASE
+                                WHEN TRIM(CAST(chr_number AS VARCHAR)) LIKE 'CHR%'
                                 THEN SUBSTR(TRIM(CAST(chr_number AS VARCHAR)), 4)
                                 ELSE TRIM(CAST(chr_number AS VARCHAR))
                             END
@@ -301,7 +305,7 @@ class LandbrugsdataUUID:
 -- Generated automatically - do not edit manually
 
 -- Main company UUID function
-CREATE OR REPLACE FUNCTION landbrugsdata_company_uuid(cvr_number_input BIGINT) 
+CREATE OR REPLACE FUNCTION landbrugsdata_company_uuid(cvr_number_input BIGINT)
 RETURNS UUID AS $$
 DECLARE
     namespace_uuid UUID := '{namespace}'::UUID;
@@ -311,22 +315,22 @@ BEGIN
     IF cvr_number_input IS NULL THEN
         RETURN NULL;
     END IF;
-    
+
     cvr_str := TRIM(cvr_number_input::TEXT);
-    
+
     -- Validate CVR format (8 digits, starting with 1-9)
     IF LENGTH(cvr_str) != 8 OR NOT cvr_str ~ '^[1-9][0-9]{{7}}$' THEN
         RAISE WARNING 'Invalid CVR number format: %', cvr_number_input;
         RETURN NULL;
     END IF;
-    
+
     -- Generate UUID5 using the same format as Python
     RETURN uuid_generate_v5(namespace_uuid, 'company-cvr-' || cvr_str);
 END;
 $$ LANGUAGE plpgsql;
 
 -- P-number UUID function
-CREATE OR REPLACE FUNCTION landbrugsdata_pnumber_uuid(p_number_input TEXT) 
+CREATE OR REPLACE FUNCTION landbrugsdata_pnumber_uuid(p_number_input TEXT)
 RETURNS UUID AS $$
 DECLARE
     namespace_uuid UUID := '{namespace}'::UUID;
@@ -335,20 +339,20 @@ BEGIN
     IF p_number_input IS NULL THEN
         RETURN NULL;
     END IF;
-    
+
     p_str := TRIM(p_number_input);
-    
+
     IF NOT p_str ~ '^[0-9]+$' THEN
         RAISE WARNING 'Invalid P-number format: %', p_number_input;
         RETURN NULL;
     END IF;
-    
+
     RETURN uuid_generate_v5(namespace_uuid, 'pnumber-' || p_str);
 END;
 $$ LANGUAGE plpgsql;
 
 -- CHR UUID function
-CREATE OR REPLACE FUNCTION landbrugsdata_chr_uuid(chr_number_input TEXT) 
+CREATE OR REPLACE FUNCTION landbrugsdata_chr_uuid(chr_number_input TEXT)
 RETURNS UUID AS $$
 DECLARE
     namespace_uuid UUID := '{namespace}'::UUID;
@@ -357,25 +361,25 @@ BEGIN
     IF chr_number_input IS NULL THEN
         RETURN NULL;
     END IF;
-    
+
     chr_str := TRIM(chr_number_input);
-    
+
     -- Remove CHR prefix if present
     IF chr_str ILIKE 'CHR%' THEN
         chr_str := SUBSTR(chr_str, 4);
     END IF;
-    
+
     IF NOT chr_str ~ '^[0-9]+$' THEN
         RAISE WARNING 'Invalid CHR number format: %', chr_number_input;
         RETURN NULL;
     END IF;
-    
+
     RETURN uuid_generate_v5(namespace_uuid, 'chr-' || chr_str);
 END;
 $$ LANGUAGE plpgsql;
 
 -- Field UUID function (for geometry-based UUIDs)
-CREATE OR REPLACE FUNCTION landbrugsdata_field_uuid(geometry_wkb BYTEA) 
+CREATE OR REPLACE FUNCTION landbrugsdata_field_uuid(geometry_wkb BYTEA)
 RETURNS UUID AS $$
 DECLARE
     namespace_uuid UUID := '{namespace}'::UUID;
@@ -384,7 +388,7 @@ BEGIN
     IF geometry_wkb IS NULL THEN
         RETURN NULL;
     END IF;
-    
+
     geometry_hex := encode(geometry_wkb, 'hex');
     RETURN uuid_generate_v5(namespace_uuid, 'field-geometry-' || geometry_hex);
 END;
