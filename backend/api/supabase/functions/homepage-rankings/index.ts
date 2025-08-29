@@ -174,30 +174,42 @@ serve(async (req) => {
           company_id,
           total_area_ha,
           rank_dk_total_area,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
-        .eq('year', 2024)
+        .eq('year', 2025)
         .order('rank_dk_total_area', { ascending: true })
         .limit(limit)
 
-      if (landAreaData) {
+      if (landAreaData?.length) {
+        // Step 2: Get company details for the land area data
+        const companyIds = landAreaData.map(item => item.company_id)
+        const { data: landAreaCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(landAreaCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'largest_land_area',
           title: 'Størst Landbrugsareal',
           category: 'field',
-          description: 'Virksomheder med det største samlede landbrugsareal i 2024',
+          description: 'Virksomheder med det største samlede landbrugsareal i 2025',
           unit: 'hektar',
-          items: landAreaData.map((item) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
-            company_name: item.companies?.company_name || 'Ukendt virksomhed',
-            municipality: item.companies?.municipality || 'Ukendt kommune',
-            rank: item.rank_dk_total_area,
-            value: item.total_area_ha,
-            formatted_value: `${item.total_area_ha.toFixed(1)} ha`,
-            year: item.year
-          }))
+          items: landAreaData.map((item) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: item.rank_dk_total_area,
+              value: item.total_area_ha,
+              formatted_value: `${item.total_area_ha.toFixed(1)} ha`,
+              year: item.year
+            }
+          })
         })
       }
 
@@ -207,32 +219,43 @@ serve(async (req) => {
         .select(`
           company_id,
           organic_area_ha,
-          rank_dk_organic_area,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
-        .eq('year', 2024)
+        .eq('year', 2025)
         .gt('organic_area_ha', 0)
-        .order('rank_dk_organic_area', { ascending: true })
+        .order('organic_area_ha', { ascending: false })
         .limit(limit)
 
-      if (organicAreaData) {
+      if (organicAreaData?.length) {
+        // Step 2: Get company details for the organic area data
+        const companyIds = organicAreaData.map(item => item.company_id)
+        const { data: organicAreaCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(organicAreaCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'largest_organic_area',
           title: 'Størst Økologisk Areal',
           category: 'field',
-          description: 'Virksomheder med det største økologiske landareal i 2024',
+          description: 'Virksomheder med det største økologiske landareal i 2025',
           unit: 'hektar',
-          items: organicAreaData.map((item) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
-            company_name: item.companies?.company_name || 'Ukendt virksomhed',
-            municipality: item.companies?.municipality || 'Ukendt kommune',
-            rank: item.rank_dk_organic_area,
-            value: item.organic_area_ha,
-            formatted_value: `${item.organic_area_ha.toFixed(1)} ha`,
-            year: item.year
-          }))
+          items: organicAreaData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.organic_area_ha,
+              formatted_value: `${item.organic_area_ha.toFixed(1)} ha`,
+              year: item.year
+            }
+          })
         })
       }
 
@@ -243,32 +266,44 @@ serve(async (req) => {
           company_id,
           organic_percentage,
           total_area_ha,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
-        .eq('year', 2024)
+        .eq('year', 2025)
         .gt('total_area_ha', 50) // Only companies with substantial land
         .gt('organic_percentage', 0)
         .order('organic_percentage', { ascending: false })
         .limit(limit)
 
-      if (organicPercentData) {
+      if (organicPercentData?.length) {
+        // Step 2: Get company details for the organic percentage data
+        const companyIds = organicPercentData.map(item => item.company_id)
+        const { data: organicPercentCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(organicPercentCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'highest_organic_percentage',
           title: 'Højest Økologisk Andel',
           category: 'field',
-          description: 'Virksomheder med den højeste andel økologisk landbrug (min. 50 ha)',
+          description: 'Virksomheder med den højeste andel økologisk landbrug (min. 50 ha) i 2025',
           unit: 'procent',
-          items: organicPercentData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
-            company_name: item.companies?.company_name || 'Ukendt virksomhed',
-            municipality: item.companies?.municipality || 'Ukendt kommune',
-            rank: index + 1,
-            value: item.organic_percentage,
-            formatted_value: `${item.organic_percentage.toFixed(1)}%`,
-            year: item.year
-          }))
+          items: organicPercentData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.organic_percentage,
+              formatted_value: `${item.organic_percentage.toFixed(1)}%`,
+              year: item.year
+            }
+          })
         })
       }
 
@@ -278,30 +313,42 @@ serve(async (req) => {
         .select(`
           company_id,
           total_fields,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
-        .eq('year', 2024)
+        .eq('year', 2025)
         .order('total_fields', { ascending: false })
         .limit(limit)
 
-      if (fieldsData) {
+      if (fieldsData?.length) {
+        // Step 2: Get company details for the fields data
+        const companyIds = fieldsData.map(item => item.company_id)
+        const { data: fieldsCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(fieldsCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'most_fields',
           title: 'Flest Marker',
           category: 'field',
-          description: 'Virksomheder med det største antal individuelle marker i 2024',
+          description: 'Virksomheder med det største antal individuelle marker i 2025',
           unit: 'marker',
-          items: fieldsData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
-            company_name: item.companies?.company_name || 'Ukendt virksomhed',
-            municipality: item.companies?.municipality || 'Ukendt kommune',
-            rank: index + 1,
-            value: item.total_fields,
-            formatted_value: `${item.total_fields} marker`,
-            year: item.year
-          }))
+          items: fieldsData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.total_fields,
+              formatted_value: `${item.total_fields} marker`,
+              year: item.year
+            }
+          })
         })
       }
     }
@@ -768,31 +815,43 @@ serve(async (req) => {
         .select(`
           company_id,
           total_ddd_usage,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
-        .eq('year', 2024)
+        .eq('year', 2025)
         .gt('total_ddd_usage', 0)
         .order('total_ddd_usage', { ascending: false })
         .limit(limit)
 
-      if (antibioticData) {
+      if (antibioticData?.length) {
+        // Step 2: Get company details for the antibiotic data
+        const companyIds = antibioticData.map(item => item.company_id)
+        const { data: antibioticCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(antibioticCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'highest_antibiotic_usage',
           title: 'Højest Antibiotikaforbrug',
           category: 'animal',
-          description: 'Virksomheder med det højeste antibiotikaforbrug i 2024',
+          description: 'Virksomheder med det højeste antibiotikaforbrug i 2025',
           unit: 'DDD',
-          items: antibioticData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
-            company_name: item.companies?.company_name || 'Ukendt virksomhed',
-            municipality: item.companies?.municipality || 'Ukendt kommune',
-            rank: index + 1,
-            value: item.total_ddd_usage,
-            formatted_value: `${item.total_ddd_usage.toLocaleString()} DDD`,
-            year: item.year
-          }))
+          items: antibioticData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.total_ddd_usage,
+              formatted_value: `${item.total_ddd_usage.toLocaleString()} DDD`,
+              year: item.year
+            }
+          })
         })
       }
 
@@ -802,30 +861,42 @@ serve(async (req) => {
         .select(`
           company_id,
           site_count,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
+          year
         `)
-        .eq('year', 2024)
+        .eq('year', 2025)
         .order('site_count', { ascending: false })
         .limit(limit)
 
-      if (sitesData) {
+      if (sitesData?.length) {
+        // Step 2: Get company details for the sites data
+        const companyIds = sitesData.map(item => item.company_id)
+        const { data: sitesCompanies } = await supabase
+          .from('companies')
+          .select('id, cvr_number, company_name, municipality')
+          .in('id', companyIds)
+
+        // Create company lookup map
+        const companyMap = new Map(sitesCompanies?.map((c: any) => [c.id, c]) || [])
+
         rankings.push({
           id: 'most_production_sites',
           title: 'Flest Produktionssteder',
           category: 'animal',
-          description: 'Virksomheder med flest dyreproduktionssteder i 2024',
+          description: 'Virksomheder med flest dyreproduktionssteder i 2025',
           unit: 'steder',
-          items: sitesData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
-            company_name: item.companies?.company_name || 'Ukendt virksomhed',
-            municipality: item.companies?.municipality || 'Ukendt kommune',
-            rank: index + 1,
-            value: item.site_count,
-            formatted_value: `${item.site_count} steder`,
-            year: item.year
-          }))
+          items: sitesData.map((item, index) => {
+            const company = companyMap.get(item.company_id)
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || 'N/A',
+              company_name: company?.company_name || 'Ukendt virksomhed',
+              municipality: company?.municipality || 'Ukendt kommune',
+              rank: index + 1,
+              value: item.site_count,
+              formatted_value: `${item.site_count} steder`,
+              year: item.year
+            }
+          })
         })
       }
 
