@@ -65,13 +65,11 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   // Check if this chart should show a placeholder
   const placeholderDataType = shouldShowPlaceholder(chart._key);
   if (placeholderDataType) {
-    return (
-      <PlaceholderChart title={chart.title} dataType={placeholderDataType} />
-    );
+    return <PlaceholderChart dataType={placeholderDataType} />;
   }
 
   if (!transformedData.length) {
-    return <NoDataPlaceholder title={chart.title} />;
+    return <NoDataPlaceholder />;
   }
 
   // Separate series by type and yAxis

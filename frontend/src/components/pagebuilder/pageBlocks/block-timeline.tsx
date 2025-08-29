@@ -35,6 +35,24 @@ function isValidEvent(event: TimelineEventCandidate): event is TimelineEvent {
   );
 }
 
+// Translation function for veterinary timeline event types
+function translateEventType(eventType: string): string {
+  const translations: Record<string, string> = {
+    certificate_issued: 'Certifikat udstedt',
+    certificate_rejected: 'Certifikat afvist',
+    control_inspection: 'Kontrolbesøg',
+    disease_status: 'Sygdomsstatus',
+    disease_status_change: 'Ændring i sygdomsstatus',
+    intervention_end: 'Intervention afsluttet',
+    intervention_start: 'Intervention startet',
+    sanitation_process: 'Sanering',
+    stable_fire: 'Staldbrand',
+    under_approval: 'Under godkendelse',
+  };
+
+  return translations[eventType] || eventType;
+}
+
 export function BlockTimeline({ timeline }: { timeline: Timeline }) {
   // Get unique event types and assign colors
   const eventTypes = useMemo(() => {
@@ -128,7 +146,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                 border: `1px solid ${color}`,
               }}
             >
-              {type}
+              {translateEventType(type)}
             </Button>
           ))}
         </div>
@@ -166,7 +184,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
             >
               <div className="flex flex-col gap-1">
                 <div className="text-sm font-semibold" style={{ color }}>
-                  {event.event_type}
+                  {translateEventType(event.event_type || '')}
                 </div>
                 <div className="p-0 text-gray-700">{event.description}</div>
                 {/* <span className="text-sm text-gray-500">

@@ -16,14 +16,12 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   // Check if this table should show a placeholder
   const placeholderDataType = shouldShowPlaceholder(grid._key);
   if (placeholderDataType) {
-    return (
-      <PlaceholderChart title={grid.title} dataType={placeholderDataType} />
-    );
+    return <PlaceholderChart dataType={placeholderDataType} />;
   }
 
   // Check if table has no data
   if (!grid.rows || grid.rows.length === 0) {
-    return <NoDataPlaceholder title={grid.title} />;
+    return <NoDataPlaceholder />;
   }
   const columns: ColumnDef<Record<string, string | number | boolean>>[] =
     grid.columns.map((col) => ({

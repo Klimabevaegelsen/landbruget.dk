@@ -3,7 +3,6 @@
 import { ResponsiveContainer } from 'recharts';
 
 interface PlaceholderChartProps {
-  title: string;
   dataType: 'nitrate' | 'carbon' | 'subsidies';
 }
 
@@ -25,7 +24,7 @@ const DATA_TYPE_CONFIG = {
   },
 };
 
-export function PlaceholderChart({ title, dataType }: PlaceholderChartProps) {
+export function PlaceholderChart({ dataType }: PlaceholderChartProps) {
   const config = DATA_TYPE_CONFIG[dataType];
 
   const handleClick = () => {
@@ -34,9 +33,6 @@ export function PlaceholderChart({ title, dataType }: PlaceholderChartProps) {
 
   return (
     <div className="relative">
-      {/* Chart title */}
-      <h3 className="mb-4 text-lg font-semibold">{title}</h3>
-
       {/* Placeholder chart area */}
       <div
         style={{ width: '100%', height: 400, minHeight: 400, minWidth: 100 }}

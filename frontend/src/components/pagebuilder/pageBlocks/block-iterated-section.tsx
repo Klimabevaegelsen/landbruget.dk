@@ -90,7 +90,7 @@ export function BlockIteratedSection({
 
   // If there are no sections, don't render anything
   if (!iteratedSection.sections || iteratedSection.sections.length === 0) {
-    return <NoDataPlaceholder title={iteratedSection.title} />;
+    return <NoDataPlaceholder />;
   }
 
   return (
