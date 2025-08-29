@@ -79,22 +79,8 @@ export default function IndividualRankingTable({
       cell: ({ row }) => {
         const rank = row.getValue('rank') as number;
         return (
-          <div className="flex h-8 w-8 items-center justify-center text-sm font-bold">
-            {rank <= 3 ? (
-              <div
-                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs text-white ${
-                  rank === 1
-                    ? 'bg-yellow-500'
-                    : rank === 2
-                      ? 'bg-gray-400'
-                      : 'bg-amber-600'
-                }`}
-              >
-                {rank}
-              </div>
-            ) : (
-              <span className="text-gray-600">#{rank}</span>
-            )}
+          <div className="flex h-8 w-8 items-center justify-center text-sm font-bold text-gray-900">
+            {rank}
           </div>
         );
       },
