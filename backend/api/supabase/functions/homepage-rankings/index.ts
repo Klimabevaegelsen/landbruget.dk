@@ -596,21 +596,21 @@ serve(async (req) => {
         })
       }
 
-      // 14. Most Low-lying Area Not Covered by Projects
-      console.log('🔍 Querying wetlands data...')
+      // 14. Most Wetlands Not Restored (Action Required)
+      console.log('🔍 Querying wetlands not restored data...')
       const { data: wetlandNotRestoredData, error: wetlandError1 } = await supabase
-        .from('wetlands_summary')
+        .from('wetlands_environmental_status')
         .select(`
           company_id,
-          area_ha,
+          action_required_hectares,
           year
         `)
-        .eq('status', 'present')
         .eq('year', 2025)
-        .order('area_ha', { ascending: false })
+        .gt('action_required_hectares', 0)
+        .order('action_required_hectares', { ascending: false })
         .limit(limit)
 
-      console.log('Wetlands result:', { data: wetlandNotRestoredData?.length || 0, error: wetlandError1 })
+      console.log('Wetlands not restored result:', { data: wetlandNotRestoredData?.length || 0, error: wetlandError1 })
 
       if (wetlandNotRestoredData?.length) {
         // Step 2: Get company details for the wetlands data
@@ -637,26 +637,29 @@ serve(async (req) => {
               company_name: company?.company_name || 'Ukendt virksomhed',
               municipality: company?.municipality || 'Ukendt kommune',
               rank: index + 1,
-              value: item.area_ha,
-              formatted_value: `${item.area_ha.toFixed(1)} ha`,
+              value: item.action_required_hectares,
+              formatted_value: `${item.action_required_hectares.toFixed(1)} ha`,
               year: item.year
             }
           })
         })
       }
 
-      // 15. Most Low-lying Area Covered by Projects
-      const { data: wetlandRestoredData } = await supabase
-        .from('wetlands_summary')
+      // 15. Most Wetlands Restored (Water Covered)
+      console.log('🔍 Querying wetlands restored data...')
+      const { data: wetlandRestoredData, error: wetlandError2 } = await supabase
+        .from('wetlands_environmental_status')
         .select(`
           company_id,
-          area_ha,
+          water_covered_hectares,
           year
         `)
-        .eq('status', 'present')
         .eq('year', 2025)
-        .order('area_ha', { ascending: false })
+        .gt('water_covered_hectares', 0)
+        .order('water_covered_hectares', { ascending: false })
         .limit(limit)
+
+      console.log('Wetlands restored result:', { data: wetlandRestoredData?.length || 0, error: wetlandError2 })
 
       if (wetlandRestoredData?.length) {
         // Step 2: Get company details for the wetlands restored data
@@ -673,7 +676,7 @@ serve(async (req) => {
           id: 'most_wetland_restored',
           title: 'Mest Lavbundsjorde Genoprettet',
           category: 'environment',
-          description: 'Virksomheder med mest lavbundsjorde-areal der er helt eller delvist genoprettet i 2025',
+          description: 'Virksomheder med mest lavbundsjorde-areal der er genoprettet til naturlig vandstand i 2025',
           unit: 'hektar',
           items: wetlandRestoredData.map((item, index) => {
             const company = companyMap.get(item.company_id)
@@ -683,8 +686,8 @@ serve(async (req) => {
               company_name: company?.company_name || 'Ukendt virksomhed',
               municipality: company?.municipality || 'Ukendt kommune',
               rank: index + 1,
-              value: item.area_ha,
-              formatted_value: `${item.area_ha.toFixed(1)} ha`,
+              value: item.water_covered_hectares,
+              formatted_value: `${item.water_covered_hectares.toFixed(1)} ha`,
               year: item.year
             }
           })
@@ -764,7 +767,7 @@ serve(async (req) => {
           year
         `)
         .eq('species_code', '12')
-        .eq('year', 2024)
+        .eq('year', 2025)
         .order('rank_dk_species_production', { ascending: true })
         .limit(limit)
 
