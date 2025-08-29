@@ -6,9 +6,6 @@ import {
   Building2,
   MapPin,
   ExternalLink,
-  Crown,
-  Medal,
-  Award,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -35,16 +32,7 @@ interface RankingTableProps {
 }
 
 const getRankIcon = (rank: number) => {
-  switch (rank) {
-    case 1:
-      return <Crown className="h-4 w-4 text-yellow-500" />;
-    case 2:
-      return <Medal className="h-4 w-4 text-gray-400" />;
-    case 3:
-      return <Award className="h-4 w-4 text-amber-600" />;
-    default:
-      return <span className="text-sm font-medium text-gray-500">#{rank}</span>;
-  }
+  return <span className="text-sm font-medium text-gray-900">{rank}</span>;
 };
 
 const getCategoryColor = (category: string) => {
