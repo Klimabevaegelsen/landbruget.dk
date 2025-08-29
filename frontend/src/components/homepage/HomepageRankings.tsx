@@ -185,7 +185,7 @@ export default function HomepageRankings() {
 
       {/* Rankings Grid */}
       {!loading && !error && filteredRankings.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6">
           {filteredRankings.map((ranking) => (
             <RankingTable
               key={ranking.id}

@@ -2,11 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  Building2,
-  MapPin,
-  ExternalLink,
-} from 'lucide-react';
+import { Building2, MapPin, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 interface RankingItem {
