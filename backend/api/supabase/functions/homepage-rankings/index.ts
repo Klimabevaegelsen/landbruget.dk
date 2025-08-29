@@ -717,15 +717,17 @@ serve(async (req) => {
         // Get CVR numbers for CHR sites
         const chrList = pigData.map(item => item.chr)
         const { data: chrToCvr } = await supabase
-          .from('site_yearly_summary')
-          .select('chr, owner_cvr, companies!inner(id, company_name)')
+          .from('production_sites')
+          .select(`
+            chr,
+            companies!inner(id, company_name, cvr_number)
+          `)
           .in('chr', chrList)
-          .eq('year', 2025)
 
                 const chrMap = new Map(chrToCvr?.map((item: any) => [
           item.chr.toString(),
           {
-            cvr_number: item.owner_cvr.toString(),
+            cvr_number: item.companies?.cvr_number?.toString() || '',
             company_id: item.companies?.id || '',
             company_name: item.companies?.company_name || ''
           }
@@ -774,15 +776,17 @@ serve(async (req) => {
       if (cattleData) {
         const chrList = cattleData.map(item => item.chr)
         const { data: chrToCvr } = await supabase
-          .from('site_yearly_summary')
-          .select('chr, owner_cvr, companies!inner(id, company_name)')
+          .from('production_sites')
+          .select(`
+            chr,
+            companies!inner(id, company_name, cvr_number)
+          `)
           .in('chr', chrList)
-          .eq('year', 2024)
 
                 const chrMap = new Map(chrToCvr?.map((item: any) => [
           item.chr.toString(),
           {
-            cvr_number: item.owner_cvr.toString(),
+            cvr_number: item.companies?.cvr_number?.toString() || '',
             company_id: item.companies?.id || '',
             company_name: item.companies?.company_name || ''
           }
@@ -911,8 +915,8 @@ serve(async (req) => {
           animal_count,
           companies!inner(cvr_number, company_name, municipality)
         `)
-        .gte('transport_date_week_start', '2024-01-01')
-        .lt('transport_date_week_start', '2025-01-01')
+        .gte('transport_date_week_start', '2025-01-01')
+        .lt('transport_date_week_start', '2026-01-01')
 
       if (transportData) {
         // Aggregate by company
@@ -939,7 +943,7 @@ serve(async (req) => {
           id: 'most_transported_pigs',
           title: 'Flest Transporterede Svin',
           category: 'animal',
-          description: 'Virksomheder med flest transporterede svin i 2024',
+          description: 'Virksomheder med flest transporterede svin i 2025',
           unit: 'svin',
           items: sortedTransports.map((item, index) => ({
             company_id: item.company_id,
@@ -949,7 +953,7 @@ serve(async (req) => {
             rank: index + 1,
             value: item.total_animals,
             formatted_value: `${item.total_animals.toLocaleString()} svin`,
-            year: 2024
+            year: 2025
           }))
         })
       }
