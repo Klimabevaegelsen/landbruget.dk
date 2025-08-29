@@ -6,6 +6,7 @@ import concurrent.futures
 import logging
 import os
 import time
+from calendar import monthrange
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -110,6 +111,47 @@ def get_default_dates() -> tuple[date, date]:
     end_date = today.replace(day=1) - timedelta(days=1)  # Last day of previous month
     start_date = end_date.replace(day=1)  # First day of previous month
     return start_date, end_date
+
+
+def generate_monthly_date_ranges(start_date: date, end_date: date) -> List[tuple[date, date]]:
+    """
+    Generate monthly date ranges for VetStat API calls.
+    VetStat API can only handle one month at a time.
+
+    Args:
+        start_date: Start date for the overall period
+        end_date: End date for the overall period
+
+    Returns:
+        List of (month_start, month_end) tuples
+    """
+    monthly_ranges = []
+
+    # Start from the first day of the start month
+    current_date = start_date.replace(day=1)
+
+    while current_date <= end_date:
+        # Get the last day of the current month
+        last_day = monthrange(current_date.year, current_date.month)[1]
+        month_end = current_date.replace(day=last_day)
+
+        # Don't go beyond the requested end date
+        if month_end > end_date:
+            month_end = end_date
+
+        monthly_ranges.append((current_date, month_end))
+
+        # Move to the first day of the next month
+        if current_date.month == 12:
+            current_date = current_date.replace(year=current_date.year + 1, month=1)
+        else:
+            current_date = current_date.replace(month=current_date.month + 1)
+
+        # Break if we've gone past the end date
+        if current_date > end_date:
+            break
+
+    return monthly_ranges
 
 
 def parse_args() -> Dict[str, Any]:
@@ -668,16 +710,31 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if "chr_to_species" not in context:
             raise ValueError("Cannot run 'vetstat' step without first running 'herd_details'")
 
+        # Generate monthly date ranges for VetStat API limitation
+        start_date = context["args"]["start_date"]
+        end_date = context["args"]["end_date"]
+        monthly_ranges = generate_monthly_date_ranges(start_date, end_date)
+
+        logging.info(f"VetStat will process {len(monthly_ranges)} monthly chunks from {start_date} to {end_date}")
+        for i, (month_start, month_end) in enumerate(monthly_ranges):
+            logging.debug(f"  Month {i+1}: {month_start} to {month_end}")
+
+        # Create tasks for each CHR/species/month combination
         vetstat_tasks = [
-            (chr_num, species, context["args"]["start_date"], context["args"]["end_date"])
+            (chr_num, species, month_start, month_end)
             for chr_num, species_set in context["chr_to_species"].items()
             for species in species_set
+            for month_start, month_end in monthly_ranges
         ]
 
         if not vetstat_tasks:
             logging.warning("No valid CHR number and species code combinations found for VetStat data")
         elif context["args"]["progress"]:
-            logging.info(f"Processing {len(vetstat_tasks)} VetStat tasks")
+            combinations = sum(len(species_set) for species_set in context["chr_to_species"].values())
+            logging.info(
+                f"Processing {len(vetstat_tasks)} VetStat tasks "
+                f"({combinations} CHR/species combinations × {len(monthly_ranges)} months)"
+            )
 
         try:
             results = process_parallel(

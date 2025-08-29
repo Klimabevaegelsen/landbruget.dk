@@ -7,11 +7,11 @@ concurrency:
 
 on:
   schedule:
-    - cron: '0 2 * * 1'  # Every Monday at 2 AM UTC
+    - cron: "0 2 * * 1" # Every Monday at 2 AM UTC
   workflow_dispatch:
     inputs:
       step:
-        description: 'Pipeline step to run'
+        description: "Pipeline step to run"
         type: choice
         required: true
         options:
@@ -31,32 +31,32 @@ on:
           - ejendom
           - vetstat
           - silver_all
-        default: 'all'
+        default: "all"
       start_date:
-        description: 'Start date (YYYY-MM-DD)'
+        description: "Start date (YYYY-MM-DD)"
         type: string
         required: false
-        default: ''
+        default: ""
       end_date:
-        description: 'End date (YYYY-MM-DD)'
+        description: "End date (YYYY-MM-DD)"
         type: string
         required: false
-        default: ''
+        default: ""
       year_range:
         description: 'Year range for processing (e.g., "2020-2024" or single year "2023")'
         type: string
         required: false
-        default: '2022-2024'
+        default: "2021-2025"
       max_herds:
-        description: 'Maximum number of herds to process'
+        description: "Maximum number of herds to process"
         type: string
-        default: ''
+        default: ""
       species_codes:
-        description: 'Comma-separated list of species codes'
+        description: "Comma-separated list of species codes"
         type: string
-        default: ''
+        default: ""
       log_level:
-        description: 'Logging level'
+        description: "Logging level"
         type: choice
         required: true
         options:
@@ -64,17 +64,16 @@ on:
           - INFO
           - DEBUG
           - ERROR
-        default: 'WARNING'
+        default: "WARNING"
 
       limit_herds_per_species:
-        description: 'Limit number of herds processed per species'
+        description: "Limit number of herds processed per species"
         type: string
-        default: ''
+        default: ""
       max_concurrent_jobs:
-        description: 'Maximum number of concurrent matrix jobs'
+        description: "Maximum number of concurrent matrix jobs"
         type: string
-        default: '6'
-
+        default: "6"
 
 # Environment variables are set in individual jobs as needed
 # Bronze timestamp is generated in the bronze-foundation job and shared via artifacts
@@ -92,10 +91,10 @@ jobs:
         run: |
           # Determine if we should process by month based on the step
           STEP="${{ inputs.step || 'all' }}"
-          YEAR_RANGE="${{ inputs.year_range || '2022-2024' }}"
+          YEAR_RANGE="${{ inputs.year_range || '2021-2025' }}"
 
-          # Only use monthly matrix for animal_movements or when processing all steps
-          if [[ "$STEP" == "all" || "$STEP" == "bronze_data_collection" || "$STEP" == "animal_movements" ]]; then
+          # Only use monthly matrix for animal_movements, vetstat, or when processing all steps
+          if [[ "$STEP" == "all" || "$STEP" == "bronze_data_collection" || "$STEP" == "animal_movements" || "$STEP" == "vetstat" ]]; then
             PROCESS_BY_MONTH="true"
 
             # Parse year range
@@ -137,8 +136,8 @@ jobs:
     if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_foundation' || inputs.step == 'bronze_data_collection' || inputs.step == 'stamdata' || inputs.step == 'herds' || inputs.step == 'herd_details' || inputs.step == 'diko' || inputs.step == 'animal_movements' || inputs.step == 'spf_su' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - uses: actions/checkout@v4
@@ -146,7 +145,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -163,14 +162,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Set up environment variables
         env:
@@ -279,16 +278,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: bronze-foundation
     if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'diko' || inputs.step == 'spf_su' }}
-    timeout-minutes: 360  # 6 hours timeout to prevent indefinite hanging
+    timeout-minutes: 360 # 6 hours timeout to prevent indefinite hanging
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     strategy:
       matrix:
         data_type: [diko, spf_su]
-      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '2') }}  # Limit concurrent jobs to reduce server load
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '2') }} # Limit concurrent jobs to reduce server load
 
     steps:
       - uses: actions/checkout@v4
@@ -296,7 +295,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -313,14 +312,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -409,7 +408,7 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '3' }}
-          SPF_SU_MAX_WORKERS: '2'
+          SPF_SU_MAX_WORKERS: "2"
         run: |
           # Skip if this specific step is not requested
           INPUT_STEP="${{ inputs.step || 'all' }}"
@@ -454,14 +453,14 @@ jobs:
     if: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'animal_movements') }}
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     strategy:
       matrix:
         month: ${{ fromJson(needs.generate-monthly-matrix.outputs.months) }}
-      fail-fast: false  # Continue processing other months even if one fails
-      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '6') }}  # Limit concurrent monthly jobs to prevent overwhelming the server
+      fail-fast: false # Continue processing other months even if one fails
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '6') }} # Limit concurrent monthly jobs to prevent overwhelming the server
 
     steps:
       - uses: actions/checkout@v4
@@ -469,7 +468,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -486,14 +485,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -617,11 +616,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [bronze-foundation, generate-monthly-matrix]
     if: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'false' && inputs.step == 'animal_movements' }}
-    timeout-minutes: 360  # 6 hours timeout for fallback
+    timeout-minutes: 360 # 6 hours timeout for fallback
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - uses: actions/checkout@v4
@@ -629,7 +628,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -646,14 +645,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -737,15 +736,22 @@ jobs:
           echo "Running animal movements command (traditional): $CMD"
           $CMD
 
-  # Job 3: Herd Details (needs foundation, required by ejendom + vetstat)
-  bronze-herd-details:
+  # Job 2d: VetStat by Month (MONTHLY MATRIX PROCESSING)
+  bronze-vetstat-by-month:
     runs-on: ubuntu-latest
-    needs: bronze-foundation
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'herd_details' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    needs: [bronze-herd-details, generate-monthly-matrix]
+    if: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'true' && ((inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'vetstat') }}
+    timeout-minutes: 240 # 4 hours timeout for VetStat processing
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
+
+    strategy:
+      matrix:
+        month: ${{ fromJson(needs.generate-monthly-matrix.outputs.months) }}
+      fail-fast: false # Continue processing other months even if one fails
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '3') }} # Limit concurrent monthly jobs to prevent overwhelming VetStat API
 
     steps:
       - uses: actions/checkout@v4
@@ -753,7 +759,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -770,14 +776,171 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+
+      - name: Download context artifact with herd details
+        uses: actions/download-artifact@v4
+        with:
+          name: chr-context-with-details
+          path: /tmp/
+
+      - name: Download bronze timestamp artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bronze-timestamp
+          path: /tmp/
+
+      - name: Set up environment variables
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+        run: |
+          cd backend/pipelines/chr_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+          echo "CONTEXT_IMPORT_PATH=/tmp/chr_context_with_details.json" >> .env
+
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
+
+          # Use the shared bronze timestamp from foundation job
+          BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
+          echo "BRONZE_EXPORT_TIMESTAMP=$BRONZE_TIMESTAMP" >> .env
+          echo "Using shared bronze timestamp: $BRONZE_TIMESTAMP"
+
+          mkdir -p /tmp/data/bronze/chr
+          mkdir -p /tmp/data/silver/chr
+
+      - name: Run VetStat for Month ${{ matrix.month }}
+        working-directory: backend/pipelines/chr_pipeline
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '2' }}
+          CONTEXT_IMPORT_PATH: /tmp/chr_context_with_details.json
+        run: |
+          MONTH="${{ matrix.month }}"
+
+          # Parse month format (e.g., "2023-06") and set monthly date range
+          YEAR=$(echo "$MONTH" | cut -d'-' -f1)
+          MONTH_NUM=$(echo "$MONTH" | cut -d'-' -f2)
+
+          # Calculate first and last day of the month
+          START_DATE="$YEAR-$MONTH_NUM-01"
+
+          # Calculate last day of month (handle leap years and different month lengths)
+          if [[ "$MONTH_NUM" == "02" ]]; then
+            # February - check for leap year
+            if [[ $((YEAR % 4)) -eq 0 && ($((YEAR % 100)) -ne 0 || $((YEAR % 400)) -eq 0) ]]; then
+              END_DATE="$YEAR-$MONTH_NUM-29"
+            else
+              END_DATE="$YEAR-$MONTH_NUM-28"
+            fi
+          elif [[ "$MONTH_NUM" == "04" || "$MONTH_NUM" == "06" || "$MONTH_NUM" == "09" || "$MONTH_NUM" == "11" ]]; then
+            # April, June, September, November - 30 days
+            END_DATE="$YEAR-$MONTH_NUM-30"
+          else
+            # All other months - 31 days
+            END_DATE="$YEAR-$MONTH_NUM-31"
+          fi
+
+          echo "Processing VetStat for month $MONTH ($START_DATE to $END_DATE)"
+
+          # Determine additional arguments
+          ARGS=""
+          if [[ "${{ inputs.max_herds }}" != "" ]]; then
+            ARGS="$ARGS --limit-total-herds ${{ inputs.max_herds }}"
+          fi
+          if [[ "${{ inputs.species_codes }}" != "" ]]; then
+            ARGS="$ARGS --test-species-codes ${{ inputs.species_codes }}"
+          fi
+          if [[ "${{ inputs.limit_herds_per_species }}" != "" ]]; then
+            ARGS="$ARGS --limit-herds-per-species ${{ inputs.limit_herds_per_species }}"
+          fi
+          # Always show progress
+          ARGS="$ARGS --progress"
+
+          # Add month-year suffix to bronze directory to prevent matrix job overwrites
+          export BRONZE_MONTH_SUFFIX="_${{ matrix.month }}"
+          echo "🗓️ Using unique bronze directory suffix: $BRONZE_MONTH_SUFFIX"
+
+          # Build command
+          CMD="python -m main --steps vetstat --start-date $START_DATE --end-date $END_DATE --skip-dependencies --log-level ${{ inputs.log_level || 'WARNING' }} $ARGS"
+
+          echo "Running VetStat command for month $MONTH: $CMD"
+
+          # Execute command
+          $CMD
+
+          if [[ $? -eq 0 ]]; then
+            echo "✅ Successfully processed VetStat for month ${{ matrix.month }}"
+          else
+            echo "❌ Failed to process VetStat for month ${{ matrix.month }}"
+            exit 1
+          fi
+
+  # Job 3: Herd Details (needs foundation, required by ejendom + vetstat)
+  bronze-herd-details:
+    runs-on: ubuntu-latest
+    needs: bronze-foundation
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'herd_details' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+          # Install CHR pipeline dependencies
+          cd ../chr_pipeline
+          uv pip install --system -e .
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -862,20 +1025,21 @@ jobs:
           path: /tmp/chr_context_with_details.json
           retention-days: 1
 
-  # Job 4: Parallel Data Collection - Group 2 (ejendom + vetstat - need herd_details)
+  # Job 4: Parallel Data Collection - Group 2 (ejendom + vetstat when not using monthly processing)
   bronze-parallel-group-2:
     runs-on: ubuntu-latest
-    needs: bronze-herd-details
-    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'ejendom' || inputs.step == 'vetstat' }}
+    needs: [bronze-herd-details, generate-monthly-matrix]
+    if: ${{ (inputs.step || 'all') == 'all' || inputs.step == 'bronze_data_collection' || inputs.step == 'ejendom' || (inputs.step == 'vetstat' && needs.generate-monthly-matrix.outputs.process_by_month == 'false') }}
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     strategy:
       matrix:
-        data_type: [ejendom, vetstat]
-      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '2') }}  # Limit concurrent jobs to reduce server load
+        # Only include vetstat if not processing by month, always include ejendom
+        data_type: ${{ needs.generate-monthly-matrix.outputs.process_by_month == 'true' && fromJson('["ejendom"]') || fromJson('["ejendom", "vetstat"]') }}
+      max-parallel: ${{ fromJson(inputs.max_concurrent_jobs || '2') }} # Limit concurrent jobs to reduce server load
 
     steps:
       - uses: actions/checkout@v4
@@ -883,7 +1047,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -900,14 +1064,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download context artifact
         uses: actions/download-artifact@v4
@@ -989,7 +1153,7 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           CHR_MAX_WORKERS: ${{ inputs.max_concurrent_jobs || '3' }}
-          SPF_SU_MAX_WORKERS: '2'
+          SPF_SU_MAX_WORKERS: "2"
         run: |
           # Skip if this specific step is not requested
           INPUT_STEP="${{ inputs.step || 'all' }}"
@@ -1027,17 +1191,23 @@ jobs:
           echo "Running parallel group 2 command for $STEP: $CMD"
           $CMD
 
-
-
   # Job 5: Silver Processing
   silver-processing:
     runs-on: ubuntu-latest
-    needs: [bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-month, bronze-herd-details, bronze-parallel-group-2]
+    needs:
+      [
+        bronze-foundation,
+        bronze-parallel-group-1,
+        bronze-animal-movements-by-month,
+        bronze-vetstat-by-month,
+        bronze-herd-details,
+        bronze-parallel-group-2,
+      ]
     if: ${{ always() && !cancelled() && ((inputs.step || 'all') == 'all' || inputs.step == 'silver_processing' || startsWith(inputs.step, 'silver_')) }}
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - uses: actions/checkout@v4
@@ -1045,7 +1215,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -1062,14 +1232,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Download bronze timestamp artifact
         uses: actions/download-artifact@v4
@@ -1132,14 +1302,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth-silver'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth-silver"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Run silver processing (Streaming Mode)
         working-directory: backend/pipelines/chr_pipeline
@@ -1183,8 +1353,8 @@ jobs:
     if: ${{ always() && !cancelled() && (needs.silver-processing.result == 'success' || inputs.step == 'gold_processing' || inputs.step == 'veterinary_timeline' || inputs.step == 'transportation_analysis') && ((inputs.step || 'all') == 'all' || inputs.step == 'gold_processing' || inputs.step == 'veterinary_timeline' || inputs.step == 'transportation_analysis') }}
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - uses: actions/checkout@v4
@@ -1192,7 +1362,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -1209,14 +1379,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth-gold'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth-gold"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Set up environment variables
         env:
@@ -1378,8 +1548,8 @@ jobs:
     if: ${{ inputs.step && !contains(fromJson('["all", "bronze_foundation", "bronze_data_collection", "silver_processing", "gold_processing", "veterinary_timeline", "transportation_analysis", "stamdata", "herds", "herd_details", "diko", "spf_su", "ejendom", "vetstat"]'), inputs.step) && !startsWith(inputs.step, 'silver_') && inputs.step != 'animal_movements' }}
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - uses: actions/checkout@v4
@@ -1387,7 +1557,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -1404,14 +1574,14 @@ jobs:
           cd ../chr_pipeline
           uv pip install --system -e .
 
-      - id: 'auth'
-        name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
         with:
-          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-      - name: 'Set up Cloud SDK'
-        uses: 'google-github-actions/setup-gcloud@v2'
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
       - name: Set up environment variables
         env:
@@ -1505,7 +1675,19 @@ jobs:
   # Job 8: Pipeline Summary and Optimization Report
   pipeline-summary:
     runs-on: ubuntu-latest
-    needs: [generate-monthly-matrix, bronze-foundation, bronze-parallel-group-1, bronze-animal-movements-by-month, bronze-animal-movements-fallback, bronze-herd-details, bronze-parallel-group-2, silver-processing, gold-processing]
+    needs:
+      [
+        generate-monthly-matrix,
+        bronze-foundation,
+        bronze-parallel-group-1,
+        bronze-animal-movements-by-month,
+        bronze-vetstat-by-month,
+        bronze-animal-movements-fallback,
+        bronze-herd-details,
+        bronze-parallel-group-2,
+        silver-processing,
+        gold-processing,
+      ]
     if: always() && !cancelled()
 
     steps:
@@ -1515,7 +1697,7 @@ jobs:
           echo ""
           echo "## 🔧 Configuration Used"
           echo "- **Step**: ${{ inputs.step || 'all' }}"
-          echo "- **Year Range**: ${{ inputs.year_range || '2022-2024' }}"
+          echo "- **Year Range**: ${{ inputs.year_range || '2021-2025' }}"
           echo "- **Monthly Processing**: ${{ needs.generate-monthly-matrix.outputs.process_by_month }}"
           echo "- **Log Level**: ${{ inputs.log_level || 'WARNING' }}"
           echo "- **Max Herds**: ${{ inputs.max_herds || 'unlimited' }}"
@@ -1563,7 +1745,8 @@ jobs:
           echo "| Animal Movements (Monthly) | ${{ needs.bronze-animal-movements-by-month.result || 'skipped' }} |"
           echo "| Animal Movements (Fallback) | ${{ needs.bronze-animal-movements-fallback.result || 'skipped' }} |"
           echo "| Herd Details | ${{ needs.bronze-herd-details.result || 'skipped' }} |"
-          echo "| Group 2 (ejendom, vetstat) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
+          echo "| VetStat Monthly Processing | ${{ needs.bronze-vetstat-by-month.result || 'skipped' }} |"
+          echo "| Group 2 (ejendom) | ${{ needs.bronze-parallel-group-2.result || 'skipped' }} |"
           echo "| Silver Processing | ${{ needs.silver-processing.result || 'skipped' }} |"
           echo "| Gold Processing (Vet Timeline + Transport Analysis) | ${{ needs.gold-processing.result || 'skipped' }} |"
           echo ""
@@ -1584,6 +1767,9 @@ jobs:
           fi
           if [[ "${{ needs.bronze-herd-details.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS herd-details"
+          fi
+          if [[ "${{ needs.bronze-vetstat-by-month.result }}" == "failure" ]]; then
+            FAILED_JOBS="$FAILED_JOBS vetstat-monthly"
           fi
           if [[ "${{ needs.bronze-parallel-group-2.result }}" == "failure" ]]; then
             FAILED_JOBS="$FAILED_JOBS group-2"
