@@ -10,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
+import { NoDataPlaceholder } from './no-data-placeholder';
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   // Check if this table should show a placeholder
@@ -18,6 +19,11 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
     return (
       <PlaceholderChart title={grid.title} dataType={placeholderDataType} />
     );
+  }
+
+  // Check if table has no data
+  if (!grid.rows || grid.rows.length === 0) {
+    return <NoDataPlaceholder title={grid.title} />;
   }
   const columns: ColumnDef<Record<string, string | number | boolean>>[] =
     grid.columns.map((col) => ({

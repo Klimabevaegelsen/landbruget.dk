@@ -22,6 +22,7 @@ import { VizColors } from '@/lib/utils';
 import { xAxisDefaultProps } from './block-bar-chart';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
+import { NoDataPlaceholder } from './no-data-placeholder';
 
 // We can reuse the existing transformDataForRecharts function since it already handles our data structure
 const transformDataForRecharts = (chartData: ChartData) => {
@@ -70,7 +71,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   }
 
   if (!transformedData.length) {
-    return <div>No data available for chart.</div>;
+    return <NoDataPlaceholder title={chart.title} />;
   }
 
   // Separate series by type and yAxis

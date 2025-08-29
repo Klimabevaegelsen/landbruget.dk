@@ -7,6 +7,7 @@ import { NavigationItem } from '../../layout/sidenav';
 import { BlockContainer } from './block-container';
 import { cn, slugify, scrollToElement } from '@/lib/utils';
 import { useHashStore } from '@/stores/hashStore';
+import { NoDataPlaceholder } from './no-data-placeholder';
 
 interface ExtendedNavigationItem extends NavigationItem {
   current: boolean;
@@ -89,7 +90,7 @@ export function BlockIteratedSection({
 
   // If there are no sections, don't render anything
   if (!iteratedSection.sections || iteratedSection.sections.length === 0) {
-    return <div>No sections available</div>;
+    return <NoDataPlaceholder title={iteratedSection.title} />;
   }
 
   return (
