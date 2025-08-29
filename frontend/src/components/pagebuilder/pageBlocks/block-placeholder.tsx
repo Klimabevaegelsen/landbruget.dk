@@ -5,7 +5,7 @@ export function BlockPlaceholder({ block }: { block: PageBuilderItem }) {
   return (
     <JsonRender
       json={JSON.parse(JSON.stringify(block))}
-      title={`Component ${block._type} placeholder (data)`}
+      title="Component placeholder (data)"
     />
   );
 }
