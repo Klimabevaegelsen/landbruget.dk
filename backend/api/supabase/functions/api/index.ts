@@ -100,6 +100,8 @@ type MapLayerResult = {
 }
 // Cache for getLatestYearForCompany results within a single request invocation
 const latestYearCache = new Map<string, number | null>();
+// Cache for column existence checks (if needed for future optimization)
+const columnExistenceCache = new Map<string, boolean>();
 
 // --- Helper: Get Latest Year (Generalized) ---
 async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: string, companyId: string, yearColumn = 'year', filterContext: Record<string, any> | null = {}) {
