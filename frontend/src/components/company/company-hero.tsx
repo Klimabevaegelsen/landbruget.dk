@@ -1,10 +1,15 @@
+'use client';
+
 import { CompanyResponse } from '@/services/supabase/types';
 import { Container } from '../layout/container';
 import { Button } from '../ui/button';
 import { ArrowLeftIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
 import { BlockMapChart } from '../pagebuilder/pageBlocks/block-map-chart';
+import { useRouter } from 'next/navigation';
 
 export function CompanyHero({ company }: { company: CompanyResponse }) {
+  const router = useRouter();
+
   // Find the company identity and map components from pageBuilder
   const companyIdentity = company.pageBuilder.find(
     (block) => block._key === 'company-identity'
@@ -18,7 +23,7 @@ export function CompanyHero({ company }: { company: CompanyResponse }) {
       <div className="flex flex-col gap-20 md:flex-row">
         <div className="flex w-full flex-col gap-4">
           <div>
-            <Button variant="secondary">
+            <Button variant="secondary" onClick={() => router.push('/')}>
               <ArrowLeftIcon
                 strokeWidth={2.5}
                 className="size-3 text-green-900"

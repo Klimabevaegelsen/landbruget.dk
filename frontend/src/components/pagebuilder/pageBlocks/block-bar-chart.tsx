@@ -24,6 +24,7 @@ import CustomLegend from '@/components/chart/custom-legend';
 import { VizColors } from '@/lib/utils';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
+import { NoDataPlaceholder } from './no-data-placeholder';
 
 export const xAxisDefaultProps: XAxisProps = {
   tickLine: true,
@@ -121,7 +122,7 @@ export function BlockBarChart({
   }
 
   if (!transformedData.length) {
-    return <div>No data available for chart.</div>;
+    return <NoDataPlaceholder title={chart.title} />;
   }
 
   // Assuming a simple case with a few predefined colors.

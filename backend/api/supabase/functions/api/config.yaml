@@ -886,7 +886,7 @@ pageBuilder:
                     direction: "asc"
 
   - _key: animal-welfare-transport-chart
-    _type: barChart
+    _type: stackedBarChart
     title: "Dyretransporter pr. Uge (Samlet, Fordelt på Destination)"
     dataSource:
       params:

@@ -13,6 +13,7 @@ import { VizColors } from '@/lib/utils';
 import { MapErrorBoundary } from './MapErrorBoundary';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
+import { NoDataPlaceholder } from './no-data-placeholder';
 
 const getLayerStyle = (style: string | undefined, index: number) => {
   // if style contains marker, return the default marker style
@@ -188,9 +189,7 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
 
   // Return error state if validation failed
   if (!chartData.isValid) {
-    return (
-      <div className="p-4 text-center text-gray-500">{chartData.error}</div>
-    );
+    return <NoDataPlaceholder title={chart.title} />;
   }
 
   return (
