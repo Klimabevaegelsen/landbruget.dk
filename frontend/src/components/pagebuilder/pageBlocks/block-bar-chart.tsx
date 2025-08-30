@@ -21,6 +21,7 @@ import {
 import CustomTooltip from '@/components/chart/custom-tooltip';
 import { useEffect, useState } from 'react';
 import CustomLegend from '@/components/chart/custom-legend';
+import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
 import { VizColors } from '@/lib/utils';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
@@ -243,6 +244,11 @@ export function BlockBarChart({
         json={JSON.parse(JSON.stringify(transformedData))}
         title={`Component ${chart._type} placeholder (data)`}
       /> */}
+
+      {/* Documentation accordion */}
+      {chart.documentation && (
+        <DocumentationAccordion documentation={chart.documentation} />
+      )}
     </div>
   );
 }

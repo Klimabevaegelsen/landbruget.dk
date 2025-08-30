@@ -18,6 +18,7 @@ import {
 import CustomTooltip from '@/components/chart/custom-tooltip';
 import { useEffect, useState } from 'react';
 import CustomLegend from '@/components/chart/custom-legend';
+import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
 import { VizColors } from '@/lib/utils';
 import { xAxisDefaultProps } from './block-bar-chart';
 import { shouldShowPlaceholder } from './chart-utils';
@@ -156,6 +157,11 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Documentation accordion */}
+      {chart.documentation && (
+        <DocumentationAccordion documentation={chart.documentation} />
+      )}
     </div>
   );
 }
