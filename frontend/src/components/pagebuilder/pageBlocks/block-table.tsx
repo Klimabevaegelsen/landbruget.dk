@@ -11,17 +11,28 @@ import {
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
+import { useCategoryDataContext } from './CategoryDataContext';
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
+  const { isInCategoryWithData } = useCategoryDataContext();
+
   // Check if this table should show a placeholder
   const placeholderDataType = shouldShowPlaceholder(grid._key);
   if (placeholderDataType) {
     return <PlaceholderChart dataType={placeholderDataType} />;
   }
 
-  // Check if table has no data
+  // Check if table has no data - only show placeholder if not in category with data
   if (!grid.rows || grid.rows.length === 0) {
-    return <NoDataPlaceholder />;
+    if (!isInCategoryWithData) {
+      return <NoDataPlaceholder />;
+    } else {
+      return (
+        <div className="py-8 text-center text-gray-500">
+          Ingen data tilgængelig for denne tabel
+        </div>
+      );
+    }
   }
   const columns: ColumnDef<Record<string, string | number | boolean>>[] =
     grid.columns.map((col) => ({

@@ -8,6 +8,8 @@ import { BlockContainer } from './block-container';
 import { cn, slugify, scrollToElement } from '@/lib/utils';
 import { useHashStore } from '@/stores/hashStore';
 import { NoDataPlaceholder } from './no-data-placeholder';
+import { hasCategoryData } from './chart-utils';
+import { CategoryDataProvider } from './CategoryDataContext';
 
 interface ExtendedNavigationItem extends NavigationItem {
   current: boolean;
@@ -93,55 +95,66 @@ export function BlockIteratedSection({
     return <NoDataPlaceholder />;
   }
 
-  return (
-    <div className={cn('relative flex w-full flex-col gap-4')}>
-      <div
-        className={cn(
-          'sticky w-full bg-white py-2',
-          level === 0 && 'top-[calc(var(--sticky-header-height,0px)+0px)] z-30',
-          level === 1 &&
-            'top-[calc(var(--sticky-header-height,0px)+62px)] z-20',
-          level === 2 &&
-            'top-[calc(var(--sticky-header-height,0px)+124px)] z-10'
-        )}
-      >
-        <IteratedSectionMenu
-          iteratedSection={iteratedSection}
-          level={level}
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-        />
-      </div>
-      <div className="flex flex-col gap-11">
-        {iteratedSection.sections?.map((item) => {
-          const sectionId = `${slugify(item._key)}`;
-          const isActive = sectionId === activeSection;
+  // Check if the entire category has data across all sections
+  const categoryHasData = hasCategoryData(iteratedSection);
 
-          return (
-            <div
-              key={sectionId}
-              id={sectionId}
-              className={cn(!isActive && 'hidden')}
-            >
-              <div className="pb-6">
-                <div className="flex flex-col gap-11">
-                  {item.content.map((item) => (
-                    <div key={item._key} id={item._key}>
-                      <BlockContainer
-                        title={item.title}
-                        href={`#${item._key}`}
-                        secondaryTitle={item._type}
-                      >
-                        <PageBlock block={item} level={level + 1} />
-                      </BlockContainer>
-                    </div>
-                  ))}
+  // If the entire category has no data, show a single placeholder for the whole category
+  if (!categoryHasData) {
+    return <NoDataPlaceholder />;
+  }
+
+  return (
+    <CategoryDataProvider hasData={categoryHasData}>
+      <div className={cn('relative flex w-full flex-col gap-4')}>
+        <div
+          className={cn(
+            'sticky w-full bg-white py-2',
+            level === 0 &&
+              'top-[calc(var(--sticky-header-height,0px)+0px)] z-30',
+            level === 1 &&
+              'top-[calc(var(--sticky-header-height,0px)+62px)] z-20',
+            level === 2 &&
+              'top-[calc(var(--sticky-header-height,0px)+124px)] z-10'
+          )}
+        >
+          <IteratedSectionMenu
+            iteratedSection={iteratedSection}
+            level={level}
+            activeSection={activeSection}
+            onSectionChange={setActiveSection}
+          />
+        </div>
+        <div className="flex flex-col gap-11">
+          {iteratedSection.sections?.map((item) => {
+            const sectionId = `${slugify(item._key)}`;
+            const isActive = sectionId === activeSection;
+
+            return (
+              <div
+                key={sectionId}
+                id={sectionId}
+                className={cn(!isActive && 'hidden')}
+              >
+                <div className="pb-6">
+                  <div className="flex flex-col gap-11">
+                    {item.content.map((item) => (
+                      <div key={item._key} id={item._key}>
+                        <BlockContainer
+                          title={item.title}
+                          href={`#${item._key}`}
+                          secondaryTitle={item._type}
+                        >
+                          <PageBlock block={item} level={level + 1} />
+                        </BlockContainer>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </CategoryDataProvider>
   );
 }
