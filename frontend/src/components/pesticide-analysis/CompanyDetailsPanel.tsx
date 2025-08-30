@@ -310,7 +310,12 @@ export default function CompanyDetailsPanel({
       {/* Municipality Ranking (if details loaded) */}
       {details && (
         <div>
-          <h4 className="mb-2 text-sm font-medium">Kommunal Placering</h4>
+          <h4 className="mb-2 text-sm font-medium">
+            Rankering i{' '}
+            {company.municipality !== 'Municipality TBD'
+              ? company.municipality
+              : 'kommunen'}
+          </h4>
           <div className="rounded bg-gray-50 p-2 text-xs">
             <div>
               Rang: #{details.municipality_ranking.rank} af{' '}

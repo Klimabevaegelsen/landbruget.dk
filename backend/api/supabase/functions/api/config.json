@@ -312,22 +312,22 @@
               },
               {
                 "key": "rank_dk_ha",
-                "label": "Placering DK (Ha)",
+                "label": "Rankering på landsplan (Ha)",
                 "column": "rank_dk_total_area"
               },
               {
                 "key": "rank_mun_ha",
-                "label": "Placering Kommune (Ha)",
+                "label": "Rankering i kommunen (Ha)",
                 "column": "rank_municipality_total_area"
               },
               {
                 "key": "rank_dk_org",
-                "label": "Placering DK (Ha Øko)",
+                "label": "Rankering på landsplan (Ha Øko)",
                 "column": "rank_dk_organic_total_area"
               },
               {
                 "key": "rank_mun_org",
-                "label": "Placering Kommune (Ha Øko)",
+                "label": "Rankering i kommunen (Ha Øko)",
                 "column": "rank_municipality_organic_total_area"
               }
             ]
@@ -586,22 +586,22 @@
               },
               {
                 "key": "rank_dk_compliance",
-                "label": "Placering DK (Overholdelse)",
+                "label": "Rankering på landsplan (Overholdelse)",
                 "column": "rank_dk_compliance"
               },
               {
                 "key": "rank_mun_compliance",
-                "label": "Placering Kommune (Overholdelse)",
+                "label": "Rankering i kommunen (Overholdelse)",
                 "column": "rank_municipality_compliance"
               },
               {
                 "key": "rank_dk_water_coverage",
-                "label": "Placering DK (Klima- eller Miljøprojekter)",
+                "label": "Rankering på landsplan (Klima- eller Miljøprojekter)",
                 "column": "rank_dk_water_coverage"
               },
               {
                 "key": "rank_mun_water_coverage",
-                "label": "Placering Kommune (Klima- eller Miljøprojekter)",
+                "label": "Rankering i kommunen (Klima- eller Miljøprojekter)",
                 "column": "rank_municipality_water_coverage"
               }
             ]
@@ -647,32 +647,32 @@
               },
               {
                 "key": "rank_dk_fertiliser",
-                "label": "Placering DK (Gødning)",
+                "label": "Rankering på landsplan (Gødning)",
                 "column": "rank_dk_total_fertiliser_kg"
               },
               {
                 "key": "rank_mun_fertiliser",
-                "label": "Placering Kommune (Gødning)",
+                "label": "Rankering i kommunen (Gødning)",
                 "column": "rank_municipality_total_fertiliser_kg"
               },
               {
                 "key": "rank_dk_n_leached_ha",
-                "label": "Placering DK (N/Ha)",
+                "label": "Rankering på landsplan (N/Ha)",
                 "column": "rank_dk_n_leached_kg_per_ha"
               },
               {
                 "key": "rank_mun_n_leached_ha",
-                "label": "Placering Kommune (N/Ha)",
+                "label": "Rankering i kommunen (N/Ha)",
                 "column": "rank_municipality_n_leached_kg_per_ha"
               },
               {
                 "key": "rank_dk_pest_load_ha",
-                "label": "Placering DK (Pest./Ha)",
+                "label": "Rankering på landsplan (Pest./Ha)",
                 "column": "rank_dk_pesticide_load_index_per_ha"
               },
               {
                 "key": "rank_mun_pest_load_ha",
-                "label": "Placering Kommune (Pest./Ha)",
+                "label": "Rankering i kommunen (Pest./Ha)",
                 "column": "rank_municipality_pesticide_load_index_per_ha"
               }
             ]
@@ -1034,32 +1034,32 @@
               },
               {
                 "key": "rank_dk_prod",
-                "label": "Placering DK (Prod. Ækv.)",
+                "label": "Rankering på landsplan (Prod. Ækv.)",
                 "column": "rank_dk_total_animal_equivalents"
               },
               {
                 "key": "rank_mun_prod",
-                "label": "Placering Kommune (Prod. Ækv.)",
+                "label": "Rankering i kommunen (Prod. Ækv.)",
                 "column": "rank_municipality_total_animal_equivalents"
               },
               {
                 "key": "rank_dk_antibiotics",
-                "label": "Placering DK (Antibiotika)",
+                "label": "Rankering på landsplan (Antibiotika)",
                 "column": "rank_dk_total_ddd_usage"
               },
               {
                 "key": "rank_mun_antibiotics",
-                "label": "Placering Kommune (Antibiotika)",
+                "label": "Rankering i kommunen (Antibiotika)",
                 "column": "rank_municipality_total_ddd_usage"
               },
               {
                 "key": "rank_dk_transport",
-                "label": "Placering DK (Transport)",
+                "label": "Rankering på landsplan (Transport)",
                 "column": "rank_dk_total_animals_transported"
               },
               {
                 "key": "rank_mun_transport",
-                "label": "Placering Kommune (Transport)",
+                "label": "Rankering i kommunen (Transport)",
                 "column": "rank_municipality_total_animals_transported"
               }
             ]
@@ -1234,17 +1234,17 @@
                   },
                   {
                     "key": "rank_mun_site_prod",
-                    "label": "Placering Kommune (Site Prod.)",
+                    "label": "Rankering i kommunen (Site Prod.)",
                     "column": "rank_municipality_site_production"
                   },
                   {
                     "key": "rank_mun_site_antibiotics",
-                    "label": "Placering Kommune (Site Antibiotika)",
+                    "label": "Rankering i kommunen (Site Antibiotika)",
                     "column": "rank_municipality_site_antibiotics"
                   },
                   {
                     "key": "rank_mun_site_transport",
-                    "label": "Placering Kommune (Site Transport)",
+                    "label": "Rankering i kommunen (Site Transport)",
                     "column": "rank_municipality_site_transport"
                   }
                 ]
@@ -1323,12 +1323,12 @@
                       },
                       {
                         "key": "rank_dk_species_prod",
-                        "label": "Placering DK (Art Prod.)",
+                        "label": "Rankering på landsplan (Art Prod.)",
                         "column": "rank_dk_species_production"
                       },
                       {
                         "key": "rank_mun_species_prod",
-                        "label": "Placering Kommune (Art Prod.)",
+                        "label": "Rankering i kommunen (Art Prod.)",
                         "column": "rank_municipality_species_production"
                       }
                     ]
@@ -1404,12 +1404,12 @@
               },
               {
                 "key": "rank_dk_co2e",
-                "label": "Placering DK (CO2e)",
+                "label": "Rankering på landsplan (CO2e)",
                 "column": "rank_dk_total_co2e_tonnes"
               },
               {
                 "key": "rank_mun_co2e",
-                "label": "Placering Kommune (CO2e)",
+                "label": "Rankering i kommunen (CO2e)",
                 "column": "rank_municipality_total_co2e_tonnes"
               }
             ]
