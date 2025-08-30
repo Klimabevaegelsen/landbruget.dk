@@ -68,7 +68,7 @@ serve(async (req) => {
           companies!inner(company_name, municipality)
         `)
         .not('net_profit_loss', 'is', null)
-        .eq('year', 2023) // Use most recent complete year
+        .eq('year', 2024) // Use most recent complete year
         .order('net_profit_loss', { ascending: false })
         .limit(limit)
 
@@ -77,7 +77,7 @@ serve(async (req) => {
           id: 'highest_profit',
           title: 'Højest Overskud',
           category: 'financial',
-          description: 'Virksomheder med det højeste nettoresultat i 2023',
+          description: 'Virksomheder med det højeste nettoresultat i 2024',
           unit: 'DKK',
           items: profitData.map((item, index) => ({
             company_id: item.company_id,
@@ -104,7 +104,7 @@ serve(async (req) => {
         `)
         .not('total_assets', 'is', null)
         .gt('total_assets', 0)
-        .eq('year', 2023)
+        .eq('year', 2024)
         .order('total_assets', { ascending: false })
         .limit(limit)
 
@@ -113,7 +113,7 @@ serve(async (req) => {
           id: 'largest_assets',
           title: 'Størst Aktiver',
           category: 'financial',
-          description: 'Virksomheder med de største samlede aktiver i 2023',
+          description: 'Virksomheder med de største samlede aktiver i 2024',
           unit: 'DKK',
           items: assetsData.map((item, index) => ({
             company_id: item.company_id,
@@ -140,7 +140,7 @@ serve(async (req) => {
         `)
         .not('average_number_of_employees', 'is', null)
         .gt('average_number_of_employees', 0)
-        .eq('year', 2023)
+        .eq('year', 2024)
         .order('average_number_of_employees', { ascending: false })
         .limit(limit)
 
@@ -149,7 +149,7 @@ serve(async (req) => {
           id: 'most_employees_financial',
           title: 'Flest Ansatte',
           category: 'financial',
-          description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2023',
+          description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
           unit: 'ansatte',
           items: employeesData.map((item, index) => ({
             company_id: item.company_id,
