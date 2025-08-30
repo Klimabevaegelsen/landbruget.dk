@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, MapPin, ExternalLink } from 'lucide-react';
-import Link from 'next/link';
+import { useCompanyNavigation } from '@/hooks/useCompanyNavigation';
 
 interface RankingItem {
   company_id: string;
@@ -72,6 +72,7 @@ export default function RankingTable({
   items,
   showTop = 20,
 }: RankingTableProps) {
+  const { navigateToCompany } = useCompanyNavigation();
   const displayItems = items.slice(0, showTop);
 
   return (
@@ -108,12 +109,14 @@ export default function RankingTable({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center space-x-2">
                     <Building2 className="h-4 w-4 flex-shrink-0 text-gray-400" />
-                    <Link
-                      href={`/virksomhed/${item.company_id}`}
-                      className="truncate text-sm font-medium text-gray-900 transition-colors hover:text-blue-600"
+                    <button
+                      onClick={() =>
+                        navigateToCompany(item.company_id, item.company_name)
+                      }
+                      className="truncate text-left text-sm font-medium text-gray-900 transition-colors hover:text-blue-600"
                     >
                       {item.company_name}
-                    </Link>
+                    </button>
                     <ExternalLink className="h-3 w-3 text-gray-400" />
                   </div>
 
