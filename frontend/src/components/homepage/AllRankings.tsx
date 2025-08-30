@@ -9,19 +9,19 @@ const RANKINGS = [
     id: 'highest_profit',
     title: 'Højest Overskud',
     category: 'financial',
-    description: 'Virksomheder med det højeste nettoresultat i 2023',
+    description: 'Virksomheder med det højeste nettoresultat i 2024',
   },
   {
     id: 'largest_assets',
     title: 'Størst Aktiver',
     category: 'financial',
-    description: 'Virksomheder med de største samlede aktiver i 2023',
+    description: 'Virksomheder med de største samlede aktiver i 2024',
   },
   {
     id: 'most_employees_financial',
     title: 'Flest Ansatte',
     category: 'financial',
-    description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2023',
+    description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
   },
 
   // Agricultural Area Rankings (4)
