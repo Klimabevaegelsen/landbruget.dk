@@ -51,6 +51,7 @@ env:
   PIPELINE_START_TIME: ${{ github.run_started_at }}
   GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
   GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
 
 jobs:
   # Step 1: CVR Collection (Sequential - must run first)

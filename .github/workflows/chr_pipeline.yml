@@ -181,12 +181,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
 
@@ -343,12 +345,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
 
@@ -516,12 +520,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
 
@@ -676,12 +682,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
 
@@ -807,12 +815,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context_with_details.json" >> .env
 
@@ -964,12 +974,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context_with_details.json" >> .env
@@ -1095,12 +1107,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
           # Add VetStat credentials if provided
@@ -1593,12 +1607,14 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/chr_pipeline
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "FVM_USERNAME=$FVM_USERNAME" >> .env
           echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "LANDBRUGSDATA_UUID_NAMESPACE=$LANDBRUGSDATA_UUID_NAMESPACE" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
 
           # Set up VetStat credentials if provided
