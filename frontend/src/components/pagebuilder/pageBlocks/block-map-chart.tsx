@@ -17,11 +17,30 @@ import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
 
 const getLayerStyle = (style: string | undefined, index: number) => {
-  // if style contains marker, return the default marker style
+  // Handle specific marker types with distinct colors
+  if (style === 'production_site_marker') {
+    return {
+      circleRadius: 8,
+      circleColor: '#FF6B35', // Orange for production sites
+      circleStrokeWidth: 2,
+      circleStrokeColor: '#FFFFFF',
+    };
+  }
+
+  if (style === 'hq_marker') {
+    return {
+      circleRadius: 8,
+      circleColor: '#4A90E2', // Blue for company headquarters/addresses
+      circleStrokeWidth: 2,
+      circleStrokeColor: '#FFFFFF',
+    };
+  }
+
+  // Generic fallback for other marker styles
   if (style && style.includes('marker')) {
     return {
       circleRadius: 6,
-      circleColor: '#FF0000',
+      circleColor: '#FF0000', // Red as fallback
       circleStrokeWidth: 2,
       circleStrokeColor: '#FFFFFF',
     };
