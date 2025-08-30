@@ -25,6 +25,10 @@ import { Button } from '@/components/ui/button';
 import { DataTablePagination } from './data-table-pagination';
 import { cn } from '@/lib/utils';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import {
+  translateDestinationType,
+  translateOriginType,
+} from '@/lib/translations/animal-transportation';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -75,6 +79,10 @@ export function DynamicDataTable<TData, TValue>({
             <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" />
           </a>
         );
+      case 'destination_type':
+        return translateDestinationType(String(value));
+      case 'origin_type':
+        return translateOriginType(String(value));
       default:
         return String(value);
     }
