@@ -11,6 +11,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapChart, GeoJSONLayer } from '@/services/supabase/types';
 import { VizColors } from '@/lib/utils';
 import { MapErrorBoundary } from './MapErrorBoundary';
+import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
@@ -479,8 +480,15 @@ export function BlockMapChart({ chart }: { chart: MapChart }) {
   }
 
   return (
-    <MapErrorBoundary>
-      <BlockMapChartInner chart={chart} />
-    </MapErrorBoundary>
+    <div>
+      <MapErrorBoundary>
+        <BlockMapChartInner chart={chart} />
+      </MapErrorBoundary>
+
+      {/* Documentation accordion */}
+      {chart.documentation && (
+        <DocumentationAccordion documentation={chart.documentation} />
+      )}
+    </div>
   );
 }

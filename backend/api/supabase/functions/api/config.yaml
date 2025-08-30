@@ -1,10 +1,19 @@
 metadata:
-  configVersion: "1.3"
+  configVersion: "1.4"  # Increment version for documentation addition
 
 pageBuilder:
   - _key: company-identity
     _type: infoCard
     title: "Virksomhed identitet"
+    documentation:
+      title: "Virksomhedsdata og CVR-oplysninger"
+      description: "Grundlæggende virksomhedsoplysninger hentet fra CVR-registret og Datafordeleren"
+      sources:
+        - name: "CVR Register API"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
+        - name: "Property Owners SFTP Pipeline"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/SPECIALIZED_PIPELINES_COMPREHENSIVE.md#property-owners-sftp-pipeline-privacy-compliant-property-data-processing"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#weekly-workflows-every-monday-2-am-utc"
     dataSource:
       params:
         source: "companies"
@@ -27,6 +36,15 @@ pageBuilder:
   - _key: company-ownership
     _type: dataGrid
     title: "Ejerforhold (oversigt)"
+    documentation:
+      title: "Ejerforhold og selskabsstruktur"
+      description: "Ejerskabsdata fra Property Owners SFTP Pipeline med privacybeskyttelse"
+      sources:
+        - name: "Property Owners SFTP Pipeline"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/SPECIALIZED_PIPELINES_COMPREHENSIVE.md#property-owners-sftp-pipeline-privacy-compliant-property-data-processing"
+        - name: "Property Cadastral Merge Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/property_cadastral_merge.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#property-owners-sftp-processing"
     dataSource:
       params:
         source: "company_owners"
@@ -42,6 +60,13 @@ pageBuilder:
   - _key: company-leadership
     _type: dataGrid
     title: "Ledelse"
+    documentation:
+      title: "Virksomhedsledelse"
+      description: "Oplysninger om virksomhedens ledelse og nøglepersoner fra CVR-registret"
+      sources:
+        - name: "CVR Register API"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#weekly-workflows-every-monday-2-am-utc"
     dataSource:
       params:
         source: "company_leadership"
@@ -61,6 +86,17 @@ pageBuilder:
   - _key: company-map-overview
     _type: mapChart
     title: "Kort: produktionssteder, marker, virksomhedens adresse"
+    documentation:
+      title: "Geografisk oversigt"
+      description: "Kombineret kort med produktionssteder fra CHR, marker fra FVM og virksomhedsadresser"
+      sources:
+        - name: "CHR Pipeline (Produktionssteder)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
+        - name: "FVM WFS Workflow (Marker)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/fvm_wfs.md"
+        - name: "CVR Enrichment (Adresser)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#cross-pipeline-data-dependencies"
     dataSource:
       params:
         map:
@@ -90,6 +126,13 @@ pageBuilder:
   - _key: financials-latest-kpis
     _type: kpiGroup
     title: "Finansielle nøgletal (seneste år)"
+    documentation:
+      title: "Finansielle Nøgletal"
+      description: "Denne sektion viser de seneste finansielle nøgletal for virksomheden, baseret på offentligt tilgængelige regnskabsdata."
+      sources:
+        - name: "Danmarks Statistik (DST) Pipeline"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/dst.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#dst-danmarks-statistik-pipeline"
     dataSource:
       params:
         source: "yearly_financials"
@@ -117,6 +160,13 @@ pageBuilder:
   - _key: financials-history
     _type: barChart
     title: "Økonomisk udvikling (pr. år)"
+    documentation:
+      title: "Økonomisk Udvikling Over Tid"
+      description: "Historisk udvikling i virksomhedens finansielle nøgletal baseret på årlige regnskabsdata fra Danmarks Statistik"
+      sources:
+        - name: "Danmarks Statistik (DST) Pipeline"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/dst.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#dst-danmarks-statistik-pipeline"
     dataSource:
       params:
         source: "yearly_financials"
@@ -139,6 +189,13 @@ pageBuilder:
   - _key: financials-detailed-kpis
     _type: kpiGroup
     title: "Detaljerede finansielle nøgletal"
+    documentation:
+      title: "Detaljerede Finansielle Nøgletal"
+      description: "Udvidede finansielle nøgletal inkluderende medarbejderoplysninger, likviditet og rentabilitetsmål"
+      sources:
+        - name: "Danmarks Statistik (DST) Pipeline"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/dst.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#dst-danmarks-statistik-pipeline"
     dataSource:
       params:
         source: "yearly_financials"
@@ -174,6 +231,13 @@ pageBuilder:
   - _key: subsidies-history-stacked
     _type: stackedBarChart
     title: "Tilskud fordelt på type (pr. år)"
+    documentation:
+      title: "Landbrugstilskud Over Tid"
+      description: "Historisk oversigt over landbrugstilskud fordelt på forskellige støtteordninger fra Drive Data Pipeline"
+      sources:
+        - name: "Drive Data Pipeline (Subsidies)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/drive_data_pipeline/README_COMPREHENSIVE.md#subsidies-landbrugstilskud"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#drive-data-pipeline-google-drive-integration"
     dataSource:
       params:
         source: "subsidy_details"
@@ -188,6 +252,15 @@ pageBuilder:
   - _key: land-use-kpis
     _type: kpiGroup
     title: "Arealanvendelse nøgletal"
+    documentation:
+      title: "Arealanvendelse og Markoversigt"
+      description: "Nøgletal for landbrugsarealanvendelse baseret på FVM-data inkluderende økologisk dyrkning og markoversigt"
+      sources:
+        - name: "FVM WFS Workflow (Marker)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/fvm_wfs.md"
+        - name: "Field Area Analysis Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/field_area_analysis.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#fvm-wfs-workflow"
     dataSource:
       params:
         source: "land_use_summary"
@@ -219,6 +292,15 @@ pageBuilder:
   - _key: land-use-crop-distribution
     _type: horizontalStackedBarChart
     title: "Afgrødefordeling (seneste år, øko/konv)"
+    documentation:
+      title: "Afgrødefordeling Økologisk vs Konventionel"
+      description: "Fordeling af afgrøder på virksomhedens marker opdelt i økologisk og konventionel dyrkning baseret på FVM-data"
+      sources:
+        - name: "FVM WFS Workflow (Afgrødedata)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/fvm_wfs.md"
+        - name: "Field Production Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/field_production.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#field-production-workflow"
     dataSource:
       params:
         source: "field_yearly_data"
@@ -236,6 +318,15 @@ pageBuilder:
   - _key: land-use-field-map
     _type: mapChart
     title: "Markernes placering & status (seneste år)"
+    documentation:
+      title: "Interaktivt Markkort"
+      description: "Geografisk oversigt over alle virksomhedens marker med information om afgrøder, økologisk status og arealanvendelse"
+      sources:
+        - name: "FVM WFS Workflow (Markgeometri)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/fvm_wfs.md"
+        - name: "Cadastral Workflow (Markgrænser)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cadastral.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#cadastral-workflow"
     dataSource:
       params:
         map:
@@ -254,6 +345,17 @@ pageBuilder:
   - _key: environmental-compliance-overview
     _type: kpiGroup
     title: "Miljøoverholdelse - oversigt"
+    documentation:
+      title: "Miljøoverholdelse og Beskyttelsesområder"
+      description: "Oversigt over miljøoverholdelse inkluderende problematiske områder, BNBO-beskyttelse og vådområder"
+      sources:
+        - name: "BNBO Workflow (Beskyttet natur)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/bnbo.md"
+        - name: "Wetlands Workflow (Vådområder)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/wetlands.md"
+        - name: "Water Projects Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/water_projects.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-protection-workflows"
     dataSource:
       params:
         source: "environmental_compliance_summary"
@@ -281,6 +383,13 @@ pageBuilder:
   - _key: bnbo-environmental-status-chart
     _type: comboChart
     title: "BNBO miljøstatus - områder og klima- eller miljøprojekter"
+    documentation:
+      title: "BNBO Beskyttet Natur Status"
+      description: "Status for beskyttet natur områder (BNBO) inkluderende områder der kræver handling og gennemførte tiltag"
+      sources:
+        - name: "BNBO Workflow (Beskyttet Natur)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/bnbo.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#bnbo-workflow"
     dataSource:
       params:
         source: "bnbo_environmental_status"
@@ -314,6 +423,13 @@ pageBuilder:
   - _key: wetlands-environmental-status-chart
     _type: comboChart
     title: "Lavbundsjorde miljøstatus - områder og klima- eller miljøprojekter"
+    documentation:
+      title: "Lavbundsjorde (Vådområder) Status"
+      description: "Status for lavbundsjorde/vådområder inkluderende områder der kræver miljøtiltag og gennemførte projekter"
+      sources:
+        - name: "Wetlands Workflow (Lavbundsjorde)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/wetlands.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#wetlands-workflow"
     dataSource:
       params:
         source: "wetlands_environmental_status"
@@ -405,6 +521,17 @@ pageBuilder:
   - _key: environment-kpis
     _type: kpiGroup
     title: "Miljø nøgletal"
+    documentation:
+      title: "Miljøpåvirkning og Bæredygtighed"
+      description: "Miljønøgletal inkluderende gødningsforbrug, kvælstofudledning og pesticidbelastning baseret på feltdata og pesticidregistreringer"
+      sources:
+        - name: "Pesticide Disaggregation Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/pesticide_disaggregation.md"
+        - name: "Field Production Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/field_production.md"
+        - name: "Drive Data Pipeline (Fertiliser)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/drive_data_pipeline/README_COMPREHENSIVE.md#fertiliser-gødning"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-impact-analysis"
     dataSource:
       params:
         source: "environment_summary"
@@ -539,6 +666,15 @@ pageBuilder:
   - _key: environment-pesticide-risks
     _type: dataGrid
     title: "Pesticidanvendelse detaljer og risici"
+    documentation:
+      title: "Detaljeret Pesticidanvendelse og Risikovurdering"
+      description: "Komplet oversigt over pesticidanvendelse med risikovurdering baseret på pesticidregistreringer og feltdata"
+      sources:
+        - name: "Pesticide Disaggregation Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/pesticide_disaggregation.md"
+        - name: "BMD Scraper (Pesticiddatabase)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/SCRAPER_PIPELINES_COMPREHENSIVE.md#bmd-scraper-bekæmpelsesmiddel-database-automation"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#pesticide-disaggregation-workflow"
     dataSource:
       params:
         source: "pesticide_applications"
@@ -588,6 +724,17 @@ pageBuilder:
   - _key: worker-welfare-kpis
     _type: kpiGroup
     title: "Medarbejderforhold nøgletal (seneste)"
+    documentation:
+      title: "Medarbejderforhold og Arbejdsmiljø"
+      description: "Nøgletal for medarbejderforhold baseret på arbejdstilsynsdata, arbejdstilladelser og arbejdsskader"
+      sources:
+        - name: "Worker Safety Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_safety.md"
+        - name: "Work Permits Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/work_permits.md"
+        - name: "Arbejdstilsynet Inspections Workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/arbejdstilsynet_inspections.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-safety-and-compliance-workflows"
     dataSource:
       params:
         source: "worker_yearly_summary"
@@ -654,6 +801,15 @@ pageBuilder:
   - _key: animal-welfare-kpis-overall
     _type: kpiGroup
     title: "Dyrevelærd nøgletal (samlet)"
+    documentation:
+      title: "Dyrevelærd og Husdyrproduktion"
+      description: "Nøgletal for husdyrproduktion baseret på CHR-data inkluderende produktionssteder, dyreækvivalenter, antibiotikaforbrug og dyretransporter"
+      sources:
+        - name: "CHR Pipeline (Husdyr og Antibiotika)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
+        - name: "Svineflytning Pipeline (Dyretransporter)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/SPECIALIZED_PIPELINES_COMPREHENSIVE.md#svineflytning-pipeline-pig-movement-tracking"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#chr-pipeline-animal-health-and-movement-data"
     dataSource:
       params:
         source: "animal_welfare_summary"
@@ -695,6 +851,13 @@ pageBuilder:
   - _key: animal-welfare-production-species-chart
     _type: stackedBarChart
     title: "Dyreproduktion pr. år (samlet, fordelt på art)"
+    documentation:
+      title: "Dyreproduktion Fordelt på Arter"
+      description: "Historisk udvikling i husdyrproduktion fordelt på forskellige dyrearter baseret på CHR-registreringer"
+      sources:
+        - name: "CHR Pipeline (Husdyrproduktion)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#chr-pipeline-animal-health-and-movement-data"
     dataSource:
       params:
         source: "site_species_production_ranked"
@@ -709,6 +872,13 @@ pageBuilder:
   - _key: animal-welfare-antibiotics-usage-chart
     _type: comboChart
     title: "Antibiotikaforbrug (samlet, total og rate)"
+    documentation:
+      title: "Antibiotikaforbrug i Husdyrproduktion"
+      description: "Historisk udvikling i antibiotikaforbrug både som total mængde og rate per dyr baseret på VetStat-data fra CHR Pipeline"
+      sources:
+        - name: "CHR Pipeline (VetStat Antibiotika)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#chr-pipeline-animal-health-and-movement-data"
     dataSource:
       params:
         source: "animal_welfare_summary"
@@ -889,6 +1059,13 @@ pageBuilder:
   - _key: animal-welfare-transport-chart
     _type: stackedBarChart
     title: "Dyretransporter pr. uge (samlet, fordelt på destination)"
+    documentation:
+      title: "Dyretransporter og Destinationer"
+      description: "Ugentlig oversigt over dyretransporter fordelt på destinationstyper baseret på Svineflytning Pipeline data"
+      sources:
+        - name: "Svineflytning Pipeline (Dyretransporter)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/SPECIALIZED_PIPELINES_COMPREHENSIVE.md#svineflytning-pipeline-pig-movement-tracking"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#svineflytning-pipeline"
     dataSource:
       params:
         source: "animal_transport_weekly_summary"
@@ -903,6 +1080,15 @@ pageBuilder:
   - _key: carbon-accounting-kpis
     _type: kpiGroup
     title: "Klimaregnskab nøgletal (seneste år)"
+    documentation:
+      title: "Klimaregnskab og CO2-udslip"
+      description: "Nøgletal for klimapåvirkning og CO2-ækvivalenter baseret på landbrugsaktiviteter og miljødata"
+      sources:
+        - name: "Field Production Workflow (Klimadata)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/field_production.md"
+        - name: "CHR Pipeline (Husdyr CO2)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-impact-analysis"
     dataSource:
       params:
         source: "carbon_summary"
@@ -923,6 +1109,15 @@ pageBuilder:
   - _key: carbon-accounting-history
     _type: stackedBarChart
     title: "CO2e emissioner pr. år (fordelt på kilde)"
+    documentation:
+      title: "Historisk CO2-udslip Fordelt på Kilder"
+      description: "Årlig udvikling i CO2-ækvivalent emissioner fordelt på forskellige kilder som husdyr, gødning og energiforbrug"
+      sources:
+        - name: "Field Production Workflow (CO2 Beregninger)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/field_production.md"
+        - name: "CHR Pipeline (Husdyr Emissioner)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-impact-analysis"
     dataSource:
       params:
         source: "carbon_emission_details_yearly"

@@ -130,6 +130,17 @@ export interface MapChart {
   _type: 'mapChart';
   title: string;
   data: MapData;
+  documentation?: DocumentationLink;
+}
+
+export interface DocumentationLink {
+  title: string;
+  description: string;
+  sources: Array<{
+    name: string;
+    url: string;
+  }>;
+  dataLineage?: string;
 }
 
 export interface BarChart {
@@ -137,6 +148,7 @@ export interface BarChart {
   _type: 'barChart';
   title: string;
   data: ChartData;
+  documentation?: DocumentationLink;
 }
 
 export interface StackedBarChart {
@@ -144,6 +156,7 @@ export interface StackedBarChart {
   _type: 'stackedBarChart';
   title: string;
   data: ChartData;
+  documentation?: DocumentationLink;
 }
 
 export interface HorizontalStackedBarChart {
@@ -151,6 +164,7 @@ export interface HorizontalStackedBarChart {
   _type: 'horizontalStackedBarChart';
   title: string;
   data: ChartData;
+  documentation?: DocumentationLink;
 }
 
 export interface ComboChart {
@@ -158,6 +172,7 @@ export interface ComboChart {
   _type: 'comboChart';
   title: string;
   data: ChartData;
+  documentation?: DocumentationLink;
 }
 
 export interface Timeline {
