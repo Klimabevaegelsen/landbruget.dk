@@ -109,7 +109,12 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
               axisLine={{ stroke: leftAxisColor }}
               tickLine={{ stroke: leftAxisColor }}
               tick={{ fill: leftAxisColor }}
-              tickFormatter={(tick) => tick.toLocaleString('da-DK')}
+              tickFormatter={(tick) => {
+                const formattedTick = tick.toLocaleString('da-DK');
+                return chart.unit
+                  ? `${formattedTick} ${chart.unit}`
+                  : formattedTick;
+              }}
               width={yWidth}
             />
 
@@ -120,11 +125,19 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
               axisLine={{ stroke: rightAxisColor }}
               tickLine={{ stroke: rightAxisColor }}
               tick={{ fill: rightAxisColor }}
-              tickFormatter={(tick) => tick.toLocaleString('da-DK')}
+              tickFormatter={(tick) => {
+                const formattedTick = tick.toLocaleString('da-DK');
+                return chart.unit
+                  ? `${formattedTick} ${chart.unit}`
+                  : formattedTick;
+              }}
               width={yWidth}
             />
 
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#eef8f2' }} />
+            <Tooltip
+              content={<CustomTooltip unit={chart.unit} />}
+              cursor={{ fill: '#eef8f2' }}
+            />
             <Legend content={<CustomLegend />} />
 
             {/* Render bar series */}

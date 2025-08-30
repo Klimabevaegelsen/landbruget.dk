@@ -203,7 +203,12 @@ export function BlockBarChart({
             {isHorizontal ? (
               <XAxis
                 type="number"
-                tickFormatter={(tick) => tick.toLocaleString('da-DK')}
+                tickFormatter={(tick) => {
+                  const formattedTick = tick.toLocaleString('da-DK');
+                  return chart.unit
+                    ? `${formattedTick} ${chart.unit}`
+                    : formattedTick;
+                }}
                 {...xAxisDefaultProps}
               />
             ) : (
@@ -219,13 +224,19 @@ export function BlockBarChart({
             ) : (
               <YAxis
                 tickFormatter={(tick) => {
-                  return tick.toLocaleString('DA-dk');
+                  const formattedTick = tick.toLocaleString('da-DK');
+                  return chart.unit
+                    ? `${formattedTick} ${chart.unit}`
+                    : formattedTick;
                 }}
                 {...yAxisDefaultProps}
                 width={yWidth}
               />
             )}
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#eef8f2' }} />
+            <Tooltip
+              content={<CustomTooltip unit={chart.unit} />}
+              cursor={{ fill: '#eef8f2' }}
+            />
             <Legend content={<CustomLegend />} />
             {chart.data.series.map((s, index) => (
               <Bar
