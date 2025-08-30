@@ -1,11 +1,7 @@
 import { PageBuilderItem } from '@/services/supabase/types';
-import { JsonRender } from '@/components/common/json-render';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function BlockPlaceholder({ block }: { block: PageBuilderItem }) {
-  return (
-    <JsonRender
-      json={JSON.parse(JSON.stringify(block))}
-      title="Component placeholder (data)"
-    />
-  );
+  // Don't render anything for unknown block types to avoid showing debug labels
+  return null;
 }

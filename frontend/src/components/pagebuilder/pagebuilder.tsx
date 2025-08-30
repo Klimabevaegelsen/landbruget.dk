@@ -72,7 +72,6 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
             <BlockContainer
               title={item.title}
               href={`#${item._key}`}
-              secondaryTitle={item._type}
               stickyTitle={item._type === 'iteratedSection'}
             >
               <PageBlock block={item} />
