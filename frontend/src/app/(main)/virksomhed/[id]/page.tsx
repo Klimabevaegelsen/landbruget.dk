@@ -1,5 +1,5 @@
-import { Company } from '@/components/company/company';
-import { getCompanyById } from '@/services/supabase/company';
+import { CompanyProgressive } from '@/components/company/company-progressive';
+import { getBasicCompanyById } from '@/services/supabase/company-basic';
 import { notFound } from 'next/navigation';
 
 type Props = {
@@ -14,11 +14,13 @@ export async function generateStaticParams() {
 
 export default async function CompanyPage({ params }: Props) {
   const { id } = await params;
-  const company = await getCompanyById(id);
 
-  if (!company) {
+  try {
+    // Only verify the company exists with basic info
+    await getBasicCompanyById(id);
+  } catch {
     return notFound();
   }
 
-  return <Company company={company} />;
+  return <CompanyProgressive companyId={id} />;
 }

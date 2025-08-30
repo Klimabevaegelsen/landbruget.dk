@@ -1,22 +1,53 @@
 'use client';
 
 import { CompanyResponse } from '@/services/supabase/types';
+import { BasicCompanyInfo } from '@/services/supabase/company-basic';
 import { Container } from '../layout/container';
 import { Button } from '../ui/button';
+import { Skeleton } from '../ui/skeleton';
 import { ArrowLeftIcon, ArrowDownIcon } from '@heroicons/react/24/outline';
 import { BlockMapChart } from '../pagebuilder/pageBlocks/block-map-chart';
 import { useRouter } from 'next/navigation';
 
-export function CompanyHero({ company }: { company: CompanyResponse }) {
+interface CompanyHeroProps {
+  company?: CompanyResponse;
+  basicInfo?: BasicCompanyInfo;
+  isLoadingDetails?: boolean;
+}
+
+export function CompanyHero({
+  company,
+  basicInfo,
+  isLoadingDetails = false,
+}: CompanyHeroProps) {
   const router = useRouter();
 
   // Find the company identity and map components from pageBuilder
-  const companyIdentity = company.pageBuilder.find(
+  const companyIdentity = company?.pageBuilder.find(
     (block) => block._key === 'company-identity'
   );
-  const companyMap = company.pageBuilder.find(
+  const companyMap = company?.pageBuilder.find(
     (block) => block._key === 'company-map-overview'
   );
+
+  // Use basic info if available, otherwise fallback to pageBuilder data
+  const companyName =
+    basicInfo?.company_name ||
+    (companyIdentity?._type === 'infoCard'
+      ? companyIdentity.items?.find((item) => item.label === 'Navn')?.value
+      : undefined) ||
+    'Virksomhed';
+  const cvrNumber =
+    basicInfo?.cvr_number ||
+    company?.metadata.company_cvr ||
+    (companyIdentity?._type === 'infoCard'
+      ? companyIdentity.items?.find((item) => item.label === 'CVR')?.value
+      : undefined);
+  const address =
+    basicInfo?.address ||
+    (companyIdentity?._type === 'infoCard'
+      ? companyIdentity.items?.find((item) => item.label === 'Adresse')?.value
+      : undefined);
 
   return (
     <Container className="bg-foreground-darker" section>
@@ -34,41 +65,16 @@ export function CompanyHero({ company }: { company: CompanyResponse }) {
 
           {/* Company Identity Info */}
           <div className="space-y-3">
-            {companyIdentity && companyIdentity._type === 'infoCard' && (
-              <>
-                <h1 className="text-4xl font-bold text-gray-800">
-                  {companyIdentity.items.find((item) => item.label === 'Navn')
-                    ?.value || 'Virksomhed'}
-                </h1>
-                <div className="space-y-1">
-                  <p className="text-lg text-gray-700">
-                    CVR:{' '}
-                    {
-                      companyIdentity.items.find((item) => item.label === 'CVR')
-                        ?.value
-                    }
-                  </p>
-                  <p className="text-base text-gray-600">
-                    {
-                      companyIdentity.items.find(
-                        (item) => item.label === 'Adresse'
-                      )?.value
-                    }
-                  </p>
-                  <p className="text-base text-gray-600">
-                    {
-                      companyIdentity.items.find(
-                        (item) => item.label === 'Postnummer'
-                      )?.value
-                    }{' '}
-                    {
-                      companyIdentity.items.find((item) => item.label === 'By')
-                        ?.value
-                    }
-                  </p>
-                </div>
-              </>
-            )}
+            <h1 className="text-4xl font-bold text-gray-800">{companyName}</h1>
+            <div className="space-y-1">
+              <p className="text-lg text-gray-700">CVR: {cvrNumber}</p>
+              {address && <p className="text-base text-gray-600">{address}</p>}
+              {basicInfo?.municipality && (
+                <p className="text-base text-gray-600">
+                  {basicInfo.municipality}
+                </p>
+              )}
+            </div>
           </div>
 
           <div>
@@ -81,8 +87,13 @@ export function CompanyHero({ company }: { company: CompanyResponse }) {
 
         <div className="relative w-full">
           {/* Company Map */}
-          {companyMap && companyMap._type === 'mapChart' && (
-            <BlockMapChart chart={companyMap} />
+          {isLoadingDetails ? (
+            <Skeleton className="h-64 w-full rounded" />
+          ) : (
+            companyMap &&
+            companyMap._type === 'mapChart' && (
+              <BlockMapChart chart={companyMap} />
+            )
           )}
         </div>
       </div>

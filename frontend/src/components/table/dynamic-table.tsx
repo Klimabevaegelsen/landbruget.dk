@@ -50,20 +50,23 @@ export function DynamicDataTable<TData, TValue>({
   const rowCount = data.length;
 
   // Helper function to format cell values based on column format
-  const formatCellValue = (value: unknown, format?: string) => {
+  const formatCellValue = (
+    value: unknown,
+    format?: string
+  ): React.ReactNode => {
     if (value === null || value === undefined) return '';
 
     switch (format) {
       case 'decimal':
-        return typeof value === 'number' ? value.toFixed(2) : value;
+        return typeof value === 'number' ? value.toFixed(2) : String(value);
       case 'coordinate':
-        return typeof value === 'number' ? value.toFixed(6) : value;
+        return typeof value === 'number' ? value.toFixed(6) : String(value);
       case 'boolean':
         return value ? 'Ja' : 'Nej';
       case 'link':
         return (
           <a
-            href={value}
+            href={String(value)}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center text-blue-600 underline hover:text-blue-800"
@@ -73,7 +76,7 @@ export function DynamicDataTable<TData, TValue>({
           </a>
         );
       default:
-        return value;
+        return String(value);
     }
   };
 

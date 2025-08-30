@@ -9,7 +9,14 @@ import {
 import { getCompanyById } from '@/services/supabase/company';
 import { CompanyHero } from './company-hero';
 import { Container } from '../layout/container';
-import { PageBuilderProgressive } from '../pagebuilder/pagebuilder-progressive';
+import { PageBuilder } from '../pagebuilder/pagebuilder';
+import {
+  SkeletonKpiGroup,
+  SkeletonChart,
+  SkeletonTable,
+  SkeletonMap,
+  SkeletonIteratedSection,
+} from '../pagebuilder/pageBlocks/skeleton-blocks';
 import { useToast } from '@/components/ui/toast';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -118,16 +125,22 @@ export function CompanyProgressive({ companyId }: CompanyProgressiveProps) {
   return (
     <article>
       <CompanyHero
-        company={fullCompanyData}
+        company={fullCompanyData || undefined}
         basicInfo={basicCompanyInfo}
         isLoadingDetails={fullLoading}
       />
       <Container section>
-        <PageBuilderProgressive
-          pageBlocks={filteredPageBuilder}
-          isLoading={fullLoading}
-          skeletonCount={6}
-        />
+        {fullLoading ? (
+          <div className="space-y-11">
+            <SkeletonKpiGroup />
+            <SkeletonChart />
+            <SkeletonTable />
+            <SkeletonMap />
+            <SkeletonIteratedSection />
+          </div>
+        ) : (
+          <PageBuilder pageBlocks={filteredPageBuilder} />
+        )}
       </Container>
     </article>
   );
