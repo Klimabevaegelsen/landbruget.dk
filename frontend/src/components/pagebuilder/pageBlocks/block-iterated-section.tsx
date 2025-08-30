@@ -142,7 +142,6 @@ export function BlockIteratedSection({
                         <BlockContainer
                           title={item.title}
                           href={`#${item._key}`}
-                          secondaryTitle={item._type}
                         >
                           <PageBlock block={item} level={level + 1} />
                         </BlockContainer>
