@@ -518,11 +518,45 @@ async function processTimeSeriesChart(supabase: SupabaseClient, companyId: strin
       data: {}
     };
   }
-  const timeValues = [
+
+  let timeValues = [
     ...new Set(data.map((d: any)=>d[timeColumn]))
   ].sort((a, b)=>a - b);
+
   let chartData: ChartData = {};
   if (isSimpleSeries) {
+    // For pesticide charts, create continuous range from first to last year with data
+    if (source === 'environment_summary' && metrics.some((m: any) => m.column?.includes('pesticide'))) {
+      // Find years that have meaningful data (not null, not 0, not undefined)
+      const yearsWithData = timeValues.filter((t: any) => {
+        const rowData = data.find((d: any) => d[timeColumn] === t);
+        if (!rowData) return false;
+
+        // Check if any metric has meaningful data
+        return metrics.some((metric: any) => {
+          const value = rowData[metric.column];
+          return value !== null && value !== undefined && value !== 0;
+        });
+      });
+
+      if (yearsWithData.length > 0) {
+        const minYear = Math.min(...yearsWithData);
+        const maxYear = Math.max(...yearsWithData);
+
+        // Create continuous range from min to max year
+        timeValues = [];
+        for (let year = minYear; year <= maxYear; year++) {
+          timeValues.push(year);
+        }
+
+        console.log(`Pesticide chart: showing continuous range ${minYear}-${maxYear} (${timeValues.length} years) based on ${yearsWithData.length} years with actual data`);
+      } else {
+        // No data found, keep empty
+        timeValues = [];
+        console.log(`Pesticide chart: no years with meaningful data found`);
+      }
+    }
+
     chartData.xAxis = {
       label: timeColumn,
       values: timeValues
