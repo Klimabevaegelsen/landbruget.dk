@@ -4,11 +4,16 @@ import {
   ValueType,
 } from 'recharts/types/component/DefaultTooltipContent';
 
+interface CustomTooltipProps extends TooltipProps<ValueType, NameType> {
+  unit?: string;
+}
+
 export default function CustomTooltip({
   active,
   payload,
   label,
-}: TooltipProps<ValueType, NameType>) {
+  unit,
+}: CustomTooltipProps) {
   if (!active || !payload || !payload.length) {
     return null;
   }
@@ -24,7 +29,7 @@ export default function CustomTooltip({
           }}
           className="mt-1 text-sm font-medium"
         >
-          {`${entry.name}: ${entry.value?.toLocaleString('da-DK')}`}
+          {`${entry.name}: ${entry.value?.toLocaleString('da-DK')}${unit ? ` ${unit}` : ''}`}
         </p>
       ))}
     </div>
