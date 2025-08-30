@@ -231,7 +231,7 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
         const categoryLabels: Record<string, string> = {
           residential: 'Bolig',
           agricultural: 'Landbrug',
-          publicServices: 'Offentlig service',
+          publicServices: 'Skole og daginstitutioner',
           commercial: 'Erhverv',
           industrial: 'Industri',
         };
