@@ -56,6 +56,9 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
           </div>
         );
       },
+      meta: {
+        format: (col as { format?: string }).format, // Pass format information to column
+      },
     }));
 
   return (

@@ -284,6 +284,17 @@ DATA_SOURCE_REGISTRY: Dict[str, DataSourceInfo] = {
         display_name="Pesticid Overholdelse",
         display_description="Analyse af pesticidanvendelses overholdelse af regler",
     ),
+    "pesticide_applications_with_field_details": DataSourceInfo(
+        source_authority="Multiple (Combined Dataset)",
+        data_acquisition_method="Database View",
+        data_description="Enhanced pesticide applications with field details and spatial information",
+        update_frequency="Real-time",
+        pipeline_name="unified_pipeline",
+        data_format="Database View",
+        data_source_type=DataSourceType.DATABASE,
+        display_name="Pesticidanvendelse med Markdetaljer",
+        display_description="Detaljeret pesticidanvendelse pr. mark med rumlige data og links til luftfotos",
+    ),
     # ========================================
     # CHR PIPELINE SOURCES
     # ========================================

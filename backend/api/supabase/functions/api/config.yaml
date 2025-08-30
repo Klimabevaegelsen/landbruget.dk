@@ -60,18 +60,19 @@ pageBuilder:
 
   - _key: company-map-overview
     _type: mapChart
-    title: "Kort: bygninger, marker, virksomhedens adresse"
+    title: "Kort: produktionssteder, marker, virksomhedens adresse"
     dataSource:
       params:
         map:
           layers:
-            - name: "Bygninger"
-              source: "building_footprints"
-              geometryColumn: "geom"
+            - name: "Produktionssteder"
+              source: "production_sites"
+              geometryColumn: "location_geom"
               properties:
-                - "building_name"
-                - "type"
-              style: "building"
+                - "site_name"
+                - "chr"
+                - "capacity"
+              style: "production_site_marker"
             - name: "Marker"
               source: "field_boundaries"
               geometryColumn: "geom"

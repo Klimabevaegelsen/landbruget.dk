@@ -69,6 +69,7 @@ export default function IndividualRankingTable({
   initialLimit = 20,
 }: IndividualRankingTableProps) {
   const [data, setData] = useState<RankingItem[]>([]);
+  const [companyCount, setCompanyCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -157,8 +158,10 @@ export default function IndividualRankingTable({
 
       if (ranking) {
         setData(ranking.items || []);
+        setCompanyCount(ranking.company_count || 0);
       } else {
         setData([]);
+        setCompanyCount(0);
       }
     } catch (err) {
       console.error(`Error fetching ranking ${rankingId}:`, err);
@@ -211,9 +214,16 @@ export default function IndividualRankingTable({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <CardTitle className="text-lg font-semibold text-gray-900">
-              {title}
-            </CardTitle>
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-lg font-semibold text-gray-900">
+                {title}
+              </CardTitle>
+              {companyCount > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {companyCount} virksomheder
+                </Badge>
+              )}
+            </div>
             <Badge
               variant="outline"
               className={`text-xs ${getCategoryColor(category)}`}
