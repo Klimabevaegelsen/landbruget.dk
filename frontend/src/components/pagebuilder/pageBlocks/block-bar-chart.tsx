@@ -26,6 +26,7 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
+import { translateDestinationType } from '@/lib/translations/animal-transportation';
 
 export const xAxisDefaultProps: XAxisProps = {
   tickLine: true,
@@ -40,6 +41,52 @@ export const yAxisDefaultProps: YAxisProps = {
   tickMargin: 6,
 };
 
+// Helper function to check if a value looks like a destination type
+const isDestinationType = (value: string): boolean => {
+  const destinationTypes = [
+    'Slaughterhouse',
+    'Rendering Plant',
+    'Collection Center',
+    'Collection Point',
+    'Cooling Facility',
+    'Production Farm',
+    'Breeding Farm',
+    'Piglet Farm',
+    'Free-range Pig Farm',
+    'Organic Pig Farm',
+    'Dairy Farm',
+    'Beef Farm',
+    'Heifer Hotel',
+    'Veal Farm',
+    'Quarantine Facility',
+    'Research Facility',
+    'AI Station',
+    'Market/Trading',
+    'Hobby Farm',
+    'Boarding/Riding School',
+    'Stud Farm',
+    'Racing/Training',
+    'Other Livestock',
+    'Livestock Farm',
+    'Seasonal Grazing',
+    'Nature Management',
+    'Livestock Show',
+    'Zoo',
+    'International Export',
+    'Other Commercial',
+    'Unknown',
+  ];
+  return destinationTypes.includes(value);
+};
+
+// Helper function to translate category values if they are destination types
+const translateCategoryValue = (value: string | number): string => {
+  const strValue = String(value);
+  return isDestinationType(strValue)
+    ? translateDestinationType(strValue)
+    : strValue;
+};
+
 // Helper function to transform your data into the format Recharts expects
 const transformDataForRecharts = (chartData: ChartData, chartType: string) => {
   // For horizontal charts, we use yAxis.values as our categories
@@ -49,7 +96,7 @@ const transformDataForRecharts = (chartData: ChartData, chartType: string) => {
 
     return yAxis.values.map((category, index) => {
       const dataPoint: { [key: string]: string | number } = {
-        category: String(category), // Using 'category' instead of 'name' for clarity
+        category: translateCategoryValue(category), // Translate destination types
       };
       series.forEach((s) => {
         dataPoint[s.name] = s.data[index];
@@ -64,7 +111,7 @@ const transformDataForRecharts = (chartData: ChartData, chartType: string) => {
 
   return xAxis.values.map((value, index) => {
     const dataPoint: { [key: string]: string | number } = {
-      name: String(value),
+      name: translateCategoryValue(value), // Translate destination types
     };
     series.forEach((s) => {
       dataPoint[s.name] = s.data[index];
