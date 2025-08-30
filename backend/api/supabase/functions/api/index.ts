@@ -780,11 +780,39 @@ async function processMapChart(supabase: SupabaseClient, companyId: string, _mun
   }
   // Get company address for centering
   const { data: companyGeomData } = await supabase.from('companies').select(`geojson: address_geom`).eq('id', companyId).maybeSingle();
-  const center = companyGeomData?.geojson?.coordinates || [
-    9.5,
-    56.0
-  ];
-  const zoom = companyGeomData?.geojson ? 13 : 9;
+
+  let center = [9.5, 56.0]; // Default center (Denmark)
+  let zoom = 9; // Default zoom
+
+  if (companyGeomData?.geojson?.coordinates) {
+    // Use company address if available
+    center = companyGeomData.geojson.coordinates;
+    zoom = 13;
+  } else {
+    // If no company address, try to center on production sites if they exist
+    const productionSitesLayer = processedLayers.find(layer =>
+      layer.name === 'Produktionssteder' &&
+      layer.data &&
+      layer.data.features &&
+      layer.data.features.length > 0
+    );
+
+    if (productionSitesLayer) {
+      // Calculate center of production sites
+      const features = productionSitesLayer.data.features;
+      const coordinates = features
+        .map(f => f.geometry?.coordinates)
+        .filter(coords => coords && coords.length === 2);
+
+      if (coordinates.length > 0) {
+        const avgLng = coordinates.reduce((sum, coord) => sum + coord[0], 0) / coordinates.length;
+        const avgLat = coordinates.reduce((sum, coord) => sum + coord[1], 0) / coordinates.length;
+        center = [avgLng, avgLat];
+        zoom = 11; // Slightly zoomed out to show multiple sites
+        console.log(`processMapChart: Centered map on production sites: [${avgLng.toFixed(6)}, ${avgLat.toFixed(6)}]`);
+      }
+    }
+  }
   return {
     data: {
       center: center,
