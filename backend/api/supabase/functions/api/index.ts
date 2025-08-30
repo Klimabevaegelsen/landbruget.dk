@@ -772,6 +772,19 @@ async function processMapChart(supabase: SupabaseClient, companyId: string, _mun
       });
       continue;
     }
+
+    // Debug logging for company address layer
+    if (source === 'companies') {
+      console.log(`processMapChart: Company address layer query result:`, {
+        dataCount: data?.length || 0,
+        hasGeometry: data?.[0]?.geojson ? true : false,
+        sampleData: data?.[0] ? {
+          id: data[0].id,
+          address: data[0].address,
+          hasGeojson: !!data[0].geojson
+        } : null
+      });
+    }
     if (!data?.length) {
       console.log(`No data found for map layer "${name}" (${source}) company ${companyId}.`);
       processedLayers.push({
@@ -812,40 +825,84 @@ async function processMapChart(supabase: SupabaseClient, companyId: string, _mun
       }
     });
   }
-  // Get company address for centering
-  const { data: companyGeomData } = await supabase.from('companies').select(`geojson: address_geom`).eq('id', companyId).maybeSingle();
+  // Get company address for centering - try multiple approaches
+  let { data: companyGeomData } = await supabase.from('companies').select(`geojson: address_geom`).eq('id', companyId).maybeSingle();
+
+  // Fallback: try getting coordinates directly using ST_X and ST_Y
+  if (!companyGeomData?.geojson?.coordinates) {
+    console.log(`processMapChart: Trying direct coordinate extraction...`);
+    const { data: coordData } = await supabase.rpc('get_company_coordinates', { company_uuid: companyId });
+    if (coordData && coordData.length > 0 && coordData[0].lng && coordData[0].lat) {
+      companyGeomData = {
+        geojson: {
+          type: 'Point',
+          coordinates: [coordData[0].lng, coordData[0].lat]
+        }
+      };
+      console.log(`processMapChart: Got coordinates via RPC: [${coordData[0].lng}, ${coordData[0].lat}]`);
+    }
+  }
 
   let center = [9.5, 56.0]; // Default center (Denmark)
   let zoom = 9; // Default zoom
 
+  console.log(`processMapChart: Company geometry data:`, companyGeomData);
+
+  // Calculate bounds to encompass all features from all layers
+  const allCoordinates: number[][] = [];
+
+  // Add company address coordinates if available
   if (companyGeomData?.geojson?.coordinates) {
-    // Use company address if available
-    center = companyGeomData.geojson.coordinates;
-    zoom = 13;
-  } else {
-    // If no company address, try to center on production sites if they exist
-    const productionSitesLayer = processedLayers.find(layer =>
-      layer.name === 'Produktionssteder' &&
-      layer.data &&
-      layer.data.features &&
-      layer.data.features.length > 0
-    );
+    allCoordinates.push(companyGeomData.geojson.coordinates);
+    console.log(`processMapChart: Added company address to bounds: [${companyGeomData.geojson.coordinates[0].toFixed(6)}, ${companyGeomData.geojson.coordinates[1].toFixed(6)}]`);
+  }
 
-    if (productionSitesLayer) {
-      // Calculate center of production sites
-      const features = productionSitesLayer.data.features;
-      const coordinates = features
-        .map(f => f.geometry?.coordinates)
-        .filter(coords => coords && coords.length === 2);
-
-      if (coordinates.length > 0) {
-        const avgLng = coordinates.reduce((sum, coord) => sum + coord[0], 0) / coordinates.length;
-        const avgLat = coordinates.reduce((sum, coord) => sum + coord[1], 0) / coordinates.length;
-        center = [avgLng, avgLat];
-        zoom = 11; // Slightly zoomed out to show multiple sites
-        console.log(`processMapChart: Centered map on production sites: [${avgLng.toFixed(6)}, ${avgLat.toFixed(6)}]`);
-      }
+  // Add coordinates from all map layers (fields, production sites, etc.)
+  processedLayers.forEach(layer => {
+    if (layer.data?.features) {
+      layer.data.features.forEach(feature => {
+        if (feature.geometry?.coordinates) {
+          if (feature.geometry.type === 'Point') {
+            allCoordinates.push(feature.geometry.coordinates);
+          } else if (feature.geometry.type === 'Polygon' && feature.geometry.coordinates[0]) {
+            // For polygons, add all vertices
+            feature.geometry.coordinates[0].forEach(coord => {
+              if (coord.length === 2) allCoordinates.push(coord);
+            });
+          }
+        }
+      });
+      console.log(`processMapChart: Added ${layer.data.features.length} features from ${layer.name} to bounds calculation`);
     }
+  });
+
+  if (allCoordinates.length > 0) {
+    // Calculate bounding box
+    const lngs = allCoordinates.map(coord => coord[0]);
+    const lats = allCoordinates.map(coord => coord[1]);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+
+    // Calculate center
+    center = [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
+
+    // Calculate appropriate zoom level based on bounds
+    const lngDiff = maxLng - minLng;
+    const latDiff = maxLat - minLat;
+    const maxDiff = Math.max(lngDiff, latDiff);
+
+    if (maxDiff < 0.01) zoom = 15;      // Very close features
+    else if (maxDiff < 0.05) zoom = 13; // Close features
+    else if (maxDiff < 0.1) zoom = 11;  // Medium spread
+    else if (maxDiff < 0.5) zoom = 9;   // Wide spread
+    else zoom = 8;                      // Very wide spread
+
+    console.log(`processMapChart: Calculated bounds center: [${center[0].toFixed(6)}, ${center[1].toFixed(6)}], zoom: ${zoom}`);
+    console.log(`processMapChart: Bounds: lng[${minLng.toFixed(6)}, ${maxLng.toFixed(6)}], lat[${minLat.toFixed(6)}, ${maxLat.toFixed(6)}]`);
+  } else {
+    console.log(`processMapChart: No coordinates found, using default Denmark center`);
   }
   return {
     data: {

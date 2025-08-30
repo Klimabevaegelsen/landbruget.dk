@@ -24,6 +24,7 @@ interface RankingTable {
   description: string;
   unit: string;
   items: RankingItem[];
+  company_count: number;
   last_updated?: string;
 }
 
@@ -72,6 +73,12 @@ serve(async (req) => {
         .order('net_profit_loss', { ascending: false })
         .limit(limit)
 
+      const { count: profitCount } = await supabase
+        .from('yearly_financials')
+        .select('company_id', { count: 'exact' })
+        .not('net_profit_loss', 'is', null)
+        .eq('year', 2024)
+
       if (profitData) {
         rankings.push({
           id: 'highest_profit',
@@ -79,6 +86,7 @@ serve(async (req) => {
           category: 'financial',
           description: 'Virksomheder med det højeste nettoresultat i 2024',
           unit: 'DKK',
+          company_count: profitCount || 0,
           items: profitData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number.toString(),
@@ -108,6 +116,13 @@ serve(async (req) => {
         .order('total_assets', { ascending: false })
         .limit(limit)
 
+      const { count: assetsCount } = await supabase
+        .from('yearly_financials')
+        .select('company_id', { count: 'exact' })
+        .not('total_assets', 'is', null)
+        .gt('total_assets', 0)
+        .eq('year', 2024)
+
       if (assetsData) {
         rankings.push({
           id: 'largest_assets',
@@ -115,6 +130,7 @@ serve(async (req) => {
           category: 'financial',
           description: 'Virksomheder med de største samlede aktiver i 2024',
           unit: 'DKK',
+          company_count: assetsCount || 0,
           items: assetsData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number.toString(),
@@ -144,6 +160,13 @@ serve(async (req) => {
         .order('average_number_of_employees', { ascending: false })
         .limit(limit)
 
+      const { count: employeesCount } = await supabase
+        .from('yearly_financials')
+        .select('company_id', { count: 'exact' })
+        .not('average_number_of_employees', 'is', null)
+        .gt('average_number_of_employees', 0)
+        .eq('year', 2024)
+
       if (employeesData) {
         rankings.push({
           id: 'most_employees_financial',
@@ -151,6 +174,7 @@ serve(async (req) => {
           category: 'financial',
           description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
           unit: 'ansatte',
+          company_count: employeesCount || 0,
           items: employeesData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number.toString(),
@@ -180,6 +204,11 @@ serve(async (req) => {
         .order('rank_dk_total_area', { ascending: true })
         .limit(limit)
 
+      const { count: landAreaCount } = await supabase
+        .from('land_use_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2025)
+
       if (landAreaData?.length) {
         // Step 2: Get company details for the land area data
         const companyIds = landAreaData.map(item => item.company_id)
@@ -197,6 +226,7 @@ serve(async (req) => {
           category: 'field',
           description: 'Virksomheder med det største samlede landbrugsareal i 2025',
           unit: 'hektar',
+          company_count: landAreaCount || 0,
           items: landAreaData.map((item) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -226,6 +256,12 @@ serve(async (req) => {
         .order('organic_area_ha', { ascending: false })
         .limit(limit)
 
+      const { count: organicAreaCount } = await supabase
+        .from('land_use_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2025)
+        .gt('organic_area_ha', 0)
+
       if (organicAreaData?.length) {
         // Step 2: Get company details for the organic area data
         const companyIds = organicAreaData.map(item => item.company_id)
@@ -243,6 +279,7 @@ serve(async (req) => {
           category: 'field',
           description: 'Virksomheder med det største økologiske landareal i 2025',
           unit: 'hektar',
+          company_count: organicAreaCount || 0,
           items: organicAreaData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -274,6 +311,13 @@ serve(async (req) => {
         .order('organic_percentage', { ascending: false })
         .limit(limit)
 
+      const { count: organicPercentCount } = await supabase
+        .from('land_use_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2025)
+        .gt('total_area_ha', 50)
+        .gt('organic_percentage', 0)
+
       if (organicPercentData?.length) {
         // Step 2: Get company details for the organic percentage data
         const companyIds = organicPercentData.map(item => item.company_id)
@@ -291,6 +335,7 @@ serve(async (req) => {
           category: 'field',
           description: 'Virksomheder med den højeste andel økologisk landbrug (min. 50 ha) i 2025',
           unit: 'procent',
+          company_count: organicPercentCount || 0,
           items: organicPercentData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -319,6 +364,11 @@ serve(async (req) => {
         .order('total_fields', { ascending: false })
         .limit(limit)
 
+      const { count: fieldsCount } = await supabase
+        .from('land_use_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2025)
+
       if (fieldsData?.length) {
         // Step 2: Get company details for the fields data
         const companyIds = fieldsData.map(item => item.company_id)
@@ -336,6 +386,7 @@ serve(async (req) => {
           category: 'field',
           description: 'Virksomheder med det største antal individuelle marker i 2025',
           unit: 'marker',
+          company_count: fieldsCount || 0,
           items: fieldsData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -370,6 +421,11 @@ serve(async (req) => {
         .order('total_belastning', { ascending: false })
         .limit(limit)
 
+      const { count: pesticideCount } = await supabase
+        .from('company_pesticide_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('application_year', 2024)
+
       if (pesticideData) {
         rankings.push({
           id: 'highest_pesticide_burden',
@@ -377,6 +433,7 @@ serve(async (req) => {
           category: 'environment',
           description: 'Virksomheder med den højeste samlede pesticidbelastning i 2024',
           unit: 'belastningsenheder',
+          company_count: pesticideCount || 0,
           items: pesticideData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number.toString(),
@@ -406,6 +463,12 @@ serve(async (req) => {
         .order('pfas_belastning', { ascending: false })
         .limit(limit)
 
+      const { count: pfasCount } = await supabase
+        .from('company_pesticide_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('application_year', 2024)
+        .gt('pfas_belastning', 0)
+
       if (pfasData) {
         rankings.push({
           id: 'most_pfas_usage',
@@ -413,6 +476,7 @@ serve(async (req) => {
           category: 'environment',
           description: 'Virksomheder med det højeste forbrug af PFAS-holdige pesticider i 2024',
           unit: 'belastningsenheder',
+          company_count: pfasCount || 0,
           items: pfasData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number.toString(),
@@ -442,6 +506,12 @@ serve(async (req) => {
         .order('glyphosate_belastning', { ascending: false })
         .limit(limit)
 
+      const { count: glyphosateCount } = await supabase
+        .from('company_pesticide_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('application_year', 2024)
+        .gt('glyphosate_belastning', 0)
+
       if (glyphosateData) {
         rankings.push({
           id: 'most_glyphosate_usage',
@@ -449,6 +519,7 @@ serve(async (req) => {
           category: 'environment',
           description: 'Virksomheder med det højeste glyphosatforbrug i 2024',
           unit: 'belastningsenheder',
+          company_count: glyphosateCount || 0,
           items: glyphosateData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number.toString(),
@@ -478,6 +549,12 @@ serve(async (req) => {
         .order('diquat_belastning', { ascending: false })
         .limit(limit)
 
+      const { count: diquatCount } = await supabase
+        .from('company_pesticide_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('application_year', 2024)
+        .gt('diquat_belastning', 0)
+
       if (diquatData) {
         rankings.push({
           id: 'most_diquat_usage',
@@ -485,6 +562,7 @@ serve(async (req) => {
           category: 'environment',
           description: 'Virksomheder med det højeste diquatforbrug i 2024',
           unit: 'belastningsenheder',
+          company_count: diquatCount || 0,
           items: diquatData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number.toString(),
@@ -512,6 +590,12 @@ serve(async (req) => {
         .order('area_ha', { ascending: false })
         .limit(limit)
 
+      const { count: bnboNotDealtCount } = await supabase
+        .from('bnbo_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('status', 'Action Required')
+        .eq('year', 2025)
+
       console.log('BNBO Action Required result:', { data: bnboNotDealtData?.length || 0, error: bnboError1 })
 
       if (bnboNotDealtData?.length) {
@@ -531,6 +615,7 @@ serve(async (req) => {
           category: 'environment',
           description: 'Virksomheder med mest boringsnært beskyttelsesområde-areal der kræver handling i 2025',
           unit: 'hektar',
+          company_count: bnboNotDealtCount || 0,
           items: bnboNotDealtData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -561,6 +646,12 @@ serve(async (req) => {
         .order('area_ha', { ascending: false })
         .limit(limit)
 
+      const { count: bnboCompletedCount } = await supabase
+        .from('bnbo_summary')
+        .select('company_id', { count: 'exact' })
+        .in('status', ['Completed', 'Action Required, Completed'])
+        .eq('year', 2025)
+
       console.log('BNBO Completed result:', { data: bnboCompletedData?.length || 0, error: bnboError2 })
 
       if (bnboCompletedData?.length) {
@@ -580,6 +671,7 @@ serve(async (req) => {
           category: 'environment',
           description: 'Virksomheder med mest boringsnært beskyttelsesområde-areal der er håndteret i 2025',
           unit: 'hektar',
+          company_count: bnboCompletedCount || 0,
           items: bnboCompletedData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -610,6 +702,12 @@ serve(async (req) => {
         .order('action_required_hectares', { ascending: false })
         .limit(limit)
 
+      const { count: wetlandNotRestoredCount } = await supabase
+        .from('wetlands_environmental_status')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2025)
+        .gt('action_required_hectares', 0)
+
       console.log('Wetlands not restored result:', { data: wetlandNotRestoredData?.length || 0, error: wetlandError1 })
 
       if (wetlandNotRestoredData?.length) {
@@ -629,6 +727,7 @@ serve(async (req) => {
           category: 'environment',
           description: 'Virksomheder med mest lavbundsjorde-areal der har behov for genopretning i 2025',
           unit: 'hektar',
+          company_count: wetlandNotRestoredCount || 0,
           items: wetlandNotRestoredData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -659,6 +758,12 @@ serve(async (req) => {
         .order('water_covered_hectares', { ascending: false })
         .limit(limit)
 
+      const { count: wetlandRestoredCount } = await supabase
+        .from('wetlands_environmental_status')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2025)
+        .gt('water_covered_hectares', 0)
+
       console.log('Wetlands restored result:', { data: wetlandRestoredData?.length || 0, error: wetlandError2 })
 
       if (wetlandRestoredData?.length) {
@@ -678,6 +783,7 @@ serve(async (req) => {
           category: 'environment',
           description: 'Virksomheder med mest lavbundsjorde-areal der er genoprettet til naturlig vandstand i 2025',
           unit: 'hektar',
+          company_count: wetlandRestoredCount || 0,
           items: wetlandRestoredData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -713,6 +819,12 @@ serve(async (req) => {
         .order('rank_dk_species_production', { ascending: true })
         .limit(limit)
 
+      const { count: pigCount } = await supabase
+        .from('site_species_production_ranked')
+        .select('chr', { count: 'exact' })
+        .eq('species_code', '15')
+        .eq('year', 2025)
+
       if (pigData) {
         // Get CVR numbers for CHR sites
         const chrList = pigData.map(item => item.chr)
@@ -739,6 +851,7 @@ serve(async (req) => {
           category: 'animal',
           description: 'Produktionssteder med den største svineproduktion i 2025',
           unit: 'svin',
+          company_count: pigCount || 0,
           items: pigData
             .map((item) => {
               const companyInfo = chrMap.get(item.chr)
@@ -773,6 +886,12 @@ serve(async (req) => {
         .order('rank_dk_species_production', { ascending: true })
         .limit(limit)
 
+      const { count: cattleCount } = await supabase
+        .from('site_species_production_ranked')
+        .select('chr', { count: 'exact' })
+        .eq('species_code', '12')
+        .eq('year', 2025)
+
       if (cattleData) {
         const chrList = cattleData.map(item => item.chr)
         const { data: chrToCvr } = await supabase
@@ -798,6 +917,7 @@ serve(async (req) => {
           category: 'animal',
           description: 'Produktionssteder med den største kvægproduktion i 2024',
           unit: 'kvæg',
+          company_count: cattleCount || 0,
           items: cattleData
             .map((item) => {
               const companyInfo = chrMap.get(item.chr)
@@ -829,6 +949,12 @@ serve(async (req) => {
         .order('total_ddd_usage', { ascending: false })
         .limit(limit)
 
+      const { count: antibioticCount } = await supabase
+        .from('antibiotic_usage_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2025)
+        .gt('total_ddd_usage', 0)
+
       if (antibioticData?.length) {
         // Step 2: Get company details for the antibiotic data
         const companyIds = antibioticData.map(item => item.company_id)
@@ -846,6 +972,7 @@ serve(async (req) => {
           category: 'animal',
           description: 'Virksomheder med det højeste antibiotikaforbrug i 2025',
           unit: 'DDD',
+          company_count: antibioticCount || 0,
           items: antibioticData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -874,6 +1001,11 @@ serve(async (req) => {
         .order('site_count', { ascending: false })
         .limit(limit)
 
+      const { count: sitesCount } = await supabase
+        .from('animal_welfare_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2025)
+
       if (sitesData?.length) {
         // Step 2: Get company details for the sites data
         const companyIds = sitesData.map(item => item.company_id)
@@ -891,6 +1023,7 @@ serve(async (req) => {
           category: 'animal',
           description: 'Virksomheder med flest dyreproduktionssteder i 2025',
           unit: 'steder',
+          company_count: sitesCount || 0,
           items: sitesData.map((item, index) => {
             const company = companyMap.get(item.company_id)
             return {
@@ -915,6 +1048,12 @@ serve(async (req) => {
           animal_count,
           companies!inner(cvr_number, company_name, municipality)
         `)
+        .gte('transport_date_week_start', '2025-01-01')
+        .lt('transport_date_week_start', '2026-01-01')
+
+      const { count: transportCount } = await supabase
+        .from('animal_transport_weekly_summary')
+        .select('company_id', { count: 'exact', head: true })
         .gte('transport_date_week_start', '2025-01-01')
         .lt('transport_date_week_start', '2026-01-01')
 
@@ -945,6 +1084,7 @@ serve(async (req) => {
           category: 'animal',
           description: 'Virksomheder med flest transporterede svin i 2025',
           unit: 'svin',
+          company_count: transportCount || 0,
           items: sortedTransports.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number.toString(),
@@ -975,6 +1115,12 @@ serve(async (req) => {
         .order('average_employee_count', { ascending: false })
         .limit(limit)
 
+      const { count: workerEmployeeCount } = await supabase
+        .from('worker_yearly_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2024)
+        .not('average_employee_count', 'is', null)
+
       if (workerEmployeeData) {
         rankings.push({
           id: 'most_employees_worker',
@@ -982,6 +1128,7 @@ serve(async (req) => {
           category: 'worker',
           description: 'Virksomheder med flest ansatte ifølge arbejdsmarkedsdata 2024',
           unit: 'ansatte',
+          company_count: workerEmployeeCount || 0,
           items: workerEmployeeData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
@@ -1009,6 +1156,12 @@ serve(async (req) => {
         .order('active_visa_count', { ascending: false })
         .limit(limit)
 
+      const { count: visaCount } = await supabase
+        .from('worker_yearly_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2024)
+        .gt('active_visa_count', 0)
+
       if (visaData) {
         rankings.push({
           id: 'most_foreign_workers',
@@ -1016,6 +1169,7 @@ serve(async (req) => {
           category: 'worker',
           description: 'Virksomheder med flest aktive arbejdstilladelser i 2024',
           unit: 'tilladelser',
+          company_count: visaCount || 0,
           items: visaData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.companies?.cvr_number?.toString() || 'N/A',
@@ -1043,6 +1197,12 @@ serve(async (req) => {
         .order('injury_count_reported', { ascending: false })
         .limit(limit)
 
+      const { count: injuryCount } = await supabase
+        .from('worker_yearly_summary')
+        .select('company_id', { count: 'exact' })
+        .eq('year', 2024)
+        .not('injury_count_reported', 'is', null)
+
       if (injuryData) {
         rankings.push({
           id: 'most_work_injuries',
@@ -1050,6 +1210,7 @@ serve(async (req) => {
           category: 'worker',
           description: 'Virksomheder med flest rapporterede arbejdsulykker i 2024',
           unit: 'ulykker',
+          company_count: injuryCount || 0,
           items: injuryData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.companies?.cvr_number?.toString() || 'N/A',

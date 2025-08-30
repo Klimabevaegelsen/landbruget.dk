@@ -24,6 +24,7 @@ interface RankingTable {
   description: string;
   unit: string;
   items: RankingItem[];
+  company_count: number;
   last_updated?: string;
 }
 
