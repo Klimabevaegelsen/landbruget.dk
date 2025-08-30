@@ -46,6 +46,19 @@ serve(async (req) => {
     });
   }
 
+  // Only allow GET requests
+  if (req.method !== 'GET') {
+    return new Response(JSON.stringify({
+      error: 'Method not allowed'
+    }), {
+      status: 405,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
+
   const url = new URL(req.url);
   const companyIdParam = url.searchParams.get('id');
 
