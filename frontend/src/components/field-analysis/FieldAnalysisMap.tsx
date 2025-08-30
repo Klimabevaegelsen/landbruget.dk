@@ -119,7 +119,7 @@ function MapTooltip({
         const categoryLabels: Record<string, string> = {
           residential: 'Bolig',
           agricultural: 'Landbrug',
-          publicServices: 'Offentlig service',
+          publicServices: 'Skole og daginstitutioner',
         };
         const categoryLabel =
           categoryLabels[properties.category_group as string] ||
@@ -210,7 +210,7 @@ function MapTooltip({
           agriculture: 'Landbrugsbygninger',
           collectiveResidence: 'Flerfamilieboliger',
           twoDwellings: 'Tofamiliehuse',
-          publicServices: 'Offentlige bygninger',
+          publicServices: 'Skole og daginstitutioner',
         };
         const usageLabel =
           usageLabels[properties.inspire_current_use as string] ||
@@ -952,7 +952,17 @@ export default function FieldAnalysisMap({
           'source-layer': 'buildings',
           type: 'fill',
           paint: {
-            'fill-color': '#4A90E2',
+            'fill-color': [
+              'case',
+              // Educational/Public services buildings - Blue
+              ['==', ['get', 'category_group'], 'publicServices'],
+              '#3B82F6', // Blue for schools and daycare
+              // Agricultural buildings - Brown
+              ['==', ['get', 'category_group'], 'agricultural'],
+              '#A16207', // Brown for agricultural buildings
+              // Residential buildings - Light blue (default)
+              '#4A90E2',
+            ],
             'fill-opacity': 0.6,
           },
           layout: {
@@ -966,7 +976,17 @@ export default function FieldAnalysisMap({
           'source-layer': 'buildings',
           type: 'line',
           paint: {
-            'line-color': '#2563EB',
+            'line-color': [
+              'case',
+              // Educational/Public services buildings - Darker blue
+              ['==', ['get', 'category_group'], 'publicServices'],
+              '#1D4ED8', // Darker blue outline
+              // Agricultural buildings - Darker brown
+              ['==', ['get', 'category_group'], 'agricultural'],
+              '#92400E', // Darker brown outline
+              // Residential buildings - Default blue
+              '#2563EB',
+            ],
             'line-width': 1,
             'line-opacity': 0.8,
           },
