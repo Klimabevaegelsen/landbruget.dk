@@ -84,9 +84,175 @@ interface TooltipProps {
 }
 
 function Tooltip({ x, y, properties, layerName }: TooltipProps) {
+  const formatValue = (value: unknown, unit?: string): string => {
+    if (typeof value === 'number') {
+      const formatted = value.toLocaleString('da-DK', {
+        maximumFractionDigits: 2,
+      });
+      return unit ? `${formatted} ${unit}` : formatted;
+    }
+    return String(value);
+  };
+
+  // Danish translations for common field names
+  const fieldTranslations: Record<string, string> = {
+    // Basic field info
+    crop_name: 'Afgrøde',
+    crop_code: 'Afgrødekode',
+    area_hectares: 'Areal',
+    area_ha: 'Areal',
+    area: 'Areal',
+    is_organic: 'Økologisk',
+    organic: 'Økologisk',
+
+    // Location info
+    kommune: 'Kommune',
+    municipality: 'Kommune',
+    region: 'Region',
+    address: 'Adresse',
+    postal_code: 'Postnummer',
+    city: 'By',
+
+    // Company info
+    company_name: 'Virksomhedsnavn',
+    cvr_number: 'CVR-nummer',
+    cvr: 'CVR-nummer',
+    p_number: 'P-nummer',
+
+    // Field identifiers
+    field_id: 'Mark ID',
+    block_id: 'Blok ID',
+    field_uuid: 'Mark UUID',
+
+    // Production data
+    production_site_name: 'Produktionssted',
+    site_name: 'Stedsnavn',
+    site_type: 'Stedtype',
+
+    // Building data
+    building_type: 'Bygningstype',
+    building_usage: 'Bygningsanvendelse',
+    bbr_usage_code: 'BBR anvendelseskode',
+    category_group: 'Kategori',
+
+    // Environmental data
+    status_category: 'Status',
+    environmental_zone: 'Miljøzone',
+    natura2000: 'Natura 2000',
+
+    // Dates
+    year: 'År',
+    created_at: 'Oprettet',
+    updated_at: 'Opdateret',
+  };
+
+  // Fields to exclude from display (technical/internal fields)
+  const excludedFields = new Set([
+    'id',
+    'uuid',
+    'geom',
+    'geometry',
+    'wkt',
+    'created_at',
+    'updated_at',
+    'version',
+    'source',
+    'processed_at',
+    'import_id',
+    'raw_data',
+    'metadata',
+    'internal_id',
+    'fid',
+    'ogc_fid',
+    'gml_id',
+    'objectid',
+  ]);
+
+  // Get relevant data with proper formatting and filtering
+  const getRelevantData = () => {
+    const data: Array<{ label: string; value: unknown; unit?: string }> = [];
+
+    // Process properties in a meaningful order
+    const orderedKeys = Object.keys(properties).sort((a, b) => {
+      // Prioritize important fields first
+      const importantFields = [
+        'crop_name',
+        'area_hectares',
+        'company_name',
+        'address',
+        'kommune',
+      ];
+      const aIndex = importantFields.indexOf(a);
+      const bIndex = importantFields.indexOf(b);
+
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return a.localeCompare(b);
+    });
+
+    for (const key of orderedKeys) {
+      // Skip excluded technical fields
+      if (excludedFields.has(key.toLowerCase())) continue;
+
+      const value = properties[key];
+
+      // Skip null, undefined, or empty string values
+      if (value === null || value === undefined || value === '') continue;
+
+      // Get Danish label or use cleaned up key
+      const label =
+        fieldTranslations[key] ||
+        key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+
+      // Determine unit based on field name
+      let unit: string | undefined;
+      if (key.includes('area') || key.includes('hectare')) {
+        unit = 'ha';
+      } else if (key.includes('distance') || key.includes('radius')) {
+        unit = 'm';
+      }
+
+      // Special formatting for specific fields
+      if (key === 'is_organic' || key === 'organic') {
+        data.push({
+          label,
+          value: value ? 'Ja' : 'Nej',
+        });
+      } else if (key === 'status_category') {
+        // Format status categories nicely
+        let statusValue = String(value);
+        if (statusValue === 'Action Required')
+          statusValue = 'Handling påkrævet';
+        else if (statusValue === 'Completed') statusValue = 'Gennemført';
+        data.push({ label, value: statusValue });
+      } else if (key === 'category_group') {
+        // Format category groups with Danish labels
+        const categoryLabels: Record<string, string> = {
+          residential: 'Bolig',
+          agricultural: 'Landbrug',
+          publicServices: 'Offentlig service',
+          commercial: 'Erhverv',
+          industrial: 'Industri',
+        };
+        const categoryLabel = categoryLabels[String(value)] || String(value);
+        data.push({ label, value: categoryLabel });
+      } else {
+        data.push({ label, value, unit });
+      }
+    }
+
+    return data;
+  };
+
+  const relevantData = getRelevantData();
+
+  // Don't show tooltip if no relevant data
+  if (relevantData.length === 0) return null;
+
   return (
     <div
-      className="absolute z-50 rounded-lg border border-gray-200 bg-white p-4 shadow-md"
+      className="absolute z-50 max-w-xs rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
       style={{
         left: x,
         top: y,
@@ -94,15 +260,17 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
         marginTop: -10,
       }}
     >
-      <p className="text-base font-semibold">{layerName}</p>
-      {Object.entries(properties).map(([key, value]) => (
-        <p key={key} className="mt-1 text-sm font-medium">
-          <span className="font-medium">{key}:</span>{' '}
-          {typeof value === 'number'
-            ? value.toLocaleString('da-DK')
-            : String(value)}
-        </p>
-      ))}
+      <p className="mb-2 text-sm font-semibold text-gray-900">{layerName}</p>
+      <div className="space-y-1 text-xs">
+        {relevantData.map(({ label, value, unit }, index) => (
+          <div key={index} className="flex justify-between">
+            <span className="text-gray-600">{label}:</span>
+            <span className="ml-2 font-medium text-gray-900">
+              {formatValue(value, unit)}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
