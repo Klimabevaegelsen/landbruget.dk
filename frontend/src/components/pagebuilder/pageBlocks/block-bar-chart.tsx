@@ -25,6 +25,7 @@ import { VizColors } from '@/lib/utils';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
+import { useCategoryDataContext } from './CategoryDataContext';
 
 export const xAxisDefaultProps: XAxisProps = {
   tickLine: true,
@@ -81,6 +82,7 @@ export function BlockBarChart({
   const transformedData = transformDataForRecharts(chart.data, chart._type);
   const [yWidth, setYWidth] = useState(60);
   const isHorizontal = chart._type === 'horizontalStackedBarChart';
+  const { isInCategoryWithData } = useCategoryDataContext();
 
   // Calculate y-axis width based on the longest value
   useEffect(() => {
@@ -119,8 +121,18 @@ export function BlockBarChart({
     return <PlaceholderChart dataType={placeholderDataType} />;
   }
 
-  if (!transformedData.length) {
+  // Only show individual no-data placeholder if not in a category with data
+  if (!transformedData.length && !isInCategoryWithData) {
     return <NoDataPlaceholder />;
+  }
+
+  // If we have no data but are in a category with data, render empty div
+  if (!transformedData.length && isInCategoryWithData) {
+    return (
+      <div className="py-8 text-center text-gray-500">
+        Ingen data tilgængelig for dette diagram
+      </div>
+    );
   }
 
   // Assuming a simple case with a few predefined colors.

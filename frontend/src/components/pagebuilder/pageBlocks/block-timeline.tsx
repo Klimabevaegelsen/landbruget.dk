@@ -11,6 +11,8 @@ import { da } from 'date-fns/locale';
 import { useState, useMemo } from 'react';
 import { VizColors } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useCategoryDataContext } from './CategoryDataContext';
+import { NoDataPlaceholder } from './no-data-placeholder';
 
 type TimelineEvent = {
   date: string;
@@ -54,6 +56,8 @@ function translateEventType(eventType: string): string {
 }
 
 export function BlockTimeline({ timeline }: { timeline: Timeline }) {
+  const { isInCategoryWithData } = useCategoryDataContext();
+
   // Get unique event types and assign colors
   const eventTypes = useMemo(() => {
     const validEvents = timeline.events.filter(isValidEvent);
@@ -123,6 +127,19 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
 
     setSelectedTypes(newSelected);
   };
+
+  // Check if timeline has no data
+  if (!timeline.events || timeline.events.length === 0) {
+    if (!isInCategoryWithData) {
+      return <NoDataPlaceholder />;
+    } else {
+      return (
+        <div className="py-8 text-center text-gray-500">
+          Ingen tidslinje data tilgængelig
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-6xl py-4">

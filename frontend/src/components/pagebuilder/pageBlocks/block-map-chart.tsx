@@ -14,6 +14,7 @@ import { MapErrorBoundary } from './MapErrorBoundary';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
+import { useCategoryDataContext } from './CategoryDataContext';
 
 const getLayerStyle = (style: string | undefined, index: number) => {
   // if style contains marker, return the default marker style
@@ -89,6 +90,7 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
 
 // https://geojson.io
 function BlockMapChartInner({ chart }: { chart: MapChart }) {
+  const { isInCategoryWithData } = useCategoryDataContext();
   const [hoverInfo, setHoverInfo] = React.useState<{
     x: number;
     y: number;
@@ -189,7 +191,15 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
 
   // Return error state if validation failed
   if (!chartData.isValid) {
-    return <NoDataPlaceholder />;
+    if (!isInCategoryWithData) {
+      return <NoDataPlaceholder />;
+    } else {
+      return (
+        <div className="py-8 text-center text-gray-500">
+          Ingen kortdata tilgængelig
+        </div>
+      );
+    }
   }
 
   return (

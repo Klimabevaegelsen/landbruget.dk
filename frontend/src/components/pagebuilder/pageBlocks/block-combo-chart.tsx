@@ -23,6 +23,7 @@ import { xAxisDefaultProps } from './block-bar-chart';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
+import { useCategoryDataContext } from './CategoryDataContext';
 
 // We can reuse the existing transformDataForRecharts function since it already handles our data structure
 const transformDataForRecharts = (chartData: ChartData) => {
@@ -44,6 +45,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   // Always call hooks first
   const transformedData = transformDataForRecharts(chart.data);
   const [yWidth, setYWidth] = useState(60);
+  const { isInCategoryWithData } = useCategoryDataContext();
 
   // Calculate y-axis width based on the longest value
   useEffect(() => {
@@ -68,8 +70,18 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
     return <PlaceholderChart dataType={placeholderDataType} />;
   }
 
-  if (!transformedData.length) {
+  // Only show individual no-data placeholder if not in a category with data
+  if (!transformedData.length && !isInCategoryWithData) {
     return <NoDataPlaceholder />;
+  }
+
+  // If we have no data but are in a category with data, render empty div
+  if (!transformedData.length && isInCategoryWithData) {
+    return (
+      <div className="py-8 text-center text-gray-500">
+        Ingen data tilgængelig for dette diagram
+      </div>
+    );
   }
 
   // Separate series by type and yAxis
