@@ -669,6 +669,15 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         """).fetchall()
 
                         if preview_data:
+                            # Human-readable table format
+                            self.log.info(f"📋 Sample data from {table_name}:")
+                            self.log.info("   Field ID  | Year | Soil Type | Crop Code | Weather | N-Washout(kg/ha)")
+                            self.log.info("   " + "-" * 70)
+                            for row in preview_data:
+                                field_id, year, soil_type, m_code, w_code, nitrogen = row
+                                self.log.info(f"   {field_id[:8]:<9} | {year} | {soil_type[:9]:<9} | {m_code[:9]:<9} | {w_code[:7]:<7} | {nitrogen:12.2f}")
+                            
+                            # Also log JSON for programmatic access
                             for row in preview_data:
                                 preview_log = {
                                     "table": table_name,
@@ -810,8 +819,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 return stats
             
             # Geometry-specific validation for spatial tables
-            if 'spatial' in table_name or table_name in ['climate_tessellation', 'soil_types_prepared']:
-                geom_column = 'geom' if table_name != 'climate_tessellation' else 'tessellation_polygon'
+            if 'spatial' in table_name or table_name in ['climate_percolation', 'soil_types_prepared']:
+                geom_column = 'geom' if table_name != 'climate_percolation' else 'geometry'
                 
                 if table_name == 'soil_types_prepared':
                     geom_column = 'geom'  # soil_types uses 'geom' after ST_Dump
@@ -1183,6 +1192,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     def _join_with_soil_data_target_year(self, fields_climate_table: str) -> str:
         """Join soil data for target year processing."""
         try:
+            if fields_climate_table is None:
+                raise ValueError("fields_climate_table cannot be None - climate joining must have failed")
+                
             result_table = f"fields_complete_target"
             
             # Simplified soil joining using existing soil_types_prepared table
@@ -1301,13 +1313,13 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             except Exception as e:
                 missing_data_issues.append(f"Cannot access soil types data: {e}")
             
-            # Check tessellation data availability
+            # Check climate data availability
             try:
-                tessellation_count = self.conn.execute("SELECT COUNT(*) FROM climate_tessellation").fetchone()[0]
-                if tessellation_count == 0:
-                    missing_data_issues.append("No climate tessellation data available - real climate grid data is required")
+                climate_count = self.conn.execute("SELECT COUNT(*) FROM climate_percolation").fetchone()[0]
+                if climate_count == 0:
+                    missing_data_issues.append("No climate percolation data available - real climate grid data is required")
             except Exception as e:
-                missing_data_issues.append(f"Cannot access climate tessellation: {e}")
+                missing_data_issues.append(f"Cannot access climate percolation: {e}")
             
             # Add the original error context
             missing_data_issues.append(f"Original error: {str(original_error)}")
@@ -1334,7 +1346,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     block_id VARCHAR, 
                     cvr_number VARCHAR,
                     year INTEGER,
-                    area_ha DOUBLE,
+                    area_ha DECIMAL(10,4),  -- FIXED: Support up to 999,999.9999 hectares (was causing DECIMAL(2,1) error)
                     crop_type VARCHAR,
                     soil_code VARCHAR,
                     soil_description VARCHAR,

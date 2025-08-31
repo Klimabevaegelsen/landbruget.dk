@@ -185,6 +185,7 @@ class NLES5ClimateProcessor:
                     -- CORRECTED: Use official Danish NLES5 percolation periods
                     s1.percolation_apr_aug as perco_apr_aug_current,        -- AAa (δ1): April-August current year
                     s1.percolation_sep_mar as perco_sep_mar_current,        -- AAb (δ2): September-March current year  
+                    COALESCE(s2.percolation_apr_aug, 0.0) as perco_apr_aug_previous, -- Previous year April-August
                     COALESCE(s2.percolation_sep_mar, 0.0) as perco_sep_mar_previous, -- APa (ν2): September-March previous year
                     -- Legacy split periods (maintain for compatibility during transition)
                     s1.percolation_sep_nov as perco_sep_nov_current,
@@ -296,12 +297,9 @@ class NLES5ClimateProcessor:
                 """).fetchone()
                 self.log.info(f"climate_percolation geometry bounding box: {bbox}")
 
-                # CRS if available
-                try:
-                    crs_climate = self.conn.execute("SELECT DISTINCT source_crs FROM climate_percolation LIMIT 5").fetchall()
-                    self.log.info(f"Climate CRS samples: {crs_climate}")
-                except Exception as e:
-                    self.log.info(f"Could not fetch climate CRS info: {e}")
+                # Climate data is already transformed to EPSG:25832 during processing
+                # (see coordinate transformation logic above)
+                self.log.info("Climate data transformed to EPSG:25832 during processing")
 
                 # Geometry validity
                 valid_climate = self.conn.execute("SELECT COUNT(*) FROM climate_percolation WHERE ST_IsValid(geometry)").fetchone()[0]
@@ -347,8 +345,8 @@ class NLES5ClimateProcessor:
                 SELECT
                     year,
                     geometry                                                             AS climate_point,
-                    perco_sep_nov_current,  perco_dec_feb_current,  perco_mar_aug_current,
-                    perco_sep_nov_previous, perco_dec_feb_previous, perco_mar_aug_previous,
+                    perco_apr_aug_current,  perco_sep_mar_current,  
+                    perco_apr_aug_previous, perco_sep_mar_previous,
                     total_percolation,
                     avg_precipitation,
                     avg_evaporation,
@@ -399,12 +397,10 @@ class NLES5ClimateProcessor:
                     f.*,
                     t.year as climate_year,
                     t.climate_point,
-                    t.perco_sep_nov_current,
-                    t.perco_dec_feb_current,
-                    t.perco_mar_aug_current,
-                    t.perco_sep_nov_previous,
-                    t.perco_dec_feb_previous,
-                    t.perco_mar_aug_previous,
+                    t.perco_apr_aug_current,
+                    t.perco_sep_mar_current,
+                    t.perco_apr_aug_previous,
+                    t.perco_sep_mar_previous,
                     t.total_percolation,
                     t.avg_precipitation,
                     t.avg_evaporation,
@@ -477,12 +473,10 @@ class NLES5ClimateProcessor:
                         f.*,
                         c.year as climate_year,
                         c.geometry as climate_point,
-                        c.perco_sep_nov_current,
-                        c.perco_dec_feb_current,
-                        c.perco_mar_aug_current,
-                        c.perco_sep_nov_previous,
-                        c.perco_dec_feb_previous,
-                        c.perco_mar_aug_previous,
+                        c.perco_apr_aug_current,
+                        c.perco_sep_mar_current,
+                        c.perco_apr_aug_previous,
+                        c.perco_sep_mar_previous,
                         c.total_percolation,
                         c.avg_precipitation,
                         c.avg_evaporation,
@@ -549,33 +543,128 @@ class NLES5ClimateProcessor:
                 self.log.warning(f"No climate data available for year {year}")
                 return None
             
-            # Perform spatial join for this specific year
+            # Use ultra-efficient spatial join strategy based on DuckDB performance recommendations
+            self.log.info(f"Using memory-optimized spatial join for year {year}")
+            
+            # Apply DuckDB memory optimizations based on documentation recommendations
+            self.conn.execute("SET preserve_insertion_order = false")  # Disable to save memory
+            self.conn.execute("SET enable_progress_bar = false")  # Reduce overhead
+            self.conn.execute("SET threads = 1")  # Single thread to reduce memory contention
+            
+            # Get field count for this year
+            field_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM agricultural_fields_spatial 
+                WHERE year = {year}
+            """).fetchone()[0]
+            
+            batch_size = self.config.spatial_join_batch_size  # Now 1000 for memory safety
+            total_batches = math.ceil(field_count / batch_size)
+            
+            self.log.info(f"Processing {field_count:,} fields in {total_batches} batches of {batch_size}")
+            
+            # Create empty result table with actual available field schema
             self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {result_table} AS
-                SELECT 
-                    f.*,
-                    c.year as climate_year,
-                    c.geometry as climate_point,
-                    c.perco_sep_nov_current,
-                    c.perco_dec_feb_current,
-                    c.perco_mar_aug_current,
-                    c.perco_sep_nov_previous,
-                    c.perco_dec_feb_previous,
-                    c.perco_mar_aug_previous,
-                    c.total_percolation,
-                    c.avg_precipitation,
-                    c.avg_evaporation,
-                    c.sufficient_climate_data,
-                    ST_Distance(ST_Centroid(f.geom), c.geometry) as distance_to_climate
-                FROM agricultural_fields_spatial f
-                INNER JOIN (
-                    SELECT *
-                    FROM {climate_table}
-                    WHERE year = {year}
-                    ORDER BY ST_Distance(ST_Centroid(f.geom), geometry)
-                    LIMIT 1
-                ) c ON true
+                CREATE OR REPLACE TABLE {result_table} (
+                    field_id VARCHAR,
+                    cvr_number VARCHAR,
+                    year INTEGER,
+                    geom GEOMETRY,
+                    -- Essential field attributes for NLES5 calculations
+                    area_ha DOUBLE,
+                    crop_name VARCHAR,
+                    m_code VARCHAR,
+                    -- Available field metadata 
+                    layer_type VARCHAR,
+                    GB BOOLEAN,
+                    -- Climate data columns
+                    climate_year INTEGER,
+                    climate_point GEOMETRY,
+                    perco_apr_aug_current DOUBLE,
+                    perco_sep_mar_current DOUBLE,
+                    perco_apr_aug_previous DOUBLE,
+                    perco_sep_mar_previous DOUBLE,
+                    total_percolation DOUBLE,
+                    avg_precipitation DOUBLE,
+                    avg_evaporation DOUBLE,
+                    sufficient_climate_data BOOLEAN,
+                    distance_to_climate DOUBLE
+                )
             """)
+            
+            # Create spatial index on climate data for performance
+            try:
+                self.conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{climate_table}_geom ON {climate_table} USING RTREE (geometry)")
+                self.log.info(f"Created spatial index on {climate_table}")
+            except Exception as e:
+                self.log.warning(f"Could not create spatial index: {e}")
+            
+            # Process in ultra-small chunks to prevent memory exhaustion
+            for batch_idx in range(total_batches):
+                offset = batch_idx * batch_size
+                if batch_idx % 10 == 0:  # Log every 10th batch to reduce log spam
+                    self.log.info(f"Processing batch {batch_idx + 1}/{total_batches} (offset: {offset:,})")
+                
+                # Use window function instead of CROSS JOIN LATERAL for memory efficiency
+                # This approach is much more memory-efficient according to DuckDB docs
+                self.conn.execute(f"""
+                    INSERT INTO {result_table}
+                    WITH field_batch AS (
+                        SELECT 
+                            field_id, cvr_number, year, geom,
+                            -- Essential field attributes for NLES5 calculations  
+                            COALESCE(area_ha, 0.0) as area_ha,
+                            COALESCE(crop_name, 'unknown') as crop_name,
+                            COALESCE(crop_name, 'unknown') as m_code,  -- Use crop_name as m_code
+                            -- Available field metadata from actual schema
+                            layer_type, 
+                            COALESCE(grundbetaling_eligible, false) as GB,
+                            ST_X(ST_Centroid(geom)) as field_x,
+                            ST_Y(ST_Centroid(geom)) as field_y
+                        FROM agricultural_fields_spatial 
+                        WHERE year = {year}
+                        ORDER BY field_id
+                        LIMIT {batch_size} OFFSET {offset}
+                    ),
+                    climate_year AS (
+                        SELECT *,
+                            ST_X(geometry) as climate_x,
+                            ST_Y(geometry) as climate_y
+                        FROM {climate_table}
+                        WHERE year = {year}
+                    ),
+                    nearest_climate AS (
+                        SELECT 
+                            f.*,
+                            c.year as climate_year,
+                            c.geometry as climate_point,
+                            c.perco_apr_aug_current,
+                            c.perco_sep_mar_current,
+                            c.perco_apr_aug_previous,
+                            c.perco_sep_mar_previous,
+                            c.total_percolation,
+                            c.avg_precipitation,
+                            c.avg_evaporation,
+                            c.sufficient_climate_data,
+                            sqrt(pow(f.field_x - c.climate_x, 2) + pow(f.field_y - c.climate_y, 2)) as distance_to_climate,
+                            ROW_NUMBER() OVER (PARTITION BY f.field_id ORDER BY sqrt(pow(f.field_x - c.climate_x, 2) + pow(f.field_y - c.climate_y, 2))) as rn
+                        FROM field_batch f
+                        CROSS JOIN climate_year c
+                    )
+                    SELECT 
+                        field_id, cvr_number, year, geom,
+                        -- Essential field attributes for NLES5 calculations
+                        area_ha, crop_name, m_code,
+                        -- Available field metadata
+                        layer_type, GB,
+                        -- Climate data columns
+                        climate_year, climate_point,
+                        perco_apr_aug_current, perco_sep_mar_current,
+                        perco_apr_aug_previous, perco_sep_mar_previous,
+                        total_percolation, avg_precipitation, avg_evaporation,
+                        sufficient_climate_data, distance_to_climate
+                    FROM nearest_climate
+                    WHERE rn = 1
+                """)
             
             joined_count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
             self.log.info(f"Year {year}: Joined {joined_count:,} fields with climate data")
@@ -601,12 +690,10 @@ class NLES5ClimateProcessor:
                 SELECT
                     year,
                     geometry AS climate_point,
-                    perco_sep_nov_current,
-                    perco_dec_feb_current,
-                    perco_mar_aug_current,
-                    perco_sep_nov_previous,
-                    perco_dec_feb_previous,
-                    perco_mar_aug_previous,
+                    perco_apr_aug_current,
+                    perco_sep_mar_current,
+                    perco_apr_aug_previous,
+                    perco_sep_mar_previous,
                     total_percolation,
                     avg_precipitation,
                     avg_evaporation,
@@ -667,12 +754,10 @@ class NLES5ClimateProcessor:
                     area_ha,
                     year as climate_year,
                     geometry as climate_point,
-                    perco_sep_nov_current,
-                    perco_dec_feb_current,
-                    perco_mar_aug_current,
-                    perco_sep_nov_previous,
-                    perco_dec_feb_previous,
-                    perco_mar_aug_previous,
+                    perco_apr_aug_current,
+                    perco_sep_mar_current,
+                    perco_apr_aug_previous,
+                    perco_sep_mar_previous,
                     total_percolation,
                     avg_precipitation,
                     avg_evaporation,

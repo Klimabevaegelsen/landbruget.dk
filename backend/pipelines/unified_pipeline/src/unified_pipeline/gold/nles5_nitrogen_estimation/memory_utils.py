@@ -244,6 +244,7 @@ class NLES5MemoryUtils:
             tables_to_preserve = [
                 'nles5_nitrogen_estimates',
                 'nles5_uncertainty_estimates',
+                'nles5_estimates_final_batched',  # FIXED: Preserve final batched results table during cleanup
                 'agricultural_fields',
                 'fertilizer_history',
                 'field_plan',

@@ -62,10 +62,11 @@ from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import (
     PNumberFetching,
     PNumberFetchingConfig,
 )
-from unified_pipeline.gold.cvr_geometry_datasets import (
-    CVRGeometryDatasets,
-    CVRGeometryDatasetsConfig,
-)
+# CVR Geometry Datasets module not yet implemented
+# from unified_pipeline.gold.cvr_geometry_datasets import (
+#     CVRGeometryDatasets,
+#     CVRGeometryDatasetsConfig,
+# )
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
     FieldAreaAnalysisGoldConfig,
@@ -552,13 +553,14 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             # cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
             # REMOVED: Eliminated in redesign
         },
-        cli_models.Source.cvr_geometry_datasets: {
-            cli_models.Stage.gold: [(CVRGeometryDatasets, CVRGeometryDatasetsConfig)],
-            cli_models.Stage.all: [
-                # Phase 1: CVR address points and CHR property points
-                (CVRGeometryDatasets, CVRGeometryDatasetsConfig),
-            ],
-        },
+        # CVR Geometry Datasets pipeline not yet implemented
+        # cli_models.Source.cvr_geometry_datasets: {
+        #     cli_models.Stage.gold: [(CVRGeometryDatasets, CVRGeometryDatasetsConfig)],
+        #     cli_models.Stage.all: [
+        #         # Phase 1: CVR address points and CHR property points
+        #         (CVRGeometryDatasets, CVRGeometryDatasetsConfig),
+        #     ],
+        # },
         cli_models.Source.dst: {
             cli_models.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
             cli_models.Stage.silver: [(DSTSilver, DSTSilverConfig)],

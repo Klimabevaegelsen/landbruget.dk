@@ -88,14 +88,15 @@ class NLES5PipelineOrchestrator:
         
         # NOTE: Comprehensive data validation will run after silver data loading in each batch
         
-        # Initialize final results table with proper schema
+        # Initialize final results table with proper schema - FIXED: Ensure area_ha supports large values
         self.conn.execute("""
-            CREATE OR REPLACE TABLE nles5_estimates_final_batched (
+            DROP TABLE IF EXISTS nles5_estimates_final_batched;
+            CREATE TABLE nles5_estimates_final_batched (
                 field_id VARCHAR,
                 block_id VARCHAR, 
                 cvr_number VARCHAR,
                 year INTEGER,
-                area_ha DOUBLE,
+                area_ha DECIMAL(10,4),  -- FIXED: Support up to 999,999.9999 hectares (was causing DECIMAL(2,1) error)
                 crop_type VARCHAR,
                 soil_code VARCHAR,
                 soil_description VARCHAR,
@@ -365,7 +366,19 @@ class NLES5PipelineOrchestrator:
                     # Ensure final batched table exists
                     self.processor._ensure_final_batched_table_exists()
                     
-                    # Append batch results to final table
+                    # DEBUG: Log area_ha statistics to validate fix
+                    area_stats = self.conn.execute(f"""
+                        SELECT 
+                            MIN(area_ha) as min_area,
+                            MAX(area_ha) as max_area,
+                            AVG(area_ha) as avg_area,
+                            COUNT(*) as total_records
+                        FROM {estimates_table}
+                        WHERE area_ha IS NOT NULL
+                    """).fetchone()
+                    self.log.info(f"🔍 DEBUG area_ha stats for {estimates_table}: min={area_stats[0]:.4f}, max={area_stats[1]:.4f}, avg={area_stats[2]:.4f}, count={area_stats[3]:,}")
+                    
+                    # Append batch results to final table with explicit casting
                     self.conn.execute(f"""
                         INSERT INTO nles5_estimates_final_batched
                         SELECT 
@@ -373,7 +386,7 @@ class NLES5PipelineOrchestrator:
                             block_id,
                             cvr_number,
                             year,
-                            area_ha,
+                            CAST(area_ha AS DECIMAL(10,4)) as area_ha,  -- FIXED: Explicit cast to prevent DECIMAL(2,1) error
                             crop_type,
                             soil_code,
                             soil_description,
@@ -512,15 +525,26 @@ class NLES5PipelineOrchestrator:
         try:
             self.log.info(f"🎯 Processing NLES5 for batch target years: {batch_years}")
             
-            # Initialize final results table for this batch
+            # Initialize final results table for this batch - FIXED: Proper schema to prevent DECIMAL(2,1) inference
             batch_table_name = f"nles5_estimates_batch_{batch_years[0]}_{batch_years[-1]}"
             self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {batch_table_name} AS
-                SELECT * FROM (VALUES 
-                    ('dummy', 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
-                ) AS t(field_id, year, nitrogen_washout, trend_effect, crop_effect, soil_effect, 
-                       climate_effect, percolation_effect, uncertainty_estimate, confidence_level)
-                WHERE false
+                CREATE OR REPLACE TABLE {batch_table_name} (
+                    field_id VARCHAR,
+                    block_id VARCHAR,
+                    cvr_number VARCHAR,
+                    year INTEGER,
+                    area_ha DECIMAL(10,4),  -- FIXED: Explicit type to prevent DECIMAL(2,1) inference from dummy values
+                    crop_type VARCHAR,
+                    soil_code VARCHAR,
+                    soil_description VARCHAR,
+                    clay_content DOUBLE,
+                    nitrogen_washout_kg_ha DOUBLE,
+                    percolation_mm DOUBLE,
+                    uncertainty_pct DOUBLE,
+                    data_quality_score DOUBLE,
+                    geometry_wkt VARCHAR,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
             """)
             
             # Process each target year in the batch
