@@ -51,7 +51,7 @@ ALTER TABLE "public"."site_details_summary_ranked" OWNER TO "postgres";
 
 -- Grant permissions
 GRANT SELECT ON "public"."site_details_summary_ranked" TO "anon";
-GRANT SELECT ON "public"."site_details_summary_ranked" TO "authenticated";  
+GRANT SELECT ON "public"."site_details_summary_ranked" TO "authenticated";
 GRANT SELECT ON "public"."site_details_summary_ranked" TO "service_role";
 
 -- Create indexes for performance

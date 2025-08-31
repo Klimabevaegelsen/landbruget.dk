@@ -299,7 +299,7 @@ class BaseSource(Generic[T], ABC):
                         metadata_gcs_path = (
                             f"{stage}/{final_dataset}/{timestamp}/{metadata_filename}"
                         )
-                        # Read the JSON metadata file and upload using existing upload_json_string method
+                        # Read JSON metadata file and upload using existing upload_json_string method
                         with open(metadata_file_path, "r", encoding="utf-8") as f:
                             metadata_json_string = f.read()
 
