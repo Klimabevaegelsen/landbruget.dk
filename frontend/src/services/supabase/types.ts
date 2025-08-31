@@ -104,6 +104,7 @@ export interface BaseDataGrid {
   columns: Column[];
   allowFiltering: boolean;
   isCollapsible?: boolean;
+  documentation?: DocumentationLink;
 }
 
 // Component types
@@ -117,7 +118,6 @@ export interface InfoCard {
 
 export interface DataGrid extends BaseDataGrid {
   _type: 'dataGrid';
-  documentation?: DocumentationLink;
 }
 
 export interface KPIGroup {
