@@ -32,9 +32,6 @@ export default function CompanyDetailsPanel({
   const [details, setDetails] = useState<CompanyDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentDetailsToastId, setCurrentDetailsToastId] = useState<
-    string | null
-  >(null);
 
   const { addToast, removeToast } = useToast();
 
@@ -43,10 +40,8 @@ export default function CompanyDetailsPanel({
     const fetchDetails = async () => {
       if (!SUPABASE_URL || !company.cvr_number) return;
 
-      // Remove any existing details toast
-      if (currentDetailsToastId) {
-        removeToast(currentDetailsToastId);
-      }
+      setLoading(true);
+      setError(null);
 
       // Show loading toast for company details
       const toastId = addToast({
@@ -54,10 +49,6 @@ export default function CompanyDetailsPanel({
         description: `Henter detaljer for ${company.company_name}...`,
         variant: 'loading',
       });
-      setCurrentDetailsToastId(toastId);
-
-      setLoading(true);
-      setError(null);
 
       try {
         const response = await fetch(
@@ -86,21 +77,12 @@ export default function CompanyDetailsPanel({
       } finally {
         setLoading(false);
         // Remove loading toast when details fetch completes
-        if (currentDetailsToastId) {
-          removeToast(currentDetailsToastId);
-          setCurrentDetailsToastId(null);
-        }
+        removeToast(toastId);
       }
     };
 
     fetchDetails();
-  }, [
-    company.cvr_number,
-    company.company_name,
-    currentDetailsToastId,
-    addToast,
-    removeToast,
-  ]);
+  }, [company.cvr_number]); // Only depend on cvr_number, not toast functions
 
   const formatBelastning = (value: number) => {
     return value.toLocaleString('da-DK', {
