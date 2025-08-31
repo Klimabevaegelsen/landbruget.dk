@@ -101,33 +101,11 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
 
             self.log.info(f"🔍 Looking for work permits files: {work_permits_pattern}")
 
-            # Create work_permits table from silver parquet files
-            create_table_sql = f"""
-            CREATE OR REPLACE TABLE work_permits AS
-            SELECT
-                company_id,
-                year,
-                nationality,
-                first_permits_count,
-                source_file,
-                extracted_at,
-                created_at,
-                updated_at
-            FROM read_parquet('{work_permits_pattern}')
-            WHERE first_permits_count > 0
-              AND first_permits_count <= {self.config.max_permits_per_record}
-            """
+            # Find the latest work permits file using the same pattern as other pipelines
+            files = self.gcs_access.list_files(work_permits_pattern)
 
-            self.conn.execute(create_table_sql)
-
-            # Get count and basic stats
-            count_result = self.conn.execute(
-                "SELECT COUNT(*) as count FROM work_permits"
-            ).fetchone()
-            record_count = count_result[0] if count_result else 0
-
-            if record_count == 0:
-                self.log.warning("⚠️ No work permits data found in silver layer")
+            if not files:
+                self.log.warning("⚠️ No work permits files found")
                 # Create empty table with correct schema
                 self.conn.execute("""
                 CREATE OR REPLACE TABLE work_permits (
@@ -141,6 +119,40 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
                     updated_at TIMESTAMP
                 )
                 """)
+                return
+
+            # Get the latest file (they should all be the same data, just pick the first)
+            latest_file = files[0]
+            self.log.info(f"📥 Loading work permits data from: {latest_file}")
+
+            # Use temp download pattern like other working pipelines
+            with self.gcs_access._temp_download(latest_file) as temp_file:
+                create_table_sql = f"""
+                CREATE OR REPLACE TABLE work_permits AS
+                SELECT
+                    company_id,
+                    year,
+                    nationality,
+                    first_permits_count,
+                    source_file,
+                    extracted_at,
+                    created_at,
+                    updated_at
+                FROM read_parquet('{temp_file}')
+                WHERE first_permits_count > 0
+                  AND first_permits_count <= {self.config.max_permits_per_record}
+                """
+
+                self.conn.execute(create_table_sql)
+
+            # Get count and basic stats
+            count_result = self.conn.execute(
+                "SELECT COUNT(*) as count FROM work_permits"
+            ).fetchone()
+            record_count = count_result[0] if count_result else 0
+
+            if record_count == 0:
+                self.log.warning("⚠️ No work permits data loaded after filtering")
                 return
 
             # Log basic statistics

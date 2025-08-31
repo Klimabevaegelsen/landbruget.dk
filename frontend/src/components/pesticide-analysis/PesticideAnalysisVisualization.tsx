@@ -34,9 +34,6 @@ export default function PesticideAnalysisVisualization() {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentLoadingToastId, setCurrentLoadingToastId] = useState<
-    string | null
-  >(null);
 
   const { addToast, removeToast } = useToast();
 
@@ -47,10 +44,8 @@ export default function PesticideAnalysisVisualization() {
       return;
     }
 
-    // Remove any existing loading toast
-    if (currentLoadingToastId) {
-      removeToast(currentLoadingToastId);
-    }
+    setLoading(true);
+    setError(null);
 
     // Show loading toast for data fetch
     const toastId = addToast({
@@ -58,10 +53,6 @@ export default function PesticideAnalysisVisualization() {
       description: 'Henter analysedata...',
       variant: 'loading',
     });
-    setCurrentLoadingToastId(toastId);
-
-    setLoading(true);
-    setError(null);
 
     try {
       const params = new URLSearchParams();
@@ -87,25 +78,17 @@ export default function PesticideAnalysisVisualization() {
     } finally {
       setLoading(false);
       // Remove loading toast when data fetch completes
-      if (currentLoadingToastId) {
-        removeToast(currentLoadingToastId);
-        setCurrentLoadingToastId(null);
-      }
+      removeToast(toastId);
     }
-  }, [filters, currentLoadingToastId, addToast, removeToast]);
+  }, [filters]); // Only depend on filters, not toast functions
 
   // Fetch data when filters change
   useEffect(() => {
     fetchData();
-  }, [filters, fetchData]);
+  }, [fetchData]);
 
   // Update filters
   const updateFilters = (newFilters: Partial<PesticideAnalysisFilters>) => {
-    // Remove any existing loading toast when filters change (new search)
-    if (currentLoadingToastId) {
-      removeToast(currentLoadingToastId);
-      setCurrentLoadingToastId(null);
-    }
     setFilters((prev) => ({ ...prev, ...newFilters, page: 1 })); // Reset to page 1 when filters change
   };
 
