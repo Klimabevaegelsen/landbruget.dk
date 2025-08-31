@@ -62,6 +62,9 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
         self.conn.execute("SET threads = 2")
         self.conn.execute("SET temp_directory = '/tmp'")
 
+        # Set correct GCS region (bucket is in EUROPE-WEST1)
+        self.conn.execute("SET s3_region = 'europe-west1'")
+
     @timed
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
         """Execute work permits gold layer processing."""
