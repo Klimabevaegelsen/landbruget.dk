@@ -112,10 +112,12 @@ export interface InfoCard {
   _type: 'infoCard';
   title: string;
   items: InfoCardItem[];
+  documentation?: DocumentationLink;
 }
 
 export interface DataGrid extends BaseDataGrid {
   _type: 'dataGrid';
+  documentation?: DocumentationLink;
 }
 
 export interface KPIGroup {
@@ -123,6 +125,7 @@ export interface KPIGroup {
   _type: 'kpiGroup';
   title: string;
   kpis: KPI[];
+  documentation?: DocumentationLink;
 }
 
 export interface MapChart {
@@ -185,6 +188,7 @@ export interface Timeline {
   title: string;
   events: TimelineEvent[];
   config: TimelineConfig;
+  documentation?: DocumentationLink;
 }
 
 export interface IteratedSection {
