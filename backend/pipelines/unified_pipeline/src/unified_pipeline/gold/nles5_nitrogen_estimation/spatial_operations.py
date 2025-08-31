@@ -283,6 +283,7 @@ class NLES5SpatialOperations:
                             'fertilizer_accounts' as nitrogen_data_source
                         FROM fields_nitrogen_base f  -- Large table on left (2.3M+ records)
                         LEFT JOIN fertilizer_accounts fert ON f.field_id = fert.field_id AND f.year = fert.year  -- Small table on right (~27K records)
+                    """)
                     # Use the sophisticated NLES5 distribution algorithm
                     distributed_table = self.fertilizer_distributor.apply_fertilizer_distribution_to_pipeline("fields_nitrogen_base")
                     
