@@ -111,6 +111,9 @@ def _setup_native_gcs_auth(conn: duckdb.DuckDBPyConnection) -> bool:
         gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
         if gcs_access_key and gcs_secret_key:
+            # Set correct GCS region (landbrugsdata-raw-data bucket is in EUROPE-WEST1)
+            conn.execute("SET s3_region = 'europe-west1'")
+
             # Create persistent GCS secret for native access
             conn.execute(f"""
                 CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
