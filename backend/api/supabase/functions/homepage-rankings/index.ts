@@ -87,16 +87,18 @@ serve(async (req) => {
           description: 'Virksomheder med det højeste nettoresultat i 2024',
           unit: 'DKK',
           company_count: profitCount || 0,
-          items: profitData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
-            rank: index + 1,
-            value: item.net_profit_loss,
-            formatted_value: `${(item.net_profit_loss / 1000000).toFixed(1)}M kr`,
-            year: item.year
-          }))
+          items: profitData
+            .filter(item => item.net_profit_loss > 0) // Only include companies with positive profit
+            .map((item, index) => ({
+              company_id: item.company_id,
+              cvr_number: item.cvr_number.toString(),
+              company_name: item.companies.company_name,
+              municipality: item.companies.municipality,
+              rank: index + 1,
+              value: item.net_profit_loss,
+              formatted_value: `${(item.net_profit_loss / 1000000).toFixed(1)}M kr`,
+              year: item.year
+            }))
         })
       }
 
@@ -201,6 +203,7 @@ serve(async (req) => {
           year
         `)
         .eq('year', 2025)
+        .gt('total_area_ha', 0) // Only include companies with actual land area
         .order('rank_dk_total_area', { ascending: true })
         .limit(limit)
 
@@ -208,6 +211,7 @@ serve(async (req) => {
         .from('land_use_summary')
         .select('company_id', { count: 'exact' })
         .eq('year', 2025)
+        .gt('total_area_ha', 0)
 
       if (landAreaData?.length) {
         // Step 2: Get company details for the land area data
@@ -361,6 +365,7 @@ serve(async (req) => {
           year
         `)
         .eq('year', 2025)
+        .gt('total_fields', 0) // Only include companies with actual fields
         .order('total_fields', { ascending: false })
         .limit(limit)
 
@@ -368,6 +373,7 @@ serve(async (req) => {
         .from('land_use_summary')
         .select('company_id', { count: 'exact' })
         .eq('year', 2025)
+        .gt('total_fields', 0)
 
       if (fieldsData?.length) {
         // Step 2: Get company details for the fields data
@@ -816,6 +822,7 @@ serve(async (req) => {
         `)
         .eq('species_code', '15')
         .eq('year', 2025)
+        .gt('total_animals', 0) // Only include sites with actual animals
         .order('rank_dk_species_production', { ascending: true })
         .limit(limit)
 
@@ -824,6 +831,7 @@ serve(async (req) => {
         .select('chr', { count: 'exact' })
         .eq('species_code', '15')
         .eq('year', 2025)
+        .gt('total_animals', 0)
 
       if (pigData) {
         // Get CVR numbers for CHR sites
@@ -883,6 +891,7 @@ serve(async (req) => {
         `)
         .eq('species_code', '12')
         .eq('year', 2025)
+        .gt('total_animals', 0) // Only include sites with actual animals
         .order('rank_dk_species_production', { ascending: true })
         .limit(limit)
 
@@ -891,6 +900,7 @@ serve(async (req) => {
         .select('chr', { count: 'exact' })
         .eq('species_code', '12')
         .eq('year', 2025)
+        .gt('total_animals', 0)
 
       if (cattleData) {
         const chrList = cattleData.map(item => item.chr)
@@ -998,6 +1008,7 @@ serve(async (req) => {
           year
         `)
         .eq('year', 2025)
+        .gt('site_count', 0) // Only include companies with actual production sites
         .order('site_count', { ascending: false })
         .limit(limit)
 
@@ -1005,6 +1016,7 @@ serve(async (req) => {
         .from('animal_welfare_summary')
         .select('company_id', { count: 'exact' })
         .eq('year', 2025)
+        .gt('site_count', 0)
 
       if (sitesData?.length) {
         // Step 2: Get company details for the sites data
@@ -1075,6 +1087,7 @@ serve(async (req) => {
         })
 
         const sortedTransports = Array.from(companyTransports.values())
+          .filter(company => company.total_animals > 0) // Only include companies with actual transports
           .sort((a, b) => b.total_animals - a.total_animals)
           .slice(0, limit)
 
@@ -1112,6 +1125,7 @@ serve(async (req) => {
         `)
         .eq('year', 2024)
         .not('average_employee_count', 'is', null)
+        .gt('average_employee_count', 0) // Only include companies with actual employees
         .order('average_employee_count', { ascending: false })
         .limit(limit)
 
@@ -1120,6 +1134,7 @@ serve(async (req) => {
         .select('company_id', { count: 'exact' })
         .eq('year', 2024)
         .not('average_employee_count', 'is', null)
+        .gt('average_employee_count', 0)
 
       if (workerEmployeeData) {
         rankings.push({
@@ -1194,6 +1209,7 @@ serve(async (req) => {
         `)
         .eq('year', 2024)
         .not('injury_count_reported', 'is', null)
+        .gt('injury_count_reported', 0) // Only include companies with actual injuries
         .order('injury_count_reported', { ascending: false })
         .limit(limit)
 
@@ -1202,6 +1218,7 @@ serve(async (req) => {
         .select('company_id', { count: 'exact' })
         .eq('year', 2024)
         .not('injury_count_reported', 'is', null)
+        .gt('injury_count_reported', 0)
 
       if (injuryData) {
         rankings.push({
