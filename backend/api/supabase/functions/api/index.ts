@@ -305,9 +305,13 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
   };
 }
 async function processKpiGroup(supabase: SupabaseClient, companyId: string, municipality: string, params: any, context: Record<string, any> | null) {
+  console.log(`DEBUG: processKpiGroup ENTRY: params=${JSON.stringify(params)}, context=${JSON.stringify(context)}`);
   const { source, kpis } = params;
   const { timeContext, n = 1, metrics, filter: kpiFilter } = kpis || {};
-  if (!source || !metrics) throw new Error(`Invalid config for kpiGroup: missing source or metrics.`);
+  if (!source || !metrics) {
+    console.error(`DEBUG: processKpiGroup INVALID CONFIG: source=${source}, metrics=${metrics ? 'present' : 'missing'}`);
+    throw new Error(`Invalid config for kpiGroup: missing source or metrics.`);
+  }
   console.log(`processKpiGroup: Source=${source}, Context=${JSON.stringify(context)}, Filter=${JSON.stringify(kpiFilter)}`);
   let latestYear = null;
   if (timeContext === 'last_n_years') {
@@ -339,8 +343,31 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
   query = query.eq('company_id', companyId);
   // Apply municipality filter ONLY if source table expects it - simplified
   if (TABLES_WITH_MUNICIPALITY_SUMMARY.includes(source)) {
-    console.log(`processKpiGroup: Applying municipality filter for ${source}`);
-    query = query.eq('municipality', municipality);
+    let municipalityToUse = municipality;
+
+    // For site-level data with CHR context, use the site's municipality instead of company municipality
+    if (source === 'site_details_summary_ranked' && context?.chr) {
+      try {
+        const { data: siteData } = await supabase
+          .from('site_details_summary_ranked')
+          .select('municipality')
+          .eq('chr', context.chr)
+          .limit(1)
+          .maybeSingle();
+
+        if (siteData?.municipality) {
+          municipalityToUse = siteData.municipality;
+          console.log(`processKpiGroup: Using site municipality '${municipalityToUse}' instead of company municipality '${municipality}' for CHR ${context.chr}`);
+        } else {
+          console.log(`processKpiGroup: Could not determine site municipality for CHR ${context.chr}, using company municipality '${municipality}'`);
+        }
+      } catch (error) {
+        console.warn(`processKpiGroup: Error fetching site municipality for CHR ${context.chr}:`, error);
+      }
+    }
+
+    console.log(`processKpiGroup: Applying municipality filter for ${source}: ${municipalityToUse}`);
+    query = query.eq('municipality', municipalityToUse);
   } else {
     console.log(`processKpiGroup: Skipping municipality filter for ${source}`);
   }
@@ -391,7 +418,12 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
       }
     }
   }
+  console.log(`DEBUG: KPI query for ${source}: companyId=${companyId}, municipality=${municipality}, year=${filterYear}, chr=${kpiFilter?.chr || 'none'}`);
   const { data: resultData, error } = await query.maybeSingle();
+  console.log(`DEBUG: KPI result for ${source}: data=${resultData ? 'found' : 'null'}, error=${error?.message || 'none'}`);
+  if (resultData) {
+    console.log(`DEBUG: KPI actual data for ${source}:`, JSON.stringify(resultData));
+  }
   if (error) {
     console.error(`Error fetching data for kpiGroup (${source}):`, error);
     return {
@@ -410,6 +442,7 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
       label: metric.label,
       value: formatValue(resultData[metric.column], metric.format)
     }));
+  console.log(`DEBUG: KPI final results for ${source}: ${JSON.stringify(kpiResults)}`);
   return {
     kpis: kpiResults
   };
@@ -1074,7 +1107,12 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
       }
 
       // TODO: Add iterator ordering?
+      console.log(`DEBUG: Iterator query for ${_key}: source=${iterSource}, companyId=${companyId}, columns=${iterColumns.join(',')}`);
+      console.log(`DEBUG: Iterator SQL query for ${_key}:`, iterQuery.toString());
       const { data: iteratorItems, error: iterError } = await iterQuery;
+      console.log(`DEBUG: Iterator query completed for ${_key}`);
+      console.log(`DEBUG: Iterator result for ${_key}: items=${iteratorItems?.length || 0}, error=${iterError?.message || 'none'}`);
+      if (iteratorItems) console.log(`DEBUG: First item for ${_key}:`, iteratorItems[0]);
       if (iterError) throw new Error(`Failed to fetch iterator items for ${_key}: ${iterError.message}`);
 
       const iteratedSections: IteratedSectionResult[] = [];
@@ -1109,8 +1147,11 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
               continue;
             }
             const resolvedTemplateConfig = JSON.parse(resolvedTemplateConfigStr);
+            console.log(`DEBUG: Processing template component: ${resolvedTemplateConfig._key} (${resolvedTemplateConfig._type}) for item ${JSON.stringify(item)}`);
             // Recursively process the template component with the current 'item' as context
             const processedItem: ComponentResult = await processComponent(resolvedTemplateConfig, supabase, companyId, municipality, item);
+            console.log(`DEBUG: Template component result: ${resolvedTemplateConfig._key} has_data=${processedItem.data != null}`);
+            console.log(`DEBUG: Template component full result:`, JSON.stringify(processedItem));
             sectionContent.push(processedItem);
           } // End template component loop
           iteratedSections.push({
