@@ -1,6 +1,7 @@
 """Stage 1A: Water Projects × BNBO Intersection Analysis
 
-Calculate which BNBO (Biodiversity Net Benefit Obligation) areas are covered by water projects.
+Calculate which BNBO (Boringsnære Beskyttelsesområder - Well-adjacent Protection Areas)
+areas are covered by water projects.
 This creates a foundation dataset for later field-level environmental coverage analysis.
 
 Optimized for DuckDB Spatial v1.2.2 with ST_Dump for multipolygon decomposition.
