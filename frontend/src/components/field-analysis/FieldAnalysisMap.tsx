@@ -62,9 +62,44 @@ function MapTooltip({
 }: TooltipInfo) {
   const formatValue = (value: unknown, unit?: string): string => {
     if (typeof value === 'number') {
-      const formatted = value.toLocaleString('da-DK', {
-        maximumFractionDigits: 2,
-      });
+      // Special formatting for different types of values
+      let formatted: string;
+
+      // For animal counts (dyr), use whole numbers with Danish thousand separators
+      if (
+        unit === 'dyr' ||
+        (typeof unit === 'string' && unit.includes('dyr'))
+      ) {
+        formatted = Math.round(value).toLocaleString('da-DK');
+      }
+      // For areas, show appropriate precision
+      else if (unit === 'ha' || unit === 'hektar') {
+        formatted = value.toLocaleString('da-DK', {
+          minimumFractionDigits: value < 1 ? 2 : 1,
+          maximumFractionDigits: value < 1 ? 2 : 1,
+        });
+      }
+      // For percentages, show 1 decimal place
+      else if (
+        unit === '%' ||
+        (typeof unit === 'string' && unit.includes('%'))
+      ) {
+        formatted = value.toLocaleString('da-DK', {
+          minimumFractionDigits: 1,
+          maximumFractionDigits: 1,
+        });
+      }
+      // For large numbers (likely counts), use whole numbers
+      else if (value >= 1000) {
+        formatted = Math.round(value).toLocaleString('da-DK');
+      }
+      // For small numbers, use appropriate precision
+      else {
+        formatted = value.toLocaleString('da-DK', {
+          maximumFractionDigits: value < 1 ? 2 : 1,
+        });
+      }
+
       return unit ? `${formatted} ${unit}` : formatted;
     }
     return String(value);
@@ -367,24 +402,44 @@ function MapTooltip({
 
   return (
     <div
-      className="absolute z-50 max-w-xs rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
+      className="absolute z-50 max-w-sm rounded-xl border border-gray-300 bg-white shadow-xl backdrop-blur-sm"
       style={{
         left: x,
         top: y,
         transform: 'translate(-50%, -100%)',
-        marginTop: -10,
+        marginTop: -12,
       }}
     >
-      <p className="mb-2 text-sm font-semibold text-gray-900">{layerName}</p>
-      <div className="space-y-1 text-xs">
-        {relevantData.map(({ label, value, unit }, index) => (
-          <div key={index} className="flex justify-between">
-            <span className="text-gray-600">{label}:</span>
-            <span className="ml-2 font-medium text-gray-900">
-              {formatValue(value, unit)}
-            </span>
-          </div>
-        ))}
+      {/* Header with better typography */}
+      <div className="border-b border-gray-100 px-4 py-3">
+        <h3 className="text-base leading-tight font-semibold text-gray-900">
+          {layerName}
+        </h3>
+        {/* Show site name prominently if available */}
+        {properties.site_name && (
+          <p className="mt-1 text-sm font-medium text-gray-600">
+            {properties.site_name}
+          </p>
+        )}
+      </div>
+
+      {/* Content with improved spacing and hierarchy */}
+      <div className="px-4 py-3">
+        <div className="space-y-2.5">
+          {relevantData.map(({ label, value, unit }, index) => (
+            <div
+              key={index}
+              className="flex items-baseline justify-between gap-3"
+            >
+              <span className="text-sm leading-tight font-medium text-gray-600">
+                {label}:
+              </span>
+              <span className="text-right text-sm leading-tight font-semibold text-gray-900">
+                {formatValue(value, unit)}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
