@@ -1080,7 +1080,7 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
     // --- Handle Iterated Sections Recursively ---
     if (_type === 'iteratedSection' && iteratorDataSource && template) {
       const iteratorParams = iteratorDataSource.params;
-      const { source: iterSource, columns: iterColumns, filter: iterFilter } = iteratorParams;
+      const { source: iterSource, columns: iterColumns, filter: iterFilter, orderBy: iterOrderBy } = iteratorParams;
       if (!iterSource || !iterColumns) throw new Error(`Invalid iteratorDataSource for ${_key}`);
 
       let iterQuery = supabase.from(iterSource).select(iterColumns.join(','));
@@ -1106,7 +1106,15 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
         }
       }
 
-      // TODO: Add iterator ordering?
+      // Apply iterator ordering
+      if (iterOrderBy && Array.isArray(iterOrderBy)) {
+        for (const orderSpec of iterOrderBy) {
+          const { column, direction = 'asc' } = orderSpec;
+          if (column) {
+            iterQuery = iterQuery.order(column, { ascending: direction === 'asc' });
+          }
+        }
+      }
       console.log(`DEBUG: Iterator query for ${_key}: source=${iterSource}, companyId=${companyId}, columns=${iterColumns.join(',')}`);
       console.log(`DEBUG: Iterator SQL query for ${_key}:`, iterQuery.toString());
       const { data: iteratorItems, error: iterError } = await iterQuery;
@@ -1114,6 +1122,18 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
       console.log(`DEBUG: Iterator result for ${_key}: items=${iteratorItems?.length || 0}, error=${iterError?.message || 'none'}`);
       if (iteratorItems) console.log(`DEBUG: First item for ${_key}:`, iteratorItems[0]);
       if (iterError) throw new Error(`Failed to fetch iterator items for ${_key}: ${iterError.message}`);
+
+      // Add computed fields for display purposes
+      if (iteratorItems?.length > 0) {
+        for (const item of iteratorItems) {
+          // Add site_name_with_capacity field for production_sites iterator
+          if (iterSource === 'production_sites' && item.site_name && item.capacity !== undefined) {
+            const capacity = item.capacity || 0;
+            const capacityText = capacity > 0 ? ` (${capacity.toLocaleString()} dyr)` : ' (0 dyr)';
+            item.site_name_with_capacity = `${item.site_name}${capacityText}`;
+          }
+        }
+      }
 
       const iteratedSections: IteratedSectionResult[] = [];
 
