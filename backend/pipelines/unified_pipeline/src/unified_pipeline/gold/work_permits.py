@@ -33,9 +33,8 @@ class WorkPermitsGoldConfig(BaseJobConfig):
     # Input silver datasets from drive pipeline
     drive_data_dataset: str = "drive_data"  # Drive pipeline silver output
 
-    # Processing configuration
-    start_year: int = Field(default=2019, description="Start year for work permits data")
-    end_year: int = Field(default=2025, description="End year for work permits data")
+    # Processing configuration - no hardcoded year limits
+    # Years are now dynamically extracted from the source data
 
     # Data validation settings
     max_permits_per_record: int = Field(
@@ -112,8 +111,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
                 created_at,
                 updated_at
             FROM read_parquet('{work_permits_pattern}')
-            WHERE year BETWEEN {self.config.start_year} AND {self.config.end_year}
-              AND first_permits_count > 0
+            WHERE first_permits_count > 0
               AND first_permits_count <= {self.config.max_permits_per_record}
             """
 

@@ -33,36 +33,9 @@ class WorkPermitsTransformer(BaseTransformer):
         self.name = "WorkPermitsTransformer"
         logger.info("Initialized WorkPermitsTransformer for visa/work permits processing")
 
-        # Known Danish country names from the permit documents (EXACT from working script)
-        self.country_names = [
-            "Ukraine",
-            "Indien",
-            "Brasilien",
-            "Vietnam",
-            "Uganda",
-            "Bangladesh",
-            "Filippinerne",
-            "Tanzania",
-            "Thailand",
-            "Kirgizstan",
-            "Usbekistan",
-            "Hviderusland",
-            "Sydafrika",
-            "Kina",
-            "Ghana",
-            "Marokko",
-            "Polen",
-            "Rumænien",
-            "Tyrkiet",
-            "Etiopien",
-            "Kenya",
-            "Pakistan",
-            "Albanien",
-            "Nordmakedonien",
-        ]
-
-        # Expected years in the pivot table
-        self.expected_years = ["2019", "2020", "2021", "2022", "2023"]
+        # Dynamic extraction - no hardcoded lists
+        self.country_names = []  # Will be populated dynamically from PDF content
+        self.expected_years = []  # Will be populated dynamically from PDF content
 
     def can_handle(self, file_path: Path, file_metadata: dict[str, Any]) -> bool:
         """
@@ -205,6 +178,131 @@ class WorkPermitsTransformer(BaseTransformer):
         logger.debug(f"Extracted {len(full_text)} characters from PDF")
         return full_text
 
+    def _extract_years_from_text(self, text: str) -> list[str]:
+        """Extract year columns from PDF text dynamically."""
+        # Look for 4-digit years in reasonable range (2015-2030)
+        year_pattern = r"\b(20[1-3][0-9])\b"
+        found_years = re.findall(year_pattern, text)
+
+        # Get unique years and sort them
+        unique_years = sorted(list(set(found_years)))
+
+        # Filter to reasonable range for work permits
+        valid_years = [year for year in unique_years if 2015 <= int(year) <= 2030]
+
+        logger.info(f"Dynamically extracted years from PDF: {valid_years}")
+        return valid_years
+
+    def _extract_countries_from_text(self, text: str) -> list[str]:
+        """Extract country names from PDF text dynamically."""
+        # Common patterns for country names in Danish agricultural work permit documents
+        # Look for capitalized words that appear to be country names
+        # This regex finds capitalized words that are likely country names
+        country_pattern = r"\b[A-ZÆØÅ][a-zæøå]+(?:land|ien|stan|ien|ien|ien)?\b"
+
+        # Also look for some common country patterns
+        potential_countries = re.findall(country_pattern, text)
+
+        # Filter out common Danish words that aren't countries
+        danish_words_to_exclude = {
+            "Danmark",
+            "Landbrugsvisum",
+            "Arbejdstilladelse",
+            "Tilladelse",
+            "Ansøger",
+            "Virksomhed",
+            "Antal",
+            "Total",
+            "Samlet",
+            "Side",
+            "Dato",
+            "Periode",
+            "Rapport",
+            "Oversigt",
+            "Tabel",
+            "Kolonne",
+            "Række",
+            "Sektion",
+            "Afsnit",
+            "Bilag",
+            "Appendiks",
+            "Nationalitet",
+            "CVR",
+            "Nummer",
+            "Ukendt",
+            "Landbruget",
+            "Ministeriet",
+            "Arbejdstilladelser",
+            # Additional words from real PDF
+            "Notat",
+            "Natio",
+            "Økonomi",
+            "Analyse",
+            "Carl",
+            "Jacobsens",
+            "Valby",
+            "Mail",
+            "Sagsbehandler",
+            "Cæcilie",
+            "Lyngø",
+            "Jensen",
+            "Sags",
+            "August",
+            "Vej",
+            "Tel",
+            "Web",
+            "CVR-nr",
+            "Akt-id",
+        }
+
+        # Get unique potential countries
+        unique_countries = []
+        for country in potential_countries:
+            if (
+                country not in danish_words_to_exclude
+                and country not in unique_countries
+                and len(country) > 3
+            ):  # Country names are typically longer than 3 chars
+                unique_countries.append(country)
+
+        # Additionally, look for lines that contain CVR numbers followed by country-like words
+        # This helps identify countries in the pivot table structure
+        cvr_lines = [line for line in text.split("\n") if re.search(r"\b\d{8}\b", line)]
+
+        # Also look for lines that are indented (nationality lines in the table structure)
+        nationality_lines = []
+        for line in text.split("\n"):
+            stripped = line.strip()
+            # Look for lines that start with a country name (capitalized, not a CVR number)
+            if (
+                stripped
+                and stripped[0].isupper()
+                and not re.match(r"^\d", stripped)  # Not starting with number
+                and not re.match(r"^CVR", stripped)  # Not CVR header
+                and not re.match(r"^Tabel", stripped)  # Not table header
+                and len(stripped.split()[0]) > 3
+            ):  # First word is substantial
+                nationality_lines.append(stripped)
+
+        # Extract countries from these lines
+        for line in cvr_lines + nationality_lines:
+            words = line.split()
+            for word in words:
+                if (
+                    word.isalpha()
+                    and len(word) > 3
+                    and word[0].isupper()
+                    and word not in danish_words_to_exclude
+                    and word not in unique_countries
+                    # Additional filter: likely country names
+                    and not word.isdigit()
+                    and not re.match(r"^\d+$", word)
+                ):
+                    unique_countries.append(word)
+
+        logger.info(f"Dynamically extracted countries from PDF: {unique_countries}")
+        return unique_countries
+
     def _parse_work_permits_data(self, text: str) -> list[dict[str, Any]]:
         """
         Parse work permits data from extracted text.
@@ -216,7 +314,22 @@ class WorkPermitsTransformer(BaseTransformer):
         - Permit counts in cells
         - Special "Ukendt CVR" (Unknown CVR) section
         """
-        logger.debug("Parsing work permits data from text...")
+        logger.info("Starting to parse work permits data from text")
+
+        # Dynamically extract years and countries from the PDF content
+        self.expected_years = self._extract_years_from_text(text)
+        self.country_names = self._extract_countries_from_text(text)
+
+        if not self.expected_years:
+            logger.warning("No years found in PDF text - using fallback range 2019-2025")
+            self.expected_years = [str(year) for year in range(2019, 2026)]
+
+        if not self.country_names:
+            logger.warning("No countries found in PDF text - this may indicate parsing issues")
+            return []
+
+        logger.info(f"Using dynamic years: {self.expected_years}")
+        logger.info(f"Using dynamic countries: {self.country_names}")
 
         lines = text.split("\n")
         visa_records = []
