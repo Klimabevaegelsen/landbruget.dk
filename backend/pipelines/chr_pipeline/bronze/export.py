@@ -20,7 +20,6 @@ try:
 
     METADATA_AVAILABLE = True
 except ImportError:
-    logger.warning("⚠️  Pipeline metadata system not available - continuing without metadata")
     MetadataManager = None
     METADATA_AVAILABLE = False
 
