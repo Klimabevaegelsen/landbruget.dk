@@ -35,9 +35,6 @@ export function Footer() {
               <Link className="text-sm font-medium hover:underline" href="/">
                 Kilder
               </Link>
-              <Link className="text-sm font-medium hover:underline" href="/">
-                Download
-              </Link>
             </div>
           </div>
 

@@ -15,12 +15,7 @@ import { GlobalSearch } from '@/components/global-search';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 
-const links = [
-  { href: '/?section=overview', label: 'Oversigt' },
-  { href: '/?section=explore', label: 'Udforsk' },
-  { href: '/markanalyse', label: 'Markanalyse' },
-  { href: '/?section=blog', label: 'Blog' },
-];
+const links = [{ href: '/markanalyse', label: 'Markanalyse' }];
 
 function DesktopNav() {
   return (
@@ -35,7 +30,12 @@ function DesktopNav() {
           </Link>
         </div>
       ))}
-      <Link href="/?section=help" className="text-sm">
+      <Link
+        href="https://github.com/klimabevaegelsen/landbruget.dk/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm"
+      >
         <Button>Hjælp til</Button>
       </Link>
     </nav>
@@ -68,7 +68,12 @@ function MobileNavSearch({ onClick }: { onClick: () => void }) {
 function MobileNav() {
   return (
     <DisclosurePanel className="lg:hidden">
-      <Link href="/?section=help" className="text-sm">
+      <Link
+        href="https://github.com/klimabevaegelsen/landbruget.dk/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm"
+      >
         <Button>Hjælp til</Button>
       </Link>
       <div className="ml-2 flex flex-col gap-6 py-4">
