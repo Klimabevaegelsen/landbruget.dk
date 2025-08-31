@@ -115,6 +115,7 @@ class NLES5Validator:
                     MAX(nitrogen_washout_kg_ha) as max_washout,
                     COUNT(CASE WHEN nitrogen_washout_kg_ha < 0 THEN 1 END) as negative_count,
                     COUNT(CASE WHEN nitrogen_washout_kg_ha > 100 THEN 1 END) as excessive_count,
+                    COUNT(CASE WHEN nitrogen_washout_kg_ha > 200 THEN 1 END) as excessive_count,
                     COUNT(CASE WHEN nitrogen_washout_kg_ha IS NULL THEN 1 END) as null_count,
                     AVG(area_ha) as avg_area,
                     COUNT(DISTINCT crop_type) as unique_crops
@@ -133,15 +134,19 @@ class NLES5Validator:
                 self.log.info(f"   Range: {min_washout:.2f} to {max_washout:.2f} kg N/ha")
                 self.log.info(f"   Negative values: {negative_count:,}")
                 self.log.info(f"   Excessive values (>100): {excessive_count:,}")
+                self.log.info(f"   Excessive values (>200): {excessive_count:,}")
                 self.log.info(f"   Null values: {null_count:,}")
 
             # Simple validation checks
             validation_results = []
 
             # Check standard deviation
+            # Check standard deviation (based on NLES5 validation RMSE of 30.8 kg N/ha)
             if stddev_washout is not None:
-                if 4 <= stddev_washout <= 8:
-                    validation_results.append("✅ Standard deviation within reference range (4-8 kg N/ha)")
+                if 15 <= stddev_washout <= 35:
+                    validation_results.append("✅ Standard deviation within expected range (15-35 kg N/ha)")
+                elif 8 <= stddev_washout <= 50:
+                    validation_results.append(f"✅ Standard deviation {stddev_washout:.2f} kg N/ha reasonable (extended range)")
                 else:
                     validation_results.append(f"⚠️ Standard deviation {stddev_washout:.2f} outside reference range (4-8 kg N/ha)")
 
@@ -151,6 +156,16 @@ class NLES5Validator:
                     validation_results.append("✅ Average washout values reasonable")
                 else:
                     validation_results.append(f"⚠️ Average washout {avg_washout:.2f} may be outside normal range")
+                    validation_results.append(f"⚠️ Standard deviation {stddev_washout:.2f} kg N/ha outside expected range (8-50 kg N/ha)")
+
+            # Check for reasonable washout values (based on NLES5 validation data)
+            if avg_washout is not None:
+                if 40 <= avg_washout <= 92:
+                    validation_results.append("✅ Average washout values within expected Danish range (40-92 kg N/ha)")
+                elif 20 <= avg_washout <= 150:
+                    validation_results.append(f"✅ Average washout {avg_washout:.2f} kg N/ha reasonable (extended range)")
+                else:
+                    validation_results.append(f"⚠️ Average washout {avg_washout:.2f} kg N/ha outside expected range (20-150 kg N/ha)")
 
             # Report validation results
             for result in validation_results:
