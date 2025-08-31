@@ -845,7 +845,7 @@ pageBuilder:
               label: "Antal Produktionssteder"
               column: "site_count"
             - key: "prod_equiv"
-              label: "Produktion (Dyreækvivalenter)"
+              label: "Kapacitet (Antal dyr)"
               column: "total_animal_equivalents"
             - key: "antibiotics_total"
               label: "Antibiotika Total (DDD)"
@@ -988,8 +988,8 @@ pageBuilder:
                 year: "latest"
               metrics:
                 - key: "production"
-                  label: "Produktion (Ækv.)"
-                  column: "production_equiv"
+                  label: "Kapacitet (Antal dyr)"
+                  column: "capacity_count"
                 - key: "antibiotics"
                   label: "Antibiotika (DDD)"
                   column: "antibiotics_ddd"
@@ -1054,18 +1054,18 @@ pageBuilder:
                     year: "latest"
                   metrics:
                     - key: "production_animals"
-                      label: "Produktion (Antal/Ækv.)"
-                      column: "production_volume_equiv"
+                      label: "Kapacitet (Antal dyr)"
+                      column: "total_animals"
                     - key: "rank_dk_species_prod"
-                      label: "Rankering på landsplan (Art Prod.)"
+                      label: "Rankering på landsplan (Art Kapacitet)"
                       column: "rank_dk_species_production"
                     - key: "rank_mun_species_prod"
-                      label: "Rankering i kommunen (Art Prod.)"
+                      label: "Rankering i kommunen (Art Kapacitet)"
                       column: "rank_municipality_species_production"
 
           - _key: species-age-chart-{iteratorContext.chr}-{iteratorContext.species_id}
             _type: stackedBarChart
-            title: "{iteratorContext.species_name} produktion pr. år (kategori)"
+            title: "{iteratorContext.species_name} kapacitet pr. år (kategori)"
             dataSource:
               params:
                 source: "animal_capacity_log"
