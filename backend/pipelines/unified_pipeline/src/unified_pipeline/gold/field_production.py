@@ -133,6 +133,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.execute(
                 f"SET max_temp_directory_size = '{self.config.max_temp_directory_size}'"
             )
+            # Ensure correct GCS region is set (may be reset by local config)
+            self.conn.execute("SET s3_region = 'europe-west1'")
 
             # CPU optimization - use all available cores
             self.conn.execute(f"SET threads = {self.config.thread_count}")
