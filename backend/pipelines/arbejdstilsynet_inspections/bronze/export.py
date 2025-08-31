@@ -9,6 +9,19 @@ from typing import Any, Optional
 
 from dotenv import load_dotenv
 from google.cloud import storage
+
+# Import the unified metadata system
+try:
+    import sys
+
+    sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+    from common.pipeline_metadata import MetadataManager
+
+    METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without metadata")
+    MetadataManager = None
+    METADATA_AVAILABLE = False
 from playwright.async_api import async_playwright
 
 # Load environment variables from .env file
@@ -96,6 +109,40 @@ class GCSStorage:
                         shutil.copyfileobj(file_obj, gcs_file)
 
                 logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+
+                # Create and upload metadata using existing methods
+                if METADATA_AVAILABLE:
+                    try:
+                        metadata_manager = MetadataManager()
+
+                        # Get file info
+                        record_count = None
+                        file_size = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+
+                        if local_path.endswith(".csv"):
+                            try:
+                                with open(local_path, "r") as f:
+                                    record_count = max(0, len(f.readlines()) - 1)  # Subtract header
+                            except:
+                                pass
+
+                        metadata = metadata_manager.create_metadata(
+                            source_key="arbejdstilsynet_inspections",
+                            record_count=record_count,
+                            file_size_bytes=file_size,
+                        )
+
+                        # Upload metadata using existing method
+                        metadata_content = json.dumps(metadata.model_dump(mode="json"), indent=2, default=str)
+                        metadata_gcs_path = full_gcs_path.replace(".csv", "_metadata.json")
+
+                        with self.gcs_access.fs.open(metadata_gcs_path, "w") as f:
+                            f.write(metadata_content)
+
+                        logging.info(f"✅ Uploaded metadata to {metadata_gcs_path}")
+                    except Exception as e:
+                        logging.warning(f"⚠️  Failed to create metadata: {e}")
+
                 return True
             else:
                 # Fallback to old method if optimized access failed
@@ -104,6 +151,39 @@ class GCSStorage:
                 blob = bucket.blob(gcs_path)
                 blob.upload_from_filename(local_path)
                 logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+
+                # Create and upload metadata using fallback method
+                if METADATA_AVAILABLE:
+                    try:
+                        metadata_manager = MetadataManager()
+
+                        # Get file info
+                        record_count = None
+                        file_size = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+
+                        if local_path.endswith(".csv"):
+                            try:
+                                with open(local_path, "r") as f:
+                                    record_count = max(0, len(f.readlines()) - 1)  # Subtract header
+                            except:
+                                pass
+
+                        metadata = metadata_manager.create_metadata(
+                            source_key="arbejdstilsynet_inspections",
+                            record_count=record_count,
+                            file_size_bytes=file_size,
+                        )
+
+                        # Upload metadata using fallback method
+                        metadata_content = json.dumps(metadata.model_dump(mode="json"), indent=2, default=str)
+                        metadata_gcs_path = gcs_path.replace(".csv", "_metadata.json")
+                        metadata_blob = bucket.blob(metadata_gcs_path)
+                        metadata_blob.upload_from_string(metadata_content, content_type="application/json")
+
+                        logging.info(f"✅ Uploaded metadata to gs://{self.bucket_name}/{metadata_gcs_path} (fallback)")
+                    except Exception as e:
+                        logging.warning(f"⚠️  Failed to create metadata (fallback): {e}")
+
                 return True
 
         except Exception as e:

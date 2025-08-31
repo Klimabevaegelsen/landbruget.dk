@@ -299,7 +299,11 @@ class BaseSource(Generic[T], ABC):
                         metadata_gcs_path = (
                             f"{stage}/{final_dataset}/{timestamp}/{metadata_filename}"
                         )
-                        self.gcs_access.upload_file(str(metadata_file_path), metadata_gcs_path)
+                        # Read the JSON metadata file and upload using existing upload_json_string method
+                        with open(metadata_file_path, "r", encoding="utf-8") as f:
+                            metadata_json_string = f.read()
+
+                        self.gcs_access.upload_json_string(metadata_json_string, metadata_gcs_path)
                         self.log.info(f"✅ Pipeline metadata uploaded to GCS: {metadata_gcs_path}")
                     except Exception as e:
                         self.log.warning(f"⚠️  Failed to upload metadata to GCS: {e}")
