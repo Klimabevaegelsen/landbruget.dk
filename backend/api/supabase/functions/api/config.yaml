@@ -949,9 +949,13 @@ pageBuilder:
         columns:
           - "chr"
           - "site_name"
+          - "capacity"
+        orderBy:
+          - column: "capacity"
+            direction: "desc"
     iterationConfig:
       layout: "collapsible"
-      titleField: "site_name"
+      titleField: "site_name_with_capacity"
 
     template:
       - _key: site-details-{iteratorContext.chr}
