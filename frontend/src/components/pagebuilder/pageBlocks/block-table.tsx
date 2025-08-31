@@ -12,6 +12,7 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
+import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   const { isInCategoryWithData } = useCategoryDataContext();
@@ -68,6 +69,11 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
         data={grid.rows}
         filterable={grid.allowFiltering}
       />
+
+      {/* Documentation accordion */}
+      {grid.documentation && (
+        <DocumentationAccordion documentation={grid.documentation} />
+      )}
     </div>
   );
 }
