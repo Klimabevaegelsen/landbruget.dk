@@ -114,8 +114,8 @@ function SearchOverlay({
   onClose: () => void;
   borderless?: boolean;
 }) {
-  // Tabs for categories
-  const tabs = ['Alle', 'CVR', 'Firmanavn', 'Person', 'Lokation'];
+  // Tabs for categories - restricted to CVR and company name only
+  const tabs = ['Alle', 'CVR', 'Firmanavn'];
   const [activeTab, setActiveTab] = useState(0);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -139,13 +139,11 @@ function SearchOverlay({
       setError(null);
 
       try {
-        // Map tab index to search type
+        // Map tab index to search type - restricted to CVR and company name only
         const searchTypeMap: { [key: number]: string } = {
           0: 'auto', // Alle
           1: 'cvr', // CVR
           2: 'company_name', // Firmanavn
-          3: 'person', // Person (not implemented yet)
-          4: 'location', // Lokation (not implemented yet)
         };
 
         const searchType = searchTypeMap[activeTab] || 'auto';
@@ -229,7 +227,7 @@ function SearchOverlay({
         <Input
           autoFocus
           type="text"
-          placeholder="Søg efter CVR, firmanavn eller person"
+          placeholder="Søg efter CVR eller firmanavn"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-12 rounded-t-lg rounded-b-none border-none focus:ring-0 focus-visible:ring-0"

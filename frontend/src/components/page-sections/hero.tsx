@@ -13,7 +13,11 @@ export default function Hero() {
               <GlobalSearch
                 className=""
                 borderless
-                searchSuggestions={['Arla foods', 'Fyn', 'John Andersen']}
+                searchSuggestions={[
+                  'TYBJERGGAARD AGRI ApS',
+                  'Bram I/S',
+                  'Egegaard Landbrug ApS',
+                ]}
               />
             </div>
           </div>
