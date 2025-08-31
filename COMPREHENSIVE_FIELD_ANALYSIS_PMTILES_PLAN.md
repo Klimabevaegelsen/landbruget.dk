@@ -13,7 +13,7 @@ Create a new subpage for landbruget.dk that visualizes the comprehensive field a
 - **Spatial Data**: GPS coordinates, geometry (WKT format for Kepler.gl)
 - **Agricultural**: area_hectares, is_organic, crop_name
 - **Environmental Areas**: 
-  - BNBO areas (biodiversity/nature restoration)
+  - BNBO areas (drinking water protection from pesticides)
   - Wetlands areas
   - Water coverage calculations
 - **Soil Data**: soil_type_count, dominant_soil_type, dominant_soil_coverage_pct

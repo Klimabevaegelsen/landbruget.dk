@@ -249,7 +249,7 @@ COMMENT ON COLUMN h3_pfas_exposure.total_pfas_grams IS 'Actual PFAS active ingre
 COMMENT ON COLUMN h3_pfas_exposure.geometry IS 'H3 hexagon polygon geometry in WGS84';
 COMMENT ON COLUMN h3_pfas_exposure.h3_centroid IS 'H3 hexagon center point in WGS84';
 
-COMMENT ON TABLE bnbo_status_areas IS 'BNBO (Biodiversity and Nature Protection) status areas';
+COMMENT ON TABLE bnbo_status_areas IS 'BNBO (Boringsnære Beskyttelsesområder - Well-adjacent Protection Areas) status areas for drinking water protection from pesticides';
 COMMENT ON COLUMN bnbo_status_areas.status_code IS 'Protection status: protected, buffer, agricultural, transition, unprotected';
 
 COMMENT ON TABLE bbr_buildings IS 'BBR (Building and Dwelling Register) building data';
