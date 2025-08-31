@@ -121,8 +121,28 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
                 """)
                 return
 
-            # Get the latest file (they should all be the same data, just pick the first)
-            latest_file = files[0]
+            # Look specifically for the 2025 file which contains the newer dynamic data
+            target_file = None
+            for file_path in files:
+                if "Landbrugsvisum_statistik_2025.parquet" in file_path:
+                    target_file = file_path
+                    break
+            
+            # If no 2025 file found, fall back to the regular file
+            if not target_file:
+                self.log.warning("⚠️ No 2025 file found, falling back to regular file")
+                for file_path in files:
+                    if "Landbrugsvisum_statistik.parquet" in file_path:
+                        target_file = file_path
+                        break
+            
+            if not target_file:
+                self.log.error("❌ No work permits files found")
+                return
+                
+            latest_file = target_file
+            
+            self.log.info(f"🎯 Selected work permits file: {latest_file.split('/')[-1]}")
             self.log.info(f"📥 Loading work permits data from: {latest_file}")
 
             # Use temp download pattern like other working pipelines
