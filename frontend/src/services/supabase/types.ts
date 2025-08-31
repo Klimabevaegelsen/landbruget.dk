@@ -148,6 +148,7 @@ export interface BarChart {
   _type: 'barChart';
   title: string;
   data: ChartData;
+  unit?: string;
   documentation?: DocumentationLink;
 }
 
@@ -156,6 +157,7 @@ export interface StackedBarChart {
   _type: 'stackedBarChart';
   title: string;
   data: ChartData;
+  unit?: string;
   documentation?: DocumentationLink;
 }
 
@@ -164,6 +166,7 @@ export interface HorizontalStackedBarChart {
   _type: 'horizontalStackedBarChart';
   title: string;
   data: ChartData;
+  unit?: string;
   documentation?: DocumentationLink;
 }
 
@@ -172,6 +175,7 @@ export interface ComboChart {
   _type: 'comboChart';
   title: string;
   data: ChartData;
+  unit?: string;
   documentation?: DocumentationLink;
 }
 
