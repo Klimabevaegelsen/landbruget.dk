@@ -415,7 +415,6 @@ function MapTooltip({
         <h3 className="text-base leading-tight font-semibold text-gray-900">
           {layerName}
         </h3>
-        {/* Show site name prominently if available */}
         {properties.site_name && (
           <p className="mt-1 text-sm font-medium text-gray-600">
             {properties.site_name}
