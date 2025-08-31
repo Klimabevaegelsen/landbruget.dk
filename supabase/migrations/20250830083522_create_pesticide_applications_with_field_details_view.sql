@@ -19,6 +19,7 @@ SELECT
     fb.cvr_number,
     fb.block_id,
     fb.field_id,
+    fb.company_id,  -- Required by API for company filtering
 
     -- Pesticide application details
     pa.product_name,
