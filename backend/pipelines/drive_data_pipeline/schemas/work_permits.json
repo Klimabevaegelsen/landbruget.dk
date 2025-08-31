@@ -15,9 +15,7 @@
       "name": "year",
       "data_type": "INTEGER",
       "nullable": false,
-      "description": "Year of the work permit",
-      "min_value": 2019,
-      "max_value": 2030
+      "description": "Year of the work permit (dynamically extracted from PDF)"
     },
     {
       "name": "nationality",
@@ -60,13 +58,8 @@
   "primary_key": ["company_id", "year", "nationality"],
   "partition_by": ["year"],
   "metadata": {
-    "expected_countries": [
-      "Ukraine", "Indien", "Brasilien", "Vietnam", "Uganda", "Bangladesh",
-      "Filippinerne", "Tanzania", "Thailand", "Kirgizstan", "Usbekistan",
-      "Hviderusland", "Sydafrika", "Kina", "Ghana", "Marokko", "Polen",
-      "Rumænien", "Tyrkiet", "Etiopien", "Kenya", "Pakistan", "Albanien",
-      "Nordmakedonien"
-    ],
-    "expected_years": [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+    "extraction_method": "dynamic",
+    "description": "Countries and years are dynamically extracted from PDF content rather than hardcoded",
+    "note": "This allows the scraper to handle new countries and years automatically as they appear in the data"
   }
 }
