@@ -954,9 +954,9 @@ export default function FieldAnalysisMap({
           paint: {
             'fill-color': [
               'case',
-              // Educational/Public services buildings - Blue
+              // Educational/Public services buildings - Pink
               ['==', ['get', 'category_group'], 'publicServices'],
-              '#3B82F6', // Blue for schools and daycare
+              '#EC4899', // Pink for schools and daycare
               // Agricultural buildings - Brown
               ['==', ['get', 'category_group'], 'agricultural'],
               '#A16207', // Brown for agricultural buildings
@@ -978,9 +978,9 @@ export default function FieldAnalysisMap({
           paint: {
             'line-color': [
               'case',
-              // Educational/Public services buildings - Darker blue
+              // Educational/Public services buildings - Darker pink
               ['==', ['get', 'category_group'], 'publicServices'],
-              '#1D4ED8', // Darker blue outline
+              '#BE185D', // Darker pink outline
               // Agricultural buildings - Darker brown
               ['==', ['get', 'category_group'], 'agricultural'],
               '#92400E', // Darker brown outline
