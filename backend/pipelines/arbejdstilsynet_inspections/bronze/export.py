@@ -19,7 +19,7 @@ try:
 
     METADATA_AVAILABLE = True
 except ImportError:
-    print("⚠️  Pipeline metadata system not available - continuing without metadata")
+    logging.warning("⚠️  Pipeline metadata system not available - continuing without metadata")
     MetadataManager = None
     METADATA_AVAILABLE = False
 from playwright.async_api import async_playwright
@@ -123,7 +123,7 @@ class GCSStorage:
                             try:
                                 with open(local_path, "r") as f:
                                     record_count = max(0, len(f.readlines()) - 1)  # Subtract header
-                            except:
+                            except Exception:
                                 pass
 
                         metadata = metadata_manager.create_metadata(
@@ -165,7 +165,7 @@ class GCSStorage:
                             try:
                                 with open(local_path, "r") as f:
                                     record_count = max(0, len(f.readlines()) - 1)  # Subtract header
-                            except:
+                            except Exception:
                                 pass
 
                         metadata = metadata_manager.create_metadata(

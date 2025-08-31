@@ -8,7 +8,7 @@
 
 -- Changes made to config.json:
 -- - "Produktion (Antal dyr)" → "Kapacitet (Antal dyr)"
--- - "production_equiv" column references → "capacity_count" 
+-- - "production_equiv" column references → "capacity_count"
 -- - "Produktion (Dyreækvivalenter)" → "Kapacitet (Antal dyr)"
 -- - "Rankering på landsplan (Prod. Ækv.)" → "Rankering på landsplan (Kapacitet)"
 -- - "Rankering i kommunen (Prod. Ækv.)" → "Rankering i kommunen (Kapacitet)"
@@ -21,7 +21,7 @@
 -- - "produktion & placering" → "kapacitet & placering"
 
 -- This ensures the frontend displays:
--- - "Kapacitet" instead of "Produktion" 
+-- - "Kapacitet" instead of "Produktion"
 -- - "Antal dyr" instead of "Ækv." (equivalents)
 -- - Consistent terminology that reflects facility capacity, not production
 
