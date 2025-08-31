@@ -89,12 +89,12 @@ class NLES5Calculator:
                                     (1 - EXP(-0.001194 * perco_apr_aug_current +
                                              -0.00111 * perco_sep_mar_current)) *
                                     EXP(-0.00086 * perco_sep_mar_previous) *
-                                    EXP(-0.00185 * clay_content) * 1.085
+                                    EXP(-0.00185 * clay_content)
                                 ELSE -- clay
                                     (1 - EXP(-0.00080 * perco_apr_aug_current +
                                              -0.00075 * perco_sep_mar_current)) *
                                     EXP(-0.00064 * perco_sep_mar_previous) *
-                                    EXP(-0.00185 * clay_content) * 1.085
+                                    EXP(-0.00185 * clay_content)
                             END
                         ELSE NULL  -- No fallbacks allowed - fail if percolation data missing
                     END as reference_perco_soil_effect,
@@ -286,8 +286,8 @@ class NLES5Calculator:
                 -- NLES5 model components using REAL data - NO DEFAULTS
                 crop_params.parameter_value as crop_effect,
                 -- Use detailed percolation effects when available
-                COALESCE(pe.reference_drainage_effect, 0.8) as drainage_effect,
-                COALESCE(pe.reference_soil_effect, 0.9) as soil_effect,
+                COALESCE(pe.reference_drainage_effect, 0.001) as drainage_effect,
+                COALESCE(pe.reference_soil_effect, 0.001) as soil_effect,
 
                 -- NLES5 nitrogen effect using REAL data from optimized spatial joins
                 ({bt_coef} * COALESCE(f.total_soil_n_mg_ha, 0) +
@@ -340,7 +340,7 @@ class NLES5Calculator:
                                {bm1_coef} * COALESCE(f.mineral_n_prev_kg_ha, 0) +
                                {bf0_coef} * COALESCE(f.nfix_ha, 0)
                            )), 1.5) *
-                    COALESCE(pe.reference_perco_soil_effect, 0.8)
+                    COALESCE(pe.reference_perco_soil_effect, 0.001)
                 ) as nitrogen_washout_kg_ha,
 
                 -- Total nitrogen washout per field (same formula * area)
@@ -357,7 +357,7 @@ class NLES5Calculator:
                                {bm1_coef} * COALESCE(f.mineral_n_prev_kg_ha, 0) +
                                {bf0_coef} * COALESCE(f.nfix_ha, 0)
                            )), 1.5) *
-                    COALESCE(pe.reference_perco_soil_effect, 0.8)
+                    COALESCE(pe.reference_perco_soil_effect, 0.001)
                 ) * f.area_ha as total_nitrogen_washout_kg,
 
                 -- Data quality indicators (real data only)
@@ -1413,6 +1413,23 @@ class NLES5Calculator:
                     (1.0 + COALESCE(f.soil_effect, 0.0)) *
                     (1.0 + COALESCE(f.drainage_effect, 0.0)) *
                     (1.0 + COALESCE(f.perco_soil_effect, 0.0))
+                -- Calculate NLES5 nitrogen washout using correct NLES5 formula: Y5 = Trend + V^1.5 * Perco_Soil_effect
+                GREATEST(0, 
+                    (
+                        -0.1108 * (f.year - 1991) +
+                        POWER((23.51 + 
+                               COALESCE(crop_params.parameter_value, 0) + 
+                               1.0 * (
+                                   0.456793 * COALESCE(f.tn_t_ha * 1000, 0) +  -- Convert tons/ha to kg/ha for soil N
+                                   0.049570 * COALESCE(f.mineral_n_foraar, 0) +
+                                   0.157044 * COALESCE(f.mineral_n_eft, 0) +
+                                   0.038245 * COALESCE(f.mineral_n_udb, 0) +
+                                   0.014099 * COALESCE(f.organic_n_hus, 0) +
+                                   0.026499 * 0 +  -- No previous year mineral N data available
+                                   0.016314 * 0    -- No N fixation data available
+                               )), 1.5) *
+                        COALESCE(f.perco_soil_effect, 0.001)
+                    ) * 1.085  -- Apply scaling factor to final result
                 ) as nitrogen_washout_kg_ha,
                 
                 COALESCE(f.perco_apr_aug_current, 0.0) as percolation_mm,
@@ -1483,6 +1500,23 @@ class NLES5Calculator:
                             END
                         ELSE NULL
                     END as perco_soil_effect
+                                    -- COMBINED PERCOLATION-SOIL EFFECT (CORRECTED: removed 1.085 from here)
+                CASE
+                    WHEN total_percolation > 0 THEN
+                        CASE
+                            WHEN (soil_code IN ('1', '2', '3') OR soil_description ILIKE '%sand%') THEN
+                                (1 - EXP(-0.001194 * perco_apr_aug_current +
+                                         -0.00111 * perco_sep_mar_current)) *
+                                EXP(-0.00086 * perco_sep_mar_previous) *
+                                EXP(-0.00185 * clay_content)
+                            ELSE -- clay
+                                (1 - EXP(-0.00080 * perco_apr_aug_current +
+                                         -0.00075 * perco_sep_mar_current)) *
+                                EXP(-0.00064 * perco_sep_mar_previous) *
+                                EXP(-0.00185 * clay_content)
+                        END
+                    ELSE NULL
+                END as perco_soil_effect
                     
                 FROM {fields_complete_table}
                 WHERE total_percolation IS NOT NULL

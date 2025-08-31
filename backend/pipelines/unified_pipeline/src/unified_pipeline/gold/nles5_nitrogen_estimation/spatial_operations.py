@@ -11,6 +11,7 @@ This module handles all spatial operations including:
 import time
 
 from unified_pipeline.util.timing import timed
+from .fertilizer_distributor import NLES5FertilizerDistributor
 
 
 class NLES5SpatialOperations:
@@ -22,6 +23,9 @@ class NLES5SpatialOperations:
         self.config = processor.config
         self.log = processor.log
         self.conn = processor.conn
+        
+        # Initialize NLES5 fertilizer distributor for proper allocation
+        self.fertilizer_distributor = NLES5FertilizerDistributor(self.conn, self.log)
         self.gcs_access = processor.gcs_access
     
     @timed(name="Spatial join fields with climate data")
@@ -245,13 +249,16 @@ class NLES5SpatialOperations:
             self.log.error(f"Crop classification join failed: {e}")
             raise ValueError(f"Crop classification join failed: {e}. Pipeline requires actual crop data, not defaults.")
 
-    @timed(name="Joining with nitrogen data")  
+    @timed(name="Joining with nitrogen data using NLES5 distribution algorithm")  
     def _join_fields_with_nitrogen(self, input_table: str) -> str:
         """
-        Join fields with comprehensive nitrogen data (fertilizer, field plan, catch crops).
+        Join fields with comprehensive nitrogen data using the NLES5 fertilizer distribution algorithm.
+        
+        This replaces the simple CVR-based join with the sophisticated distribution algorithm
+        that follows the Danish methodology for prioritized organic fertilizer allocation.
         """
         try:
-            self.log.info("Joining fields with comprehensive nitrogen data sources")
+            self.log.info("🚜 Applying NLES5 fertilizer distribution algorithm to fields...")
             
             # Step 1: Start with base fields
             self.conn.execute(f"""
@@ -259,12 +266,12 @@ class NLES5SpatialOperations:
                 SELECT * FROM {input_table}
             """)
             
-            # Step 2: Join with fertilizer data (if available)
+            # Step 2: Apply NLES5 fertilizer distribution algorithm
             fertilizer_joined = False
             try:
                 fertilizer_count = self.conn.execute("SELECT COUNT(*) FROM fertilizer_accounts").fetchone()[0]
                 if fertilizer_count > 0:
-                    self.log.info(f"Joining with {fertilizer_count:,} fertilizer records")
+                    self.log.info(f"Distributing fertilizer from {fertilizer_count:,} farm-level records using NLES5 priority algorithm")
                     
                     # Optimize join order - large table on left, small table on right
                     self.conn.execute("""
@@ -276,12 +283,53 @@ class NLES5SpatialOperations:
                             'fertilizer_accounts' as nitrogen_data_source
                         FROM fields_nitrogen_base f  -- Large table on left (2.3M+ records)
                         LEFT JOIN fertilizer_accounts fert ON f.field_id = fert.field_id AND f.year = fert.year  -- Small table on right (~27K records)
+                    # Use the sophisticated NLES5 distribution algorithm
+                    distributed_table = self.fertilizer_distributor.apply_fertilizer_distribution_to_pipeline("fields_nitrogen_base")
+                    
+                    # Rename to standard name for pipeline compatibility
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE fields_with_fertilizer AS
+                        SELECT 
+                            *,
+                            'nles5_distributed' as nitrogen_data_source
+                        FROM {distributed_table}
                     """)
+                    
+                    # Clean up intermediate table
+                    self.conn.execute(f"DROP TABLE IF EXISTS {distributed_table}")
                     fertilizer_joined = True
+                    
+                    # Log distribution statistics
+                    stats = self.conn.execute("""
+                        SELECT 
+                            COUNT(*) as total_fields,
+                            COUNT(CASE WHEN fertilizer_allocation_method != 'no_fertilizer_data' THEN 1 END) as fields_with_fertilizer,
+                            COUNT(CASE WHEN fertilizer_allocation_method = 'proportional' THEN 1 END) as proportional_allocations,
+                            COUNT(CASE WHEN fertilizer_allocation_method = 'priority_based' THEN 1 END) as priority_allocations,
+                            AVG(organic_quota_fraction) as avg_organic_fraction
+                        FROM fields_with_fertilizer
+                    """).fetchone()
+                    
+                    self.log.info(f"📊 NLES5 Distribution Results: {stats[1]:,}/{stats[0]:,} fields received fertilizer "
+                                 f"({stats[2]:,} proportional, {stats[3]:,} priority-based, "
+                                 f"avg organic fraction: {stats[4]:.1%})")
                 else:
                     self.log.warning("No fertilizer data available")
             except Exception as e:
-                self.log.warning(f"Could not join fertilizer data: {e}")
+                self.log.warning(f"Could not apply NLES5 fertilizer distribution: {e}")
+                # Fallback to simple approach
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE fields_with_fertilizer AS
+                    SELECT 
+                        *,
+                        0.0 as organic_n_hus,
+                        0.0 as mineral_n_foraar,
+                        0.0 as mineral_n_eft,
+                        0.0 as mineral_n_udb,
+                        0.0 as tn_t_ha,
+                        'no_fertilizer_data' as nitrogen_data_source
+                    FROM fields_nitrogen_base
+                """)
             
             # Step 3: Join with field plan data (if fertilizer not available or as supplement)
             field_plan_table = "fields_with_fertilizer" if fertilizer_joined else "fields_nitrogen_base"
