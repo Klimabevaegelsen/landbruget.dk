@@ -343,7 +343,7 @@ pageBuilder:
       title: "Miljøoverholdelse og Beskyttelsesområder"
       description: "Oversigt over miljøoverholdelse inkluderende problematiske områder, BNBO-beskyttelse og vådområder"
       sources:
-        - name: "BNBO workflow (beskyttet natur)"
+        - name: "BNBO workflow (drikkevandsbeskyttelse)"
           url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/bnbo.md"
         - name: "Lavbundsjorde workflow"
           url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/wetlands.md"
@@ -378,10 +378,10 @@ pageBuilder:
     _type: comboChart
     title: "BNBO miljøstatus - områder og klima- eller miljøprojekter"
     documentation:
-      title: "BNBO Beskyttet Natur Status"
-      description: "Status for beskyttet natur områder (BNBO) inkluderende områder der kræver handling og gennemførte tiltag"
+      title: "BNBO Boringsnære Beskyttelsesområder Status"
+      description: "Status for boringsnære beskyttelsesområder (BNBO) omkring drikkevandsboringer hvor sprøjtemidler kan forurene grundvandet. Inkluderer områder der kræver handling og gennemførte tiltag for drikkevandsbeskyttelse"
       sources:
-        - name: "BNBO workflow (beskyttet natur)"
+        - name: "BNBO workflow (drikkevandsbeskyttelse)"
           url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/bnbo.md"
       dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#bnbo-workflow"
     dataSource:
