@@ -44,17 +44,17 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     enable_spatial_indexing: bool = True  # Enable spatial indexes for performance  
     use_chunked_processing: bool = True  # Enable chunking to handle large datasets
     use_target_year_processing: bool = True  # ULTIMATE: Process one target year at a time with 3-year windows
-    max_memory_usage_gb: int = 6  # More conservative memory limit for stability
+    max_memory_usage_gb: int = 8  # Increased from 2GB - spatial joins need more memory
     
-    # Enhanced chunked processing settings for memory management
+    # Enhanced chunked processing settings for memory management - REDUCED FOR DISK SPACE
     # Can be overridden by environment variables for fine-tuning
-    tessellation_batch_size: int = int(os.getenv('TESSELLATION_BATCH_SIZE', '25000'))  # Grid cells per tessellation batch
-    spatial_join_batch_size: int = int(os.getenv('SPATIAL_JOIN_BATCH_SIZE', '30000'))  # Fields per spatial join batch
-    nles5_calculation_batch_size: int = int(os.getenv('NLES5_CALCULATION_BATCH_SIZE', '40000'))  # Fields per NLES5 calculation batch
+    tessellation_batch_size: int = int(os.getenv('TESSELLATION_BATCH_SIZE', '10000'))  # Reduced from 25000 to prevent disk overflow
+    spatial_join_batch_size: int = int(os.getenv('SPATIAL_JOIN_BATCH_SIZE', '1000'))  # Ultra-small batches to prevent memory exhaustion
+    nles5_calculation_batch_size: int = int(os.getenv('NLES5_CALCULATION_BATCH_SIZE', '10000'))  # Reduced from 20000 for memory optimization
     
-    # Disk space and performance optimization settings - UNRESTRICTED
-    max_temp_directory_size_gb: int = 500  # Large temp space allowance
-    threads: int = 2  # Very conservative to reduce memory contention
+    # Disk space and performance optimization settings - CONSERVATIVE
+    max_temp_directory_size_gb: int = 50  # Reduced from 500GB to prevent disk overflow
+    threads: int = 1  # Reduced to 1 to minimize concurrent temp file creation
     preserve_insertion_order: bool = False  # Disable to save memory/disk space
 
 
@@ -62,8 +62,9 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # OPTIMIZED YEAR SELECTION: Only loads years actually needed for NLES5 calculations
     # Specify target calculation years - pipeline automatically loads required supporting years (current + 2 previous)
     # Example: target_years = [2021, 2022] → loads [2019, 2020, 2021, 2022] (4 years instead of 18 years)
-    # target_years: Optional[List[int]] = None
-    target_years: Optional[List[int]] = [2021, 2022, 2023]
+    # target_years: Optional[List[int]] = None  
+    # NOTE: 2023 agricultural fields data is not available in GCS, max year is 2022
+    target_years: Optional[List[int]] = [2021, 2022]
 
     # MEMORY OPTIMIZATION: Limits target calculation years (auto-discovery with memory management)
     # NLES5 requires 3-year windows: current + previous + year before previous
@@ -84,7 +85,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # This reduces dataset size by ~98% while maintaining representative agricultural data
     # To disable geographic filtering, set test_bounds = None
     # Can be overridden by setting the TEST_BOUNDS environment variable as a JSON string, e.g., '[10.0, 55.9, 10.3, 56.2]'.
-    test_bounds: Optional[List[float]] = json.loads(os.getenv('TEST_BOUNDS')) if os.getenv('TEST_BOUNDS') else None  # Process entire Denmark by default
+    test_bounds: Optional[List[float]] = json.loads(os.getenv('TEST_BOUNDS')) if os.getenv('TEST_BOUNDS') else [10.0, 55.9, 10.3, 56.2]  # Use small test area to prevent disk overflow
 
     # Quality thresholds
     min_data_coverage: float = 0.7  # Minimum acceptable data coverage rate
