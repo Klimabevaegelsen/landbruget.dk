@@ -1,5 +1,6 @@
 import { serve } from 'std/http/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { withSecurity, validateCompanyId, createErrorResponse, createSuccessResponse } from '../_shared/security.ts';
 // import yaml from 'js-yaml'; // No longer needed
 import appConfig from './config.json' assert { type: 'json' }; // Import JSON directly
 // --- Configuration ---
@@ -1071,7 +1072,7 @@ type IteratedSectionResult = {
 }
 // --- Recursive Component Processor ---
 async function processComponent(componentConfig: any, supabase: SupabaseClient, companyId: string, municipality: string, parentContext: Record<string, any> | null): Promise<ComponentResult> {
-  const { _key, _type, title, dataSource, iteratorDataSource, iterationConfig, template } = componentConfig;
+  const { _key, _type, title, documentation, dataSource, iteratorDataSource, iterationConfig, template } = componentConfig;
   console.log(`Processing component: ${_key} (${_type}), Context: ${JSON.stringify(parentContext)}`);
   let resultData: any = null; // Use any temporarily for varied results
   let processingError: string | null = null;
@@ -1216,12 +1217,13 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
   // Structure the final output for this component
   const finalResultData = resultData as (ComponentResult | null);
   if (finalResultData && !finalResultData.error && !processingError) {
-    // Spread finalResultData first, then set title
+    // Spread finalResultData first, then set title and documentation
     return {
       ...finalResultData, // Spread the processed data
       _key: _key,       // Ensure _key from config is used
       _type: _type,     // Ensure _type from config is used
-      title: title       // Ensure title from config is used
+      title: title,     // Ensure title from config is used
+      ...(documentation && { documentation }) // Include documentation if present
     };
   } else {
     // Error path remains the same
@@ -1234,33 +1236,19 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
   }
 }
 // --- Main Request Handler ---
-serve(async (req)=>{
+serve(withSecurity(async (req, rateLimitInfo) => {
   // Clear caches at the beginning of each request
   latestYearCache.clear();
   columnExistenceCache.clear();
 
-  // CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
-      }
-    });
-  }
   const url = new URL(req.url);
   const companyIdParam = url.searchParams.get('id');
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*'
-  };
-  if (!companyIdParam) return new Response(JSON.stringify({
-    error: 'Company ID (UUID) query parameter is required'
-  }), {
-    status: 400,
-    headers
-  });
+
+  // Validate company ID
+  const validation = validateCompanyId(companyIdParam);
+  if (!validation.valid) {
+    return createErrorResponse(validation.error!, 400, rateLimitInfo);
+  }
   let config;
   let companyInfo: CompanyInfo | null = null;
   let supabase: SupabaseClient;
@@ -1275,16 +1263,9 @@ serve(async (req)=>{
         fetch: fetch.bind(globalThis)
       }
     });
-    companyInfo = await getCompanyDetails(supabase, companyIdParam);
+    companyInfo = await getCompanyDetails(supabase, companyIdParam!);
     if (!companyInfo) {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const errorMsg = uuidRegex.test(companyIdParam) ? `Company with ID ${companyIdParam} not found` : `Invalid Company ID format provided`;
-      return new Response(JSON.stringify({
-        error: errorMsg
-      }), {
-        status: 404,
-        headers
-      });
+      return createErrorResponse(`Company with ID ${companyIdParam} not found`, 404, rateLimitInfo);
     }
     config = getConfig();
     if (!config?.pageBuilder) throw new Error("Invalid or empty configuration loaded.");
@@ -1309,21 +1290,10 @@ serve(async (req)=>{
       },
       pageBuilder: pageBuilderResults
     };
-    return new Response(JSON.stringify(responseBody, null, 2), {
-      headers
-    });
+    return createSuccessResponse(responseBody, rateLimitInfo);
   } catch (error) {
     const err = error as Error;
     console.error('Critical error in edge function:', err);
-    const errorHeaders = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    };
-    return new Response(JSON.stringify({
-      error: `Internal Server Error: ${err.message}`
-    }), {
-      status: 500,
-      headers: errorHeaders
-    });
+    return createErrorResponse(`Internal Server Error: ${err.message}`, 500, rateLimitInfo);
   }
-});
+}));
