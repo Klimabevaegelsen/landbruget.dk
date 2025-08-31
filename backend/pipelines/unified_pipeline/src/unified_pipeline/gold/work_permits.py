@@ -91,10 +91,10 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
         self.log.info("📥 Loading work permits data from drive pipeline silver layer")
 
         # Look for work permits parquet files in drive_data silver bucket
-        # Pattern: work_permits_*.parquet
+        # The drive pipeline stores work permits data in "work permits" folder (with space)
         try:
             # Try to find work permits files in the silver bucket
-            work_permits_pattern = f"gs://{self.config.bucket}/silver/{self.config.drive_data_dataset}/**/work_permits_*.parquet"
+            work_permits_pattern = f"gs://{self.config.bucket}/silver/work permits/**/*.parquet"
 
             self.log.info(f"🔍 Looking for work permits files: {work_permits_pattern}")
 
