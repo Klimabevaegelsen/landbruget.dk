@@ -659,6 +659,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
             # Define output tables with subdataset names for standard pattern
             # Include the new unified table as the primary output
+            failed_uploads = 0
+
+            # Define output tables with subdataset names for standard pattern
             tables_to_save = [
                 ("nles5_unified_results", "unified_results"),  # NEW: Primary comprehensive table
                 ("nles5_nitrogen_estimates_gold", "nitrogen_estimates"),
