@@ -6,7 +6,13 @@ import { LayerControlPanel } from './LayerControlPanel';
 import { FieldDetailsPanel } from './FieldDetailsPanel';
 import { CoordinatePanel } from './CoordinatePanel';
 import { LoadingState } from './LoadingState';
-import { FieldAnalysisData, LayerVisibility, FilterState } from './types';
+import { YearSelector } from './YearSelector';
+import {
+  FieldAnalysisData,
+  LayerVisibility,
+  FilterState,
+  YearSelection,
+} from './types';
 
 // Dynamically import the map component to avoid SSR issues
 const FieldAnalysisMap = dynamic(() => import('./FieldAnalysisMap'), {
@@ -33,6 +39,13 @@ export default function FieldAnalysisVisualization() {
     useDecileColoring: true,
   });
 
+  const [yearSelection, setYearSelection] = useState<YearSelection>({
+    selectedYear: 2024, // Default to most recent year
+    availableYears: [
+      2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024,
+    ], // Available years from PMTiles generation
+  });
+
   const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(
     null
   );
@@ -44,9 +57,9 @@ export default function FieldAnalysisVisualization() {
   const [error, setError] = useState<string | null>(null);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
 
-  // PMTiles URLs from environment variables (Cloudflare R2)
+  // Generate PMTiles URLs dynamically based on selected year
   const pmtilesUrls = {
-    fields: process.env.NEXT_PUBLIC_FIELD_ANALYSIS_PMTILES_URL || '',
+    fields: `https://data.pesticidkortet.dk/pmtiles/field_analysis_${yearSelection.selectedYear}.pmtiles`,
     bnbo: process.env.NEXT_PUBLIC_BNBO_PMTILES_URL || '',
     wetlands: process.env.NEXT_PUBLIC_WETLANDS_PMTILES_URL || '',
     water_projects: process.env.NEXT_PUBLIC_WATER_PROJECTS_PMTILES_URL || '',
@@ -57,6 +70,11 @@ export default function FieldAnalysisVisualization() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Handle loading state when PMTiles URLs change
+  useEffect(() => {
+    setIsLoading(true);
+  }, [pmtilesUrls.fields]);
 
   // Handle orientation changes on mobile
   useEffect(() => {
@@ -129,6 +147,21 @@ export default function FieldAnalysisVisualization() {
     },
     [selectedField]
   );
+
+  // Handle year selection changes
+  const handleYearChange = useCallback((year: number) => {
+    setYearSelection((prev) => ({ ...prev, selectedYear: year }));
+    // Reset selected field and coordinates when year changes
+    setSelectedField(null);
+    setClickedCoordinates(null);
+    // Set loading state while new PMTiles load
+    setIsLoading(true);
+  }, []);
+
+  // Handle map ready callback
+  const handleMapReady = useCallback(() => {
+    setIsLoading(false);
+  }, []);
 
   // Handle escape key and prevent body scroll
   useEffect(() => {
@@ -233,7 +266,12 @@ export default function FieldAnalysisVisualization() {
       >
         {/* Mobile close button */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4 lg:hidden">
-          <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
+          <div>
+            <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
+            <p className="text-sm text-gray-600">
+              Data for {yearSelection.selectedYear}
+            </p>
+          </div>
           <button
             onClick={() => setMobileControlsOpen(false)}
             className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 hover:bg-gray-100 active:bg-gray-200"
@@ -253,6 +291,23 @@ export default function FieldAnalysisVisualization() {
               />
             </svg>
           </button>
+        </div>
+
+        {/* Desktop header */}
+        <div className="hidden border-b bg-white p-4 lg:block">
+          <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
+          <p className="text-sm text-gray-600">
+            Data for {yearSelection.selectedYear}
+          </p>
+        </div>
+
+        {/* Year Selection */}
+        <div className="border-b bg-white p-4">
+          <YearSelector
+            yearSelection={yearSelection}
+            onYearChange={handleYearChange}
+            isLoading={isLoading}
+          />
         </div>
 
         <LayerControlPanel
@@ -282,6 +337,7 @@ export default function FieldAnalysisVisualization() {
             filterState={filterState}
             onFieldSelect={handleFieldSelect}
             onMapClick={handleMapClick}
+            onMapReady={handleMapReady}
           />
         )}
       </div>

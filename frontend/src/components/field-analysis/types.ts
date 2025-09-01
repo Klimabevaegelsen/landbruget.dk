@@ -71,6 +71,11 @@ export interface LayerVisibility {
   buildings: boolean;
 }
 
+export interface YearSelection {
+  selectedYear: number;
+  availableYears: number[];
+}
+
 export type VisualizationMode =
   | 'total_pesticide_belastning'
   | 'pfas_belastning'
