@@ -40,7 +40,7 @@ export default function MarkanalysePage() {
               </p>
             </div>
             <div className="text-xs text-gray-500 lg:text-right lg:text-sm">
-              617.774 marker • 2024 data
+              617.774 marker • Vælg år i kontrolpanelet
             </div>
           </div>
         </div>

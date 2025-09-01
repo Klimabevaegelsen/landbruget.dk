@@ -41,6 +41,7 @@ interface FieldAnalysisMapProps {
     address: string;
   }) => void;
   onMapClick?: (coordinates: { lat: number; lng: number }) => void;
+  onMapReady?: () => void;
 }
 
 interface TooltipInfo {
@@ -451,6 +452,7 @@ export default function FieldAnalysisMap({
   onFieldSelect,
   onLocationSelect,
   onMapClick,
+  onMapReady,
 }: FieldAnalysisMapProps) {
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -1077,8 +1079,13 @@ export default function FieldAnalysisMap({
       addWetlandsLayers(map);
       addWaterProjectsLayers(map);
       addBuildingsLayers(map);
+
+      // Notify parent that map is ready
+      setIsLoading(false);
+      onMapReady?.();
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
+      setError('Failed to load map data');
     }
   }, [
     pmtilesUrls,
@@ -1087,6 +1094,7 @@ export default function FieldAnalysisMap({
     addWetlandsLayers,
     addWaterProjectsLayers,
     addBuildingsLayers,
+    onMapReady,
   ]);
 
   // Update layer visibility and styling when props change
