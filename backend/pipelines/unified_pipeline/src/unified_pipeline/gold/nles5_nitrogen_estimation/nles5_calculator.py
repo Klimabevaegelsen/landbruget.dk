@@ -1387,6 +1387,27 @@ class NLES5Calculator:
         self.conn.execute(f"DROP TABLE IF EXISTS {result_table}")
         self.conn.execute(f"""
             CREATE TABLE {result_table} AS
+            WITH deduplicated_fields AS (
+                SELECT DISTINCT
+                    field_id,
+                    cvr_number,
+                    year,
+                    area_ha,
+                    crop_name,
+                    m_code,
+                    tn_t_ha,
+                    mineral_n_foraar,
+                    mineral_n_eft,
+                    mineral_n_udb,
+                    organic_n_hus,
+                    perco_soil_effect,
+                    perco_apr_aug_current,
+                    geom
+                FROM fields_with_fertilizer
+                WHERE perco_apr_aug_current IS NOT NULL 
+                  AND perco_apr_aug_current > 0
+                  AND perco_soil_effect IS NOT NULL
+            )
             SELECT
                 f.field_id,
                 -- Generate block_id from available FVM marker data
@@ -1406,19 +1427,12 @@ class NLES5Calculator:
                 'unknown' as soil_description,  -- soil_description not available
                 0.0 as clay_content,  -- clay_content not available
                 
-                -- Calculate NLES5 nitrogen washout using complete formula
-                GREATEST(0, 
-                    f.perco_apr_aug_current * 
-                    COALESCE(crop_params.nles5_factor, 0.87) * 
-                    (1.0 + COALESCE(f.soil_effect, 0.0)) *
-                    (1.0 + COALESCE(f.drainage_effect, 0.0)) *
-                    (1.0 + COALESCE(f.perco_soil_effect, 0.0))
                 -- Calculate NLES5 nitrogen washout using correct NLES5 formula: Y5 = Trend + V^1.5 * Perco_Soil_effect
                 GREATEST(0, 
                     (
                         -0.1108 * (f.year - 1991) +
                         POWER((23.51 + 
-                               COALESCE(crop_params.parameter_value, 0) + 
+                               COALESCE(crop_params.nles5_factor, 0) + 
                                1.0 * (
                                    0.456793 * COALESCE(f.tn_t_ha * 1000, 0) +  -- Convert tons/ha to kg/ha for soil N
                                    0.049570 * COALESCE(f.mineral_n_foraar, 0) +
@@ -1438,10 +1452,8 @@ class NLES5Calculator:
                 ST_AsText(f.geom) as geometry_wkt,
                 current_timestamp as created_at
                 
-            FROM fields_with_fertilizer f
+            FROM deduplicated_fields f
             LEFT JOIN nles5_crop_parameters AS crop_params ON crop_params.crop_code = f.m_code
-            WHERE f.perco_apr_aug_current IS NOT NULL 
-              AND f.perco_apr_aug_current > 0
         """)
         
         # Log results
@@ -1500,23 +1512,6 @@ class NLES5Calculator:
                             END
                         ELSE NULL
                     END as perco_soil_effect
-                                    -- COMBINED PERCOLATION-SOIL EFFECT (CORRECTED: removed 1.085 from here)
-                CASE
-                    WHEN total_percolation > 0 THEN
-                        CASE
-                            WHEN (soil_code IN ('1', '2', '3') OR soil_description ILIKE '%sand%') THEN
-                                (1 - EXP(-0.001194 * perco_apr_aug_current +
-                                         -0.00111 * perco_sep_mar_current)) *
-                                EXP(-0.00086 * perco_sep_mar_previous) *
-                                EXP(-0.00185 * clay_content)
-                            ELSE -- clay
-                                (1 - EXP(-0.00080 * perco_apr_aug_current +
-                                         -0.00075 * perco_sep_mar_current)) *
-                                EXP(-0.00064 * perco_sep_mar_previous) *
-                                EXP(-0.00185 * clay_content)
-                        END
-                    ELSE NULL
-                END as perco_soil_effect
                     
                 FROM {fields_complete_table}
                 WHERE total_percolation IS NOT NULL
