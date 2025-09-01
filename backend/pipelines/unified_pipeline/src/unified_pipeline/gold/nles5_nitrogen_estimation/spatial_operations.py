@@ -273,18 +273,8 @@ class NLES5SpatialOperations:
                 if fertilizer_count > 0:
                     self.log.info(f"Distributing fertilizer from {fertilizer_count:,} farm-level records using NLES5 priority algorithm")
                     
-                    # Optimize join order - large table on left, small table on right
-                    self.conn.execute("""
-                        CREATE OR REPLACE TABLE fields_with_fertilizer AS
-                        SELECT 
-                            f.*,
-                            fert.tn_t_ha, fert.mineral_n_foraar, fert.mineral_n_eft, fert.mineral_n_udb,
-                            fert.organic_n_hus, fert.niveau, fert.nfix_ha,
-                            'fertilizer_accounts' as nitrogen_data_source
-                        FROM fields_nitrogen_base f  -- Large table on left (2.3M+ records)
-                        LEFT JOIN fertilizer_accounts fert ON f.field_id = fert.field_id AND f.year = fert.year  -- Small table on right (~27K records)
-                    """)
-                    # Use the sophisticated NLES5 distribution algorithm
+                    # Use the sophisticated NLES5 fertilizer distribution algorithm
+                    self.log.info("🚜 Applying NLES5 fertilizer distribution with crop prioritization...")
                     distributed_table = self.fertilizer_distributor.apply_fertilizer_distribution_to_pipeline("fields_nitrogen_base")
                     
                     # Rename to standard name for pipeline compatibility
@@ -295,6 +285,10 @@ class NLES5SpatialOperations:
                             'nles5_distributed' as nitrogen_data_source
                         FROM {distributed_table}
                     """)
+                    
+                    # Log fertilizer distribution results
+                    distribution_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_fertilizer WHERE nitrogen_data_source = 'nles5_distributed'").fetchone()[0]
+                    self.log.info(f"✅ NLES5 fertilizer distribution completed: {distribution_count:,} fields with prioritized allocation")
                     
                     # Clean up intermediate table
                     self.conn.execute(f"DROP TABLE IF EXISTS {distributed_table}")

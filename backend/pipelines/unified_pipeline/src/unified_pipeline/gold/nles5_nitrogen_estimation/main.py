@@ -553,7 +553,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
             # Define output tables with optimized paths
             tables_to_save = [
-                ("nles5_nitrogen_estimates", "nitrogen_estimates"),
+                ("nles5_nitrogen_estimates_gold", "nitrogen_estimates"),
                 ("nles5_estimates_analysis", "estimates_analysis"),
                 ("nles5_estimates_by_soil_type", "estimates_by_soil_type"),
                 ("nles5_estimates_by_crop_type", "estimates_by_crop_type"),
