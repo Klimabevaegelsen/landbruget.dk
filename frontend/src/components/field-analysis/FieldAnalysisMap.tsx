@@ -415,11 +415,11 @@ function MapTooltip({
         <h3 className="text-base leading-tight font-semibold text-gray-900">
           {layerName}
         </h3>
-        {properties.site_name && (
+        {properties.site_name ? (
           <p className="mt-1 text-sm font-medium text-gray-600">
-            {properties.site_name}
+            {String(properties.site_name)}
           </p>
-        )}
+        ) : null}
       </div>
 
       {/* Content with improved spacing and hierarchy */}

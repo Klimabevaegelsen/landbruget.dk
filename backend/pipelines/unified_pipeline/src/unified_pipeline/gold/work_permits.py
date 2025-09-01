@@ -127,7 +127,7 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
                 if "Landbrugsvisum_statistik_2025.parquet" in file_path:
                     target_file = file_path
                     break
-            
+
             # If no 2025 file found, fall back to the regular file
             if not target_file:
                 self.log.warning("⚠️ No 2025 file found, falling back to regular file")
@@ -135,13 +135,13 @@ class WorkPermitsGold(BaseSource[WorkPermitsGoldConfig], GoldJobInterface):
                     if "Landbrugsvisum_statistik.parquet" in file_path:
                         target_file = file_path
                         break
-            
+
             if not target_file:
                 self.log.error("❌ No work permits files found")
                 return
-                
+
             latest_file = target_file
-            
+
             self.log.info(f"🎯 Selected work permits file: {latest_file.split('/')[-1]}")
             self.log.info(f"📥 Loading work permits data from: {latest_file}")
 

@@ -1,5 +1,6 @@
 import { serve } from 'std/http/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { withSecurity, validateCompanyId, createErrorResponse, createSuccessResponse } from '../_shared/security.ts';
 
 // Define type for basic company info
 type BasicCompanyInfo = {
@@ -34,46 +35,19 @@ async function getBasicCompanyDetails(supabase: SupabaseClient, companyId: strin
 }
 
 // --- Main Request Handler ---
-serve(async (req) => {
-  // CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
-      }
-    });
-  }
-
+serve(withSecurity(async (req, rateLimitInfo) => {
   // Only allow GET requests
   if (req.method !== 'GET') {
-    return new Response(JSON.stringify({
-      error: 'Method not allowed'
-    }), {
-      status: 405,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }
-    });
+    return createErrorResponse('Method not allowed', 405, rateLimitInfo);
   }
 
   const url = new URL(req.url);
   const companyIdParam = url.searchParams.get('id');
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*'
-  };
-
-  if (!companyIdParam) {
-    return new Response(JSON.stringify({
-      error: 'Company ID (UUID) query parameter is required'
-    }), {
-      status: 400,
-      headers
-    });
+  // Validate company ID
+  const validation = validateCompanyId(companyIdParam);
+  if (!validation.valid) {
+    return createErrorResponse(validation.error!, 400, rateLimitInfo);
   }
 
   try {
@@ -90,20 +64,10 @@ serve(async (req) => {
       }
     });
 
-    const companyInfo = await getBasicCompanyDetails(supabase, companyIdParam);
+    const companyInfo = await getBasicCompanyDetails(supabase, companyIdParam!);
 
     if (!companyInfo) {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      const errorMsg = uuidRegex.test(companyIdParam)
-        ? `Company with ID ${companyIdParam} not found`
-        : `Invalid Company ID format provided`;
-
-      return new Response(JSON.stringify({
-        error: errorMsg
-      }), {
-        status: 404,
-        headers
-      });
+      return createErrorResponse(`Company with ID ${companyIdParam} not found`, 404, rateLimitInfo);
     }
 
     // Construct Basic Response
@@ -118,23 +82,10 @@ serve(async (req) => {
       company: companyInfo
     };
 
-    return new Response(JSON.stringify(responseBody, null, 2), {
-      headers
-    });
+    return createSuccessResponse(responseBody, rateLimitInfo);
   } catch (error) {
     const err = error as Error;
     console.error('Critical error in basic company edge function:', err);
-
-    const errorHeaders = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    };
-
-    return new Response(JSON.stringify({
-      error: `Internal Server Error: ${err.message}`
-    }), {
-      status: 500,
-      headers: errorHeaders
-    });
+    return createErrorResponse(`Internal Server Error: ${err.message}`, 500, rateLimitInfo);
   }
-});
+}));
