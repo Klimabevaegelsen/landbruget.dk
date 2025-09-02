@@ -59,7 +59,7 @@ export default function MarkanalysePage() {
               <span>
                 Data: Landbrugsstyrelsen, Miljøstyrelsen, Datafordeleren
               </span>
-              <span>Opdateret: August 2025</span>
+              <span>Opdateret: August 2024</span>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-4">
               <span>617.774 marker</span>

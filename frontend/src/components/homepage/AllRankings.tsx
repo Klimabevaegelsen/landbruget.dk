@@ -43,7 +43,7 @@ const RANKINGS = [
     title: 'Højest Økologisk Andel',
     category: 'field',
     description:
-      'Virksomheder med den højeste andel økologisk landbrug (min. 50 ha)',
+      'Virksomheder med den højeste andel økologisk landbrug (min. 50 ha) i 2024',
   },
   {
     id: 'most_fields',
