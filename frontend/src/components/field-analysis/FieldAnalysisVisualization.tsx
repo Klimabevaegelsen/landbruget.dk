@@ -58,10 +58,18 @@ export default function FieldAnalysisVisualization() {
   // Generate PMTiles URLs dynamically based on selected year
   const pmtilesUrls = {
     fields: `https://data.pesticidkortet.dk/pmtiles/field_analysis_${yearSelection.selectedYear}.pmtiles`,
-    bnbo: process.env.NEXT_PUBLIC_BNBO_PMTILES_URL || '',
-    wetlands: process.env.NEXT_PUBLIC_WETLANDS_PMTILES_URL || '',
-    water_projects: process.env.NEXT_PUBLIC_WATER_PROJECTS_PMTILES_URL || '',
-    buildings: process.env.NEXT_PUBLIC_BUILDINGS_PMTILES_URL || '',
+    bnbo:
+      process.env.NEXT_PUBLIC_BNBO_PMTILES_URL ||
+      'https://data.pesticidkortet.dk/pmtiles/bnbo_areas.pmtiles',
+    wetlands:
+      process.env.NEXT_PUBLIC_WETLANDS_PMTILES_URL ||
+      'https://data.pesticidkortet.dk/pmtiles/wetlands_all_2024.pmtiles',
+    water_projects:
+      process.env.NEXT_PUBLIC_WATER_PROJECTS_PMTILES_URL ||
+      'https://data.pesticidkortet.dk/pmtiles/water_projects_2024.pmtiles',
+    buildings:
+      process.env.NEXT_PUBLIC_BUILDINGS_PMTILES_URL ||
+      'https://data.pesticidkortet.dk/pmtiles/buildings_proximity_2024.pmtiles',
   };
 
   // Ensure client-side only rendering
@@ -72,6 +80,14 @@ export default function FieldAnalysisVisualization() {
   // Handle loading state when PMTiles URLs change
   useEffect(() => {
     setIsLoading(true);
+
+    // Fallback timeout to prevent getting stuck in loading state
+    const fallbackTimeout = setTimeout(() => {
+      console.warn('⚠️ Map loading timeout - forcing loading state to false');
+      setIsLoading(false);
+    }, 10000); // 10 second fallback
+
+    return () => clearTimeout(fallbackTimeout);
   }, [pmtilesUrls.fields]);
 
   // Handle orientation changes on mobile
@@ -144,6 +160,7 @@ export default function FieldAnalysisVisualization() {
 
   // Handle map ready callback
   const handleMapReady = useCallback(() => {
+    console.log('✅ Map ready - clearing loading state');
     setIsLoading(false);
   }, []);
 
@@ -291,7 +308,7 @@ export default function FieldAnalysisVisualization() {
           <YearSlider
             yearSelection={yearSelection}
             onYearChange={handleYearChange}
-            isLoading={isLoading}
+            isLoading={false} // Allow year changes even during loading
           />
         </div>
 

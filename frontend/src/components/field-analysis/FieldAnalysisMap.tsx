@@ -1067,11 +1067,15 @@ export default function FieldAnalysisMap({
       // Add PMTiles sources
       Object.entries(pmtilesUrls).forEach(([layerName, url]) => {
         if (url && !map.getSource(layerName)) {
-          map.addSource(layerName, {
-            type: 'vector',
-            url: `pmtiles://${url}`,
-          });
-          console.log(`✅ Added ${layerName} source:`, url);
+          try {
+            map.addSource(layerName, {
+              type: 'vector',
+              url: `pmtiles://${url}`,
+            });
+            console.log(`✅ Added ${layerName} source:`, url);
+          } catch (error) {
+            console.warn(`⚠️ Failed to add ${layerName} source:`, error);
+          }
         }
       });
 
@@ -1086,7 +1090,7 @@ export default function FieldAnalysisMap({
       setTimeout(() => {
         setIsLoading(false);
         onMapReady?.();
-      }, 1000);
+      }, 3000);
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
       setError('Failed to load map data');
@@ -1144,7 +1148,7 @@ export default function FieldAnalysisMap({
         setTimeout(() => {
           setIsLoading(false);
           onMapReady?.();
-        }, 1000);
+        }, 2000);
       } catch (error) {
         console.error('Error loading PMTiles for year:', error);
         setError(`Failed to load data for selected year`);

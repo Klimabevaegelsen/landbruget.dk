@@ -76,11 +76,6 @@ export interface YearSelection {
   availableYears: number[];
 }
 
-// Helper function to get year range display text
-export function getYearRangeDisplay(year: number): string {
-  return `${year}-${year + 1}`;
-}
-
 export type VisualizationMode =
   | 'total_pesticide_belastning'
   | 'pfas_belastning'
@@ -97,4 +92,10 @@ export interface FilterState {
   visualizationMode: VisualizationMode;
   colorUnit: ColorUnit;
   useDecileColoring: boolean;
+}
+
+export function getYearRangeDisplay(year: number): string {
+  // For field analysis, we use pesticide data from the selected year
+  // with field boundaries from the following year
+  return `${year} pesticider + ${year + 1} marker`;
 }
