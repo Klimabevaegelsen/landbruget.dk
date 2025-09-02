@@ -63,7 +63,7 @@ export default function CompanyFilterPanel({
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="municipality" id="municipality" />
             <Label htmlFor="municipality" className="text-sm">
-              Specifik kommune
+              Specifik kommune (markområde)
             </Label>
           </div>
         </RadioGroup>
@@ -95,16 +95,19 @@ export default function CompanyFilterPanel({
       {/* Time Period Filter */}
       <div>
         <Label className="mb-3 block text-sm font-medium">Tidsperiode</Label>
-        <RadioGroup
-          value={filters.year === 'all' ? 'all' : filters.year.toString()}
-          onValueChange={(value) =>
-            onFiltersChange({
-              year: value === 'all' ? 'all' : parseInt(value),
-            })
-          }
-        >
+        <div className="space-y-2">
           <div className="flex items-center space-x-2">
-            <RadioGroupItem value="all" id="all-years" />
+            <input
+              type="checkbox"
+              id="all-years"
+              checked={filters.years.length === 0}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  onFiltersChange({ years: [] });
+                }
+              }}
+              className="h-4 w-4 rounded border-gray-300"
+            />
             <Label htmlFor="all-years" className="text-sm">
               Alle år
             </Label>
@@ -113,13 +116,29 @@ export default function CompanyFilterPanel({
             .sort((a, b) => b - a)
             .map((year) => (
               <div key={year} className="flex items-center space-x-2">
-                <RadioGroupItem value={year.toString()} id={`year-${year}`} />
+                <input
+                  type="checkbox"
+                  id={`year-${year}`}
+                  checked={filters.years.includes(year)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onFiltersChange({
+                        years: [...filters.years, year].sort((a, b) => b - a),
+                      });
+                    } else {
+                      onFiltersChange({
+                        years: filters.years.filter((y) => y !== year),
+                      });
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
                 <Label htmlFor={`year-${year}`} className="text-sm">
                   {year}
                 </Label>
               </div>
             ))}
-        </RadioGroup>
+        </div>
       </div>
 
       {/* Pesticide Type Filter */}
