@@ -40,10 +40,8 @@ export default function FieldAnalysisVisualization() {
   });
 
   const [yearSelection, setYearSelection] = useState<YearSelection>({
-    selectedYear: 2024, // Default to most recent year
-    availableYears: [
-      2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024,
-    ], // Available years from PMTiles generation
+    selectedYear: 2023, // Default to 2023 as it's most likely to have data
+    availableYears: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023], // Available years from PMTiles generation
   });
 
   const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(
