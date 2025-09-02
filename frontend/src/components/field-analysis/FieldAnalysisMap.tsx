@@ -1097,6 +1097,56 @@ export default function FieldAnalysisMap({
     onMapReady,
   ]);
 
+  // Handle PMTiles URL changes (e.g., year selection)
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current.getMap();
+
+    // Only update if fields source already exists (avoid running on initial load)
+    const fieldsSource = map.getSource('fields');
+    if (fieldsSource && pmtilesUrls.fields) {
+      console.log(
+        `🔄 Updating fields source for year change:`,
+        pmtilesUrls.fields
+      );
+
+      // Remove existing fields layers
+      const layersToRemove = [
+        'fields-fill',
+        'fields-outline',
+        'organic-symbols',
+      ];
+      layersToRemove.forEach((layerId) => {
+        if (map.getLayer(layerId)) {
+          map.removeLayer(layerId);
+        }
+      });
+
+      // Remove existing fields source
+      map.removeSource('fields');
+
+      // Add new source with updated URL
+      try {
+        map.addSource('fields', {
+          type: 'vector',
+          url: `pmtiles://${pmtilesUrls.fields}`,
+        });
+
+        // Re-add fields layers
+        addFieldsLayers(map);
+
+        // Notify parent that map is ready with new data
+        setIsLoading(false);
+        onMapReady?.();
+      } catch (error) {
+        console.error('Error loading PMTiles for year:', error);
+        setError(`Failed to load data for selected year`);
+        setIsLoading(false);
+      }
+    }
+  }, [pmtilesUrls.fields, addFieldsLayers, onMapReady]);
+
   // Update layer visibility and styling when props change
   useEffect(() => {
     if (!mapRef.current) return;
