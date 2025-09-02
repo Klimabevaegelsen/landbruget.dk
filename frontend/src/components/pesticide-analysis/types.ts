@@ -1,6 +1,6 @@
 export interface PesticideAnalysisFilters {
   geography: string; // 'country' or municipality name
-  year: number | 'all';
+  years: number[]; // Array of selected years, empty array means 'all'
   type: 'total' | 'pfas' | 'diquat' | 'glyphosate';
   cvr: string;
   page: number;
@@ -32,6 +32,9 @@ export interface PesticideAnalysisResponse {
     available_years: number[];
     available_municipalities: string[];
     total_companies: number;
+    companies_with_pfas: number;
+    companies_with_diquat: number;
+    companies_with_glyphosate: number;
   };
 }
 

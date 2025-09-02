@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface PesticideAnalysisRequest {
   geography?: string; // 'country' or municipality name
-  year?: number | 'all';
+  years?: number[]; // Array of years, empty means 'all'
   type?: 'total' | 'pfas' | 'diquat' | 'glyphosate';
   cvr?: string;
   page?: number;
@@ -40,6 +40,9 @@ interface PesticideAnalysisResponse {
     available_years: number[];
     available_municipalities: string[];
     total_companies: number;
+    companies_with_pfas: number;
+    companies_with_diquat: number;
+    companies_with_glyphosate: number;
   };
 }
 
@@ -52,9 +55,12 @@ serve(async (req) => {
   try {
     // Parse request parameters
     const url = new URL(req.url)
+    const yearsParams = url.searchParams.getAll('years')
+    const years = yearsParams.length > 0 ? yearsParams.map(y => parseInt(y)).filter(y => !isNaN(y)) : []
+
     const params: PesticideAnalysisRequest = {
       geography: url.searchParams.get('geography') || 'country',
-      year: url.searchParams.get('year') === 'all' ? 'all' : parseInt(url.searchParams.get('year') || ''),
+      years: years,
       type: (url.searchParams.get('type') as 'total' | 'pfas' | 'diquat' | 'glyphosate') || 'total',
       cvr: url.searchParams.get('cvr') || undefined,
       page: parseInt(url.searchParams.get('page') || '1'),
@@ -68,8 +74,8 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Build query for company pesticide summary
-    let query = supabase
+    // Get all data without pagination to properly group and sort
+    let baseQuery = supabase
       .from('company_pesticide_summary')
       .select(`
         cvr_number,
@@ -85,55 +91,27 @@ serve(async (req) => {
         total_treated_area_ha
       `)
 
-    // Apply filters
+    // Apply filters to base query
     if (params.geography !== 'country') {
-      query = query.eq('municipality', params.geography)
+      baseQuery = baseQuery.eq('municipality', params.geography)
     }
 
-    if (params.year !== 'all' && params.year) {
-      query = query.eq('application_year', params.year)
+    if (params.years && params.years.length > 0) {
+      baseQuery = baseQuery.in('application_year', params.years)
     }
 
     if (params.cvr) {
-      query = query.eq('cvr_number', parseInt(params.cvr))
+      baseQuery = baseQuery.eq('cvr_number', parseInt(params.cvr))
     }
 
-    // Apply sorting
-    let sortColumn = 'total_belastning'
-    switch (params.sortBy) {
-      case 'applications':
-        sortColumn = 'total_applications'
-        break
-      case 'area':
-        sortColumn = 'total_treated_area_ha'
-        break
-      default:
-        // Handle different burden types for sorting
-        if (params.type === 'pfas') sortColumn = 'pfas_belastning'
-        else if (params.type === 'diquat') sortColumn = 'diquat_belastning'
-        else if (params.type === 'glyphosate') sortColumn = 'glyphosate_belastning'
-        break
-    }
-
-    query = query.order(sortColumn, { ascending: params.sortOrder === 'asc' })
-
-    // Get total count for pagination
-    const { count } = await supabase
-      .from('company_pesticide_summary')
-      .select('*', { count: 'exact', head: true })
-
-    // Apply pagination
-    const offset = (params.page - 1) * params.limit
-    query = query.range(offset, offset + params.limit - 1)
-
-    const { data: rawData, error } = await query
+    const { data: rawData, error } = await baseQuery
 
     if (error) {
       throw error
     }
 
     // Group data by company (since we might have multiple years per company)
-    const companyMap = new Map<string, CompanySummary>()
+    const companyMap = new Map<string, CompanySummary & { year_data: Array<{year: number, area: number}> }>()
 
     for (const row of rawData || []) {
       const cvr = row.cvr_number.toString()
@@ -146,8 +124,8 @@ serve(async (req) => {
         existing.glyphosate_belastning += row.glyphosate_belastning || 0
         existing.total_applications += row.total_applications || 0
         existing.unique_products += row.unique_products || 0
-        existing.total_treated_area_ha += row.total_treated_area_ha || 0
         existing.years_active.push(row.application_year)
+        existing.year_data.push({ year: row.application_year, area: row.total_treated_area_ha || 0 })
       } else {
         companyMap.set(cvr, {
           cvr_number: cvr,
@@ -159,18 +137,37 @@ serve(async (req) => {
           glyphosate_belastning: row.glyphosate_belastning || 0,
           total_applications: row.total_applications || 0,
           unique_products: row.unique_products || 0,
-          total_treated_area_ha: row.total_treated_area_ha || 0,
-          years_active: [row.application_year]
+          total_treated_area_ha: 0, // Will be set below based on most recent year
+          years_active: [row.application_year],
+          year_data: [{ year: row.application_year, area: row.total_treated_area_ha || 0 }]
         })
       }
     }
 
-    const companies = Array.from(companyMap.values())
+    // Convert to final format and set area from most recent year
+    let companies = Array.from(companyMap.values()).map(company => {
+      // Find the most recent year's area data
+      const mostRecentYear = Math.max(...company.year_data.map(yd => yd.year))
+      const mostRecentYearData = company.year_data.find(yd => yd.year === mostRecentYear)
+
+      return {
+        cvr_number: company.cvr_number,
+        company_name: company.company_name,
+        municipality: '', // Keep for API compatibility but not displayed
+        total_belastning: company.total_belastning,
+        pfas_belastning: company.pfas_belastning,
+        diquat_belastning: company.diquat_belastning,
+        glyphosate_belastning: company.glyphosate_belastning,
+        total_applications: company.total_applications,
+        unique_products: company.unique_products,
+        total_treated_area_ha: mostRecentYearData?.area || 0, // Use most recent year's area
+        years_active: [...new Set(company.years_active)].sort((a, b) => b - a) // Remove duplicates and sort
+      }
+    })
 
     // Filter by pesticide type if specified
-    let filteredCompanies = companies
     if (params.type !== 'total') {
-      filteredCompanies = companies.filter(company => {
+      companies = companies.filter(company => {
         switch (params.type) {
           case 'pfas':
             return company.pfas_belastning > 0
@@ -183,6 +180,47 @@ serve(async (req) => {
         }
       })
     }
+
+    // Apply sorting to grouped companies
+    companies.sort((a, b) => {
+      let aValue, bValue
+
+      switch (params.sortBy) {
+        case 'applications':
+          aValue = a.total_applications
+          bValue = b.total_applications
+          break
+        case 'area':
+          aValue = a.total_treated_area_ha
+          bValue = b.total_treated_area_ha
+          break
+        default:
+          // Handle different burden types for sorting
+          if (params.type === 'pfas') {
+            aValue = a.pfas_belastning
+            bValue = b.pfas_belastning
+          } else if (params.type === 'diquat') {
+            aValue = a.diquat_belastning
+            bValue = b.diquat_belastning
+          } else if (params.type === 'glyphosate') {
+            aValue = a.glyphosate_belastning
+            bValue = b.glyphosate_belastning
+          } else {
+            aValue = a.total_belastning
+            bValue = b.total_belastning
+          }
+          break
+      }
+
+      return params.sortOrder === 'asc' ? aValue - bValue : bValue - aValue
+    })
+
+    // Get total count after filtering
+    const totalCount = companies.length
+
+    // Apply pagination to sorted companies
+    const offset = (params.page - 1) * params.limit
+    const paginatedCompanies = companies.slice(offset, offset + params.limit)
 
     // Get filter metadata
     const { data: yearData } = await supabase
@@ -198,15 +236,42 @@ serve(async (req) => {
     const availableYears = [...new Set(yearData?.map(row => row.application_year) || [])]
     const availableMunicipalities = [...new Set(municipalityData?.map(row => row.municipality) || [])]
 
+    // Calculate correct statistics based on all companies (before type filtering)
+    const allCompaniesForStats = Array.from(companyMap.values()).map(company => {
+      const mostRecentYear = Math.max(...company.year_data.map(yd => yd.year))
+      const mostRecentYearData = company.year_data.find(yd => yd.year === mostRecentYear)
+
+      return {
+        cvr_number: company.cvr_number,
+        company_name: company.company_name,
+        municipality: company.municipality,
+        total_belastning: company.total_belastning,
+        pfas_belastning: company.pfas_belastning,
+        diquat_belastning: company.diquat_belastning,
+        glyphosate_belastning: company.glyphosate_belastning,
+        total_applications: company.total_applications,
+        unique_products: company.unique_products,
+        total_treated_area_ha: mostRecentYearData?.area || 0,
+        years_active: [...new Set(company.years_active)].sort((a, b) => b - a)
+      }
+    })
+
+    const companiesWithPfas = allCompaniesForStats.filter(c => c.pfas_belastning > 0).length
+    const companiesWithDiquat = allCompaniesForStats.filter(c => c.diquat_belastning > 0).length
+    const companiesWithGlyphosate = allCompaniesForStats.filter(c => c.glyphosate_belastning > 0).length
+
     const response: PesticideAnalysisResponse = {
-      companies: filteredCompanies,
-      total_count: count || 0,
+      companies: paginatedCompanies,
+      total_count: totalCount,
       page: params.page,
       limit: params.limit,
       filters: {
         available_years: availableYears,
         available_municipalities: availableMunicipalities,
-        total_companies: companyMap.size
+        total_companies: allCompaniesForStats.length,
+        companies_with_pfas: companiesWithPfas,
+        companies_with_diquat: companiesWithDiquat,
+        companies_with_glyphosate: companiesWithGlyphosate
       }
     }
 

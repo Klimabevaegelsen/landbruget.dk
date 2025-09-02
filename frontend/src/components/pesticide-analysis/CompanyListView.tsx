@@ -9,7 +9,6 @@ import {
   ArrowUp,
   ArrowDown,
   Building2,
-  MapPin,
   Beaker,
 } from 'lucide-react';
 import { CompanySummary } from './types';
@@ -166,12 +165,6 @@ export default function CompanyListView({
             </div>
 
             <div className="mb-2 flex items-center gap-4 text-xs text-gray-600">
-              <div className="flex items-center gap-1">
-                <MapPin className="h-3 w-3" />
-                {company.municipality !== 'Municipality TBD'
-                  ? company.municipality
-                  : 'Ukendt kommune'}
-              </div>
               <div className="flex items-center gap-1">
                 <Beaker className="h-3 w-3" />
                 {company.total_applications} anvendelser
