@@ -15,6 +15,8 @@ interface MapInstance {
   getSource: (id: string) => unknown;
   getLayer: (id: string) => unknown;
   addLayer: (layer: unknown) => void;
+  removeLayer: (id: string) => void;
+  removeSource: (id: string) => void;
   setLayoutProperty: (id: string, prop: string, value: string) => void;
   setPaintProperty: (id: string, prop: string, value: unknown) => void;
   addSource: (id: string, source: unknown) => void;
