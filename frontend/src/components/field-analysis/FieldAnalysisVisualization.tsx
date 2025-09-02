@@ -6,12 +6,13 @@ import { LayerControlPanel } from './LayerControlPanel';
 import { FieldDetailsPanel } from './FieldDetailsPanel';
 import { CoordinatePanel } from './CoordinatePanel';
 import { LoadingState } from './LoadingState';
-import { YearSelector } from './YearSelector';
+import { YearSlider } from './YearSlider';
 import {
   FieldAnalysisData,
   LayerVisibility,
   FilterState,
   YearSelection,
+  getYearRangeDisplay,
 } from './types';
 
 // Dynamically import the map component to avoid SSR issues
@@ -40,7 +41,7 @@ export default function FieldAnalysisVisualization() {
   });
 
   const [yearSelection, setYearSelection] = useState<YearSelection>({
-    selectedYear: 2023, // Default to 2023 as it's most likely to have data
+    selectedYear: 2023, // Default to most recent year (2023 pesticides + 2024 fields)
     availableYears: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023], // Available years from PMTiles generation
   });
 
@@ -52,7 +53,6 @@ export default function FieldAnalysisVisualization() {
     lng: number;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
 
   // Generate PMTiles URLs dynamically based on selected year
@@ -86,24 +86,10 @@ export default function FieldAnalysisVisualization() {
       window.removeEventListener('orientationchange', handleOrientationChange);
   }, []);
 
-  // Initialize visualization
+  // Initialize visualization - loading is handled by map component
   useEffect(() => {
     if (!isClient) return;
-
-    const initializeVisualization = async () => {
-      try {
-        setIsLoading(true);
-        // Kepler.gl will handle PMTiles loading
-        setIsLoading(false);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : 'Fejl ved indlæsning af data'
-        );
-        setIsLoading(false);
-      }
-    };
-
-    initializeVisualization();
+    // Map component will handle loading states via onMapReady callback
   }, [isClient]);
 
   // Handle layer visibility changes
@@ -267,7 +253,7 @@ export default function FieldAnalysisVisualization() {
           <div>
             <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
             <p className="text-sm text-gray-600">
-              Data for {yearSelection.selectedYear}
+              Data for {getYearRangeDisplay(yearSelection.selectedYear)}
             </p>
           </div>
           <button
@@ -295,17 +281,8 @@ export default function FieldAnalysisVisualization() {
         <div className="hidden border-b bg-white p-4 lg:block">
           <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
           <p className="text-sm text-gray-600">
-            Data for {yearSelection.selectedYear}
+            Data for {getYearRangeDisplay(yearSelection.selectedYear)}
           </p>
-        </div>
-
-        {/* Year Selection */}
-        <div className="border-b bg-white p-4">
-          <YearSelector
-            yearSelection={yearSelection}
-            onYearChange={handleYearChange}
-            isLoading={isLoading}
-          />
         </div>
 
         <LayerControlPanel
@@ -326,6 +303,15 @@ export default function FieldAnalysisVisualization() {
 
       {/* Main Map Area */}
       <div className="relative flex-1">
+        {/* Year Slider - positioned at top of map */}
+        <div className="absolute top-4 right-4 left-4 z-10">
+          <YearSlider
+            yearSelection={yearSelection}
+            onYearChange={handleYearChange}
+            isLoading={isLoading}
+          />
+        </div>
+
         {isLoading ? (
           <LoadingState message="Indlæser kortdata..." />
         ) : (

@@ -76,6 +76,11 @@ export interface YearSelection {
   availableYears: number[];
 }
 
+// Helper function to get year range display text
+export function getYearRangeDisplay(year: number): string {
+  return `${year}-${year + 1}`;
+}
+
 export type VisualizationMode =
   | 'total_pesticide_belastning'
   | 'pfas_belastning'
