@@ -167,7 +167,28 @@ class NLES5Calculator:
                 ORDER BY count DESC
                 LIMIT 10
             """).fetchall()
-            self.log.info(f"Crop type distribution in data: {crop_distribution}")
+            self.log.info(f"🌾 Top 10 crop types in data: {crop_distribution}")
+            
+            # Comprehensive crop type analysis
+            crop_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as total_fields,
+                    COUNT(CASE WHEN crop_name IS NULL OR crop_name = '' OR crop_name = 'unknown' THEN 1 END) as unknown_crops,
+                    COUNT(DISTINCT crop_name) as unique_crop_types,
+                    COUNT(CASE WHEN crop_name IS NOT NULL AND crop_name != '' AND crop_name != 'unknown' THEN 1 END) as known_crops
+                FROM fields_with_climate_soil_crops
+            """).fetchone()
+            
+            total_fields, unknown_crops, unique_crop_types, known_crops = crop_stats
+            unknown_pct = (unknown_crops / total_fields * 100) if total_fields > 0 else 0
+            known_pct = (known_crops / total_fields * 100) if total_fields > 0 else 0
+            
+            self.log.info(f"📊 CROP TYPE ANALYSIS:")
+            self.log.info(f"   Total fields: {total_fields:,}")
+            self.log.info(f"   Known crop types: {known_crops:,} ({known_pct:.1f}%)")
+            self.log.info(f"   Unknown crop types: {unknown_crops:,} ({unknown_pct:.1f}%)")
+            self.log.info(f"   Unique crop varieties: {unique_crop_types:,}")
+            self.log.info(f"💡 Uncertainty impact: {unknown_crops:,} fields get +1% uncertainty penalty")
             
             # DIAGNOSTIC: Check what data is actually available for NLES5 calculation
             total_count = self.conn.execute("SELECT COUNT(*) FROM fields_with_climate_soil_crops").fetchone()[0]
@@ -1447,8 +1468,34 @@ class NLES5Calculator:
                 ) as nitrogen_washout_kg_ha,
                 
                 COALESCE(f.perco_apr_aug_current, 0.0) as percolation_mm,
-                0.0 as uncertainty_pct,  -- Placeholder for future uncertainty analysis
-                1.0 as data_quality_score,  -- Placeholder for future quality scoring
+                
+                -- Calculate uncertainty based on NLES5 model coefficient of variation (~10%)
+                -- From DCA Report 163: Model uncertainty is approximately 10% (coefficient of variation)
+                -- Higher uncertainty for fields with extreme values or poor data quality
+                GREATEST(8.0, LEAST(15.0,
+                    10.0 + -- Base model uncertainty of 10%
+                    CASE 
+                        WHEN COALESCE(f.tn_t_ha, 0) = 0 THEN 2.0  -- +2% for missing fertilizer data
+                        ELSE 0.0 
+                    END +
+                    CASE 
+                        WHEN COALESCE(f.perco_apr_aug_current, 0) < 50 THEN 1.5  -- +1.5% for low percolation (dry conditions)
+                        WHEN COALESCE(f.perco_apr_aug_current, 0) > 300 THEN 2.0  -- +2% for high percolation (wet conditions)
+                        ELSE 0.0
+                    END +
+                    CASE 
+                        WHEN crop_params.nles5_factor IS NULL THEN 1.0  -- +1% for unknown crop type
+                        ELSE 0.0
+                    END
+                )) as uncertainty_pct,
+                
+                -- Data quality score based on available data completeness
+                GREATEST(0.5, LEAST(1.0,
+                    0.7 + -- Base quality score
+                    CASE WHEN COALESCE(f.tn_t_ha, 0) > 0 THEN 0.1 ELSE 0.0 END +  -- +0.1 for fertilizer data
+                    CASE WHEN COALESCE(f.perco_apr_aug_current, 0) > 0 THEN 0.1 ELSE 0.0 END +  -- +0.1 for climate data
+                    CASE WHEN crop_params.nles5_factor IS NOT NULL THEN 0.1 ELSE 0.0 END  -- +0.1 for known crop
+                )) as data_quality_score,
                 ST_AsText(f.geom) as geometry_wkt,
                 current_timestamp as created_at
                 

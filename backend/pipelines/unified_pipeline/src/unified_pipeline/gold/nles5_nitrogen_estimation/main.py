@@ -544,15 +544,123 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """Delegate to validator."""
         return self.validator._analyze_uncertainty_patterns()
     
+    @timed(name="Creating unified NLES5 results table")
+    def _create_unified_results_table(self) -> None:
+        """Create a single unified table combining all NLES5 analysis results."""
+        try:
+            self.log.info("🔄 Creating unified NLES5 results table with all analysis data...")
+            
+            # Create unified table combining main estimates with analysis data
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE nles5_unified_results AS
+                SELECT 
+                    -- Main estimate fields
+                    main.field_id,
+                    main.block_id,
+                    main.cvr_number,
+                    main.year,
+                    main.area_ha,
+                    main.crop_type,
+                    main.soil_code,
+                    main.soil_description,
+                    main.clay_content,
+                    main.nitrogen_washout_kg_ha,
+                    main.percolation_mm,
+                    main.uncertainty_pct,
+                    main.data_quality_score,
+                    main.geometry_wkt,
+                    main.created_at,
+                    
+                    -- Enhanced uncertainty information from detailed analysis
+                    COALESCE(unc.total_uncertainty_kg_ha, 
+                             main.nitrogen_washout_kg_ha * main.uncertainty_pct / 100.0) as total_uncertainty_kg_ha,
+                    COALESCE(unc.total_uncertainty_pct, main.uncertainty_pct) as enhanced_uncertainty_pct,
+                    
+                    -- Soil type analysis
+                    soil_analysis.avg_nitrogen_by_soil,
+                    soil_analysis.soil_type_percentile,
+                    
+                    -- Crop type analysis  
+                    crop_analysis.avg_nitrogen_by_crop,
+                    crop_analysis.crop_type_percentile,
+                    
+                    -- Uncertainty components
+                    unc.bt_uncertainty,
+                    unc.bcs_uncertainty,
+                    unc.bca_uncertainty,
+                    unc.budb_uncertainty,
+                    unc.bm1_uncertainty,
+                    unc.bf0_uncertainty,
+                    unc.bf1_uncertainty,
+                    unc.bg0_uncertainty
+                    
+                FROM nles5_nitrogen_estimates_gold main
+                
+                -- Join with uncertainty estimates
+                LEFT JOIN nles5_uncertainty_estimates unc ON 
+                    main.field_id = unc.field_id AND main.year = unc.year
+                
+                -- Join with soil type analysis
+                LEFT JOIN (
+                    SELECT 
+                        soil_code,
+                        AVG(nitrogen_washout_kg_ha) as avg_nitrogen_by_soil,
+                        PERCENT_RANK() OVER (ORDER BY AVG(nitrogen_washout_kg_ha)) * 100 as soil_type_percentile
+                    FROM nles5_estimates_by_soil_type
+                    GROUP BY soil_code
+                ) soil_analysis ON main.soil_code = soil_analysis.soil_code
+                
+                -- Join with crop type analysis
+                LEFT JOIN (
+                    SELECT 
+                        crop_type,
+                        AVG(nitrogen_washout_kg_ha) as avg_nitrogen_by_crop,
+                        PERCENT_RANK() OVER (ORDER BY AVG(nitrogen_washout_kg_ha)) * 100 as crop_type_percentile  
+                    FROM nles5_estimates_by_crop_type
+                    GROUP BY crop_type
+                ) crop_analysis ON main.crop_type = crop_analysis.crop_type
+            """)
+            
+            # Get statistics on the unified table
+            unified_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as total_records,
+                    AVG(nitrogen_washout_kg_ha) as avg_nitrogen,
+                    AVG(enhanced_uncertainty_pct) as avg_uncertainty,
+                    AVG(data_quality_score) as avg_quality,
+                    COUNT(CASE WHEN enhanced_uncertainty_pct BETWEEN 8 AND 15 THEN 1 END) as records_in_target_uncertainty
+                FROM nles5_unified_results
+            """).fetchone()
+            
+            if unified_stats:
+                total, avg_n, avg_unc, avg_qual, target_unc_count = unified_stats
+                target_unc_pct = (target_unc_count / total * 100) if total > 0 else 0
+                
+                self.log.info(f"✅ Created unified results table with {total:,} records")
+                self.log.info(f"📊 Average nitrogen washout: {avg_n:.2f} kg N/ha")
+                self.log.info(f"📊 Average uncertainty: {avg_unc:.1f}% (target: 8-15%)")
+                self.log.info(f"📊 Average data quality: {avg_qual:.2f} (target: 0.8+)")
+                self.log.info(f"📊 Records in target uncertainty range: {target_unc_count:,} ({target_unc_pct:.1f}%)")
+                
+        except Exception as e:
+            self.log.error(f"Error creating unified results table: {e}")
+            raise
+
     @timed(name="Saving NLES5 results to gold layer")
     def _save_results_to_gold(self) -> None:
-        """Save NLES5 results to the gold layer using optimized DuckDB export."""
+        """Save NLES5 results to the gold layer using shared GCS interface."""
         try:
-            self.log.info("Saving NLES5 results to gold layer")
+            self.log.info("Saving NLES5 results to gold layer using shared GCS interface")
+            
+            # Create unified results table first
+            self._create_unified_results_table()
+            
             failed_uploads = 0
 
-            # Define output tables with optimized paths
+            # Define output tables with subdataset names for standard pattern
+            # Include the new unified table as the primary output
             tables_to_save = [
+                ("nles5_unified_results", "unified_results"),  # NEW: Primary comprehensive table
                 ("nles5_nitrogen_estimates_gold", "nitrogen_estimates"),
                 ("nles5_estimates_analysis", "estimates_analysis"),
                 ("nles5_estimates_by_soil_type", "estimates_by_soil_type"),
@@ -566,17 +674,21 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 try:
                     count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                     if count > 0:
-                        # Use optimized GCS upload directly from DuckDB table
-                        output_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/{subdataset}.parquet"
+                        # Create standard timestamped path structure
+                        timestamp = self.date_pattern
+                        dataset_name = f"{self.config.dataset}_{subdataset}"
+                        gcs_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
+                        full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
 
+                        # Use shared GCS interface like other gold stages
                         self.gcs_access.upload_from_duckdb_table(
                             table_name,
-                            output_path,
+                            full_gcs_path,
                             compression="zstd",
                             row_group_size=100000,
                         )
 
-                        self.log.info(f"✅ Saved {table_name} ({count:,} rows) to {output_path}")
+                        self.log.info(f"✅ Saved {table_name} ({count:,} rows) to {full_gcs_path}")
                     else:
                         self.log.warning(f"Table {table_name} is empty, skipping")
                 except Exception as e:
@@ -586,7 +698,16 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             if failed_uploads > 0:
                 raise RuntimeError(f"{failed_uploads} GCS uploads failed. Check logs for details.")
 
-            self.log.info(f"NLES5 results saved to: gs://{self.config.bucket}/gold/{self.config.dataset}/latest/")
+            # Log the standard path structure being used
+            timestamp = self.date_pattern
+            base_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}_*/{timestamp}/"
+            unified_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}_unified_results/{timestamp}/data.parquet"
+            
+            self.log.info(f"✅ NLES5 results saved using shared GCS interface")
+            self.log.info(f"🎯 PRIMARY TABLE: {unified_path}")
+            self.log.info(f"📁 Base path structure: {base_path}")
+            self.log.info(f"📊 Saved {len(tables_to_save) - failed_uploads}/{len(tables_to_save)} tables successfully")
+            self.log.info(f"💡 Use 'nles5_unified_results' table for comprehensive analysis with uncertainty data")
 
         except Exception as e:
             self.log.error(f"Error saving results: {e}")
@@ -1193,6 +1314,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """Join soil data for target year processing."""
         try:
             if fields_climate_table is None:
+                self.log.error("❌ Climate joining failed - fields_climate_table is None")
+                self.log.error("🔍 This indicates climate data processing or spatial join failed")
+                self.log.error("💡 Check: 1) Climate data availability, 2) Spatial join performance, 3) Memory limits")
                 raise ValueError("fields_climate_table cannot be None - climate joining must have failed")
                 
             result_table = f"fields_complete_target"
@@ -1365,9 +1489,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         return self.memory_utils._aggressive_pipeline_cleanup()
     
     def _save_batched_results_to_gold(self) -> None:
-        """Save final batched results to gold layer."""
+        """Save final batched results to gold layer using shared GCS interface."""
         try:
-            self.log.info("💾 Saving batched results to gold layer...")
+            self.log.info("💾 Saving batched results to gold layer using shared GCS interface...")
             
             # Final validation
             final_count = self.conn.execute("SELECT COUNT(*) FROM nles5_estimates_final_batched").fetchone()[0]
@@ -1387,8 +1511,23 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 SELECT DISTINCT year FROM nles5_nitrogen_estimates_gold ORDER BY year
             """).fetchall()
             
-            self.log.info(f"✅ Saved {final_count:,} NLES5 estimates to gold layer")
+            self.log.info(f"✅ Created gold table with {final_count:,} NLES5 estimates")
             self.log.info(f"📅 Years processed: {[row[0] for row in final_years]}")
+            
+            # Save to GCS using shared GCS interface - main results table
+            timestamp = self.date_pattern
+            dataset_name = f"{self.config.dataset}_nitrogen_estimates"
+            gcs_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
+            full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
+
+            self.gcs_access.upload_from_duckdb_table(
+                "nles5_nitrogen_estimates_gold",
+                full_gcs_path,
+                compression="zstd",
+                row_group_size=100000,
+            )
+            
+            self.log.info(f"✅ Saved batched results to {full_gcs_path}")
             
             # Perform final validation
             self._validate_nles5_estimates()
