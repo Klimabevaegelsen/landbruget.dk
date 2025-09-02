@@ -186,23 +186,6 @@ export default function FieldAnalysisVisualization() {
     };
   }, [mobileControlsOpen, selectedField, clickedCoordinates]);
 
-  if (error) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md text-center">
-          <div className="mb-2 text-xl text-red-600">⚠️ Fejl</div>
-          <div className="mb-4 text-sm text-gray-700 lg:text-base">{error}</div>
-          <button
-            onClick={() => window.location.reload()}
-            className="min-h-[44px] rounded-lg bg-blue-600 px-6 py-3 text-base font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
-          >
-            Genindlæs
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // Prevent hydration mismatch by not rendering until client-side
   if (!isClient) {
     return <LoadingState message="Indlæser..." />;
