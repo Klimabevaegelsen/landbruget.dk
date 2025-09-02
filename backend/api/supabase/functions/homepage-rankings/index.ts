@@ -281,7 +281,7 @@ serve(async (req) => {
           id: 'largest_organic_area',
           title: 'Størst Økologisk Areal',
           category: 'field',
-          description: 'Virksomheder med det største økologiske landareal i 2025',
+          description: 'Virksomheder med det største økologiske landbrugsareal i 2024',
           unit: 'hektar',
           company_count: organicAreaCount || 0,
           items: organicAreaData.map((item, index) => {
@@ -294,7 +294,7 @@ serve(async (req) => {
               rank: index + 1,
               value: item.organic_area_ha,
               formatted_value: `${item.organic_area_ha.toFixed(1)} ha`,
-              year: item.year
+              year: 2024
             }
           })
         })
@@ -313,6 +313,7 @@ serve(async (req) => {
         .gt('total_area_ha', 50) // Only companies with substantial land
         .gt('organic_percentage', 0)
         .order('organic_percentage', { ascending: false })
+        .order('total_area_ha', { ascending: false })
         .limit(limit)
 
       const { count: organicPercentCount } = await supabase
@@ -337,7 +338,7 @@ serve(async (req) => {
           id: 'highest_organic_percentage',
           title: 'Højest Økologisk Andel',
           category: 'field',
-          description: 'Virksomheder med den højeste andel økologisk landbrug (min. 50 ha) i 2025',
+          description: 'Virksomheder med den højeste andel økologisk landbrug (min. 50 ha) i 2024',
           unit: 'procent',
           company_count: organicPercentCount || 0,
           items: organicPercentData.map((item, index) => {
@@ -350,7 +351,7 @@ serve(async (req) => {
               rank: index + 1,
               value: item.organic_percentage,
               formatted_value: `${item.organic_percentage.toFixed(1)}%`,
-              year: item.year
+              year: 2024
             }
           })
         })
