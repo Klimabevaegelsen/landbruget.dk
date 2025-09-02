@@ -3,34 +3,34 @@ name: DMA Monthly Data Scraper
 on:
   schedule:
     # Run monthly on the 1st at 2 AM UTC
-    - cron: '0 2 1 * *'
+    - cron: "0 2 1 * *"
   workflow_dispatch:
     # Allow manual triggering
     inputs:
       vm_machine_type:
-        description: 'VM machine type'
+        description: "VM machine type"
         required: true
-        default: 'e2-standard-4'
+        default: "e2-standard-4"
         type: choice
         options:
           - e2-standard-2
           - e2-standard-4
           - e2-standard-8
       auto_shutdown:
-        description: 'Auto shutdown VM after completion'
+        description: "Auto shutdown VM after completion"
         required: true
         default: true
         type: boolean
       max_companies:
-        description: 'Maximum number of companies to process (leave empty for all)'
+        description: "Maximum number of companies to process (leave empty for all)"
         required: false
         type: string
       start_date:
-        description: 'Start date for filtering Tilsynsdato (YYYY-MM-DD)'
+        description: "Start date for filtering Tilsynsdato (YYYY-MM-DD)"
         required: false
         type: string
       end_date:
-        description: 'End date for filtering Tilsynsdato (YYYY-MM-DD)'
+        description: "End date for filtering Tilsynsdato (YYYY-MM-DD)"
         required: false
         type: string
 
@@ -47,8 +47,8 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - name: Checkout code
@@ -218,6 +218,21 @@ jobs:
 
           if [ $WAIT_MINUTES -ge $MAX_WAIT_MINUTES ]; then
             echo "⚠️ Pipeline monitoring timeout reached (4 hours)"
+            echo "🚨 FORCING VM SHUTDOWN due to timeout"
+
+            # Force kill the process and shutdown VM
+            gcloud compute ssh $VM_NAME --zone=${{ env.ZONE }} --command="
+              echo 'Killing DMA scraper process due to timeout...'
+              pkill -f enhanced_dma_detail_scraper.py || echo 'Process already stopped'
+              echo 'Uploading partial results...'
+              if [ -d '/tmp/dma_data' ]; then
+                gsutil -m cp -r /tmp/dma_data/* gs://${{ env.GCS_BUCKET }}/bronze/dma/timeout_$(date +%Y%m%d_%H%M%S)/ || echo 'Upload failed'
+              fi
+              echo 'Timeout cleanup completed'
+            " 2>/dev/null || echo "Could not connect to VM for timeout cleanup"
+
+            # Mark for forced deletion
+            echo "FORCE_DELETE=true" >> $GITHUB_ENV
           fi
 
       - name: Upload results to GCS
@@ -279,8 +294,13 @@ jobs:
         run: |
           VM_NAME="${{ env.VM_NAME }}"
           AUTO_SHUTDOWN="${{ env.AUTO_SHUTDOWN }}"
+          FORCE_DELETE="${{ env.FORCE_DELETE }}"
 
-          if [ "$AUTO_SHUTDOWN" = "true" ]; then
+          if [ "$FORCE_DELETE" = "true" ]; then
+            echo "🚨 FORCED DELETION due to timeout - deleting VM immediately..."
+            gcloud compute instances delete $VM_NAME --zone=${{ env.ZONE }} --quiet || echo "VM deletion failed or already deleted"
+            echo "✅ Forced VM cleanup completed"
+          elif [ "$AUTO_SHUTDOWN" = "true" ]; then
             echo "🧹 Auto-shutdown enabled, deleting VM..."
             gcloud compute instances delete $VM_NAME --zone=${{ env.ZONE }} --quiet || echo "VM deletion failed or already deleted"
             echo "✅ VM cleanup completed"
@@ -288,6 +308,8 @@ jobs:
             echo "⚠️ Auto-shutdown disabled, VM $VM_NAME left running"
             echo "💡 Remember to manually delete the VM to save costs:"
             echo "   gcloud compute instances delete $VM_NAME --zone=${{ env.ZONE }}"
+            echo "⚠️ WARNING: VM will continue running and incurring costs!"
+            echo "🚨 Consider running: ./scripts/deployment/emergency_vm_cleanup.sh"
           fi
 
       - name: Notify on success
