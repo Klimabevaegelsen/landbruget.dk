@@ -4,8 +4,16 @@ import {
   Disclosure,
   DisclosureButton,
   DisclosurePanel,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuItems,
 } from '@headlessui/react';
-import { Bars3Icon, MagnifyingGlassIcon } from '@heroicons/react/24/solid';
+import {
+  Bars3Icon,
+  MagnifyingGlassIcon,
+  ChevronDownIcon,
+} from '@heroicons/react/24/solid';
 import { motion } from 'framer-motion';
 import { Logo } from '@/components/layout/templates/logo';
 import Link from 'next/link';
@@ -15,21 +23,32 @@ import { GlobalSearch } from '@/components/global-search';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 
-const links = [{ href: '/markanalyse', label: 'Markanalyse' }];
+const analyserLinks = [
+  { href: '/markanalyse', label: 'Markanalyse' },
+  { href: '/pesticidanalyse', label: 'Pesticidanalyse' },
+];
 
 function DesktopNav() {
   return (
     <nav className="relative hidden items-center gap-4 lg:flex">
-      {links.map(({ href, label }) => (
-        <div key={href} className="relative flex">
-          <Link
-            href={href}
-            className="flex items-center px-4 py-3 text-sm font-medium text-gray-950 bg-blend-multiply hover:underline data-hover:bg-black/[2.5%]"
-          >
-            {label}
-          </Link>
-        </div>
-      ))}
+      <Menu as="div" className="relative">
+        <MenuButton className="flex items-center px-4 py-3 text-sm font-medium text-gray-950 bg-blend-multiply hover:underline data-hover:bg-black/[2.5%]">
+          Analyser
+          <ChevronDownIcon className="ml-1 h-4 w-4" aria-hidden="true" />
+        </MenuButton>
+        <MenuItems className="ring-opacity-5 absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black focus:outline-none">
+          {analyserLinks.map(({ href, label }) => (
+            <MenuItem key={href}>
+              <Link
+                href={href}
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+              >
+                {label}
+              </Link>
+            </MenuItem>
+          ))}
+        </MenuItems>
+      </Menu>
       <Link
         href="https://github.com/klimabevaegelsen/landbruget.dk/"
         target="_blank"
@@ -77,7 +96,8 @@ function MobileNav() {
         <Button>Hjælp til</Button>
       </Link>
       <div className="ml-2 flex flex-col gap-6 py-4">
-        {links.map(({ href, label }, linkIndex) => (
+        <div className="text-base font-semibold text-gray-950">Analyser</div>
+        {analyserLinks.map(({ href, label }, linkIndex) => (
           <motion.div
             initial={{ opacity: 0, rotateX: -90 }}
             animate={{ opacity: 1, rotateX: 0 }}
@@ -87,8 +107,9 @@ function MobileNav() {
               rotateX: { duration: 0.3, delay: linkIndex * 0.1 },
             }}
             key={href}
+            className="ml-4"
           >
-            <Link href={href} className="text-base font-medium text-gray-950">
+            <Link href={href} className="text-base font-medium text-gray-700">
               {label}
             </Link>
           </motion.div>
