@@ -169,11 +169,11 @@ export default function CompanyListView({
                 <Beaker className="h-3 w-3" />
                 {company.total_applications} anvendelser
               </div>
-              <div>
+              <div title="Behandlet areal for seneste år med data">
                 {company.total_treated_area_ha.toLocaleString('da-DK', {
                   maximumFractionDigits: 0,
                 })}{' '}
-                ha
+                ha (seneste år)
               </div>
             </div>
 
