@@ -1,5 +1,5 @@
 metadata:
-  configVersion: "1.4"  # Increment version for documentation addition
+  configVersion: "1.5"  # Added documentation to all missing chart components
 
 pageBuilder:
   - _key: company-identity
@@ -457,6 +457,13 @@ pageBuilder:
   - _key: environmental-action-status-chart
     _type: horizontalStackedBarChart
     title: "Miljøhandlingsstatus - fordeling på område type"
+    documentation:
+      title: "Miljøhandlingsstatus Fordelt på Områdetyper"
+      description: "Status for miljøhandlinger fordelt på forskellige områdetyper som BNBO og lavbundsjorde, viser hvilke områder der kræver handling og hvilke der allerede er håndteret"
+      sources:
+        - name: "Environmental action status workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/environmental_action_status.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-workflows"
     dataSource:
       params:
         source: "environmental_action_status"
@@ -470,6 +477,13 @@ pageBuilder:
   - _key: water-coverage-effectiveness-chart
     _type: stackedBarChart
     title: "Miljø- og klimaprojekt effektivitet pr. år"
+    documentation:
+      title: "Miljø- og Klimaprojekt Effektivitet"
+      description: "Årlig udvikling i effektiviteten af miljø- og klimaprojekter målt på dækningsområde i hektarer fordelt på forskellige dækningstyper"
+      sources:
+        - name: "Water coverage effectiveness workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/water_coverage_effectiveness.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-workflows"
     dataSource:
       params:
         source: "water_coverage_effectiveness"
@@ -701,7 +715,7 @@ pageBuilder:
       dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#pesticide-disaggregation-workflow"
     dataSource:
       params:
-        source: "pesticide_applications"
+        source: "pesticide_applications_with_field_details"
         table:
           columns:
             - key: "year"
@@ -709,6 +723,10 @@ pageBuilder:
               column: "year"
               isFilterable: true
               isHidden: true
+            - key: "field_uuid"
+              label: "Mark UUID"
+              column: "field_uuid"
+              isFilterable: true
             - key: "risk_category"
               label: "Risiko Kategori"
               column: "risk_category"
@@ -736,6 +754,15 @@ pageBuilder:
             - key: "prox_school"
               label: "Nærhed Skole (m)"
               column: "proximity_school_m"
+            - key: "centroid_lat"
+              label: "Breddegrad"
+              column: "centroid_lat"
+            - key: "centroid_lng"
+              label: "Længdegrad"
+              column: "centroid_lng"
+            - key: "skraafoto"
+              label: "Skråfoto"
+              column: "skraafoto_url"
           initialFilter:
             year: "latest"
         orderBy:
@@ -776,6 +803,13 @@ pageBuilder:
   - _key: worker-welfare-employees-monthly
     _type: barChart
     title: "Antal ansatte pr. måned"
+    documentation:
+      title: "Månedlig Medarbejderantal"
+      description: "Historisk udvikling i antal ansatte pr. måned baseret på arbejdsmarkedsdata"
+      sources:
+        - name: "Worker welfare workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_welfare.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-welfare-workflow"
     dataSource:
       params:
         source: "employee_monthly_counts"
@@ -792,6 +826,13 @@ pageBuilder:
   - _key: worker-welfare-visas
     _type: stackedBarChart
     title: "Førstegangstilladelser pr. år (fordelt på nationalitet)"
+    documentation:
+      title: "Arbejdstilladelser Fordelt på Nationalitet"
+      description: "Årlig udvikling i førstegangstilladelser til udenlandsk arbejdskraft fordelt på nationalitet baseret på arbejdstilladelsesdata"
+      sources:
+        - name: "Worker welfare workflow (visa data)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_welfare.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-welfare-workflow"
     dataSource:
       params:
         source: "visa_yearly_counts"
@@ -1070,6 +1111,13 @@ pageBuilder:
           - _key: species-age-chart-{iteratorContext.chr}-{iteratorContext.species_id}
             _type: stackedBarChart
             title: "{iteratorContext.species_name} kapacitet pr. år (kategori)"
+            documentation:
+              title: "Dyrekapacitet Fordelt på Kategorier"
+              description: "Historisk udvikling i dyrekapacitet fordelt på forskellige kategorier (alder/type) for specifik dyreart på produktionsstedet baseret på CHR-data"
+              sources:
+                - name: "CHR pipeline (dyrekapacitet)"
+                  url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
+              dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#chr-pipeline-animal-health-and-movement-data"
             dataSource:
               params:
                 source: "animal_capacity_log"

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "configVersion": "1.4"
+    "configVersion": "1.5"
   },
   "pageBuilder": [
     {
@@ -9,7 +9,7 @@
       "title": "Virksomhed identitet",
       "documentation": {
         "title": "Virksomhedsdata og CVR-oplysninger",
-        "description": "Grundlæggende virksomhedsoplysninger hentet fra CVR-registret",
+        "description": "Grundl\u00e6ggende virksomhedsoplysninger hentet fra CVR-registret",
         "sources": [
           {
             "name": "CVR enrichment workflow",
@@ -98,7 +98,7 @@
       "title": "Ledelse",
       "documentation": {
         "title": "Virksomhedsledelse",
-        "description": "Oplysninger om virksomhedens ledelse og nøglepersoner fra CVR-registret",
+        "description": "Oplysninger om virksomhedens ledelse og n\u00f8glepersoner fra CVR-registret",
         "sources": [
           {
             "name": "CVR enrichment workflow",
@@ -198,10 +198,10 @@
     {
       "_key": "financials-latest-kpis",
       "_type": "kpiGroup",
-      "title": "Finansielle nøgletal (seneste år)",
+      "title": "Finansielle n\u00f8gletal (seneste \u00e5r)",
       "documentation": {
-        "title": "Finansielle nøgletal",
-        "description": "Seneste finansielle nøgletal for virksomheden baseret på CVR regnskabsdata",
+        "title": "Finansielle n\u00f8gletal",
+        "description": "Seneste finansielle n\u00f8gletal for virksomheden baseret p\u00e5 CVR regnskabsdata",
         "sources": [
           {
             "name": "CVR enrichment workflow",
@@ -249,10 +249,10 @@
     {
       "_key": "financials-history",
       "_type": "barChart",
-      "title": "Økonomisk udvikling (pr. år)",
+      "title": "\u00d8konomisk udvikling (pr. \u00e5r)",
       "documentation": {
-        "title": "Økonomisk udvikling over tid",
-        "description": "Historisk udvikling i virksomhedens finansielle nøgletal baseret på CVR regnskabsdata",
+        "title": "\u00d8konomisk udvikling over tid",
+        "description": "Historisk udvikling i virksomhedens finansielle n\u00f8gletal baseret p\u00e5 CVR regnskabsdata",
         "sources": [
           {
             "name": "CVR enrichment workflow",
@@ -296,10 +296,10 @@
     {
       "_key": "financials-detailed-kpis",
       "_type": "kpiGroup",
-      "title": "Detaljerede finansielle nøgletal",
+      "title": "Detaljerede finansielle n\u00f8gletal",
       "documentation": {
-        "title": "Detaljerede finansielle nøgletal",
-        "description": "Udvidede finansielle nøgletal inkluderende medarbejderoplysninger, likviditet og rentabilitetsmål fra CVR regnskabsdata",
+        "title": "Detaljerede finansielle n\u00f8gletal",
+        "description": "Udvidede finansielle n\u00f8gletal inkluderende medarbejderoplysninger, likviditet og rentabilitetsm\u00e5l fra CVR regnskabsdata",
         "sources": [
           {
             "name": "CVR enrichment workflow",
@@ -323,7 +323,7 @@
               },
               {
                 "key": "employee_costs",
-                "label": "Lønomkostninger",
+                "label": "L\u00f8nomkostninger",
                 "column": "employee_benefits_expense",
                 "format": "currency"
               },
@@ -359,10 +359,10 @@
     {
       "_key": "subsidies-history-stacked",
       "_type": "stackedBarChart",
-      "title": "Tilskud fordelt på type (pr. år)",
+      "title": "Tilskud fordelt p\u00e5 type (pr. \u00e5r)",
       "documentation": {
         "title": "Landbrugstilskud Over Tid",
-        "description": "Historisk oversigt over landbrugstilskud fordelt på forskellige støtteordninger fra Drive Data Pipeline",
+        "description": "Historisk oversigt over landbrugstilskud fordelt p\u00e5 forskellige st\u00f8tteordninger fra Drive Data Pipeline",
         "sources": [
           {
             "name": "Drive data pipeline (subsidies)",
@@ -391,10 +391,10 @@
     {
       "_key": "land-use-kpis",
       "_type": "kpiGroup",
-      "title": "Arealanvendelse nøgletal",
+      "title": "Arealanvendelse n\u00f8gletal",
       "documentation": {
         "title": "Arealanvendelse og Markoversigt",
-        "description": "Nøgletal for landbrugsarealanvendelse baseret på FVM-data inkluderende økologisk dyrkning og markoversigt",
+        "description": "N\u00f8gletal for landbrugsarealanvendelse baseret p\u00e5 FVM-data inkluderende \u00f8kologisk dyrkning og markoversigt",
         "sources": [
           {
             "name": "Field area analysis workflow",
@@ -418,13 +418,13 @@
               },
               {
                 "key": "organic_ha",
-                "label": "Økologisk Hektar (Total)",
+                "label": "\u00d8kologisk Hektar (Total)",
                 "column": "organic_area_ha",
                 "format": "number"
               },
               {
                 "key": "rank_dk_ha",
-                "label": "Rankering på landsplan (Ha)",
+                "label": "Rankering p\u00e5 landsplan (Ha)",
                 "column": "rank_dk_total_area"
               },
               {
@@ -434,12 +434,12 @@
               },
               {
                 "key": "rank_dk_org",
-                "label": "Rankering på landsplan (Ha Øko)",
+                "label": "Rankering p\u00e5 landsplan (Ha \u00d8ko)",
                 "column": "rank_dk_organic_total_area"
               },
               {
                 "key": "rank_mun_org",
-                "label": "Rankering i kommunen (Ha Øko)",
+                "label": "Rankering i kommunen (Ha \u00d8ko)",
                 "column": "rank_municipality_organic_total_area"
               }
             ]
@@ -450,13 +450,13 @@
     {
       "_key": "land-use-crop-distribution",
       "_type": "horizontalStackedBarChart",
-      "title": "Afgrødefordeling (seneste år, øko/konv)",
+      "title": "Afgr\u00f8defordeling (seneste \u00e5r, \u00f8ko/konv)",
       "documentation": {
-        "title": "Afgrødefordeling Økologisk vs Konventionel",
-        "description": "Fordeling af afgrøder på virksomhedens marker opdelt i økologisk og konventionel dyrkning baseret på FVM-data",
+        "title": "Afgr\u00f8defordeling \u00d8kologisk vs Konventionel",
+        "description": "Fordeling af afgr\u00f8der p\u00e5 virksomhedens marker opdelt i \u00f8kologisk og konventionel dyrkning baseret p\u00e5 FVM-data",
         "sources": [
           {
-            "name": "FVM WFS workflow (afgrødedata)",
+            "name": "FVM WFS workflow (afgr\u00f8dedata)",
             "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/fvm_wfs.md"
           },
           {
@@ -489,10 +489,10 @@
     {
       "_key": "land-use-field-map",
       "_type": "mapChart",
-      "title": "Markernes placering & status (seneste år)",
+      "title": "Markernes placering & status (seneste \u00e5r)",
       "documentation": {
         "title": "Interaktivt Markkort",
-        "description": "Geografisk oversigt over alle virksomhedens marker med information om afgrøder, økologisk status og arealanvendelse",
+        "description": "Geografisk oversigt over alle virksomhedens marker med information om afgr\u00f8der, \u00f8kologisk status og arealanvendelse",
         "sources": [
           {
             "name": "Cadastral workflow",
@@ -526,10 +526,10 @@
     {
       "_key": "environmental-compliance-overview",
       "_type": "kpiGroup",
-      "title": "Miljøoverholdelse - oversigt",
+      "title": "Milj\u00f8overholdelse - oversigt",
       "documentation": {
-        "title": "Miljøoverholdelse og Beskyttelsesområder",
-        "description": "Oversigt over miljøoverholdelse inkluderende problematiske områder, BNBO-beskyttelse og vådområder",
+        "title": "Milj\u00f8overholdelse og Beskyttelsesomr\u00e5der",
+        "description": "Oversigt over milj\u00f8overholdelse inkluderende problematiske omr\u00e5der, BNBO-beskyttelse og v\u00e5domr\u00e5der",
         "sources": [
           {
             "name": "BNBO workflow (drikkevandsbeskyttelse)",
@@ -555,13 +555,13 @@
             "metrics": [
               {
                 "key": "total_problematic_ha",
-                "label": "Problematiske Områder (Ha)",
+                "label": "Problematiske Omr\u00e5der (Ha)",
                 "column": "total_problematic_hectares",
                 "format": "number"
               },
               {
                 "key": "total_dealt_with_ha",
-                "label": "Håndterede Områder (Ha)",
+                "label": "H\u00e5ndterede Omr\u00e5der (Ha)",
                 "column": "total_dealt_with_hectares",
                 "format": "number"
               },
@@ -573,7 +573,7 @@
               },
               {
                 "key": "water_coverage_percentage",
-                "label": "Areal til Klima- eller Miljøprojekter",
+                "label": "Areal til Klima- eller Milj\u00f8projekter",
                 "column": "water_coverage_percentage",
                 "format": "percentage"
               }
@@ -585,10 +585,10 @@
     {
       "_key": "bnbo-environmental-status-chart",
       "_type": "comboChart",
-      "title": "BNBO miljøstatus - områder og klima- eller miljøprojekter",
+      "title": "BNBO milj\u00f8status - omr\u00e5der og klima- eller milj\u00f8projekter",
       "documentation": {
-        "title": "BNBO Boringsnære Beskyttelsesområder Status",
-        "description": "Status for boringsnære beskyttelsesområder (BNBO) omkring drikkevandsboringer hvor sprøjtemidler kan forurene grundvandet. Inkluderer områder der kræver handling og gennemførte tiltag for drikkevandsbeskyttelse",
+        "title": "BNBO Boringsn\u00e6re Beskyttelsesomr\u00e5der Status",
+        "description": "Status for boringsn\u00e6re beskyttelsesomr\u00e5der (BNBO) omkring drikkevandsboringer hvor spr\u00f8jtemidler kan forurene grundvandet. Inkluderer omr\u00e5der der kr\u00e6ver handling og gennemf\u00f8rte tiltag for drikkevandsbeskyttelse",
         "sources": [
           {
             "name": "BNBO workflow (drikkevandsbeskyttelse)",
@@ -605,21 +605,21 @@
             "metrics": [
               {
                 "key": "action_required",
-                "seriesName": "Kræver handling (ha)",
+                "seriesName": "Kr\u00e6ver handling (ha)",
                 "column": "action_required_hectares",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "completed",
-                "seriesName": "Gennemført (ha)",
+                "seriesName": "Gennemf\u00f8rt (ha)",
                 "column": "completed_hectares",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "water_covered",
-                "seriesName": "Areal til klima- eller miljøprojekter (ha)",
+                "seriesName": "Areal til klima- eller milj\u00f8projekter (ha)",
                 "column": "water_covered_hectares",
                 "type": "bar",
                 "yAxis": "left"
@@ -645,10 +645,10 @@
     {
       "_key": "wetlands-environmental-status-chart",
       "_type": "comboChart",
-      "title": "Lavbundsjorde miljøstatus - områder og klima- eller miljøprojekter",
+      "title": "Lavbundsjorde milj\u00f8status - omr\u00e5der og klima- eller milj\u00f8projekter",
       "documentation": {
         "title": "Lavbundsjorde status",
-        "description": "Status for lavbundsjorde inkluderende områder der kræver miljøtiltag og gennemførte projekter",
+        "description": "Status for lavbundsjorde inkluderende omr\u00e5der der kr\u00e6ver milj\u00f8tiltag og gennemf\u00f8rte projekter",
         "sources": [
           {
             "name": "Lavbundsjorde workflow",
@@ -665,21 +665,21 @@
             "metrics": [
               {
                 "key": "action_required",
-                "seriesName": "Kræver handling (ha)",
+                "seriesName": "Kr\u00e6ver handling (ha)",
                 "column": "action_required_hectares",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "completed",
-                "seriesName": "Gennemført (ha)",
+                "seriesName": "Gennemf\u00f8rt (ha)",
                 "column": "completed_hectares",
                 "type": "bar",
                 "yAxis": "left"
               },
               {
                 "key": "water_covered",
-                "seriesName": "Areal til klima- eller miljøprojekter (ha)",
+                "seriesName": "Areal til klima- eller milj\u00f8projekter (ha)",
                 "column": "water_covered_hectares",
                 "type": "bar",
                 "yAxis": "left"
@@ -705,7 +705,18 @@
     {
       "_key": "environmental-action-status-chart",
       "_type": "horizontalStackedBarChart",
-      "title": "Miljøhandlingsstatus - fordeling på område type",
+      "title": "Milj\u00f8handlingsstatus - fordeling p\u00e5 omr\u00e5de type",
+      "documentation": {
+        "title": "Milj\u00f8handlingsstatus Fordelt p\u00e5 Omr\u00e5detyper",
+        "description": "Status for milj\u00f8handlinger fordelt p\u00e5 forskellige omr\u00e5detyper som BNBO og lavbundsjorde, viser hvilke omr\u00e5der der kr\u00e6ver handling og hvilke der allerede er h\u00e5ndteret",
+        "sources": [
+          {
+            "name": "Environmental action status workflow",
+            "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/environmental_action_status.md"
+          }
+        ],
+        "dataLineage": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-workflows"
+      },
       "dataSource": {
         "params": {
           "source": "environmental_action_status",
@@ -722,7 +733,18 @@
     {
       "_key": "water-coverage-effectiveness-chart",
       "_type": "stackedBarChart",
-      "title": "Miljø- og klimaprojekt effektivitet pr. år",
+      "title": "Milj\u00f8- og klimaprojekt effektivitet pr. \u00e5r",
+      "documentation": {
+        "title": "Milj\u00f8- og Klimaprojekt Effektivitet",
+        "description": "\u00c5rlig udvikling i effektiviteten af milj\u00f8- og klimaprojekter m\u00e5lt p\u00e5 d\u00e6kningsomr\u00e5de i hektarer fordelt p\u00e5 forskellige d\u00e6kningstyper",
+        "sources": [
+          {
+            "name": "Water coverage effectiveness workflow",
+            "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/water_coverage_effectiveness.md"
+          }
+        ],
+        "dataLineage": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-workflows"
+      },
       "dataSource": {
         "params": {
           "source": "water_coverage_effectiveness",
@@ -743,7 +765,7 @@
     {
       "_key": "environmental-compliance-kpis",
       "_type": "kpiGroup",
-      "title": "Miljøoverholdelse nøgletal & placering",
+      "title": "Milj\u00f8overholdelse n\u00f8gletal & placering",
       "dataSource": {
         "params": {
           "source": "environmental_compliance_ranking",
@@ -759,13 +781,13 @@
               },
               {
                 "key": "environmental_risk_score",
-                "label": "Miljørisiko Score",
+                "label": "Milj\u00f8risiko Score",
                 "column": "environmental_risk_score",
                 "format": "number"
               },
               {
                 "key": "rank_dk_compliance",
-                "label": "Rankering på landsplan (Overholdelse)",
+                "label": "Rankering p\u00e5 landsplan (Overholdelse)",
                 "column": "rank_dk_compliance"
               },
               {
@@ -775,12 +797,12 @@
               },
               {
                 "key": "rank_dk_water_coverage",
-                "label": "Rankering på landsplan (Klima- eller Miljøprojekter)",
+                "label": "Rankering p\u00e5 landsplan (Klima- eller Milj\u00f8projekter)",
                 "column": "rank_dk_water_coverage"
               },
               {
                 "key": "rank_mun_water_coverage",
-                "label": "Rankering i kommunen (Klima- eller Miljøprojekter)",
+                "label": "Rankering i kommunen (Klima- eller Milj\u00f8projekter)",
                 "column": "rank_municipality_water_coverage"
               }
             ]
@@ -791,10 +813,10 @@
     {
       "_key": "environment-kpis",
       "_type": "kpiGroup",
-      "title": "Miljø nøgletal",
+      "title": "Milj\u00f8 n\u00f8gletal",
       "documentation": {
-        "title": "Miljøpåvirkning og Bæredygtighed",
-        "description": "Miljønøgletal inkluderende gødningsforbrug, kvælstofudledning og pesticidbelastning baseret på feltdata og pesticidregistreringer",
+        "title": "Milj\u00f8p\u00e5virkning og B\u00e6redygtighed",
+        "description": "Milj\u00f8n\u00f8gletal inkluderende g\u00f8dningsforbrug, kv\u00e6lstofudledning og pesticidbelastning baseret p\u00e5 feltdata og pesticidregistreringer",
         "sources": [
           {
             "name": "Pesticide disaggregation workflow",
@@ -806,7 +828,7 @@
           },
           {
             "name": "Drive data pipeline (fertiliser)",
-            "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/drive_data_pipeline/README_COMPREHENSIVE.md#fertiliser-gødning"
+            "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/drive_data_pipeline/README_COMPREHENSIVE.md#fertiliser-g\u00f8dning"
           }
         ],
         "dataLineage": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#environmental-impact-analysis"
@@ -820,17 +842,17 @@
             "metrics": [
               {
                 "key": "fertiliser_kg",
-                "label": "Kg Gødning Brugt",
+                "label": "Kg G\u00f8dning Brugt",
                 "column": "total_fertiliser_kg"
               },
               {
                 "key": "nitrogen_leached_kg",
-                "label": "Kg Kvælstof Udledt",
+                "label": "Kg Kv\u00e6lstof Udledt",
                 "column": "total_n_leached_kg"
               },
               {
                 "key": "nitrogen_leached_kg_ha",
-                "label": "Kg Kvælstof Udledt pr. Ha",
+                "label": "Kg Kv\u00e6lstof Udledt pr. Ha",
                 "column": "n_leached_kg_per_ha"
               },
               {
@@ -845,17 +867,17 @@
               },
               {
                 "key": "rank_dk_fertiliser",
-                "label": "Rankering på landsplan (Gødning)",
+                "label": "Rankering p\u00e5 landsplan (G\u00f8dning)",
                 "column": "rank_dk_total_fertiliser_kg"
               },
               {
                 "key": "rank_mun_fertiliser",
-                "label": "Rankering i kommunen (Gødning)",
+                "label": "Rankering i kommunen (G\u00f8dning)",
                 "column": "rank_municipality_total_fertiliser_kg"
               },
               {
                 "key": "rank_dk_n_leached_ha",
-                "label": "Rankering på landsplan (N/Ha)",
+                "label": "Rankering p\u00e5 landsplan (N/Ha)",
                 "column": "rank_dk_n_leached_kg_per_ha"
               },
               {
@@ -865,7 +887,7 @@
               },
               {
                 "key": "rank_dk_pest_load_ha",
-                "label": "Rankering på landsplan (Pest./Ha)",
+                "label": "Rankering p\u00e5 landsplan (Pest./Ha)",
                 "column": "rank_dk_pesticide_load_index_per_ha"
               },
               {
@@ -881,10 +903,10 @@
     {
       "_key": "environment-slurry-incidents",
       "_type": "timeline",
-      "title": "Hændelser med gylleudslip",
+      "title": "H\u00e6ndelser med gylleudslip",
       "documentation": {
-        "title": "Gylleudslip og miljøhændelser",
-        "description": "Registrerede hændelser med gylleudslip og andre miljøhændelser",
+        "title": "Gylleudslip og milj\u00f8h\u00e6ndelser",
+        "description": "Registrerede h\u00e6ndelser med gylleudslip og andre milj\u00f8h\u00e6ndelser",
         "sources": [
           {
             "name": "Drive data pipeline (slurry leaks)",
@@ -915,10 +937,10 @@
     {
       "_key": "environment-nitrogen-leaching",
       "_type": "comboChart",
-      "title": "Kvælstofudvaskning (total og pr. hektar)",
+      "title": "Kv\u00e6lstofudvaskning (total og pr. hektar)",
       "documentation": {
-        "title": "Kvælstofudvaskning over tid",
-        "description": "Historisk udvikling i kvælstofudvaskning både som total mængde og per hektar",
+        "title": "Kv\u00e6lstofudvaskning over tid",
+        "description": "Historisk udvikling i kv\u00e6lstofudvaskning b\u00e5de som total m\u00e6ngde og per hektar",
         "sources": [
           {
             "name": "Field production workflow",
@@ -961,10 +983,10 @@
     {
       "_key": "environment-nitrogen-per-field",
       "_type": "dataGrid",
-      "title": "Kvælstofudvaskning pr. mark (detaljeret)",
+      "title": "Kv\u00e6lstofudvaskning pr. mark (detaljeret)",
       "documentation": {
-        "title": "Detaljeret kvælstofudvaskning per mark",
-        "description": "Kvælstofudvaskning fordelt på individuelle marker med detaljer om afgrøder og dyrkning",
+        "title": "Detaljeret kv\u00e6lstofudvaskning per mark",
+        "description": "Kv\u00e6lstofudvaskning fordelt p\u00e5 individuelle marker med detaljer om afgr\u00f8der og dyrkning",
         "sources": [
           {
             "name": "Field production workflow",
@@ -985,7 +1007,7 @@
               },
               {
                 "key": "year",
-                "label": "År",
+                "label": "\u00c5r",
                 "column": "year",
                 "isFilterable": true,
                 "isHidden": true
@@ -1021,7 +1043,7 @@
       "title": "Pesticidbelastning (total og pr. hektar)",
       "documentation": {
         "title": "Pesticidbelastning over tid",
-        "description": "Historisk udvikling i pesticidbelastning både som total belastningsindeks og per hektar",
+        "description": "Historisk udvikling i pesticidbelastning b\u00e5de som total belastningsindeks og per hektar",
         "sources": [
           {
             "name": "Pesticide disaggregation workflow",
@@ -1071,7 +1093,7 @@
       "title": "Pesticidanvendelse detaljer og risici",
       "documentation": {
         "title": "Detaljeret Pesticidanvendelse og Risikovurdering",
-        "description": "Komplet oversigt over pesticidanvendelse med risikovurdering baseret på pesticidregistreringer og feltdata",
+        "description": "Komplet oversigt over pesticidanvendelse med risikovurdering baseret p\u00e5 pesticidregistreringer og feltdata",
         "sources": [
           {
             "name": "Pesticide disaggregation workflow",
@@ -1079,22 +1101,28 @@
           },
           {
             "name": "BMD scraper (pesticiddatabase)",
-            "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/SCRAPER_PIPELINES_COMPREHENSIVE.md#bmd-scraper-bekæmpelsesmiddel-database-automation"
+            "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/SCRAPER_PIPELINES_COMPREHENSIVE.md#bmd-scraper-bek\u00e6mpelsesmiddel-database-automation"
           }
         ],
         "dataLineage": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#pesticide-disaggregation-workflow"
       },
       "dataSource": {
         "params": {
-          "source": "pesticide_applications",
+          "source": "pesticide_applications_with_field_details",
           "table": {
             "columns": [
               {
                 "key": "year",
-                "label": "År",
+                "label": "\u00c5r",
                 "column": "year",
                 "isFilterable": true,
                 "isHidden": true
+              },
+              {
+                "key": "field_uuid",
+                "label": "Mark UUID",
+                "column": "field_uuid",
+                "isFilterable": true
               },
               {
                 "key": "risk_category",
@@ -1115,7 +1143,7 @@
               },
               {
                 "key": "ha_sprayed",
-                "label": "Antal Ha Sprøjtet",
+                "label": "Antal Ha Spr\u00f8jtet",
                 "column": "treated_area_ha"
               },
               {
@@ -1126,18 +1154,33 @@
               },
               {
                 "key": "prox_water",
-                "label": "Nærhed Vandløb (m)",
+                "label": "N\u00e6rhed Vandl\u00f8b (m)",
                 "column": "proximity_water_m"
               },
               {
                 "key": "prox_housing",
-                "label": "Nærhed Beboelse (m)",
+                "label": "N\u00e6rhed Beboelse (m)",
                 "column": "proximity_housing_m"
               },
               {
                 "key": "prox_school",
-                "label": "Nærhed Skole (m)",
+                "label": "N\u00e6rhed Skole (m)",
                 "column": "proximity_school_m"
+              },
+              {
+                "key": "centroid_lat",
+                "label": "Breddegrad",
+                "column": "centroid_lat"
+              },
+              {
+                "key": "centroid_lng",
+                "label": "L\u00e6ngdegrad",
+                "column": "centroid_lng"
+              },
+              {
+                "key": "skraafoto",
+                "label": "Skr\u00e5foto",
+                "column": "skraafoto_url"
               }
             ],
             "initialFilter": {
@@ -1161,10 +1204,10 @@
     {
       "_key": "worker-welfare-kpis",
       "_type": "kpiGroup",
-      "title": "Medarbejderforhold nøgletal (seneste)",
+      "title": "Medarbejderforhold n\u00f8gletal (seneste)",
       "documentation": {
-        "title": "Medarbejderforhold og Arbejdsmiljø",
-        "description": "Nøgletal for medarbejderforhold baseret på arbejdstilsynsdata, arbejdstilladelser og arbejdsskader",
+        "title": "Medarbejderforhold og Arbejdsmilj\u00f8",
+        "description": "N\u00f8gletal for medarbejderforhold baseret p\u00e5 arbejdstilsynsdata, arbejdstilladelser og arbejdsskader",
         "sources": [
           {
             "name": "Worker safety workflow",
@@ -1190,12 +1233,12 @@
             "metrics": [
               {
                 "key": "employees",
-                "label": "Gns. Antal Ansatte (År)",
+                "label": "Gns. Antal Ansatte (\u00c5r)",
                 "column": "average_employee_count"
               },
               {
                 "key": "injuries",
-                "label": "Arbejdsskader (År)",
+                "label": "Arbejdsskader (\u00c5r)",
                 "column": "injury_count_reported"
               }
             ]
@@ -1206,7 +1249,18 @@
     {
       "_key": "worker-welfare-employees-monthly",
       "_type": "barChart",
-      "title": "Antal ansatte pr. måned",
+      "title": "Antal ansatte pr. m\u00e5ned",
+      "documentation": {
+        "title": "M\u00e5nedlig Medarbejderantal",
+        "description": "Historisk udvikling i antal ansatte pr. m\u00e5ned baseret p\u00e5 arbejdsmarkedsdata",
+        "sources": [
+          {
+            "name": "Worker welfare workflow",
+            "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_welfare.md"
+          }
+        ],
+        "dataLineage": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-welfare-workflow"
+      },
       "dataSource": {
         "params": {
           "source": "employee_monthly_counts",
@@ -1232,7 +1286,18 @@
     {
       "_key": "worker-welfare-visas",
       "_type": "stackedBarChart",
-      "title": "Førstegangstilladelser pr. år (fordelt på nationalitet)",
+      "title": "F\u00f8rstegangstilladelser pr. \u00e5r (fordelt p\u00e5 nationalitet)",
+      "documentation": {
+        "title": "Arbejdstilladelser Fordelt p\u00e5 Nationalitet",
+        "description": "\u00c5rlig udvikling i f\u00f8rstegangstilladelser til udenlandsk arbejdskraft fordelt p\u00e5 nationalitet baseret p\u00e5 arbejdstilladelsesdata",
+        "sources": [
+          {
+            "name": "Worker welfare workflow (visa data)",
+            "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_welfare.md"
+          }
+        ],
+        "dataLineage": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-welfare-workflow"
+      },
       "dataSource": {
         "params": {
           "source": "visa_yearly_counts",
@@ -1253,7 +1318,7 @@
     {
       "_key": "worker-welfare-injuries",
       "_type": "dataGrid",
-      "title": "Arbejdsskader pr. år (rapporteret antal)",
+      "title": "Arbejdsskader pr. \u00e5r (rapporteret antal)",
       "dataSource": {
         "params": {
           "source": "worker_yearly_summary",
@@ -1261,7 +1326,7 @@
             "columns": [
               {
                 "key": "year",
-                "label": "År",
+                "label": "\u00c5r",
                 "column": "year"
               },
               {
@@ -1284,10 +1349,10 @@
     {
       "_key": "animal-welfare-kpis-overall",
       "_type": "kpiGroup",
-      "title": "Dyrevelærd nøgletal (samlet)",
+      "title": "Dyrevel\u00e6rd n\u00f8gletal (samlet)",
       "documentation": {
-        "title": "Dyrevelærd og Husdyrproduktion",
-        "description": "Nøgletal for husdyrproduktion baseret på CHR-data inkluderende produktionssteder, dyreækvivalenter, antibiotikaforbrug og dyretransporter",
+        "title": "Dyrevel\u00e6rd og Husdyrproduktion",
+        "description": "N\u00f8gletal for husdyrproduktion baseret p\u00e5 CHR-data inkluderende produktionssteder, dyre\u00e6kvivalenter, antibiotikaforbrug og dyretransporter",
         "sources": [
           {
             "name": "CHR pipeline (husdyr og antibiotika)",
@@ -1329,17 +1394,17 @@
               },
               {
                 "key": "rank_dk_prod",
-                "label": "Rankering på landsplan (Prod. Ækv.)",
+                "label": "Rankering p\u00e5 landsplan (Prod. \u00c6kv.)",
                 "column": "rank_dk_total_animal_equivalents"
               },
               {
                 "key": "rank_mun_prod",
-                "label": "Rankering i kommunen (Prod. Ækv.)",
+                "label": "Rankering i kommunen (Prod. \u00c6kv.)",
                 "column": "rank_municipality_total_animal_equivalents"
               },
               {
                 "key": "rank_dk_antibiotics",
-                "label": "Rankering på landsplan (Antibiotika)",
+                "label": "Rankering p\u00e5 landsplan (Antibiotika)",
                 "column": "rank_dk_total_ddd_usage"
               },
               {
@@ -1349,7 +1414,7 @@
               },
               {
                 "key": "rank_dk_transport",
-                "label": "Rankering på landsplan (Transport)",
+                "label": "Rankering p\u00e5 landsplan (Transport)",
                 "column": "rank_dk_total_animals_transported"
               },
               {
@@ -1365,10 +1430,10 @@
     {
       "_key": "animal-welfare-production-species-chart",
       "_type": "stackedBarChart",
-      "title": "Dyreproduktion pr. år (samlet, fordelt på art)",
+      "title": "Dyreproduktion pr. \u00e5r (samlet, fordelt p\u00e5 art)",
       "documentation": {
-        "title": "Dyreproduktion Fordelt på Arter",
-        "description": "Historisk udvikling i husdyrproduktion fordelt på forskellige dyrearter baseret på CHR-registreringer",
+        "title": "Dyreproduktion Fordelt p\u00e5 Arter",
+        "description": "Historisk udvikling i husdyrproduktion fordelt p\u00e5 forskellige dyrearter baseret p\u00e5 CHR-registreringer",
         "sources": [
           {
             "name": "CHR pipeline (husdyrproduktion)",
@@ -1400,7 +1465,7 @@
       "title": "Antibiotikaforbrug (samlet, total og rate)",
       "documentation": {
         "title": "Antibiotikaforbrug i Husdyrproduktion",
-        "description": "Historisk udvikling i antibiotikaforbrug både som total mængde og rate per dyr baseret på VetStat-data fra CHR Pipeline",
+        "description": "Historisk udvikling i antibiotikaforbrug b\u00e5de som total m\u00e6ngde og rate per dyr baseret p\u00e5 VetStat-data fra CHR Pipeline",
         "sources": [
           {
             "name": "CHR pipeline (VetStat antibiotika)",
@@ -1531,7 +1596,7 @@
         {
           "_key": "site-kpis-{iteratorContext.chr}",
           "_type": "kpiGroup",
-          "title": "Site nøgletal & placering",
+          "title": "Site n\u00f8gletal & placering",
           "dataSource": {
             "params": {
               "source": "site_details_summary_ranked",
@@ -1579,7 +1644,7 @@
         {
           "_key": "site-vet-events-{iteratorContext.chr}",
           "_type": "timeline",
-          "title": "Site veterinære hændelser",
+          "title": "Site veterin\u00e6re h\u00e6ndelser",
           "dataSource": {
             "params": {
               "source": "vet_events",
@@ -1608,7 +1673,7 @@
         {
           "_key": "site-species-iteration-{iteratorContext.chr}",
           "_type": "iteratedSection",
-          "title": "Detaljer pr. dyreart på site",
+          "title": "Detaljer pr. dyreart p\u00e5 site",
           "iteratorDataSource": {
             "params": {
               "source": "site_species_production_ranked",
@@ -1647,7 +1712,7 @@
                       },
                       {
                         "key": "rank_dk_species_prod",
-                        "label": "Rankering på landsplan (Art Kapacitet)",
+                        "label": "Rankering p\u00e5 landsplan (Art Kapacitet)",
                         "column": "rank_dk_species_production"
                       },
                       {
@@ -1663,7 +1728,18 @@
             {
               "_key": "species-age-chart-{iteratorContext.chr}-{iteratorContext.species_id}",
               "_type": "stackedBarChart",
-              "title": "{iteratorContext.species_name} kapacitet pr. år (kategori)",
+              "title": "{iteratorContext.species_name} kapacitet pr. \u00e5r (kategori)",
+              "documentation": {
+                "title": "Dyrekapacitet Fordelt p\u00e5 Kategorier",
+                "description": "Historisk udvikling i dyrekapacitet fordelt p\u00e5 forskellige kategorier (alder/type) for specifik dyreart p\u00e5 produktionsstedet baseret p\u00e5 CHR-data",
+                "sources": [
+                  {
+                    "name": "CHR pipeline (dyrekapacitet)",
+                    "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
+                  }
+                ],
+                "dataLineage": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#chr-pipeline-animal-health-and-movement-data"
+              },
               "dataSource": {
                 "params": {
                   "source": "animal_capacity_log",
@@ -1692,10 +1768,10 @@
     {
       "_key": "animal-welfare-transport-chart",
       "_type": "stackedBarChart",
-      "title": "Dyretransporter pr. uge (samlet, fordelt på destination)",
+      "title": "Dyretransporter pr. uge (samlet, fordelt p\u00e5 destination)",
       "documentation": {
         "title": "Dyretransporter og Destinationer",
-        "description": "Ugentlig oversigt over dyretransporter fordelt på destinationstyper baseret på Svineflytning Pipeline data",
+        "description": "Ugentlig oversigt over dyretransporter fordelt p\u00e5 destinationstyper baseret p\u00e5 Svineflytning Pipeline data",
         "sources": [
           {
             "name": "Svineflytning pipeline (dyretransporter)",
@@ -1724,10 +1800,10 @@
     {
       "_key": "carbon-accounting-kpis",
       "_type": "kpiGroup",
-      "title": "Klimaregnskab nøgletal (seneste år)",
+      "title": "Klimaregnskab n\u00f8gletal (seneste \u00e5r)",
       "documentation": {
         "title": "Klimaregnskab og CO2-udslip",
-        "description": "Nøgletal for klimapåvirkning og CO2-ækvivalenter baseret på landbrugsaktiviteter og miljødata",
+        "description": "N\u00f8gletal for klimap\u00e5virkning og CO2-\u00e6kvivalenter baseret p\u00e5 landbrugsaktiviteter og milj\u00f8data",
         "sources": [
           {
             "name": "Field production workflow (klimadata)",
@@ -1754,7 +1830,7 @@
               },
               {
                 "key": "rank_dk_co2e",
-                "label": "Rankering på landsplan (CO2e)",
+                "label": "Rankering p\u00e5 landsplan (CO2e)",
                 "column": "rank_dk_total_co2e_tonnes"
               },
               {
@@ -1770,10 +1846,10 @@
     {
       "_key": "carbon-accounting-history",
       "_type": "stackedBarChart",
-      "title": "CO2e emissioner pr. år (fordelt på kilde)",
+      "title": "CO2e emissioner pr. \u00e5r (fordelt p\u00e5 kilde)",
       "documentation": {
-        "title": "Historisk CO2-udslip Fordelt på Kilder",
-        "description": "Årlig udvikling i CO2-ækvivalent emissioner fordelt på forskellige kilder som husdyr, gødning og energiforbrug",
+        "title": "Historisk CO2-udslip Fordelt p\u00e5 Kilder",
+        "description": "\u00c5rlig udvikling i CO2-\u00e6kvivalent emissioner fordelt p\u00e5 forskellige kilder som husdyr, g\u00f8dning og energiforbrug",
         "sources": [
           {
             "name": "Field production workflow (CO2 beregninger)",
@@ -1806,7 +1882,7 @@
     {
       "_key": "carbon-accounting-details",
       "_type": "dataGrid",
-      "title": "Detaljeret klimaregnskab (kilde x faktor pr. år)",
+      "title": "Detaljeret klimaregnskab (kilde x faktor pr. \u00e5r)",
       "dataSource": {
         "params": {
           "source": "carbon_emission_factors",
@@ -1814,7 +1890,7 @@
             "columns": [
               {
                 "key": "year",
-                "label": "År",
+                "label": "\u00c5r",
                 "column": "year",
                 "isFilterable": true,
                 "isHidden": true
