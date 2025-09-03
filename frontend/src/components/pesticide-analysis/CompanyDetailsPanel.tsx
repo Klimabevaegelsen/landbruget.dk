@@ -82,8 +82,7 @@ export default function CompanyDetailsPanel({
     };
 
     fetchDetails();
-  }, [company.cvr_number]); // Only depend on cvr_number, not toast functions
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company.cvr_number, company.company_name, addToast, removeToast]);
 
   const formatBelastning = (value: number) => {
     return value.toLocaleString('da-DK', {
