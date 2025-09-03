@@ -79,15 +79,6 @@ export function DocumentationAccordion({
               </p>
             </div>
           )}
-
-          {/* Footer note */}
-          <div className="border-t border-gray-100 pt-3">
-            <p className="text-xs text-gray-500">
-              Alle datakilder er offentligt tilgængelige og behandles i
-              overensstemmelse med GDPR. Dokumentationen opdateres løbende med
-              pipelineændringer.
-            </p>
-          </div>
         </div>
       )}
     </div>
