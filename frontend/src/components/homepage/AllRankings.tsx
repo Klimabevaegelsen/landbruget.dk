@@ -7,19 +7,19 @@ const RANKINGS = [
   // Financial Rankings (3)
   {
     id: 'highest_profit',
-    title: 'Højest Overskud',
+    title: 'Højest overskud',
     category: 'financial',
     description: 'Virksomheder med det højeste nettoresultat i 2024',
   },
   {
     id: 'largest_assets',
-    title: 'Størst Aktiver',
+    title: 'Størst aktiver',
     category: 'financial',
     description: 'Virksomheder med de største samlede aktiver i 2024',
   },
   {
     id: 'most_employees_financial',
-    title: 'Flest Ansatte',
+    title: 'Flest ansatte',
     category: 'financial',
     description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
   },
@@ -27,27 +27,27 @@ const RANKINGS = [
   // Agricultural Area Rankings (4)
   {
     id: 'largest_land_area',
-    title: 'Størst Landbrugsareal',
+    title: 'Størst landbrugsareal',
     category: 'field',
     description: 'Virksomheder med det største samlede landbrugsareal i 2024',
   },
   {
     id: 'largest_organic_area',
-    title: 'Størst Økologisk Areal',
+    title: 'Størst økologisk areal',
     category: 'field',
     description:
       'Virksomheder med det største økologiske landbrugsareal i 2024',
   },
   {
     id: 'highest_organic_percentage',
-    title: 'Højest Økologisk Andel',
+    title: 'Højest økologisk andel',
     category: 'field',
     description:
       'Virksomheder med den højeste andel økologisk landbrug (min. 50 ha) i 2024',
   },
   {
     id: 'most_fields',
-    title: 'Flest Marker',
+    title: 'Flest marker',
     category: 'field',
     description:
       'Virksomheder med det største antal individuelle marker i 2024',
@@ -56,7 +56,7 @@ const RANKINGS = [
   // Environment Rankings (8)
   {
     id: 'highest_pesticide_burden',
-    title: 'Højest Pesticidbelastning',
+    title: 'Højest pesticidbelastning',
     category: 'environment',
     description:
       'Virksomheder med den højeste samlede pesticidbelastning i 2024',
@@ -70,40 +70,40 @@ const RANKINGS = [
   },
   {
     id: 'most_glyphosate_usage',
-    title: 'Højest Glyphosatforbrug',
+    title: 'Højest glyphosatforbrug',
     category: 'environment',
     description: 'Virksomheder med det højeste glyphosatforbrug i 2024',
   },
   {
     id: 'most_diquat_usage',
-    title: 'Højest Diquatforbrug',
+    title: 'Højest diquatforbrug',
     category: 'environment',
     description: 'Virksomheder med det højeste diquatforbrug i 2024',
   },
   {
     id: 'most_bnbo_not_dealt_with',
-    title: 'Mest BNBO-areal Ikke Håndteret',
+    title: 'Mest BNBO-areal ikke håndteret',
     category: 'environment',
     description:
       'Virksomheder med mest boringsnært beskyttelsesområde-areal der kræver handling i 2024',
   },
   {
     id: 'most_bnbo_dealt_with',
-    title: 'Mest BNBO-areal Håndteret',
+    title: 'Mest BNBO-areal håndteret',
     category: 'environment',
     description:
       'Virksomheder med mest boringsnært beskyttelsesområde-areal der er håndteret i 2024',
   },
   {
     id: 'most_wetland_not_restored',
-    title: 'Mest Lavbundsjorde Ikke Genoprettet',
+    title: 'Mest lavbundsjorde ikke genoprettet',
     category: 'environment',
     description:
       'Virksomheder med mest lavbundsjorde-areal der har behov for genopretning i 2024',
   },
   {
     id: 'most_wetland_restored',
-    title: 'Mest Lavbundsjorde Genoprettet',
+    title: 'Mest lavbundsjorde genoprettet',
     category: 'environment',
     description:
       'Virksomheder med mest lavbundsjorde-areal der er helt eller delvist genoprettet i 2024',
@@ -112,31 +112,33 @@ const RANKINGS = [
   // Animal Rankings (5)
   {
     id: 'largest_pig_production',
-    title: 'Størst Svineproduktion',
+    title: 'Størst svineproduktionskapacitet',
     category: 'animal',
-    description: 'Produktionssteder med den største svineproduktion i 2024',
+    description:
+      'Produktionssteder med den største svineproduktionskapacitet i 2024',
   },
   {
     id: 'largest_cattle_production',
-    title: 'Størst Kvægproduktion',
+    title: 'Størst kvægproduktionskapacitet',
     category: 'animal',
-    description: 'Produktionssteder med den største kvægproduktion i 2024',
+    description:
+      'Produktionssteder med den største kvægproduktionskapacitet i 2024',
   },
   {
     id: 'highest_antibiotic_usage',
-    title: 'Højest Antibiotikaforbrug',
+    title: 'Højest antibiotikaforbrug',
     category: 'animal',
     description: 'Virksomheder med det højeste antibiotikaforbrug i 2024',
   },
   {
     id: 'most_production_sites',
-    title: 'Flest Produktionssteder',
+    title: 'Flest produktionssteder',
     category: 'animal',
     description: 'Virksomheder med flest dyreproduktionssteder i 2024',
   },
   {
     id: 'most_transported_pigs',
-    title: 'Flest Transporterede Svin',
+    title: 'Flest transporterede svin',
     category: 'animal',
     description: 'Virksomheder med flest transporterede svin i 2024',
   },
@@ -144,20 +146,20 @@ const RANKINGS = [
   // Worker Rankings (3)
   {
     id: 'most_employees_worker',
-    title: 'Flest Ansatte (Arbejdsmarkedsdata)',
+    title: 'Flest ansatte (arbejdsmarkedsdata)',
     category: 'worker',
     description:
       'Virksomheder med flest ansatte ifølge arbejdsmarkedsdata 2024',
   },
   {
     id: 'most_foreign_workers',
-    title: 'Flest Arbejdstilladelser',
+    title: 'Flest arbejdstilladelser',
     category: 'worker',
     description: 'Virksomheder med flest aktive arbejdstilladelser i 2024',
   },
   {
     id: 'most_work_injuries',
-    title: 'Flest Arbejdsulykker',
+    title: 'Flest arbejdsulykker',
     category: 'worker',
     description: 'Virksomheder med flest rapporterede arbejdsulykker i 2024',
   },
@@ -173,8 +175,8 @@ export default function AllRankings() {
         </h2>
         <p className="mx-auto max-w-3xl text-lg text-gray-600">
           23 ranglister viser de førende virksomheder inden for økonomi,
-          landbrugsareal, miljøpåvirkning, husdyrproduktion og beskæftigelse
-          baseret på officielle data.
+          landbrugsareal, miljøpåvirkning, husdyrproduktionskapacitet og
+          beskæftigelse baseret på officielle data.
         </p>
       </div>
 

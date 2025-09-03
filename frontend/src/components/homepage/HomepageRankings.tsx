@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Filter, RefreshCw } from 'lucide-react';
+import { Loader2, Filter, RefreshCw, Clock } from 'lucide-react';
 import RankingTable from './RankingTable';
+import { useRankingsCache } from '@/hooks/useRankingsCache';
 
 interface RankingItem {
   company_id: string;
@@ -25,7 +26,7 @@ interface RankingTable {
   unit: string;
   items: RankingItem[];
   company_count: number;
-  last_updated?: string;
+  last_updated: string;
 }
 
 interface HomepageRankingsResponse {
@@ -54,46 +55,79 @@ export default function HomepageRankings() {
     generated_at: string;
     total_tables: number;
   } | null>(null);
+  const [usingCache, setUsingCache] = useState(false);
 
-  const fetchRankings = async (category: string = 'all') => {
-    setLoading(true);
-    setError(null);
+  const { getCachedData, setCachedData, clearCache } = useRankingsCache();
 
-    try {
-      const params = new URLSearchParams({
-        category,
-        limit: '20',
-      });
-
-      const response = await fetch(
-        `/api/supabase/functions/homepage-rankings?${params}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
+  const fetchRankings = useCallback(
+    async (category: string = 'all', forceRefresh: boolean = false) => {
+      // Check cache first if not forcing refresh
+      if (!forceRefresh) {
+        const cachedData = getCachedData(category);
+        if (cachedData) {
+          setRankings(cachedData.rankings);
+          setMetadata(cachedData.metadata);
+          setUsingCache(true);
+          setLoading(false);
+          return;
+        }
       }
 
-      const data: HomepageRankingsResponse = await response.json();
-      setRankings(data.rankings);
-      setMetadata(data.metadata);
-    } catch (err) {
-      console.error('Error fetching rankings:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load rankings');
-    } finally {
-      setLoading(false);
-    }
-  };
+      setLoading(true);
+      setError(null);
+      setUsingCache(false);
+
+      try {
+        const params = new URLSearchParams({
+          category,
+          limit: '20',
+        });
+
+        const response = await fetch(
+          `/api/supabase/functions/homepage-rankings?${params}`
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            `API error: ${response.status} ${response.statusText}`
+          );
+        }
+
+        const data: HomepageRankingsResponse = await response.json();
+
+        // Cache the fresh data
+        setCachedData(category, data);
+
+        setRankings(data.rankings);
+        setMetadata(data.metadata);
+      } catch (err) {
+        console.error('Error fetching rankings:', err);
+        setError(
+          err instanceof Error ? err.message : 'Failed to load rankings'
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [getCachedData, setCachedData]
+  );
 
   useEffect(() => {
     fetchRankings(selectedCategory);
-  }, [selectedCategory]);
+  }, [selectedCategory, fetchRankings]);
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
   };
 
   const handleRefresh = () => {
-    fetchRankings(selectedCategory);
+    fetchRankings(selectedCategory, true); // Force refresh
+  };
+
+  const handleClearCache = () => {
+    clearCache();
+    setUsingCache(false);
+    fetchRankings(selectedCategory, true);
   };
 
   // Calculate category counts
@@ -119,8 +153,8 @@ export default function HomepageRankings() {
         </h2>
         <p className="mx-auto max-w-3xl text-lg text-gray-600">
           Ranglisterne viser de førende virksomheder inden for økonomi,
-          landbrugsareal, miljøpåvirkning, husdyrproduktion og beskæftigelse
-          baseret på officielle data.
+          landbrugsareal, miljøpåvirkning, husdyrproduktionskapacitet og
+          beskæftigelse baseret på officielle data.
         </p>
       </div>
 
@@ -154,6 +188,18 @@ export default function HomepageRankings() {
           <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
           <span>Opdater</span>
         </Button>
+
+        {usingCache && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearCache}
+            className="flex items-center space-x-2 text-orange-600 hover:text-orange-700"
+          >
+            <Clock className="h-3 w-3" />
+            <span>Ryd cache</span>
+          </Button>
+        )}
       </div>
 
       {/* Loading State */}
@@ -214,12 +260,20 @@ export default function HomepageRankings() {
 
       {/* Metadata Footer */}
       {metadata && !loading && (
-        <div className="border-t border-gray-200 pt-8 text-center">
+        <div className="space-y-2 border-t border-gray-200 pt-8 text-center">
           <p className="text-xs text-gray-500">
             Data opdateret:{' '}
             {new Date(metadata.generated_at).toLocaleString('da-DK')} •{' '}
             {metadata.total_tables} ranglister tilgængelige
           </p>
+          {usingCache && (
+            <div className="flex items-center justify-center space-x-2">
+              <Clock className="h-3 w-3 text-orange-500" />
+              <p className="text-xs text-orange-600">
+                Data fra cache • Opdateres automatisk hver uge
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -10,7 +10,15 @@ export function NavBanner() {
           <div className="flex gap-x-6">
             <p className="flex items-center gap-x-1 text-xs font-bold">
               <CheckBadgeIcon strokeWidth={2} className="size-4" />
-              Fri adgang og <span className="underline">open source</span>
+              Fri adgang og{' '}
+              <a
+                href="https://github.com/klimabevaegelsen/landbruget.dk/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:no-underline"
+              >
+                open source
+              </a>
             </p>
             <p className="flex items-center gap-x-1 text-xs font-bold">
               <CheckBadgeIcon strokeWidth={2} className="size-4" />

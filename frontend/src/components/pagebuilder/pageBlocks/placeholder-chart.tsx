@@ -76,7 +76,15 @@ export function PlaceholderChart({ dataType }: PlaceholderChartProps) {
             onClick={handleClick}
             className="cursor-pointer rounded-md bg-green-600 px-6 py-3 font-medium text-white transition-colors hover:bg-green-700"
           >
-            Bidrag til open-source
+            Bidrag til{' '}
+            <a
+              href="https://github.com/klimabevaegelsen/landbruget.dk/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              open-source
+            </a>
           </button>
         </div>
       </div>
