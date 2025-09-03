@@ -97,5 +97,5 @@ export interface FilterState {
 export function getYearRangeDisplay(year: number): string {
   // For field analysis, we use pesticide data from the selected year
   // with field boundaries from the following year
-  return `${year} pesticider + ${year + 1} marker`;
+  return `${year}-${year + 1}`;
 }

@@ -323,7 +323,7 @@ export default function FieldAnalysisVisualization() {
       {/* Main Map Area */}
       <div className="relative flex-1">
         {/* Year Slider - positioned below search bar */}
-        <div className="absolute top-20 right-4 left-4 z-10 lg:top-4 lg:right-4 lg:left-96">
+        <div className="absolute top-20 right-4 left-4 z-10 lg:top-4 lg:right-4 lg:left-[22rem]">
           <YearSlider
             yearSelection={yearSelection}
             onYearChange={handleYearChange}
