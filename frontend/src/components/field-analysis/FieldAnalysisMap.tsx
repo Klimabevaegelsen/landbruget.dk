@@ -143,7 +143,13 @@ function MapTooltip({
           : properties.status_category === 'Completed'
             ? 'BNBO gennemført'
             : 'BNBO status';
-      data.push({ label: statusLabel, value: properties.status_category });
+      const statusValue =
+        properties.status_category === 'Action Required'
+          ? 'Handling påkrævet'
+          : properties.status_category === 'Completed'
+            ? 'Gennemført'
+            : properties.status_category;
+      data.push({ label: statusLabel, value: statusValue });
     }
 
     // Show building-specific data if available

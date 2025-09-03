@@ -88,8 +88,7 @@ export default function PesticideAnalysisVisualization() {
       // Remove loading toast when data fetch completes
       removeToast(toastId);
     }
-  }, [filters]); // Only depend on filters, not toast functions
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, addToast, removeToast]);
 
   // Fetch data when filters change
   useEffect(() => {
