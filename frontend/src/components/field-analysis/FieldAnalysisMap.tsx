@@ -518,11 +518,10 @@ export default function FieldAnalysisMap({
           console.log('✅ PMTiles protocol registered');
         }
 
-        setIsLoading(false);
+        // Don't set loading false here - let the map load callback handle it
       } catch (err) {
         console.error('❌ Failed to initialize PMTiles:', err);
         setError('Kunne ikke indlæse kortdata');
-        setIsLoading(false);
       }
     };
 
