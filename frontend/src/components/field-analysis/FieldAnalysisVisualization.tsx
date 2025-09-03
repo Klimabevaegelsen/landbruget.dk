@@ -53,7 +53,7 @@ export default function FieldAnalysisVisualization() {
     lat: number;
     lng: number;
   } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
 
   // Generate PMTiles URLs dynamically based on selected year
