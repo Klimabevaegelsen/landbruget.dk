@@ -6,6 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Simple in-memory cache
+const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week
+let cachedRankings: { data: any, timestamp: number } | null = null;
+
 interface RankingItem {
   company_id: string;
   cvr_number: string;
@@ -48,6 +52,17 @@ serve(async (req) => {
     const category = url.searchParams.get('category') // 'all', 'financial', 'field', 'environment', 'animal', 'worker'
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 50) // Max 50 per table
     const rankingId = url.searchParams.get('rankingId') // Optional: fetch only specific ranking
+
+    // Check cache first (simple approach - cache all requests for 1 week)
+    if (cachedRankings && Date.now() - cachedRankings.timestamp < CACHE_DURATION) {
+      return new Response(JSON.stringify(cachedRankings.data), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'X-Cache': 'HIT'
+        }
+      });
+    }
 
     // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -1267,10 +1282,20 @@ serve(async (req) => {
       }
     }
 
+    // Cache the response for 1 week
+    cachedRankings = {
+      data: response,
+      timestamp: Date.now()
+    }
+
     return new Response(
       JSON.stringify(response),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'X-Cache': 'MISS'
+        },
         status: 200,
       },
     )

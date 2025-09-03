@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Filter, RefreshCw, Clock } from 'lucide-react';
+import { Loader2, Filter, RefreshCw, Clock, Database } from 'lucide-react';
 import RankingTable from './RankingTable';
 import { useRankingsCache } from '@/hooks/useRankingsCache';
+import { useCompanyCache } from '@/hooks/useCompanyCache';
 
 interface RankingItem {
   company_id: string;
@@ -58,6 +59,7 @@ export default function HomepageRankings() {
   const [usingCache, setUsingCache] = useState(false);
 
   const { getCachedData, setCachedData, clearCache } = useRankingsCache();
+  const { cacheCompaniesFromRankings, getCacheStats } = useCompanyCache();
 
   const fetchRankings = useCallback(
     async (category: string = 'all', forceRefresh: boolean = false) => {
@@ -65,6 +67,9 @@ export default function HomepageRankings() {
       if (!forceRefresh) {
         const cachedData = getCachedData(category);
         if (cachedData) {
+          // Also cache company information from cached rankings
+          cacheCompaniesFromRankings(cachedData.rankings);
+
           setRankings(cachedData.rankings);
           setMetadata(cachedData.metadata);
           setUsingCache(true);
@@ -98,6 +103,9 @@ export default function HomepageRankings() {
         // Cache the fresh data
         setCachedData(category, data);
 
+        // Cache company information from the rankings for faster access
+        cacheCompaniesFromRankings(data.rankings);
+
         setRankings(data.rankings);
         setMetadata(data.metadata);
       } catch (err) {
@@ -109,7 +117,7 @@ export default function HomepageRankings() {
         setLoading(false);
       }
     },
-    [getCachedData, setCachedData]
+    [getCachedData, setCachedData, cacheCompaniesFromRankings]
   );
 
   useEffect(() => {
@@ -266,14 +274,23 @@ export default function HomepageRankings() {
             {new Date(metadata.generated_at).toLocaleString('da-DK')} •{' '}
             {metadata.total_tables} ranglister tilgængelige
           </p>
-          {usingCache && (
-            <div className="flex items-center justify-center space-x-2">
-              <Clock className="h-3 w-3 text-orange-500" />
-              <p className="text-xs text-orange-600">
-                Data fra cache • Opdateres automatisk hver uge
+          <div className="flex items-center justify-center space-x-4">
+            {usingCache && (
+              <div className="flex items-center space-x-2">
+                <Clock className="h-3 w-3 text-orange-500" />
+                <p className="text-xs text-orange-600">
+                  Data fra cache • Opdateres automatisk hver uge
+                </p>
+              </div>
+            )}
+            <div className="flex items-center space-x-2">
+              <Database className="h-3 w-3 text-green-500" />
+              <p className="text-xs text-green-600">
+                {getCacheStats().total_companies} virksomheder cachet for hurtig
+                adgang
               </p>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
