@@ -58,7 +58,7 @@ serve(async (req) => {
 
     // Financial Rankings
     if (!category || category === 'all' || category === 'financial') {
-      // 1. Highest Profit
+      // 1. Highest Profit (Agricultural companies only)
       const { data: profitData } = await supabase
         .from('yearly_financials')
         .select(`
@@ -66,25 +66,28 @@ serve(async (req) => {
           cvr_number,
           net_profit_loss,
           year,
-          companies!inner(company_name, municipality)
+          companies!inner(company_name, municipality, is_agricultural_company)
         `)
         .not('net_profit_loss', 'is', null)
         .eq('year', 2024) // Use most recent complete year
+        .eq('companies.is_agricultural_company', true) // Only agricultural companies
         .order('net_profit_loss', { ascending: false })
         .limit(limit)
 
       const { count: profitCount } = await supabase
         .from('yearly_financials')
-        .select('company_id', { count: 'exact' })
+        .select('yearly_financials.company_id', { count: 'exact' })
         .not('net_profit_loss', 'is', null)
         .eq('year', 2024)
+        .eq('companies.is_agricultural_company', true) // Only agricultural companies
+        .inner('companies', 'yearly_financials.company_id', 'companies.id')
 
       if (profitData) {
         rankings.push({
           id: 'highest_profit',
           title: 'Højest Overskud',
           category: 'financial',
-          description: 'Virksomheder med det højeste nettoresultat i 2024',
+          description: 'Landbrugsvirksomheder med det højeste nettoresultat i 2024',
           unit: 'DKK',
           company_count: profitCount || 0,
           items: profitData
@@ -102,7 +105,7 @@ serve(async (req) => {
         })
       }
 
-      // 2. Largest Assets
+      // 2. Largest Assets (Agricultural companies only)
       const { data: assetsData } = await supabase
         .from('yearly_financials')
         .select(`
@@ -110,27 +113,30 @@ serve(async (req) => {
           cvr_number,
           total_assets,
           year,
-          companies!inner(company_name, municipality)
+          companies!inner(company_name, municipality, is_agricultural_company)
         `)
         .not('total_assets', 'is', null)
         .gt('total_assets', 0)
         .eq('year', 2024)
+        .eq('companies.is_agricultural_company', true) // Only agricultural companies
         .order('total_assets', { ascending: false })
         .limit(limit)
 
       const { count: assetsCount } = await supabase
         .from('yearly_financials')
-        .select('company_id', { count: 'exact' })
+        .select('yearly_financials.company_id', { count: 'exact' })
         .not('total_assets', 'is', null)
         .gt('total_assets', 0)
         .eq('year', 2024)
+        .eq('companies.is_agricultural_company', true) // Only agricultural companies
+        .inner('companies', 'yearly_financials.company_id', 'companies.id')
 
       if (assetsData) {
         rankings.push({
           id: 'largest_assets',
           title: 'Størst Aktiver',
           category: 'financial',
-          description: 'Virksomheder med de største samlede aktiver i 2024',
+          description: 'Landbrugsvirksomheder med de største samlede aktiver i 2024',
           unit: 'DKK',
           company_count: assetsCount || 0,
           items: assetsData.map((item, index) => ({
@@ -146,7 +152,7 @@ serve(async (req) => {
         })
       }
 
-      // 3. Most Employees (Financial data)
+      // 3. Most Employees (Agricultural companies only)
       const { data: employeesData } = await supabase
         .from('yearly_financials')
         .select(`
@@ -154,27 +160,30 @@ serve(async (req) => {
           cvr_number,
           average_number_of_employees,
           year,
-          companies!inner(company_name, municipality)
+          companies!inner(company_name, municipality, is_agricultural_company)
         `)
         .not('average_number_of_employees', 'is', null)
         .gt('average_number_of_employees', 0)
         .eq('year', 2024)
+        .eq('companies.is_agricultural_company', true) // Only agricultural companies
         .order('average_number_of_employees', { ascending: false })
         .limit(limit)
 
       const { count: employeesCount } = await supabase
         .from('yearly_financials')
-        .select('company_id', { count: 'exact' })
+        .select('yearly_financials.company_id', { count: 'exact' })
         .not('average_number_of_employees', 'is', null)
         .gt('average_number_of_employees', 0)
         .eq('year', 2024)
+        .eq('companies.is_agricultural_company', true) // Only agricultural companies
+        .inner('companies', 'yearly_financials.company_id', 'companies.id')
 
       if (employeesData) {
         rankings.push({
           id: 'most_employees_financial',
           title: 'Flest Ansatte',
           category: 'financial',
-          description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
+          description: 'Landbrugsvirksomheder med flest ansatte ifølge regnskabsdata 2024',
           unit: 'ansatte',
           company_count: employeesCount || 0,
           items: employeesData.map((item, index) => ({

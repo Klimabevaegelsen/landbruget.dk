@@ -1003,6 +1003,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 address_geom_wkt VARCHAR,
                 address_coordinate_quality VARCHAR,
                 address_coordinate_source VARCHAR,
+                primary_industry_code VARCHAR,
+                primary_industry_description VARCHAR,
+                is_agricultural_company BOOLEAN,
                 data_source VARCHAR,
                 fetch_timestamp VARCHAR,
                 source_pipelines VARCHAR[],
@@ -1163,6 +1166,39 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     as address_coordinate_quality,
                 json_extract_string(json_data, '$.primary_address_geometry.coordinate_source')
                     as address_coordinate_source,
+                -- Extract industry information from the JSON data
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        json_extract_string(
+                            json_extract(json_data, '$.industries[0]'),
+                            '$.industry_code'
+                        )
+                    ELSE NULL
+                END as primary_industry_code,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        json_extract_string(
+                            json_extract(json_data, '$.industries[0]'),
+                            '$.industry_description'
+                        )
+                    ELSE NULL
+                END as primary_industry_description,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        CASE
+                            WHEN json_extract_string(
+                                json_extract(json_data, '$.industries[0]'),
+                                '$.industry_code'
+                            ) LIKE '01%'
+                            AND json_extract(
+                                json_extract(json_data, '$.industries[0]'),
+                                '$.is_current'
+                            )::BOOLEAN = true
+                            THEN true
+                            ELSE false
+                        END
+                    ELSE false
+                END as is_agricultural_company,
                 json_extract_string(json_data, '$.data_source') as data_source,
                 json_extract_string(json_data, '$.fetch_timestamp') as fetch_timestamp,
                 json_extract(json_data, '$.source_pipelines')::VARCHAR[] as source_pipelines,
