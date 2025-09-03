@@ -91,11 +91,10 @@ serve(async (req) => {
 
       const { count: profitCount } = await supabase
         .from('yearly_financials')
-        .select('yearly_financials.company_id', { count: 'exact' })
+        .select('yearly_financials.company_id, companies!inner(is_agricultural_company)', { count: 'exact' })
         .not('net_profit_loss', 'is', null)
         .eq('year', 2024)
         .eq('companies.is_agricultural_company', true) // Only agricultural companies
-        .inner('companies', 'yearly_financials.company_id', 'companies.id')
 
       if (profitData) {
         rankings.push({
@@ -139,12 +138,11 @@ serve(async (req) => {
 
       const { count: assetsCount } = await supabase
         .from('yearly_financials')
-        .select('yearly_financials.company_id', { count: 'exact' })
+        .select('yearly_financials.company_id, companies!inner(is_agricultural_company)', { count: 'exact' })
         .not('total_assets', 'is', null)
         .gt('total_assets', 0)
         .eq('year', 2024)
         .eq('companies.is_agricultural_company', true) // Only agricultural companies
-        .inner('companies', 'yearly_financials.company_id', 'companies.id')
 
       if (assetsData) {
         rankings.push({
@@ -186,12 +184,11 @@ serve(async (req) => {
 
       const { count: employeesCount } = await supabase
         .from('yearly_financials')
-        .select('yearly_financials.company_id', { count: 'exact' })
+        .select('yearly_financials.company_id, companies!inner(is_agricultural_company)', { count: 'exact' })
         .not('average_number_of_employees', 'is', null)
         .gt('average_number_of_employees', 0)
         .eq('year', 2024)
         .eq('companies.is_agricultural_company', true) // Only agricultural companies
-        .inner('companies', 'yearly_financials.company_id', 'companies.id')
 
       if (employeesData) {
         rankings.push({
