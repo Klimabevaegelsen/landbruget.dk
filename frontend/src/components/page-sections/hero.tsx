@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { GlobalSearch } from '../global-search';
+import { useHomepageStatsCache } from '@/hooks/useHomepageStatsCache';
 
 interface HomepageStatistics {
   total_data_points: number;
@@ -11,18 +12,40 @@ interface HomepageStatistics {
     data_points: string;
     companies: string;
   };
+  fallback?: boolean;
 }
 
 export default function Hero() {
   const [stats, setStats] = useState<HomepageStatistics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [usingCache, setUsingCache] = useState(false);
 
-  useEffect(() => {
-    const fetchStats = async () => {
+  const { getCachedData, setCachedData } = useHomepageStatsCache();
+
+  const fetchStats = useCallback(
+    async (forceRefresh: boolean = false) => {
+      // Check cache first if not forcing refresh
+      if (!forceRefresh) {
+        const cachedData = getCachedData();
+        if (cachedData) {
+          setStats(cachedData);
+          setUsingCache(true);
+          setLoading(false);
+          return;
+        }
+      }
+
+      setUsingCache(false);
+      setLoading(true);
+
       try {
         const response = await fetch('/api/homepage-statistics');
         if (response.ok) {
           const data = await response.json();
+
+          // Cache the fresh data
+          setCachedData(data);
+
           setStats(data);
         } else {
           console.error('Failed to fetch homepage statistics');
@@ -32,10 +55,13 @@ export default function Hero() {
       } finally {
         setLoading(false);
       }
-    };
+    },
+    [getCachedData, setCachedData]
+  );
 
+  useEffect(() => {
     fetchStats();
-  }, []);
+  }, [fetchStats]);
 
   // Format numbers with Danish formatting (periods for thousands)
   const formatDanishNumber = (num: number) => {
@@ -81,8 +107,23 @@ export default function Hero() {
             <span className="font-bold">
               {displayCompanies} danske landbrugsvirksomheder
             </span>
-            .<br /> Data gennemsigtighed. Fri adgang og open source.
+            .<br /> Data gennemsigtighed. Fri adgang og{' '}
+            <a
+              href="https://github.com/klimabevaegelsen/landbruget.dk/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:no-underline"
+            >
+              open source
+            </a>
+            .
           </p>
+
+          {usingCache && !loading && (
+            <p className="mt-2 text-xs text-white/70">
+              📊 Data fra cache • Opdateres automatisk hver uge
+            </p>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 # Om os
 
-Velkommen til Landbruget.dk. Vi er et almennyttigt, open-source og non-profit initiativ drevet af Klimabevægelsen. Vores mission er at indsamle og formidle offentligt tilgængelige data om den danske landbrugssektor.
+Velkommen til Landbruget.dk. Vi er et almennyttigt, [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) og non-profit initiativ drevet af Klimabevægelsen. Vores mission er at indsamle og formidle offentligt tilgængelige data om den danske landbrugssektor.
 
 ---
 
@@ -30,7 +30,7 @@ Særligt i lyset af Den Grønne Trepartsaftale er der et stort behov for et soli
 
 ## Hvordan arbejder vi?
 
-Landbruget.dk er baseret på open-source principper. Det betyder, at vores metoder og software er åbne for alle at inspicere, foreslå ændringer til og videreudvikle på.
+Landbruget.dk er baseret på [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) principper. Det betyder, at vores metoder og software er åbne for alle at inspicere, foreslå ændringer til og videreudvikle på.
 
 Vi bestræber os på, med bedste intention og efter bedste evne, at formidle data neutralt og basere vores arbejde på den bedste tilgængelige videnskab. De data, vi indsamler, er primært dem, der i forvejen er offentligt tilgængelige via officielle kilder. Hvor vi har mulighed for det, stiller vi disse data frit til rådighed under en Creative Commons licens. For data, hvor dette ikke er tilfældet, bibeholder de den ophavsret og de vilkår, som de oprindeligt er offentliggjort under, af de offentlige myndigheder.
 

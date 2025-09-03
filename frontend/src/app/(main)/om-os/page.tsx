@@ -19,7 +19,15 @@ export default function AboutPage() {
                 Om os
               </h1>
               <p className="text-xl leading-relaxed text-gray-700">
-                Velkommen til Landbruget.dk. Vi er et almennyttigt, open-source
+                Velkommen til Landbruget.dk. Vi er et almennyttigt,{' '}
+                <a
+                  href="https://github.com/klimabevaegelsen/landbruget.dk/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:no-underline"
+                >
+                  open-source
+                </a>{' '}
                 og non-profit initiativ drevet af Klimabevægelsen. Vores mission
                 er at indsamle og formidle offentligt tilgængelige data om den
                 danske landbrugssektor.
@@ -134,9 +142,18 @@ export default function AboutPage() {
 
               <div className="space-y-6">
                 <p className="text-lg leading-relaxed text-gray-700">
-                  Landbruget.dk er baseret på open-source principper. Det
-                  betyder, at vores metoder og software er åbne for alle at
-                  inspicere, foreslå ændringer til og videreudvikle på.
+                  Landbruget.dk er baseret på{' '}
+                  <a
+                    href="https://github.com/klimabevaegelsen/landbruget.dk/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:no-underline"
+                  >
+                    open-source
+                  </a>{' '}
+                  principper. Det betyder, at vores metoder og software er åbne
+                  for alle at inspicere, foreslå ændringer til og videreudvikle
+                  på.
                 </p>
 
                 <p className="text-lg leading-relaxed text-gray-700">
