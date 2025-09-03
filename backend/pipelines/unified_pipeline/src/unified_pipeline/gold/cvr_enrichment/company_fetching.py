@@ -503,6 +503,39 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 NULL::VARCHAR as coordinate_quality,
                 NULL::VARCHAR as coordinate_source,
                 NULL::BOOLEAN as dawa_enriched,
+                -- Extract industry information from the JSON data
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        json_extract_string(
+                            json_extract(json_data, '$.industries[0]'),
+                            '$.industry_code'
+                        )
+                    ELSE NULL
+                END as primary_industry_code,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        json_extract_string(
+                            json_extract(json_data, '$.industries[0]'),
+                            '$.industry_description'
+                        )
+                    ELSE NULL
+                END as primary_industry_description,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        CASE
+                            WHEN json_extract_string(
+                                json_extract(json_data, '$.industries[0]'),
+                                '$.industry_code'
+                            ) LIKE '01%'
+                            AND json_extract(
+                                json_extract(json_data, '$.industries[0]'),
+                                '$.is_current'
+                            )::BOOLEAN = true
+                            THEN true
+                            ELSE false
+                        END
+                    ELSE false
+                END as is_agricultural_company,
                 json_data as company_data_json,
                 json_extract_string(json_data, '$.processing_timestamp')
                     as processing_timestamp
