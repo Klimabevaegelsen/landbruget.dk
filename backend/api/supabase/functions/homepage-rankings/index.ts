@@ -289,7 +289,7 @@ serve(async (req) => {
 
       if (organicAreaData?.length) {
         // Step 2: Get company details for the organic area data
-        const companyIds = organicAreaData.map(item => item.company_id)
+        const companyIds = organicAreaData.map(item => item.company_id.toString())
         const { data: organicAreaCompanies } = await supabase
           .from('companies')
           .select('id, cvr_number, company_name, municipality')
