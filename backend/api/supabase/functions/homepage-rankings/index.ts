@@ -56,140 +56,7 @@ serve(async (req) => {
 
     const rankings: RankingTable[] = []
 
-    // Financial Rankings
-    if (!category || category === 'all' || category === 'financial') {
-      // 1. Highest Profit
-      const { data: profitData } = await supabase
-        .from('yearly_financials')
-        .select(`
-          company_id,
-          cvr_number,
-          net_profit_loss,
-          year,
-          companies!inner(company_name, municipality)
-        `)
-        .not('net_profit_loss', 'is', null)
-        .eq('year', 2024) // Use most recent complete year
-        .order('net_profit_loss', { ascending: false })
-        .limit(limit)
 
-      const { count: profitCount } = await supabase
-        .from('yearly_financials')
-        .select('company_id', { count: 'exact' })
-        .not('net_profit_loss', 'is', null)
-        .eq('year', 2024)
-
-      if (profitData) {
-        rankings.push({
-          id: 'highest_profit',
-          title: 'Højest overskud',
-          category: 'financial',
-          description: 'Virksomheder med det højeste nettoresultat i 2024',
-          unit: 'DKK',
-          company_count: profitCount || 0,
-          items: profitData
-            .filter(item => item.net_profit_loss > 0) // Only include companies with positive profit
-            .map((item, index) => ({
-              company_id: item.company_id,
-              cvr_number: item.cvr_number.toString(),
-              company_name: item.companies.company_name,
-              municipality: item.companies.municipality,
-              rank: index + 1,
-              value: item.net_profit_loss,
-              formatted_value: `${(item.net_profit_loss / 1000000).toFixed(1)}M kr`,
-              year: item.year
-            }))
-        })
-      }
-
-      // 2. Largest Assets
-      const { data: assetsData } = await supabase
-        .from('yearly_financials')
-        .select(`
-          company_id,
-          cvr_number,
-          total_assets,
-          year,
-          companies!inner(company_name, municipality)
-        `)
-        .not('total_assets', 'is', null)
-        .gt('total_assets', 0)
-        .eq('year', 2024)
-        .order('total_assets', { ascending: false })
-        .limit(limit)
-
-      const { count: assetsCount } = await supabase
-        .from('yearly_financials')
-        .select('company_id', { count: 'exact' })
-        .not('total_assets', 'is', null)
-        .gt('total_assets', 0)
-        .eq('year', 2024)
-
-      if (assetsData) {
-        rankings.push({
-          id: 'largest_assets',
-          title: 'Størst aktiver',
-          category: 'financial',
-          description: 'Virksomheder med de største samlede aktiver i 2024',
-          unit: 'DKK',
-          company_count: assetsCount || 0,
-          items: assetsData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
-            rank: index + 1,
-            value: item.total_assets,
-            formatted_value: `${(item.total_assets / 1000000).toFixed(1)}M kr`,
-            year: item.year
-          }))
-        })
-      }
-
-      // 3. Most Employees (Financial data)
-      const { data: employeesData } = await supabase
-        .from('yearly_financials')
-        .select(`
-          company_id,
-          cvr_number,
-          average_number_of_employees,
-          year,
-          companies!inner(company_name, municipality)
-        `)
-        .not('average_number_of_employees', 'is', null)
-        .gt('average_number_of_employees', 0)
-        .eq('year', 2024)
-        .order('average_number_of_employees', { ascending: false })
-        .limit(limit)
-
-      const { count: employeesCount } = await supabase
-        .from('yearly_financials')
-        .select('company_id', { count: 'exact' })
-        .not('average_number_of_employees', 'is', null)
-        .gt('average_number_of_employees', 0)
-        .eq('year', 2024)
-
-      if (employeesData) {
-        rankings.push({
-          id: 'most_employees_financial',
-          title: 'Flest ansatte',
-          category: 'financial',
-          description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
-          unit: 'ansatte',
-          company_count: employeesCount || 0,
-          items: employeesData.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.cvr_number.toString(),
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
-            rank: index + 1,
-            value: item.average_number_of_employees,
-            formatted_value: `${item.average_number_of_employees} ansatte`,
-            year: item.year
-          }))
-        })
-      }
-    }
 
     // Agricultural Area Rankings
     if (!category || category === 'all' || category === 'field') {
@@ -1237,6 +1104,141 @@ serve(async (req) => {
             rank: index + 1,
             value: item.injury_count_reported,
             formatted_value: `${item.injury_count_reported} ulykker`,
+            year: item.year
+          }))
+        })
+      }
+    }
+
+    // Financial Rankings (moved to end)
+    if (!category || category === 'all' || category === 'financial') {
+      // 1. Highest Profit
+      const { data: profitData } = await supabase
+        .from('yearly_financials')
+        .select(`
+          company_id,
+          cvr_number,
+          net_profit_loss,
+          year,
+          companies!inner(company_name, municipality)
+        `)
+        .not('net_profit_loss', 'is', null)
+        .eq('year', 2024) // Use most recent complete year
+        .order('net_profit_loss', { ascending: false })
+        .limit(limit)
+
+      const { count: profitCount } = await supabase
+        .from('yearly_financials')
+        .select('company_id', { count: 'exact' })
+        .not('net_profit_loss', 'is', null)
+        .eq('year', 2024)
+
+      if (profitData) {
+        rankings.push({
+          id: 'highest_profit',
+          title: 'Højest overskud',
+          category: 'financial',
+          description: 'Virksomheder med det højeste nettoresultat i 2024',
+          unit: 'DKK',
+          company_count: profitCount || 0,
+          items: profitData
+            .filter(item => item.net_profit_loss > 0) // Only include companies with positive profit
+            .map((item, index) => ({
+              company_id: item.company_id,
+              cvr_number: item.cvr_number.toString(),
+              company_name: item.companies.company_name,
+              municipality: item.companies.municipality,
+              rank: index + 1,
+              value: item.net_profit_loss,
+              formatted_value: `${(item.net_profit_loss / 1000000).toFixed(1)}M kr`,
+              year: item.year
+            }))
+        })
+      }
+
+      // 2. Largest Assets
+      const { data: assetsData } = await supabase
+        .from('yearly_financials')
+        .select(`
+          company_id,
+          cvr_number,
+          total_assets,
+          year,
+          companies!inner(company_name, municipality)
+        `)
+        .not('total_assets', 'is', null)
+        .gt('total_assets', 0)
+        .eq('year', 2024)
+        .order('total_assets', { ascending: false })
+        .limit(limit)
+
+      const { count: assetsCount } = await supabase
+        .from('yearly_financials')
+        .select('company_id', { count: 'exact' })
+        .not('total_assets', 'is', null)
+        .gt('total_assets', 0)
+        .eq('year', 2024)
+
+      if (assetsData) {
+        rankings.push({
+          id: 'largest_assets',
+          title: 'Størst aktiver',
+          category: 'financial',
+          description: 'Virksomheder med de største samlede aktiver i 2024',
+          unit: 'DKK',
+          company_count: assetsCount || 0,
+          items: assetsData.map((item, index) => ({
+            company_id: item.company_id,
+            cvr_number: item.cvr_number.toString(),
+            company_name: item.companies.company_name,
+            municipality: item.companies.municipality,
+            rank: index + 1,
+            value: item.total_assets,
+            formatted_value: `${(item.total_assets / 1000000).toFixed(1)}M kr`,
+            year: item.year
+          }))
+        })
+      }
+
+      // 3. Most Employees (Financial data)
+      const { data: employeesData } = await supabase
+        .from('yearly_financials')
+        .select(`
+          company_id,
+          cvr_number,
+          average_number_of_employees,
+          year,
+          companies!inner(company_name, municipality)
+        `)
+        .not('average_number_of_employees', 'is', null)
+        .gt('average_number_of_employees', 0)
+        .eq('year', 2024)
+        .order('average_number_of_employees', { ascending: false })
+        .limit(limit)
+
+      const { count: employeesCount } = await supabase
+        .from('yearly_financials')
+        .select('company_id', { count: 'exact' })
+        .not('average_number_of_employees', 'is', null)
+        .gt('average_number_of_employees', 0)
+        .eq('year', 2024)
+
+      if (employeesData) {
+        rankings.push({
+          id: 'most_employees_financial',
+          title: 'Flest ansatte',
+          category: 'financial',
+          description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
+          unit: 'ansatte',
+          company_count: employeesCount || 0,
+          items: employeesData.map((item, index) => ({
+            company_id: item.company_id,
+            cvr_number: item.cvr_number.toString(),
+            company_name: item.companies.company_name,
+            municipality: item.companies.municipality,
+            rank: index + 1,
+            value: item.average_number_of_employees,
+            formatted_value: `${item.average_number_of_employees} ansatte`,
             year: item.year
           }))
         })

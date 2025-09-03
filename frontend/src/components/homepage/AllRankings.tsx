@@ -4,26 +4,6 @@ import IndividualRankingTable from './IndividualRankingTable';
 
 // Define all 23 rankings
 const RANKINGS = [
-  // Financial Rankings (3)
-  {
-    id: 'highest_profit',
-    title: 'Højest overskud',
-    category: 'financial',
-    description: 'Virksomheder med det højeste nettoresultat i 2024',
-  },
-  {
-    id: 'largest_assets',
-    title: 'Størst aktiver',
-    category: 'financial',
-    description: 'Virksomheder med de største samlede aktiver i 2024',
-  },
-  {
-    id: 'most_employees_financial',
-    title: 'Flest ansatte',
-    category: 'financial',
-    description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
-  },
-
   // Agricultural Area Rankings (4)
   {
     id: 'largest_land_area',
@@ -162,6 +142,26 @@ const RANKINGS = [
     title: 'Flest arbejdsulykker',
     category: 'worker',
     description: 'Virksomheder med flest rapporterede arbejdsulykker i 2024',
+  },
+
+  // Financial Rankings (moved to end)
+  {
+    id: 'highest_profit',
+    title: 'Højest overskud',
+    category: 'financial',
+    description: 'Virksomheder med det højeste nettoresultat i 2024',
+  },
+  {
+    id: 'largest_assets',
+    title: 'Størst aktiver',
+    category: 'financial',
+    description: 'Virksomheder med de største samlede aktiver i 2024',
+  },
+  {
+    id: 'most_employees_financial',
+    title: 'Flest ansatte',
+    category: 'financial',
+    description: 'Virksomheder med flest ansatte ifølge regnskabsdata 2024',
   },
 ];
 

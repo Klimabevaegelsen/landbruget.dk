@@ -466,6 +466,8 @@ export default function FieldAnalysisMap({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadedSourcesRef = useRef<Set<string>>(new Set());
 
   // Handle location selection from search
   const handleLocationSelect = useCallback(
@@ -493,10 +495,68 @@ export default function FieldAnalysisMap({
     [onLocationSelect]
   );
 
-  // Initialize PMTiles protocol
+  // Set up loading timeout
+  const startLoadingTimeout = useCallback(() => {
+    // Clear any existing timeout
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+
+    // Set a 10-second timeout for map loading
+    loadingTimeoutRef.current = setTimeout(() => {
+      console.warn('⚠️ Map loading timeout - forcing loading state to false');
+      setIsLoading(false);
+      onMapReady?.();
+    }, 10000);
+  }, [onMapReady]);
+
+  // Clear loading timeout
+  const clearLoadingTimeout = useCallback(() => {
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Check if all required sources are loaded
+  const checkAllSourcesLoaded = useCallback(() => {
+    const requiredSources = Object.keys(pmtilesUrls).filter(
+      (key) => pmtilesUrls[key as keyof typeof pmtilesUrls]
+    );
+    const allLoaded = requiredSources.every((source) =>
+      loadedSourcesRef.current.has(source)
+    );
+
+    if (allLoaded && isLoading) {
+      console.log('✅ All PMTiles sources loaded successfully');
+      clearLoadingTimeout();
+      setIsLoading(false);
+      onMapReady?.();
+    }
+  }, [pmtilesUrls, isLoading, clearLoadingTimeout, onMapReady]);
+
+  // Handle source data events to detect when PMTiles are loaded
+  const handleSourceData = useCallback(
+    (e: { sourceId: string; isSourceLoaded: boolean }) => {
+      if (e.isSourceLoaded && Object.keys(pmtilesUrls).includes(e.sourceId)) {
+        loadedSourcesRef.current.add(e.sourceId);
+        console.log(`✅ PMTiles source loaded: ${e.sourceId}`);
+        checkAllSourcesLoaded();
+      }
+    },
+    [pmtilesUrls, checkAllSourcesLoaded]
+  );
+
+  // Initialize PMTiles protocol with retry mechanism
   useEffect(() => {
+    let retryCount = 0;
+    const maxRetries = 3;
+
     const initializePMTiles = async () => {
       try {
+        // Start loading timeout when initialization begins
+        startLoadingTimeout();
+
         // Import MapLibre GL dynamically to avoid SSR issues
         const [maplibregl, { Protocol }] = await Promise.all([
           import('maplibre-gl'),
@@ -520,13 +580,52 @@ export default function FieldAnalysisMap({
 
         // Don't set loading false here - let the map load callback handle it
       } catch (err) {
-        console.error('❌ Failed to initialize PMTiles:', err);
-        setError('Kunne ikke indlæse kortdata');
+        console.error(
+          `❌ Failed to initialize PMTiles (attempt ${retryCount + 1}):`,
+          err
+        );
+        // Retry up to maxRetries times
+        if (retryCount < maxRetries) {
+          retryCount++;
+          console.log(
+            `🔄 Retrying PMTiles initialization (${retryCount}/${maxRetries})...`
+          );
+          setTimeout(initializePMTiles, 1000 * retryCount); // Exponential backoff
+          return;
+        }
+
+        // Final failure after all retries
+        clearLoadingTimeout();
+        setError(
+          'Kunne ikke indlæse kortdata efter flere forsøg. Prøv at genindlæse siden.'
+        );
+        setIsLoading(false);
       }
     };
 
     initializePMTiles();
-  }, []);
+
+    // Cleanup timeout on unmount
+    return () => {
+      clearLoadingTimeout();
+    };
+  }, [startLoadingTimeout, clearLoadingTimeout]);
+
+  // Cleanup event listeners on unmount
+  useEffect(() => {
+    const currentMapRef = mapRef.current;
+    return () => {
+      if (currentMapRef) {
+        const map = currentMapRef.getMap() as MapInstance & {
+          off: (
+            event: string,
+            handler: (e: { sourceId: string; isSourceLoaded: boolean }) => void
+          ) => void;
+        };
+        map.off('sourcedata', handleSourceData);
+      }
+    };
+  }, [handleSourceData]);
 
   // Generate dynamic paint properties based on visualization mode
   const generateFieldsPaint = useCallback(() => {
@@ -1069,7 +1168,22 @@ export default function FieldAnalysisMap({
     const map = mapRef.current.getMap();
 
     try {
-      // Add PMTiles sources
+      // Reset loaded sources tracking
+      loadedSourcesRef.current.clear();
+
+      // Add event listener for source data loading
+      const mapWithEvents = map as MapInstance & {
+        on: (
+          event: string,
+          handler: (e: { sourceId: string; isSourceLoaded: boolean }) => void
+        ) => void;
+      };
+      mapWithEvents.on('sourcedata', handleSourceData);
+
+      // Add PMTiles sources with better error handling
+      const sourceErrors: string[] = [];
+      let sourcesAdded = 0;
+
       Object.entries(pmtilesUrls).forEach(([layerName, url]) => {
         if (url && !map.getSource(layerName)) {
           try {
@@ -1078,11 +1192,29 @@ export default function FieldAnalysisMap({
               url: `pmtiles://${url}`,
             });
             console.log(`✅ Added ${layerName} source:`, url);
+            sourcesAdded++;
           } catch (error) {
-            console.warn(`⚠️ Failed to add ${layerName} source:`, error);
+            const errorMessage = `Failed to add ${layerName} source: ${error}`;
+            console.warn(`⚠️ ${errorMessage}`);
+            sourceErrors.push(errorMessage);
           }
         }
       });
+
+      // If no sources were added (all URLs empty or sources already exist)
+      if (sourcesAdded === 0) {
+        console.log('ℹ️ No new sources to add, marking as ready');
+        clearLoadingTimeout();
+        setIsLoading(false);
+        onMapReady?.();
+        return;
+      }
+
+      // If there are source errors, show a warning but continue
+      if (sourceErrors.length > 0) {
+        console.warn('⚠️ Some map sources failed to load:', sourceErrors);
+        // Don't set error state for source failures - the map can still work with partial data
+      }
 
       // Add layers
       addFieldsLayers(map);
@@ -1091,12 +1223,13 @@ export default function FieldAnalysisMap({
       addWaterProjectsLayers(map);
       addBuildingsLayers(map);
 
-      // Mark as ready immediately after adding sources - PMTiles will load in background
-      setIsLoading(false);
-      onMapReady?.();
+      // Don't set loading to false here - wait for sourcedata events
+      console.log(`🔄 Waiting for ${sourcesAdded} PMTiles sources to load...`);
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
+      clearLoadingTimeout();
       setError('Failed to load map data');
+      setIsLoading(false);
     }
   }, [
     pmtilesUrls,
@@ -1106,6 +1239,8 @@ export default function FieldAnalysisMap({
     addWaterProjectsLayers,
     addBuildingsLayers,
     onMapReady,
+    clearLoadingTimeout,
+    handleSourceData,
   ]);
 
   // Handle PMTiles URL changes (e.g., year selection)
@@ -1121,6 +1256,10 @@ export default function FieldAnalysisMap({
         `🔄 Updating fields source for year change:`,
         pmtilesUrls.fields
       );
+
+      // Start loading timeout for year change
+      startLoadingTimeout();
+      setIsLoading(true);
 
       // Remove existing fields layers
       const layersToRemove = [
@@ -1139,6 +1278,9 @@ export default function FieldAnalysisMap({
 
       // Add new source with updated URL
       try {
+        // Reset loaded sources tracking for fields
+        loadedSourcesRef.current.delete('fields');
+
         map.addSource('fields', {
           type: 'vector',
           url: `pmtiles://${pmtilesUrls.fields}`,
@@ -1147,16 +1289,22 @@ export default function FieldAnalysisMap({
         // Re-add fields layers
         addFieldsLayers(map);
 
-        // Mark as ready immediately after updating sources - PMTiles will load in background
-        setIsLoading(false);
-        onMapReady?.();
+        // Don't set loading to false here - wait for sourcedata event
+        console.log(`🔄 Waiting for updated fields source to load...`);
       } catch (error) {
         console.error('Error loading PMTiles for year:', error);
-        setError(`Failed to load data for selected year`);
+        clearLoadingTimeout();
+        setError('Failed to load data for selected year');
         setIsLoading(false);
       }
     }
-  }, [pmtilesUrls.fields, addFieldsLayers, onMapReady]);
+  }, [
+    pmtilesUrls.fields,
+    addFieldsLayers,
+    onMapReady,
+    startLoadingTimeout,
+    clearLoadingTimeout,
+  ]);
 
   // Update layer visibility and styling when props change
   useEffect(() => {
