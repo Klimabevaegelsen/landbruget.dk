@@ -8,7 +8,7 @@ const corsHeaders = {
 
 // Simple in-memory cache
 const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week
-let cachedRankings: { data: any, timestamp: number } | null = null;
+let cachedRankings: Map<string, { data: any, timestamp: number }> = new Map();
 
 interface RankingItem {
   company_id: string;
@@ -53,9 +53,11 @@ serve(async (req) => {
     const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 50) // Max 50 per table
     const rankingId = url.searchParams.get('rankingId') // Optional: fetch only specific ranking
 
-    // Check cache first (simple approach - cache all requests for 1 week)
-    if (cachedRankings && Date.now() - cachedRankings.timestamp < CACHE_DURATION) {
-      return new Response(JSON.stringify(cachedRankings.data), {
+    // Check cache first (cache by category and rankingId)
+    const cacheKey = `${category || 'all'}-${rankingId || 'all'}-${limit}`;
+    const cached = cachedRankings.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return new Response(JSON.stringify(cached.data), {
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
@@ -1280,10 +1282,10 @@ serve(async (req) => {
     }
 
     // Cache the response for 1 week
-    cachedRankings = {
+    cachedRankings.set(cacheKey, {
       data: response,
       timestamp: Date.now()
-    }
+    })
 
     return new Response(
       JSON.stringify(response),
