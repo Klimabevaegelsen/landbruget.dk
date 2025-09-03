@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { LayerControlPanel } from './LayerControlPanel';
 import { FieldDetailsPanel } from './FieldDetailsPanel';
@@ -23,6 +23,7 @@ const FieldAnalysisMap = dynamic(() => import('./FieldAnalysisMap'), {
 
 export default function FieldAnalysisVisualization() {
   const [isClient, setIsClient] = useState(false);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // State management
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({
@@ -81,13 +82,24 @@ export default function FieldAnalysisVisualization() {
   useEffect(() => {
     setIsLoading(true);
 
+    // Clear any existing timeout
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+    }
+
     // Fallback timeout to prevent getting stuck in loading state
-    const fallbackTimeout = setTimeout(() => {
+    loadingTimeoutRef.current = setTimeout(() => {
       console.warn('⚠️ Map loading timeout - forcing loading state to false');
       setIsLoading(false);
-    }, 10000); // 10 second fallback
+      loadingTimeoutRef.current = null;
+    }, 5000); // 5 second fallback timeout
 
-    return () => clearTimeout(fallbackTimeout);
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    };
   }, [pmtilesUrls.fields]);
 
   // Handle orientation changes on mobile
@@ -161,6 +173,13 @@ export default function FieldAnalysisVisualization() {
   // Handle map ready callback
   const handleMapReady = useCallback(() => {
     console.log('✅ Map ready - clearing loading state');
+
+    // Clear the fallback timeout since map loaded successfully
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+
     setIsLoading(false);
   }, []);
 
