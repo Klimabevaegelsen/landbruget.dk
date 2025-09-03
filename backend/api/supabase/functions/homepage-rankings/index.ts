@@ -1085,14 +1085,14 @@ serve(async (req) => {
           animal_count,
           companies!inner(cvr_number, company_name, municipality)
         `)
-        .gte('transport_date_week_start', '2025-01-01')
-        .lt('transport_date_week_start', '2026-01-01')
+        .gte('transport_date_week_start', '2024-01-01')
+        .lt('transport_date_week_start', '2025-01-01')
 
       const { count: transportCount } = await supabase
         .from('animal_transport_weekly_summary')
         .select('company_id', { count: 'exact', head: true })
-        .gte('transport_date_week_start', '2025-01-01')
-        .lt('transport_date_week_start', '2026-01-01')
+        .gte('transport_date_week_start', '2024-01-01')
+        .lt('transport_date_week_start', '2025-01-01')
 
       if (transportData) {
         // Aggregate by company
@@ -1120,7 +1120,7 @@ serve(async (req) => {
           id: 'most_transported_pigs',
           title: 'Flest Transporterede Svin',
           category: 'animal',
-          description: 'Virksomheder med flest transporterede svin i 2025',
+          description: 'Virksomheder med flest transporterede svin i 2024',
           unit: 'svin',
           company_count: transportCount || 0,
           items: sortedTransports.map((item, index) => ({
@@ -1131,7 +1131,7 @@ serve(async (req) => {
             rank: index + 1,
             value: item.total_animals,
             formatted_value: `${item.total_animals.toLocaleString()} svin`,
-            year: 2025
+            year: 2024
           }))
         })
       }
