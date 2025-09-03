@@ -1086,11 +1086,9 @@ export default function FieldAnalysisMap({
       addWaterProjectsLayers(map);
       addBuildingsLayers(map);
 
-      // Wait a bit for PMTiles to actually load before marking as ready
-      setTimeout(() => {
-        setIsLoading(false);
-        onMapReady?.();
-      }, 3000);
+      // Mark as ready immediately after adding sources - PMTiles will load in background
+      setIsLoading(false);
+      onMapReady?.();
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
       setError('Failed to load map data');
@@ -1144,11 +1142,9 @@ export default function FieldAnalysisMap({
         // Re-add fields layers
         addFieldsLayers(map);
 
-        // Wait a bit for PMTiles to actually load before marking as ready
-        setTimeout(() => {
-          setIsLoading(false);
-          onMapReady?.();
-        }, 2000);
+        // Mark as ready immediately after updating sources - PMTiles will load in background
+        setIsLoading(false);
+        onMapReady?.();
       } catch (error) {
         console.error('Error loading PMTiles for year:', error);
         setError(`Failed to load data for selected year`);
