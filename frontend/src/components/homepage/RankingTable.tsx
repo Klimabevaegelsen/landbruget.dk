@@ -2,8 +2,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Building2, MapPin, ExternalLink } from 'lucide-react';
+import { Building2, MapPin, ExternalLink, Database } from 'lucide-react';
 import { useCompanyNavigation } from '@/hooks/useCompanyNavigation';
+import { useCompanyCache } from '@/hooks/useCompanyCache';
 
 interface RankingItem {
   company_id: string;
@@ -73,6 +74,7 @@ export default function RankingTable({
   showTop = 20,
 }: RankingTableProps) {
   const { navigateToCompany } = useCompanyNavigation();
+  const { getCompanyForDisplay } = useCompanyCache();
   const displayItems = items.slice(0, showTop);
 
   return (
@@ -96,55 +98,62 @@ export default function RankingTable({
 
       <CardContent className="p-0">
         <div className="divide-y divide-gray-100">
-          {displayItems.map((item) => (
-            <div
-              key={`${item.company_id}-${item.rank}`}
-              className="flex items-center justify-between px-6 py-3 transition-colors hover:bg-gray-50"
-            >
-              <div className="flex min-w-0 flex-1 items-center space-x-3">
-                <div className="flex w-8 flex-shrink-0 justify-center">
-                  {getRankIcon(item.rank)}
-                </div>
+          {displayItems.map((item) => {
+            const isCached = getCompanyForDisplay(item.company_id) !== null;
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center space-x-2">
-                    <Building2 className="h-4 w-4 flex-shrink-0 text-gray-400" />
-                    <button
-                      onClick={() =>
-                        navigateToCompany(item.company_id, item.company_name)
-                      }
-                      className="truncate text-left text-sm font-medium text-gray-900 transition-colors hover:text-blue-600"
-                    >
-                      {item.company_name}
-                    </button>
-                    <ExternalLink className="h-3 w-3 text-gray-400" />
+            return (
+              <div
+                key={`${item.company_id}-${item.rank}`}
+                className="flex items-center justify-between px-6 py-3 transition-colors hover:bg-gray-50"
+              >
+                <div className="flex min-w-0 flex-1 items-center space-x-3">
+                  <div className="flex w-8 flex-shrink-0 justify-center">
+                    {getRankIcon(item.rank)}
                   </div>
 
-                  <div className="mt-1 flex items-center space-x-4">
-                    <div className="flex items-center space-x-1 text-xs text-gray-500">
-                      <span>CVR:</span>
-                      <span className="font-mono">{item.cvr_number}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center space-x-2">
+                      <Building2 className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                      <button
+                        onClick={() =>
+                          navigateToCompany(item.company_id, item.company_name)
+                        }
+                        className="truncate text-left text-sm font-medium text-gray-900 transition-colors hover:text-blue-600"
+                      >
+                        {item.company_name}
+                      </button>
+                      <ExternalLink className="h-3 w-3 text-gray-400" />
+                      {isCached && (
+                        <Database className="h-3 w-3 text-green-500" />
+                      )}
                     </div>
-                    {item.municipality && (
+
+                    <div className="mt-1 flex items-center space-x-4">
                       <div className="flex items-center space-x-1 text-xs text-gray-500">
-                        <MapPin className="h-3 w-3" />
-                        <span>{item.municipality}</span>
+                        <span>CVR:</span>
+                        <span className="font-mono">{item.cvr_number}</span>
                       </div>
-                    )}
+                      {item.municipality && (
+                        <div className="flex items-center space-x-1 text-xs text-gray-500">
+                          <MapPin className="h-3 w-3" />
+                          <span>{item.municipality}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex-shrink-0 text-right">
-                <div className="text-sm font-semibold text-gray-900">
-                  {item.formatted_value}
+                <div className="flex-shrink-0 text-right">
+                  <div className="text-sm font-semibold text-gray-900">
+                    {item.formatted_value}
+                  </div>
+                  {item.year && (
+                    <div className="text-xs text-gray-500">{item.year}</div>
+                  )}
                 </div>
-                {item.year && (
-                  <div className="text-xs text-gray-500">{item.year}</div>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {items.length > showTop && (
