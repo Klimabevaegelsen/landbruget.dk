@@ -168,18 +168,6 @@ const RANKINGS = [
 export default function AllRankings() {
   return (
     <div className="w-full space-y-8">
-      {/* Header */}
-      <div className="space-y-4 text-center">
-        <h2 className="text-3xl font-bold text-gray-900">
-          Top 20 Danske Landbrugsvirksomheder
-        </h2>
-        <p className="mx-auto max-w-3xl text-lg text-gray-600">
-          23 ranglister viser de førende virksomheder inden for økonomi,
-          landbrugsareal, miljøpåvirkning, husdyrproduktionskapacitet og
-          beskæftigelse baseret på officielle data.
-        </p>
-      </div>
-
       {/* Rankings Grid */}
       <div className="grid grid-cols-1 gap-6">
         {RANKINGS.map((ranking) => (
