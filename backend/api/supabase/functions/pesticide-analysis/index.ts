@@ -76,63 +76,45 @@ serve(async (req) => {
 
 
 
-    // Use RPC functions for efficient database-side processing
-    const { data: companies, error: companiesError } = await supabase.rpc('get_pesticide_companies', {
+    // Use the RPC function instead of direct table query to get properly aggregated data
+    const { data: rawCompanies, error: companiesError } = await supabase.rpc('get_pesticide_companies', {
       p_years: params.years && params.years.length > 0 ? params.years : null,
-      p_geography: params.geography === 'country' ? null : params.geography,
+      p_geography: params.geography !== 'country' ? params.geography : null,
       p_cvr: params.cvr ? parseInt(params.cvr) : null,
-      p_pesticide_type: params.type,
-      p_sort_by: params.sortBy,
-      p_sort_order: params.sortOrder,
-      p_limit: params.limit,
-      p_offset: (params.page - 1) * params.limit
+      p_pesticide_type: params.type || 'total',
+      p_sort_by: params.sortBy || 'total_belastning',
+      p_sort_order: params.sortOrder || 'desc',
+      p_limit: params.limit || 50,
+      p_offset: ((params.page || 1) - 1) * (params.limit || 50)
     })
 
     if (companiesError) throw companiesError
 
+    // Get metadata using the metadata function
     const { data: metadata, error: metadataError } = await supabase.rpc('get_pesticide_metadata', {
       p_years: params.years && params.years.length > 0 ? params.years : null,
-      p_geography: params.geography === 'country' ? null : params.geography,
+      p_geography: params.geography !== 'country' ? params.geography : null,
       p_cvr: params.cvr ? parseInt(params.cvr) : null
     })
 
     if (metadataError) throw metadataError
 
+    // The function already returns properly aggregated data, no need for JavaScript aggregation
+    const paginatedCompanies = rawCompanies || []
     const metadataRow = metadata?.[0] || {}
-    const totalCount = parseInt(metadataRow.total_companies || '0')
-    const availableYears = metadataRow.available_years || []
-    const availableMunicipalities = metadataRow.available_municipalities || []
-    const companiesWithPfas = parseInt(metadataRow.companies_with_pfas || '0')
-    const companiesWithDiquat = parseInt(metadataRow.companies_with_diquat || '0')
-    const companiesWithGlyphosate = parseInt(metadataRow.companies_with_glyphosate || '0')
-
-    // Format the companies data for the frontend
-    const paginatedCompanies = (companies || []).map(company => ({
-      cvr_number: company.cvr_number.toString(),
-      company_name: company.company_name || `Company ${company.cvr_number}`,
-      municipality: '', // Keep for API compatibility
-      total_belastning: parseFloat(company.total_belastning || '0'),
-      pfas_belastning: parseFloat(company.pfas_belastning || '0'),
-      diquat_belastning: parseFloat(company.diquat_belastning || '0'),
-      glyphosate_belastning: parseFloat(company.glyphosate_belastning || '0'),
-      total_applications: parseInt(company.total_applications || '0'),
-      unique_products: parseInt(company.unique_products || '0'),
-      total_treated_area_ha: parseFloat(company.total_treated_area_ha || '0'),
-      years_active: company.years_active || []
-    }))
 
     const response: PesticideAnalysisResponse = {
       companies: paginatedCompanies,
-      total_count: totalCount,
-      page: params.page,
-      limit: params.limit,
+      total_count: Number(metadataRow.total_companies || 0),
+      page: params.page || 1,
+      limit: params.limit || 50,
       filters: {
-        available_years: availableYears,
-        available_municipalities: availableMunicipalities,
-        total_companies: totalCount,
-        companies_with_pfas: companiesWithPfas,
-        companies_with_diquat: companiesWithDiquat,
-        companies_with_glyphosate: companiesWithGlyphosate
+        available_years: metadataRow.available_years || [],
+        available_municipalities: metadataRow.available_municipalities || [],
+        total_companies: Number(metadataRow.total_companies || 0),
+        companies_with_pfas: Number(metadataRow.companies_with_pfas || 0),
+        companies_with_diquat: Number(metadataRow.companies_with_diquat || 0),
+        companies_with_glyphosate: Number(metadataRow.companies_with_glyphosate || 0)
       }
     }
 
