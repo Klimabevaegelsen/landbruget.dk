@@ -426,9 +426,7 @@ export default function KilderPage() {
                   måde sanktioneret vores brug, behandling eller præsentation af
                   deres data. Vi bestræber os på, med bedste intention og efter
                   bedste evne, at arbejde ansvarligt med offentligt tilgængelige
-                  data, men eventuelle fejl eller unøjagtigheder i vores
-                  analyser, fortolkninger og præsentationsform er vores eget
-                  ansvar.
+                  data.
                 </p>
               </div>
 
