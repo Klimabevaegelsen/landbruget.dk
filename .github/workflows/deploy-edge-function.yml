@@ -6,7 +6,7 @@ on:
       - main
     paths:
       # Trigger on changes within the backend/api directory, including the Supabase config
-      - 'backend/api/**'
+      - "backend/api/**"
   workflow_dispatch:
 
 jobs:
