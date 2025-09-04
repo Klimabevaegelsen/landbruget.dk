@@ -81,7 +81,42 @@ export default function Hero() {
       : '46.000+'; // Fallback based on our query results
 
   return (
-    <div className="relative isolate px-6 pt-14 lg:px-8">
+    <div className="relative isolate overflow-hidden px-6 pt-14 lg:px-8">
+      {/* Background Image */}
+      <div className="absolute inset-0 -z-10">
+        <picture>
+          <source
+            media="(min-width: 1024px)"
+            srcSet="/images/hero/hero-desktop.webp"
+            type="image/webp"
+          />
+          <source
+            media="(min-width: 1024px)"
+            srcSet="/images/hero/hero-desktop.jpg"
+            type="image/jpeg"
+          />
+          <source
+            media="(min-width: 768px)"
+            srcSet="/images/hero/hero-tablet.webp"
+            type="image/webp"
+          />
+          <source
+            media="(min-width: 768px)"
+            srcSet="/images/hero/hero-tablet.jpg"
+            type="image/jpeg"
+          />
+          <source srcSet="/images/hero/hero-mobile.webp" type="image/webp" />
+          <img
+            src="/images/hero/hero-mobile.jpg"
+            alt="Danish agricultural landscape"
+            className="h-full w-full object-cover object-center"
+            loading="eager"
+            decoding="async"
+          />
+        </picture>
+        {/* Overlay for better text readability */}
+        <div className="absolute inset-0 bg-black/40"></div>
+      </div>
       <div className="mx-auto max-w-4xl py-18 sm:py-28 lg:py-40">
         <div className="flex flex-col gap-6 text-center">
           <h1 className="text-5xl font-bold tracking-tight text-balance text-white sm:text-5xl">
