@@ -403,7 +403,7 @@ export default function KilderPage() {
             </section>
 
             {/* Additional Information */}
-            <section className="space-y-6">
+            <section className="space-y-8">
               <h2 className="text-primary border-primary/20 mt-16 border-b pb-4 text-3xl leading-tight font-bold">
                 Om vores dataindsamling
               </h2>
@@ -414,6 +414,39 @@ export default function KilderPage() {
                 landbrugssektor. Dataene opdateres løbende efter de enkelte
                 kilders publiceringsrytme.
               </p>
+
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-6">
+                <h3 className="text-primary-darker mb-3 text-xl font-bold">
+                  Vigtigt at vide
+                </h3>
+                <p className="leading-relaxed text-gray-700">
+                  <strong>Uafhængig databehandling:</strong> Landbruget.dk er et
+                  uafhængigt initiativ. De ovenstående myndigheder og
+                  institutioner har ikke godkendt, endorseret eller på anden
+                  måde sanktioneret vores brug, behandling eller præsentation af
+                  deres data. Vi bestræber os på, med bedste intention og efter
+                  bedste evne, at arbejde ansvarligt med offentligt tilgængelige
+                  data, men eventuelle fejl eller unøjagtigheder i vores
+                  analyser, fortolkninger og præsentationsform er vores eget
+                  ansvar.
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-green-200 bg-green-50 p-6">
+                <h3 className="text-primary-darker mb-3 text-xl font-bold">
+                  Tak til vores datakilder
+                </h3>
+                <p className="leading-relaxed text-gray-700">
+                  Vi vil gerne udtrykke vores dybeste taknemmelighed til alle de
+                  myndigheder, institutioner og organisationer, der gør deres
+                  data offentligt tilgængelige. Deres åbenhed og transparens
+                  muliggør projekter som Landbruget.dk og bidrager til en mere
+                  informeret offentlig debat om dansk landbrug. Vi anerkender
+                  det store arbejde, der ligger bag indsamling, kvalitetssikring
+                  og offentliggørelse af disse værdifulde datasæt.
+                </p>
+              </div>
+
               <p className="text-lg leading-relaxed text-gray-700">
                 For mere information om vores metoder og principper, se vores{' '}
                 <a
