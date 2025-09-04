@@ -163,12 +163,24 @@ export default function MunicipalityRankingsPage() {
         <Card className="border-red-200">
           <CardHeader>
             <CardTitle className="text-red-800">Fejl ved indlæsning</CardTitle>
-            <CardDescription className="text-red-600">{error}</CardDescription>
+            <CardDescription className="text-red-600">
+              {error.includes('404')
+                ? 'Kommune ranglister data er ikke tilgængelige endnu. Systemet er ved at blive opdateret.'
+                : error}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={fetchRankings} className="mt-4">
-              Prøv igen
-            </Button>
+            <div className="space-y-3">
+              <Button onClick={fetchRankings} className="mt-4">
+                Prøv igen
+              </Button>
+              {error.includes('404') && (
+                <p className="text-sm text-gray-600">
+                  💡 Tip: Siden er lige blevet oprettet og data indlæses. Prøv
+                  igen om et par minutter.
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -191,7 +203,14 @@ export default function MunicipalityRankingsPage() {
             <span>📅 Data fra {data.metadata.year}</span>
             <span>
               🕒 Opdateret{' '}
-              {new Date(data.metadata.generated_at).toLocaleDateString('da-DK')}
+              {new Date(data.metadata.generated_at).toLocaleDateString(
+                'da-DK',
+                {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                }
+              )}
             </span>
           </div>
         )}
