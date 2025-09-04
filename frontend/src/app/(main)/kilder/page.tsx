@@ -424,9 +424,7 @@ export default function KilderPage() {
                   uafhængigt initiativ. De ovenstående myndigheder og
                   institutioner har ikke godkendt, endorseret eller på anden
                   måde sanktioneret vores brug, behandling eller præsentation af
-                  deres data. Vi bestræber os på, med bedste intention og efter
-                  bedste evne, at arbejde ansvarligt med offentligt tilgængelige
-                  data.
+                  deres data.
                 </p>
               </div>
 
