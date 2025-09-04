@@ -32,7 +32,10 @@ export function Footer() {
               </Link>
             </div>
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-center">
-              <Link className="text-sm font-medium hover:underline" href="/">
+              <Link
+                className="text-sm font-medium hover:underline"
+                href="/kilder"
+              >
                 Kilder
               </Link>
             </div>
