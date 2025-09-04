@@ -33,8 +33,6 @@ export default function KilderPage() {
               <h2 className="text-primary border-primary/20 border-b pb-4 text-3xl leading-tight font-bold">
                 Datakilder og myndigheder
               </h2>
-
-              {/* First Table */}
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse border border-gray-300">
                   <thead>
@@ -237,7 +235,7 @@ export default function KilderPage() {
                     <tr className="hover:bg-gray-50">
                       <td
                         className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
-                        rowSpan={3}
+                        rowSpan={4}
                       >
                         Miljøstyrelsen
                       </td>
@@ -265,12 +263,6 @@ export default function KilderPage() {
                       </td>
                     </tr>
                     <tr className="hover:bg-gray-50">
-                      <td
-                        className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
-                        rowSpan={2}
-                      >
-                        Miljøstyrelsen (fortsat)
-                      </td>
                       <td className="border border-gray-300 px-4 py-3 text-gray-700">
                         WFS API
                       </td>
@@ -283,6 +275,12 @@ export default function KilderPage() {
                       </td>
                     </tr>
                     <tr className="hover:bg-gray-50">
+                      <td
+                        className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
+                        rowSpan={2}
+                      >
+                        Fødevarestyrelsen
+                      </td>
                       <td className="border border-gray-300 px-4 py-3 text-gray-700">
                         Det Centrale Husdyrbrugsregister (API)
                       </td>
@@ -296,9 +294,6 @@ export default function KilderPage() {
                       </td>
                     </tr>
                     <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
-                        Fødevarestyrelsen
-                      </td>
                       <td className="border border-gray-300 px-4 py-3 text-gray-700">
                         Aktindsigt
                       </td>
