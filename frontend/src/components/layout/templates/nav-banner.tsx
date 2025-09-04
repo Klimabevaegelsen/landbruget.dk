@@ -31,7 +31,7 @@ export function NavBanner() {
           </div>
           <div className="hidden gap-x-6 md:flex">
             <Link
-              href="/?search=kilder"
+              href="/kilder"
               className="flex items-center text-xs font-medium hover:underline"
             >
               Kilder
