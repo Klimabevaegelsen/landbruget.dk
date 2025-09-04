@@ -154,18 +154,6 @@ export default function HomepageRankings() {
 
   return (
     <div className="w-full space-y-6">
-      {/* Header */}
-      <div className="space-y-4 text-center">
-        <h2 className="text-3xl font-bold text-gray-900">
-          Top 20 Danske Landbrugsvirksomheder
-        </h2>
-        <p className="mx-auto max-w-3xl text-lg text-gray-600">
-          Ranglisterne viser de førende virksomheder inden for økonomi,
-          landbrugsareal, miljøpåvirkning, husdyrproduktionskapacitet og
-          beskæftigelse baseret på officielle data.
-        </p>
-      </div>
-
       {/* Category Filters */}
       <div className="flex flex-wrap justify-center gap-2 pb-4">
         {categoryFilters.map((filter) => (
