@@ -1,48 +1,36 @@
-import { CheckBadgeIcon } from '@heroicons/react/24/outline';
 import { Container } from '../container';
-import Link from 'next/link';
 
 export function NavBanner() {
   return (
-    <div className="bg-primary-foreground h-10 w-full">
-      <Container className="h-full" subclassName="h-full">
-        <div className="flex size-full justify-center md:justify-between">
-          <div className="flex gap-x-6">
-            <p className="flex items-center gap-x-1 text-xs font-bold">
-              <CheckBadgeIcon strokeWidth={2} className="size-4" />
-              Fri adgang og{' '}
-              <a
-                href="https://github.com/klimabevaegelsen/landbruget.dk/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:no-underline"
-              >
-                open source
-              </a>
-            </p>
-            <p className="flex items-center gap-x-1 text-xs font-bold">
-              <CheckBadgeIcon strokeWidth={2} className="size-4" />
-              Valideret data
-            </p>
-            <p className="hidden items-center gap-x-1 text-xs font-bold md:flex">
-              <CheckBadgeIcon strokeWidth={2} className="size-4" />
-              Månedlig opdatering af data
-            </p>
-          </div>
-          <div className="hidden gap-x-6 md:flex">
-            <Link
-              href="/kilder"
-              className="flex items-center text-xs font-medium hover:underline"
+    <div className="w-full border-b border-yellow-200 bg-yellow-100 py-3">
+      <Container>
+        <div className="flex justify-center text-center">
+          <p className="text-sm font-medium text-yellow-800">
+            <span className="mr-2">🚜</span>
+            <strong>Undskyld vi roder</strong>
+            <span className="mx-2">•</span>
+            Hjemmesiden er ved at blive gjort klar til lanceringen. Det betyder,
+            at du vil opleve at noget data mangler eller er forkert, og at
+            tingene ikke helt spiller. Vi tager imod feedback på{' '}
+            <a
+              href="https://github.com/Klimabevaegelsen/landbruget.dk/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold underline hover:no-underline"
             >
-              Kilder
-            </Link>
-            <Link
-              href="/om-os"
-              className="flex items-center text-xs font-medium hover:underline"
+              Github
+            </a>{' '}
+            eller{' '}
+            <a
+              href="https://join.slack.com/t/landbrugetdk/shared_invite/zt-3bcf1whh0-mY6GqDGRhC0BuG3ADNLB2Q"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold underline hover:no-underline"
             >
-              Om landbruget.dk
-            </Link>
-          </div>
+              Slack
+            </a>{' '}
+            med kyshånd <span className="ml-1">🫶</span>
+          </p>
         </div>
       </Container>
     </div>
