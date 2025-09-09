@@ -1,4 +1,4 @@
-import { env } from "@/lib/env";
+import { env } from '@/lib/env';
 
 export const apiFetch = async (
   path: string,
@@ -10,13 +10,13 @@ export const apiFetch = async (
   }
 ) => {
   const response = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}${path}`, {
-    method: options?.method || "GET",
+    method: options?.method || 'GET',
     body: options?.body,
     headers: {
       ...options?.headers,
       Authorization: `Bearer ${env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
     },
-    cache: options?.cache || "force-cache",
+    cache: options?.cache || 'force-cache',
   });
   return response;
 };

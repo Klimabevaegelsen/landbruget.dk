@@ -21,6 +21,10 @@ class PMTilesDiscoveryService {
   private cache: Map<string, unknown> = new Map();
   private readonly baseUrl = 'https://data.pesticidkortet.dk';
 
+  constructor() {
+    console.log('🔧 PMTilesDiscoveryService initialized with baseUrl:', this.baseUrl);
+  }
+
   // Discover available data by checking GCS bucket structure
   async getDataAvailability(): Promise<DataAvailability> {
     const cacheKey = 'data_availability';

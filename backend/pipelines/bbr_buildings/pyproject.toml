@@ -73,4 +73,4 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 python_classes = "Test*"
-addopts = "--cov=. --cov-report=term-missing -v --ignore=tests" 
+addopts = "--cov=. --cov-report=term-missing -v --ignore=tests"

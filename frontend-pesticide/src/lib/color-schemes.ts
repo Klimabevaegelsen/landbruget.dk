@@ -37,7 +37,7 @@ export const BBR_COLORS = {
 // Generate color scale configuration for Kepler.gl
 export function generateColorScale(field: string) {
   const config = COLOR_SCHEMES[field as keyof typeof COLOR_SCHEMES];
-  
+
   if (!config) {
     console.warn(`Color scheme not found for field: ${field}`);
     return {
@@ -47,7 +47,7 @@ export function generateColorScale(field: string) {
       range: ['#f7fbff', '#084594'] // Default blue scale
     };
   }
-  
+
   return {
     type: 'quantile',
     field: field,
@@ -85,11 +85,11 @@ export function rgbToHex(r: number, g: number, b: number): string {
 export function interpolateColor(color1: string, color2: string, factor: number): string {
   const rgb1 = hexToRgb(color1);
   const rgb2 = hexToRgb(color2);
-  
+
   const r = Math.round(rgb1[0] + factor * (rgb2[0] - rgb1[0]));
   const g = Math.round(rgb1[1] + factor * (rgb2[1] - rgb1[1]));
   const b = Math.round(rgb1[2] + factor * (rgb2[2] - rgb1[2]));
-  
+
   return rgbToHex(r, g, b);
 }
 
@@ -97,18 +97,18 @@ export function interpolateColor(color1: string, color2: string, factor: number)
 export function generateColorPalette(baseColor: string, steps: number): string[] {
   const palette: string[] = [];
   const rgb = hexToRgb(baseColor);
-  
+
   for (let i = 0; i < steps; i++) {
     const factor = i / (steps - 1);
     const lightness = 0.9 - (factor * 0.7); // From light to dark
-    
+
     const r = Math.round(rgb[0] * lightness);
     const g = Math.round(rgb[1] * lightness);
     const b = Math.round(rgb[2] * lightness);
-    
+
     palette.push(rgbToHex(r, g, b));
   }
-  
+
   return palette;
 }
 
@@ -116,13 +116,13 @@ export function generateColorPalette(baseColor: string, steps: number): string[]
 export function getContrastRatio(color1: string, color2: string): number {
   const rgb1 = hexToRgb(color1);
   const rgb2 = hexToRgb(color2);
-  
+
   const luminance1 = getLuminance(rgb1);
   const luminance2 = getLuminance(rgb2);
-  
+
   const lighter = Math.max(luminance1, luminance2);
   const darker = Math.min(luminance1, luminance2);
-  
+
   return (lighter + 0.05) / (darker + 0.05);
 }
 
@@ -131,7 +131,7 @@ function getLuminance(rgb: [number, number, number]): number {
     c = c / 255;
     return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
   });
-  
+
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
@@ -139,7 +139,7 @@ function getLuminance(rgb: [number, number, number]): number {
 export function getReadableTextColor(backgroundColor: string): string {
   const contrastWithWhite = getContrastRatio(backgroundColor, '#ffffff');
   const contrastWithBlack = getContrastRatio(backgroundColor, '#000000');
-  
+
   return contrastWithWhite > contrastWithBlack ? '#ffffff' : '#000000';
 }
 
@@ -179,4 +179,4 @@ export const COLOR_CLASSES = {
     Public: 'bg-purple-600 text-white',
     Other: 'bg-teal-500 text-white'
   }
-}; 
+};

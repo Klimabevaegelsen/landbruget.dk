@@ -15,4 +15,4 @@ services:
       - GCS_BUCKET=${GCS_BUCKET:-}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - MAX_WORKERS=${MAX_WORKERS:-4}
-    command: ["--log-level", "${LOG_LEVEL:-INFO}"] 
+    command: ["--log-level", "${LOG_LEVEL:-INFO}"]

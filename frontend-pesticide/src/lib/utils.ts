@@ -30,4 +30,4 @@ export const API_ENDPOINTS = {
   H3_DATA: '/api/h3-data',
   BNBO_DATA: '/api/bnbo-data',
   BBR_DATA: '/api/bbr-data'
-}; 
+};

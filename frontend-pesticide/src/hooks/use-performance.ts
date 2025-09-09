@@ -19,21 +19,21 @@ export function usePerformance() {
         custom_parameter_3: metrics.interactionTime,
       });
     }
-    
+
     // Send to PostHog for detailed analysis (placeholder)
     if (typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).posthog) {
       ((window as unknown as Record<string, unknown>).posthog as Record<string, (...args: unknown[]) => void>).capture(event, metrics);
     }
-    
+
     // Log to console in development
     if (process.env.NODE_ENV === 'development') {
       console.log(`Performance: ${event}`, metrics);
     }
   }, []);
-  
+
   const measureRenderTime = useCallback((componentName: string) => {
     const startTime = performance.now();
-    
+
     return () => {
       const endTime = performance.now();
       trackPerformance(`${componentName}_render`, {
@@ -41,36 +41,36 @@ export function usePerformance() {
       });
     };
   }, [trackPerformance]);
-  
+
   const measureDataFetch = useCallback(async <T>(
     fetchFn: () => Promise<T>,
     operationName: string
   ): Promise<T> => {
     const startTime = performance.now();
-    
+
     try {
       const result = await fetchFn();
       const endTime = performance.now();
-      
+
       trackPerformance(`${operationName}_fetch`, {
         dataFetchTime: endTime - startTime,
       });
-      
+
       return result;
     } catch (error) {
       const endTime = performance.now();
-      
+
       trackPerformance(`${operationName}_fetch_error`, {
         dataFetchTime: endTime - startTime,
       });
-      
+
       throw error;
     }
   }, [trackPerformance]);
-  
+
   const measureInteraction = useCallback((interactionName: string) => {
     const startTime = performance.now();
-    
+
     return () => {
       const endTime = performance.now();
       trackPerformance(`${interactionName}_interaction`, {
@@ -78,7 +78,7 @@ export function usePerformance() {
       });
     };
   }, [trackPerformance]);
-  
+
   // Monitor memory usage
   useEffect(() => {
     if (typeof window !== 'undefined' && 'memory' in performance) {
@@ -88,11 +88,11 @@ export function usePerformance() {
           memoryUsage: memory.usedJSHeapSize / 1024 / 1024, // MB
         });
       }, 30000); // Every 30 seconds
-      
+
       return () => clearInterval(interval);
     }
   }, [trackPerformance]);
-  
+
   // Monitor Core Web Vitals
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -102,13 +102,13 @@ export function usePerformance() {
         const lastEntry = entries[entries.length - 1];
         trackPerformance('lcp', { renderTime: lastEntry.startTime });
       });
-      
+
       try {
         observer.observe({ entryTypes: ['largest-contentful-paint'] });
       } catch {
         // Fallback for browsers that don't support LCP
       }
-      
+
       // First Input Delay (FID)
       const fidObserver = new PerformanceObserver((list) => {
         const entries = list.getEntries();
@@ -117,24 +117,24 @@ export function usePerformance() {
           trackPerformance('fid', { interactionTime: fidEntry.processingStart - fidEntry.startTime });
         });
       });
-      
+
       try {
         fidObserver.observe({ entryTypes: ['first-input'] });
       } catch {
         // Fallback for browsers that don't support FID
       }
-      
+
       return () => {
         observer.disconnect();
         fidObserver.disconnect();
       };
     }
   }, [trackPerformance]);
-  
+
   return {
     trackPerformance,
     measureRenderTime,
     measureDataFetch,
     measureInteraction,
   };
-} 
+}

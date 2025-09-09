@@ -30,4 +30,4 @@ export function MapPlaceholder() {
       </div>
     </div>
   );
-} 
+}

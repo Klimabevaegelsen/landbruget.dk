@@ -14,7 +14,7 @@ def create_sample_fvm_marker_data(conn: duckdb.DuckDBPyConnection) -> None:
     """Create sample FVM marker data with realistic Danish field geometries."""
     conn.execute("""
         CREATE TABLE fvm_marker_sample AS
-        SELECT 
+        SELECT
             'DK001' as field_id,
             'CVR12345678' as cvr_number,
             'BLOCK001' as block_id,
@@ -23,9 +23,9 @@ def create_sample_fvm_marker_data(conn: duckdb.DuckDBPyConnection) -> None:
             ) as geom,
             2024 as year
         UNION ALL
-        SELECT 
+        SELECT
             'DK002' as field_id,
-            'CVR12345678' as cvr_number, 
+            'CVR12345678' as cvr_number,
             'BLOCK002' as block_id,
             ST_GeomFromText(
                 'POLYGON((10.5 56.2, 10.6 56.2, 10.6 56.3, 10.5 56.3, 10.5 56.2))'
@@ -35,7 +35,7 @@ def create_sample_fvm_marker_data(conn: duckdb.DuckDBPyConnection) -> None:
         SELECT
             'DK003' as field_id,
             'CVR87654321' as cvr_number,
-            'BLOCK003' as block_id, 
+            'BLOCK003' as block_id,
             ST_GeomFromText(
                 'POLYGON((11.8 55.8, 11.9 55.8, 11.9 55.9, 11.8 55.9, 11.8 55.8))'
             ) as geom,
@@ -47,7 +47,7 @@ def create_sample_bnbo_data(conn: duckdb.DuckDBPyConnection) -> None:
     """Create sample BNBO status data."""
     conn.execute("""
         CREATE TABLE bnbo_status_sample AS
-        SELECT 
+        SELECT
             'Natura2000' as status_category,
             ST_GeomFromText(
                 'MULTIPOLYGON(((12.2 55.2, 12.3 55.2, 12.3 55.3, 12.2 55.3, 12.2 55.2)))'

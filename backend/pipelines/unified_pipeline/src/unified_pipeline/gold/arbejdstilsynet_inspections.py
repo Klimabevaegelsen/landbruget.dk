@@ -138,6 +138,18 @@ class ArbjdstilsynetInspectionsGold(
             # Clean company names - remove extra whitespace and apply title case
             df_clean["company_name_clean"] = df_clean["company_name"].str.strip().str.title()
 
+            # Ensure CVR number column is preserved (mapped from P-numbers in silver layer)
+            if "cvr_number" in df_clean.columns:
+                # Convert to integer if it's not null, keep as-is otherwise
+                df_clean["cvr_number"] = pd.to_numeric(
+                    df_clean["cvr_number"], errors="coerce"
+                ).astype("Int64")
+                self.logger.info(
+                    f"✅ Preserved CVR numbers for {df_clean['cvr_number'].notna().sum()} records"
+                )
+            else:
+                self.logger.warning("⚠️ No CVR number column found in silver data")
+
             # Extract postal code from address
             df_clean["postal_code"] = df_clean["company_address"].str.extract(
                 r"(\d{4})", expand=False
@@ -213,14 +225,14 @@ class ArbjdstilsynetInspectionsGold(
                 "avl af malkekvaeg": "Avl af malkekvæg",
                 "avl af smaagrise": "Avl af smågrise",
                 "dyrkning af groentsager og meloner, roedder og rodknolde": (
-        "Dyrkning af grøntsager og meloner, rødder og rodknolde"
-    ),
+                    "Dyrkning af grøntsager og meloner, rødder og rodknolde"
+                ),
                 "dyrkning af korn (undtagen ris), baelgfrugter og olieholdige froe": (
-        "Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø"
-    ),
+                    "Dyrkning af korn (undtagen ris), bælgfrugter og olieholdige frø"
+                ),
                 "stoetteaktiviteter i forbindelse med planteavl": (
-        "Støtteaktiviteter i forbindelse med planteavl"
-    ),
+                    "Støtteaktiviteter i forbindelse med planteavl"
+                ),
                 "anlaeg af ledningsnet til vaesker": "Anlæg af ledningsnet til væsker",
                 "anlaeg af ledningsnet til elektricitet og tele": (
                     "Anlæg af ledningsnet til elektricitet og tele"
@@ -385,7 +397,11 @@ class ArbjdstilsynetInspectionsGold(
         try:
             total_records = len(df)
             date_range = f"{df['date'].min()} to {df['date'].max()}"
-            unique_companies = df["company_id"].nunique()
+            # Use CVR numbers if available, otherwise fall back to company_id
+            if "cvr_number" in df.columns and df["cvr_number"].notna().sum() > 0:
+                unique_companies = df["cvr_number"].nunique()
+            else:
+                unique_companies = df["company_id"].nunique()
 
             decision_counts = df["decision_type"].value_counts()
             top_industries = df["industry_clean"].value_counts().head(3)

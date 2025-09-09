@@ -41,4 +41,4 @@ USER app
 ENV PYTHONPATH=/app/src
 
 # Default command - can be overridden
-CMD ["uv", "run", "python", "-m", "unified_pipeline", "--help"] 
+CMD ["uv", "run", "python", "-m", "unified_pipeline", "--help"]

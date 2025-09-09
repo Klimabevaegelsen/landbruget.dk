@@ -30,8 +30,7 @@ def _get_optimized_gcs_access():
     except ImportError as e:
         logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
         logger.warning(
-            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed "
-            "for optimal performance"
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed " "for optimal performance"
         )
         return None
 
@@ -94,9 +93,7 @@ class OptimizedGCSStorage:
                 # Use fallback upload
                 blob = self.gcs_bucket.blob(gcs_path)
                 blob.upload_from_filename(str(local_path))
-                logger.info(
-                    f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)"
-                )
+                logger.info(f"✅ Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
 
             return True
 

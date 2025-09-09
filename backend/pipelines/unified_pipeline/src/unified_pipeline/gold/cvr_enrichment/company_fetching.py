@@ -503,6 +503,39 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 NULL::VARCHAR as coordinate_quality,
                 NULL::VARCHAR as coordinate_source,
                 NULL::BOOLEAN as dawa_enriched,
+                -- Extract industry information from the JSON data
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        json_extract_string(
+                            json_extract(json_data, '$.industries[0]'),
+                            '$.industry_code'
+                        )
+                    ELSE NULL
+                END as primary_industry_code,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        json_extract_string(
+                            json_extract(json_data, '$.industries[0]'),
+                            '$.industry_description'
+                        )
+                    ELSE NULL
+                END as primary_industry_description,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        CASE
+                            WHEN json_extract_string(
+                                json_extract(json_data, '$.industries[0]'),
+                                '$.industry_code'
+                            ) LIKE '01%'
+                            AND json_extract(
+                                json_extract(json_data, '$.industries[0]'),
+                                '$.is_current'
+                            )::BOOLEAN = true
+                            THEN true
+                            ELSE false
+                        END
+                    ELSE false
+                END as is_agricultural_company,
                 json_data as company_data_json,
                 json_extract_string(json_data, '$.processing_timestamp')
                     as processing_timestamp
@@ -1260,6 +1293,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             # Create normalized persons table from leadership data
             self._create_persons_table(json_strings)
 
+            # Create normalized ownership table from ownership data
+            self._create_ownership_table(json_strings)
+
             # Create normalized employment table from employment data
             self._create_employment_table(json_strings)
 
@@ -1358,21 +1394,21 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.unit_number'
                     )::BIGINT as unit_number,
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.person_type'
-                    )::VARCHAR as person_type,
+                    ) as person_type,
                     -- Get current name (first name marked as current, or first name if none marked)
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.names[0].name'
-                    )::VARCHAR as current_name,
+                    ) as current_name,
                     -- Get current address (first address marked as current,
                     -- or first address if none marked)
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].person.addresses[0].city'
-                    )::VARCHAR as current_city,
+                    ) as current_city,
                     TRY_CAST(
                         json_extract(
                             t.json_data,
@@ -1380,27 +1416,27 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                             '].person.addresses[0].postal_code'
                         ) AS INTEGER
                     ) as current_postal_code,
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].person.addresses[0].municipality_name'
-                    )::VARCHAR as current_municipality,
+                    ) as current_municipality,
                     -- Get role from organization
-                    json_extract(
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].vaerdi'
-                    )::VARCHAR as role,
-                    json_extract(
+                    ) as role,
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigFra'
-                    )::VARCHAR as role_start_date,
-                    json_extract(
+                    ) as role_start_date,
+                    json_extract_string(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx ||
                         '].organization.member_data[0].attributter[0].vaerdier[0].periode.gyldigTil'
-                    )::VARCHAR as role_end_date,
+                    ) as role_end_date,
                     json_extract(
                         t.json_data,
                         '$.leadership[' || lf.leadership_idx || '].is_current'
@@ -1429,39 +1465,39 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 role,
                 -- Create a formatted role for display (simple title case for common roles)
                 CASE
-                    WHEN UPPER(TRIM(role, '"')) = 'DIREKTØR' THEN 'Direktør'
-                    WHEN UPPER(TRIM(role, '"')) = 'ADM. DIR.' THEN 'Adm. Dir.'
-                    WHEN UPPER(TRIM(role, '"')) = 'FORMAND' THEN 'Formand'
-                    WHEN UPPER(TRIM(role, '"')) = 'NÆSTFORMAND' THEN 'Næstformand'
-                    WHEN UPPER(TRIM(role, '"')) = 'BESTYRELSESMEDLEM' THEN 'Bestyrelsesmedlem'
-                    WHEN UPPER(TRIM(role, '"')) = 'LEDER' THEN 'Leder'
-                    WHEN UPPER(TRIM(role, '"')) = 'INTERESSENTER' THEN 'Interessenter'
-                    WHEN UPPER(TRIM(role, '"')) = 'REEL EJER' THEN 'Reel Ejer'
-                    WHEN UPPER(TRIM(role, '"')) = 'REVISION' THEN 'Revision'
-                    WHEN UPPER(TRIM(role, '"')) = 'STIFTERE' THEN 'Stiftere'
-                    WHEN UPPER(TRIM(role, '"')) = 'FORENINGSREPRÆSENTANT'
+                    WHEN UPPER(role) = 'DIREKTØR' THEN 'Direktør'
+                    WHEN UPPER(role) = 'ADM. DIR.' THEN 'Adm. Dir.'
+                    WHEN UPPER(role) = 'FORMAND' THEN 'Formand'
+                    WHEN UPPER(role) = 'NÆSTFORMAND' THEN 'Næstformand'
+                    WHEN UPPER(role) = 'BESTYRELSESMEDLEM' THEN 'Bestyrelsesmedlem'
+                    WHEN UPPER(role) = 'LEDER' THEN 'Leder'
+                    WHEN UPPER(role) = 'INTERESSENTER' THEN 'Interessenter'
+                    WHEN UPPER(role) = 'REEL EJER' THEN 'Reel Ejer'
+                    WHEN UPPER(role) = 'REVISION' THEN 'Revision'
+                    WHEN UPPER(role) = 'STIFTERE' THEN 'Stiftere'
+                    WHEN UPPER(role) = 'FORENINGSREPRÆSENTANT'
                         THEN 'Foreningsrepræsentant'
-                    WHEN UPPER(TRIM(role, '"')) = 'LIKVIDATOR' THEN 'Likvidator'
-                    ELSE TRIM(role, '"')  -- Keep original for unknown/mixed content roles
+                    WHEN UPPER(role) = 'LIKVIDATOR' THEN 'Likvidator'
+                    ELSE role  -- Keep original for unknown/mixed content roles
                 END as role_formatted,
                 role_start_date,
                 role_end_date,
                 COALESCE(is_current_role, true) as is_current_role,
                 -- Classify as leadership based on role (case-insensitive matching)
                 CASE
-                    WHEN UPPER(TRIM(role, '"')) IN (
+                    WHEN UPPER(role) IN (
                         'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND',
                         'BESTYRELSESMEDLEM', 'LEDER', 'INTERESSENTER'
                     ) THEN true
-                    WHEN UPPER(TRIM(role, '"')) IN (
+                    WHEN UPPER(role) IN (
                         'REEL EJER', 'REVISION', 'STIFTERE', 'FORENINGSREPRÆSENTANT', 'LIKVIDATOR'
                     ) THEN false
                     ELSE NULL
                 END as is_leadership,
                 -- Classify as owner based on role (case-insensitive matching)
                 CASE
-                    WHEN UPPER(TRIM(role, '"')) IN ('REEL EJER', 'INTERESSENTER') THEN true
-                    WHEN UPPER(TRIM(role, '"')) IN (
+                    WHEN UPPER(role) IN ('REEL EJER', 'INTERESSENTER') THEN true
+                    WHEN UPPER(role) IN (
                         'DIREKTØR', 'ADM. DIR.', 'FORMAND', 'NÆSTFORMAND', 'BESTYRELSESMEDLEM',
                         'REVISION', 'STIFTERE', 'FORENINGSREPRÆSENTANT', 'LIKVIDATOR', 'LEDER'
                     ) THEN false
@@ -1483,10 +1519,114 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self.log.info(f"Created persons table with {person_count} person-company relationships")
         self.log.info(f"Representing {unique_persons} unique persons")
 
-        # Save persons table to GCS
+    def _create_ownership_table(self, json_strings: List[str]) -> None:
+        """Create normalized ownership table from ownership data."""
+
+        self.log.info("Creating normalized ownership table from ownership data")
+
+        # Create ownership table
+        ownership_table = "cvr_ownership"
+        self.conn.execute(f"DROP TABLE IF EXISTS {ownership_table}")
+
+        self.conn.execute(
+            f"""
+            CREATE TABLE {ownership_table} AS
+            WITH ownership_flattened AS (
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    idx as ownership_idx
+                FROM unnest($1) as t(json_data)
+                CROSS JOIN generate_series(0::BIGINT,
+                    CASE
+                        WHEN json_array_length(json_extract(json_data, '$.ownership')) > 0
+                        THEN (
+                            json_array_length(json_extract(json_data, '$.ownership')) - 1
+                        )::BIGINT
+                        ELSE 0::BIGINT
+                    END) as t(idx)
+                WHERE json_extract(json_data, '$.ownership') IS NOT NULL
+                AND json_array_length(json_extract(json_data, '$.ownership')) > 0
+            ),
+            ownership_extracted AS (
+                SELECT
+                    of.cvr_number,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].person_uuid'
+                    ) as person_uuid,
+                    json_extract(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].unit_number'
+                    )::BIGINT as unit_number,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].owner_name'
+                    ) as owner_name,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].owner_type'
+                    ) as owner_type,
+                    json_extract(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].ownership_percentage'
+                    )::DOUBLE as ownership_percentage,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].period_start'
+                    ) as period_start,
+                    json_extract_string(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].period_end'
+                    ) as period_end,
+                    json_extract(
+                        t.json_data,
+                        '$.ownership[' || of.ownership_idx || '].is_current'
+                    )::BOOLEAN as is_current,
+                    NOW()::VARCHAR as processing_timestamp
+                FROM ownership_flattened of
+                JOIN unnest($1) as t(json_data) ON (
+                    json_extract(t.json_data, '$.cvr_number')::INTEGER = of.cvr_number
+                )
+                WHERE json_extract(
+                    t.json_data, '$.ownership[' || of.ownership_idx || '].owner_name'
+                ) IS NOT NULL
+            )
+            SELECT
+                -- Generate ownership UUID based on company + unit number + period for consistency
+                md5(CONCAT(cvr_number::VARCHAR, '_',
+                          COALESCE(unit_number::VARCHAR, 'unknown'), '_',
+                          COALESCE(period_start, 'no_start')))::VARCHAR as ownership_uuid,
+                -- Generate company UUID for consistency with other tables
+                md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                cvr_number,
+                person_uuid,
+                unit_number,
+                owner_name,
+                owner_type,
+                ownership_percentage,
+                period_start,
+                period_end,
+                COALESCE(is_current, true) as is_current,
+                processing_timestamp
+            FROM ownership_extracted
+            WHERE owner_name IS NOT NULL
+        """,
+            [json_strings],
+        )
+
+        # Get count for logging
+        ownership_count = self.conn.execute(f"SELECT COUNT(*) FROM {ownership_table}").fetchone()[0]
+        current_ownership_count = self.conn.execute(
+            f"SELECT COUNT(*) FROM {ownership_table} WHERE is_current = true"
+        ).fetchone()[0]
+
+        self.log.info(f"Created ownership table with {ownership_count} ownership records")
+        self.log.info(f"Including {current_ownership_count} current ownership relationships")
+
+        # Save ownership table to GCS
         self._save_data(
-            data=persons_table,
-            dataset="cvr_persons",
+            data=ownership_table,
+            dataset="cvr_ownership",
             bucket=self.config.bucket,
             stage="gold",
         )

@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
-import { useHashStore } from "@/stores/hashStore";
+import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { useHashStore } from '@/stores/hashStore';
 
 // Custom hook for media query
 function useMediaQuery(query: string) {
@@ -16,8 +16,8 @@ function useMediaQuery(query: string) {
       setMatches(media.matches);
     }
     const listener = () => setMatches(media.matches);
-    media.addEventListener("change", listener);
-    return () => media.removeEventListener("change", listener);
+    media.addEventListener('change', listener);
+    return () => media.removeEventListener('change', listener);
   }, [matches, query]);
 
   return matches;
@@ -40,7 +40,7 @@ function SidenavClient({
   className?: string;
 }) {
   const { currentHash, setCurrentHash } = useHashStore();
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isMobile = useMediaQuery('(max-width: 768px)');
   const [isCollapsed, setIsCollapsed] = useState(isMobile);
 
   // Update isCollapsed when screen size changes
@@ -71,23 +71,23 @@ function SidenavClient({
       replaceState.apply(window.history, args);
       setTimeout(() => setCurrentHash(window.location.hash));
     };
-    window.addEventListener("hashchange", onHashChanged);
+    window.addEventListener('hashchange', onHashChanged);
     return () => {
-      window.removeEventListener("hashchange", onHashChanged);
+      window.removeEventListener('hashchange', onHashChanged);
     };
   }, [setCurrentHash]);
 
   const handleClick = (item: NavigationItem, isSubItem?: boolean) => {
-    const hash = item.href.split("#")[1];
+    const hash = item.href.split('#')[1];
     if (hash) {
-      setCurrentHash("#" + hash);
+      setCurrentHash('#' + hash);
 
       // replace the current url with the new hash without reloading the page
-      window.history.pushState({}, "", item.href);
+      window.history.pushState({}, '', item.href);
 
       const element = document.getElementById(hash);
       if (element && !isSubItem) {
-        element.scrollIntoView({ behavior: "smooth" });
+        element.scrollIntoView({ behavior: 'smooth' });
       }
 
       if (element && isSubItem) {
@@ -97,7 +97,7 @@ function SidenavClient({
           const offsetPosition = elementPosition + window.pageYOffset - offset;
           window.scrollTo({
             top: offsetPosition,
-            behavior: "smooth",
+            behavior: 'smooth',
           });
         }
       }
@@ -108,17 +108,17 @@ function SidenavClient({
     <nav
       aria-label="Sidebar"
       className={cn(
-        "flex flex-1 flex-col transition-all duration-300",
+        'flex flex-1 flex-col transition-all duration-300',
 
         className
       )}
     >
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl md:text-2xl font-bold">{title}</h2>
+        <h2 className="text-xl font-bold md:text-2xl">{title}</h2>
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 hover:bg-gray-100 rounded-md transition-colors block md:hidden"
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="block rounded-md p-2 transition-colors hover:bg-gray-100 md:hidden"
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {isCollapsed ? (
             <ChevronDownIcon className="size-5" />
@@ -135,22 +135,22 @@ function SidenavClient({
             exit={{ opacity: 0 }}
             role="list"
             className={cn(
-              "space-y-1 divide-y divide-slate-300 text-sm transition-all duration-300",
-              isCollapsed && "opacity-0"
+              'space-y-1 divide-y divide-slate-300 text-sm transition-all duration-300',
+              isCollapsed && 'opacity-0'
             )}
           >
             {navigation.map((item) => {
-              const itemHash = item.href.split("#")[1];
-              const isCurrent = currentHash === "#" + itemHash;
+              const itemHash = item.href.split('#')[1];
+              const isCurrent = currentHash === '#' + itemHash;
 
               return (
                 <li key={item.id}>
                   <div
                     className={cn(
                       isCurrent
-                        ? "text-black font-bold"
-                        : "font-medium text-gray-700 hover:font-semibold hover:text-black",
-                      "group flex gap-x-3 p-4 pl-0 cursor-pointer"
+                        ? 'font-bold text-black'
+                        : 'font-medium text-gray-700 hover:font-semibold hover:text-black',
+                      'group flex cursor-pointer gap-x-3 p-4 pl-0'
                     )}
                     onClick={() => {
                       handleClick(item);
@@ -158,8 +158,8 @@ function SidenavClient({
                   >
                     <div
                       className={cn(
-                        "pl-3",
-                        isCurrent && "border-l-2 border-primary"
+                        'pl-3',
+                        isCurrent && 'border-primary border-l-2'
                       )}
                     >
                       {!isCollapsed && item.name}
@@ -168,17 +168,17 @@ function SidenavClient({
                   {item.subItems && (
                     <ul className="">
                       {item.subItems.map((subItem) => {
-                        const subItemHash = subItem.href.split("#")[1];
-                        const isSubCurrent = currentHash === "#" + subItemHash;
+                        const subItemHash = subItem.href.split('#')[1];
+                        const isSubCurrent = currentHash === '#' + subItemHash;
 
                         return (
                           <li key={subItem.id}>
                             <div
                               className={cn(
                                 isSubCurrent
-                                  ? "text-black font-bold"
-                                  : "font-medium text-gray-700 hover:font-semibold hover:text-black",
-                                "group flex gap-x-3 p-4 pl-0 cursor-pointer"
+                                  ? 'font-bold text-black'
+                                  : 'font-medium text-gray-700 hover:font-semibold hover:text-black',
+                                'group flex cursor-pointer gap-x-3 p-4 pl-0'
                               )}
                               onClick={() => {
                                 handleClick(subItem, true);
@@ -186,8 +186,8 @@ function SidenavClient({
                             >
                               <div
                                 className={cn(
-                                  "pl-6",
-                                  isSubCurrent && "border-l-2 border-primary"
+                                  'pl-6',
+                                  isSubCurrent && 'border-primary border-l-2'
                                 )}
                               >
                                 {!isCollapsed && subItem.name}

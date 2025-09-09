@@ -1,5 +1,5 @@
-import Image from "next/image";
-import { clsx } from "clsx";
+import Image from 'next/image';
+import { clsx } from 'clsx';
 
 export function Logo({ className }: { className?: string }) {
   return (
@@ -8,7 +8,7 @@ export function Logo({ className }: { className?: string }) {
       alt="Landbruget.dk logo"
       width={361 / 2}
       height={54 / 2}
-      className={clsx(className, "overflow-visible")}
+      className={clsx(className, 'overflow-visible')}
       priority
     />
   );

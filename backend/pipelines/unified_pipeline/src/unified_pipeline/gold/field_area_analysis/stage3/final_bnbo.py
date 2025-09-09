@@ -213,7 +213,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         invalid_water = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_bnbo_water_intersections
-            WHERE property_bnbo_water_geometry IS NULL OR 
+            WHERE property_bnbo_water_geometry IS NULL OR
                 NOT ST_IsValid(property_bnbo_water_geometry)
         """).fetchone()[0]
 
@@ -227,7 +227,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         empty_water = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_bnbo_water_intersections
-            WHERE property_bnbo_water_geometry IS NOT NULL AND 
+            WHERE property_bnbo_water_geometry IS NOT NULL AND
                 ST_IsEmpty(property_bnbo_water_geometry)
         """).fetchone()[0]
 
@@ -333,7 +333,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         water_only_properties = self.conn.execute("""
             SELECT COUNT(DISTINCT pbw.bfe_number)
             FROM property_bnbo_water_intersections pbw
-            LEFT JOIN property_bnbo_intersections pb ON 
+            LEFT JOIN property_bnbo_intersections pb ON
                 pbw.bfe_number = pb.bfe_number AND pbw.field_uuid = pb.field_uuid
             WHERE pb.bfe_number IS NULL
         """).fetchone()[0]
@@ -353,7 +353,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         invalid_bfe_numbers = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_bnbo_intersections pb
-            LEFT JOIN field_property_intersections fp ON 
+            LEFT JOIN field_property_intersections fp ON
                 pb.field_uuid = fp.field_uuid AND pb.bfe_number = fp.bfe_number
             WHERE fp.bfe_number IS NULL
         """).fetchone()[0]

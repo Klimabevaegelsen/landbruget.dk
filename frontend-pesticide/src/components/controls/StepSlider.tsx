@@ -14,29 +14,29 @@ export function StepSlider({ className = '' }: StepSliderProps) {
   const availableYearOptions = useAvailableYearOptions();
   const { setSelectedYear } = useMapStore();
   const { isMobile } = useUIStore();
-  
+
   const [isAnimating, setIsAnimating] = useState(false);
   const [animationInterval, setAnimationInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Get numeric years for animation and display
   const numericYears = availableYearOptions.filter((year): year is number => typeof year === 'number').sort((a, b) => a - b);
   const hasTotal = availableYearOptions.includes('total');
-  
+
   // All options in order: years + total
   const allOptions = [...numericYears, ...(hasTotal ? ['total'] : [])] as YearSelection[];
-  
+
   const currentIndex = allOptions.indexOf(selectedYear);
 
   const startAnimation = () => {
     if (numericYears.length <= 1) return;
-    
+
     setIsAnimating(true);
     const interval = setInterval(() => {
       const currentIndex = numericYears.indexOf(selectedYear as number);
       const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % numericYears.length : 0;
       setSelectedYear(numericYears[nextIndex]);
     }, 1500);
-    
+
     setAnimationInterval(interval);
   };
 
@@ -133,7 +133,7 @@ export function StepSlider({ className = '' }: StepSliderProps) {
               {year}
             </button>
           ))}
-          
+
           {/* Total Button */}
           {hasTotal && (
             <button
@@ -191,7 +191,7 @@ export function StepSlider({ className = '' }: StepSliderProps) {
             {year}
           </button>
         ))}
-        
+
         {/* Total Button */}
         {hasTotal && (
           <button
@@ -218,4 +218,4 @@ export function StepSlider({ className = '' }: StepSliderProps) {
       </button>
     </div>
   );
-} 
+}

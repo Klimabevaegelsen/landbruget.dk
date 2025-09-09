@@ -806,9 +806,7 @@ class InspireBBRFetcher:
                             href = link.get("href")
                             if href and "download" in href:
                                 if href.startswith("/"):
-                                    parsed_url = urlparse(
-                                        self.settings.sdfe_ftp_base_url
-                                    )
+                                    parsed_url = urlparse(self.settings.sdfe_ftp_base_url)
                                     base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
                                     download_link = urljoin(base_url, href)
                                 elif href.startswith("main.html"):

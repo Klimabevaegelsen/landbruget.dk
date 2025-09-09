@@ -2,8 +2,8 @@
 
 import { useResolutionStore } from '@/stores/resolution-store'
 import { usePMTilesStore } from '@/stores/pmtiles-store'
-import { 
-  Zap, 
+import {
+  Zap,
   ZapOff
 } from 'lucide-react'
 
@@ -18,11 +18,11 @@ export function ResolutionControls({ className = '' }: ResolutionControlsProps) 
     setResolution,
     setAutoResolution,
   } = useResolutionStore()
-  
+
   const { getAvailableResolutions } = usePMTilesStore()
-  
+
   const availableResolutions = getAvailableResolutions()
-  
+
   return (
     <div className={`${className}`}>
       {/* Auto Resolution Toggle */}
@@ -35,7 +35,7 @@ export function ResolutionControls({ className = '' }: ResolutionControlsProps) 
           <span>Auto</span>
         </button>
       </div>
-      
+
       {/* Manual Resolution Selection */}
       {!autoResolution && (
         <div className="flex space-x-1">
@@ -56,4 +56,4 @@ export function ResolutionControls({ className = '' }: ResolutionControlsProps) 
       )}
     </div>
   )
-} 
+}

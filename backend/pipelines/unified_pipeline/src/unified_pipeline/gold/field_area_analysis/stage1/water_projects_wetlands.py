@@ -464,11 +464,11 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
             try:
                 test_result = conn.execute("""
                     SELECT
-                        ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326') 
+                        ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')
                             as transformed_point,
-                        ST_X(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) 
+                        ST_X(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326'))
                             as lon,
-                        ST_Y(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326')) 
+                        ST_Y(ST_Transform(ST_Point(500000, 6200000), 'EPSG:25832', 'EPSG:4326'))
                             as lat
                 """).fetchone()
 

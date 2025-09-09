@@ -14,6 +14,16 @@ from .schema_manager import SchemaManager
 from .storage import SilverStorageManager
 from .validators.pii_validator import PIIAction, PIIType, PIIValidator
 
+# Import the new data tracing system
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
+
 # Get logger
 logger = get_logger()
 
@@ -49,6 +59,14 @@ class SilverProcessor:
         )
 
         self.metadata_manager = metadata_manager
+
+        # Initialize pipeline metadata manager (pipeline-level data tracing)
+        if PIPELINE_METADATA_AVAILABLE:
+            self.pipeline_metadata_manager = PipelineMetadataManager()
+            logger.info("✅ Pipeline metadata system initialized for Silver layer data tracing")
+        else:
+            self.pipeline_metadata_manager = None
+            logger.warning("⚠️  Pipeline metadata system not available in Silver layer")
 
         # Initialize specialized managers
         self.parquet_manager = ParquetManager(
@@ -125,6 +143,9 @@ class SilverProcessor:
         try:
             logger.info("Processing Bronze data from memory - skipping disk I/O")
 
+            # Track processing start time for pipeline metadata
+            processing_start_time = time.time()
+
             # Extract data from bronze_data structure
             file_data = bronze_data.get("data", {})
             bronze_data.get("metadata", {})
@@ -172,9 +193,38 @@ class SilverProcessor:
                 if success:
                     processed_count += 1
 
+            # Calculate processing duration and create pipeline metadata
+            processing_duration = time.time() - processing_start_time
+
             logger.info(
-                f"Successfully processed {processed_count} files from memory to Silver layer"
+                f"Successfully processed {processed_count} files from memory to Silver layer "
+                f"in {processing_duration:.1f}s"
             )
+
+            # Create and save pipeline metadata for data tracing
+            if self.pipeline_metadata_manager:
+                try:
+                    # Calculate total file size processed
+                    total_file_size = sum(item.get("file_size", 0) for item in file_data.values())
+
+                    # Create pipeline metadata for Silver layer
+                    pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                        source_key="drive_pesticide_reports",  # Same source as Bronze
+                        record_count=processed_count,
+                        processing_duration=processing_duration,
+                        file_size_bytes=total_file_size,
+                    )
+
+                    # Save pipeline metadata
+                    pipeline_metadata_path = self.pipeline_metadata_manager.save_metadata(
+                        pipeline_metadata, silver_run_path / "pipeline_metadata.json"
+                    )
+
+                    logger.info(f"✅ Silver pipeline metadata saved to {pipeline_metadata_path}")
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to create Silver pipeline metadata: {e}")
+
             return processed_count
 
         except Exception as e:

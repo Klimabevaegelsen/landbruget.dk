@@ -64,13 +64,13 @@ class Settings(BaseModel):
         env_file_encoding = "utf-8"
         case_sensitive = False
 
-    @model_validator(mode='after')
-    def validate_storage_and_credentials(self) -> 'Settings':
+    @model_validator(mode="after")
+    def validate_storage_and_credentials(self) -> "Settings":
         """Validate storage and credentials configuration."""
         # Validate GCS bucket
         if self.storage_type == StorageType.GCS and not self.gcs_bucket:
             raise ValueError("GCS bucket must be specified when using GCS storage")
-        
+
         # Validate credentials file
         if not self.use_public_access and self.google_application_credentials is not None:
             # Check if it's an empty Path
@@ -80,7 +80,7 @@ class Settings(BaseModel):
                 raise ValueError(
                     f"Credentials file not found: {self.google_application_credentials}"
                 )
-        
+
         return self
 
     def get_bronze_path_for_run(self, timestamp: str) -> Path:

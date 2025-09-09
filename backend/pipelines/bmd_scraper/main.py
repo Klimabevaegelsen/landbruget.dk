@@ -17,6 +17,16 @@ from bronze import BMDScraper
 from bronze.export import GCSStorage
 from silver import BMDTransformer, upload_to_gcs
 
+# Import pipeline metadata system for data tracing
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
+
 # Load environment variables
 dotenv.load_dotenv()
 
@@ -213,6 +223,14 @@ def main() -> None:
     # Track pipeline start time
     start_time = datetime.now()
 
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
+
     # Run selected stages
     bronze_file = None
     silver_file = None
@@ -291,6 +309,51 @@ def main() -> None:
         except Exception as e:
             logger.error(f"Failed to generate BMD schema documentation: {e}", exc_info=True)
             # Don't fail the pipeline if schema documentation fails
+
+    # Create and save metadata for BMD pesticide database
+    if pipeline_metadata_manager and (bronze_file or silver_file):
+        try:
+            import time
+
+            processing_duration = time.time() - start_time.timestamp()
+
+            # Determine record count if possible (from silver file)
+            record_count = None
+            if silver_file and silver_file.exists():
+                try:
+                    import duckdb
+
+                    conn = duckdb.connect()
+                    result = conn.execute(f"SELECT COUNT(*) FROM read_parquet('{silver_file}')").fetchone()
+                    record_count = result[0] if result else None
+                    conn.close()
+                except Exception:
+                    pass  # If we can't get count, that's okay
+
+            # Create metadata for BMD pesticide database
+            bmd_metadata = pipeline_metadata_manager.create_metadata(
+                source_key="bmd_pesticide_database",
+                record_count=record_count,
+                processing_duration=processing_duration,
+                file_size_bytes=None,  # Will be calculated automatically
+                source_datasets=None,
+            )
+
+            # Determine where to save metadata
+            metadata_dir = None
+            if silver_file:
+                metadata_dir = silver_file.parent
+            elif bronze_file:
+                metadata_dir = bronze_file.parent
+
+            if metadata_dir:
+                metadata_path = pipeline_metadata_manager.save_metadata(
+                    bmd_metadata, metadata_dir / "bmd_pesticide_database_metadata.json"
+                )
+                logger.info(f"✅ BMD pesticide database metadata saved to {metadata_path}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create BMD pipeline metadata: {e}")
 
     # Return success/failure code
     if args.stage == "bronze" and bronze_file:

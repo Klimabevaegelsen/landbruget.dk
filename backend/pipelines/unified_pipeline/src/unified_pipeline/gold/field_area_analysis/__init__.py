@@ -31,7 +31,7 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
     Field Area Analysis Gold Pipeline
 
     This pipeline performs comprehensive field area analysis including:
-    - BNBO (Biodiversity and Nature) status coverage
+    - BNBO (Boringsnære Beskyttelsesområder - Well-adjacent Protection Areas) status coverage
     - Wetland coverage analysis
     - Water project intersections
     - Soil type analysis

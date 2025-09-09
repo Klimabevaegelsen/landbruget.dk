@@ -1,4 +1,4 @@
-import { Payload } from "recharts/types/component/DefaultLegendContent";
+import { Payload } from 'recharts/types/component/DefaultLegendContent';
 
 interface CustomLegendProps {
   payload?: Payload[];
@@ -14,12 +14,12 @@ export default function CustomLegend({
   }
 
   return (
-    <div className="flex flex-wrap gap-2 ">
+    <div className="flex flex-wrap gap-2">
       {payload.map((entry, index) => (
         <button
           key={`legend-item-${index}`}
           onClick={() => onLegendClick?.(entry.dataKey as string)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors"
+          className="flex items-center gap-2 rounded-md px-3 py-1.5 transition-colors hover:bg-gray-50"
           style={{
             opacity: entry.inactive ? 0.5 : 1,
           }}

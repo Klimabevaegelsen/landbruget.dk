@@ -1,41 +1,60 @@
-"use client";
+'use client';
 
 import {
   Disclosure,
   DisclosureButton,
   DisclosurePanel,
-} from "@headlessui/react";
-import { Bars3Icon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
-import { motion } from "framer-motion";
-import { Logo } from "@/components/layout/templates/logo";
-import Link from "next/link";
-import { Container } from "../container";
-import { cn } from "@/lib/utils";
-import { GlobalSearch } from "@/components/global-search";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuItems,
+} from '@headlessui/react';
+import {
+  Bars3Icon,
+  MagnifyingGlassIcon,
+  ChevronDownIcon,
+} from '@heroicons/react/24/solid';
+import { motion } from 'framer-motion';
+import { Logo } from '@/components/layout/templates/logo';
+import Link from 'next/link';
+import { Container } from '../container';
+import { cn } from '@/lib/utils';
+import { GlobalSearch } from '@/components/global-search';
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 
-const links = [
-  { href: "/?section=overview", label: "Oversigt" },
-  { href: "/?section=explore", label: "Udforsk" },
-  { href: "/markanalyse", label: "Markanalyse" },
-  { href: "/?section=blog", label: "Blog" },
+const analyserLinks = [
+  { href: '/markanalyse', label: 'Markanalyse' },
+  { href: '/pesticidanalyse', label: 'Pesticidanalyse' },
 ];
 
 function DesktopNav() {
   return (
-    <nav className="relative hidden lg:flex items-center gap-4">
-      {links.map(({ href, label }) => (
-        <div key={href} className="relative flex">
-          <Link
-            href={href}
-            className="flex items-center px-4 py-3 font-medium text-gray-950 bg-blend-multiply data-hover:bg-black/[2.5%] text-sm hover:underline"
-          >
-            {label}
-          </Link>
-        </div>
-      ))}
-      <Link href="/?section=help" className="text-sm">
+    <nav className="relative hidden items-center gap-4 lg:flex">
+      <Menu as="div" className="relative">
+        <MenuButton className="flex items-center px-4 py-3 text-sm font-medium text-gray-950 bg-blend-multiply hover:underline data-hover:bg-black/[2.5%]">
+          Analyser
+          <ChevronDownIcon className="ml-1 h-4 w-4" aria-hidden="true" />
+        </MenuButton>
+        <MenuItems className="ring-opacity-5 absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black focus:outline-none">
+          {analyserLinks.map(({ href, label }) => (
+            <MenuItem key={href}>
+              <Link
+                href={href}
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+              >
+                {label}
+              </Link>
+            </MenuItem>
+          ))}
+        </MenuItems>
+      </Menu>
+      <Link
+        href="https://github.com/klimabevaegelsen/landbruget.dk/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm"
+      >
         <Button>Hjælp til</Button>
       </Link>
     </nav>
@@ -68,22 +87,29 @@ function MobileNavSearch({ onClick }: { onClick: () => void }) {
 function MobileNav() {
   return (
     <DisclosurePanel className="lg:hidden">
-      <Link href="/?section=help" className="text-sm">
+      <Link
+        href="https://github.com/klimabevaegelsen/landbruget.dk/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sm"
+      >
         <Button>Hjælp til</Button>
       </Link>
-      <div className="flex flex-col gap-6 py-4 ml-2">
-        {links.map(({ href, label }, linkIndex) => (
+      <div className="ml-2 flex flex-col gap-6 py-4">
+        <div className="text-base font-semibold text-gray-950">Analyser</div>
+        {analyserLinks.map(({ href, label }, linkIndex) => (
           <motion.div
             initial={{ opacity: 0, rotateX: -90 }}
             animate={{ opacity: 1, rotateX: 0 }}
             transition={{
               duration: 0.15,
-              ease: "easeInOut",
+              ease: 'easeInOut',
               rotateX: { duration: 0.3, delay: linkIndex * 0.1 },
             }}
             key={href}
+            className="ml-4"
           >
-            <Link href={href} className="text-base font-medium text-gray-950">
+            <Link href={href} className="text-base font-medium text-gray-700">
               {label}
             </Link>
           </motion.div>
@@ -102,8 +128,8 @@ export function Navbar({ banner }: { banner?: React.ReactNode }) {
     <div className="relative">
       {banner && <div className="relative flex items-center">{banner}</div>}
       <Container className="relative">
-        <Disclosure as="header" className={cn(!banner && "pt-12 sm:pt-10")}>
-          <div className="relative flex justify-between gap-8 lg:px-10 py-2">
+        <Disclosure as="header" className={cn(!banner && 'pt-12 sm:pt-10')}>
+          <div className="relative flex justify-between gap-8 py-2 lg:px-10">
             <MobileNavButton />
             <div className="relative flex gap-6">
               <div className="my-auto w-[180px]">
@@ -121,8 +147,8 @@ export function Navbar({ banner }: { banner?: React.ReactNode }) {
         </Disclosure>
         <div
           className={cn(
-            "absolute py-2 px-6 top-0 left-0 right-0 bottom-0 z-50",
-            !searchOpen && "hidden"
+            'absolute top-0 right-0 bottom-0 left-0 z-50 px-6 py-2',
+            !searchOpen && 'hidden'
           )}
         >
           <GlobalSearch

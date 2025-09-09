@@ -132,7 +132,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             injury_type_data AS (
                 SELECT
                     CAST(
-                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart 
+                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart
                         AS BIGINT
                     ) as cvr_number,
                     column_1 as injury_type,
@@ -143,8 +143,8 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
                     column_6 as year_2023,
                     column_7 as year_2024
                 FROM worker_safety_injury_types_raw
-                WHERE 
-                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart 
+                WHERE
+                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer_og_skadeart
                     ~ '^[0-9]+$'
                 AND column_1 IS NOT NULL
                 AND column_1 != ''
@@ -154,7 +154,7 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             main_data AS (
                 SELECT
                     CAST(
-                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer 
+                        anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer
                         AS BIGINT
                     ) as cvr_number,
                     column_1 as year_2019,
@@ -164,11 +164,11 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
                     column_5 as year_2023,
                     column_6 as year_2024
                 FROM worker_safety_raw
-                WHERE 
-                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer 
+                WHERE
+                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer
                     ~ '^[0-9]+$'
-                AND 
-                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer 
+                AND
+                    anmeldte_ulykker_i_easy_med_mere_end_en_dags_fravaer_i_branchegruppen_landbrug_jagt_skovbrug_og_fiskeri_2020_2024_fordelt_paa_cvr_nummer
                     != 'CVR-nr.'
             ),
             -- Get CVRs that have detailed injury type data
@@ -177,22 +177,22 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
             ),
             -- Unpivot detailed injury type data
             detailed_unpivoted AS (
-                SELECT cvr_number, injury_type, 2019 as year, 
+                SELECT cvr_number, injury_type, 2019 as year,
                        year_2019 as injury_count_raw FROM injury_type_data
-                UNION ALL 
-                SELECT cvr_number, injury_type, 2020 as year, 
+                UNION ALL
+                SELECT cvr_number, injury_type, 2020 as year,
                        year_2020 as injury_count_raw FROM injury_type_data
-                UNION ALL 
-                SELECT cvr_number, injury_type, 2021 as year, 
+                UNION ALL
+                SELECT cvr_number, injury_type, 2021 as year,
                        year_2021 as injury_count_raw FROM injury_type_data
-                UNION ALL 
-                SELECT cvr_number, injury_type, 2022 as year, 
+                UNION ALL
+                SELECT cvr_number, injury_type, 2022 as year,
                        year_2022 as injury_count_raw FROM injury_type_data
-                UNION ALL 
-                SELECT cvr_number, injury_type, 2023 as year, 
+                UNION ALL
+                SELECT cvr_number, injury_type, 2023 as year,
                        year_2023 as injury_count_raw FROM injury_type_data
-                UNION ALL 
-                SELECT cvr_number, injury_type, 2024 as year, 
+                UNION ALL
+                SELECT cvr_number, injury_type, 2024 as year,
                        year_2024 as injury_count_raw FROM injury_type_data
             ),
             -- Unpivot main data for companies WITHOUT detailed injury type data
@@ -205,40 +205,40 @@ class WorkerSafetyGold(BaseSource[WorkerSafetyGoldConfig], GoldJobInterface):
                 FROM main_data m
                 LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number
                 WHERE d.cvr_number IS NULL  -- Only companies without detailed data
-                
-                UNION ALL 
-                SELECT m.cvr_number, 'TOTAL' as injury_type, 2020 as year, 
+
+                UNION ALL
+                SELECT m.cvr_number, 'TOTAL' as injury_type, 2020 as year,
                        m.year_2020 as injury_count_raw
-                FROM main_data m 
-                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number 
+                FROM main_data m
+                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number
                 WHERE d.cvr_number IS NULL
-                
-                UNION ALL 
-                SELECT m.cvr_number, 'TOTAL' as injury_type, 2021 as year, 
+
+                UNION ALL
+                SELECT m.cvr_number, 'TOTAL' as injury_type, 2021 as year,
                        m.year_2021 as injury_count_raw
-                FROM main_data m 
-                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number 
+                FROM main_data m
+                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number
                 WHERE d.cvr_number IS NULL
-                
-                UNION ALL 
-                SELECT m.cvr_number, 'TOTAL' as injury_type, 2022 as year, 
+
+                UNION ALL
+                SELECT m.cvr_number, 'TOTAL' as injury_type, 2022 as year,
                        m.year_2022 as injury_count_raw
-                FROM main_data m 
-                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number 
+                FROM main_data m
+                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number
                 WHERE d.cvr_number IS NULL
-                
-                UNION ALL 
-                SELECT m.cvr_number, 'TOTAL' as injury_type, 2023 as year, 
+
+                UNION ALL
+                SELECT m.cvr_number, 'TOTAL' as injury_type, 2023 as year,
                        m.year_2023 as injury_count_raw
-                FROM main_data m 
-                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number 
+                FROM main_data m
+                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number
                 WHERE d.cvr_number IS NULL
-                
-                UNION ALL 
-                SELECT m.cvr_number, 'TOTAL' as injury_type, 2024 as year, 
+
+                UNION ALL
+                SELECT m.cvr_number, 'TOTAL' as injury_type, 2024 as year,
                        m.year_2024 as injury_count_raw
-                FROM main_data m 
-                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number 
+                FROM main_data m
+                LEFT JOIN detailed_cvrs d ON m.cvr_number = d.cvr_number
                 WHERE d.cvr_number IS NULL
             ),
             -- Combine both datasets

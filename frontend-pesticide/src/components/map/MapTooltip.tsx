@@ -15,7 +15,7 @@ interface TooltipData {
   actual_coverage_ratio?: number;
   unique_field_count?: number;
   field_count?: number;
-  
+
   // Pesticide data - both old and new field names
   pfas_grams?: number;
   pesticide_load?: number;
@@ -29,7 +29,7 @@ interface TooltipData {
   pesticide_intensity?: number;
   diquat_intensity?: number;
   glyphosate_intensity?: number;
-  
+
   // Original field names for backward compatibility
   total_pfas_containing_active_ingredient_grams?: number;
   total_diquat_containing_active_ingredient_grams?: number;
@@ -87,11 +87,11 @@ interface TooltipData {
 const formatNumber = (value: number | undefined, decimals: number = 2): string => {
   if (value === undefined || value === null) return 'N/A';
   if (value === 0) return '0';
-  
+
   if (value < 0.01 && value > 0) {
     return value.toExponential(2);
   }
-  
+
   return value.toLocaleString('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: decimals,
@@ -112,7 +112,7 @@ function getTooltipType(data: TooltipData): 'h3' | 'kommune' | 'bnbo' {
 }
 
 const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
-  
+
   const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
   const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
   const diquatGrams = data.diquat_grams || data.total_diquat_containing_active_ingredient_grams || 0;
@@ -228,7 +228,7 @@ const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
 };
 
 const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
-  
+
   const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
   const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
   const diquatGrams = data.diquat_grams || data.total_diquat_containing_active_ingredient_grams || 0;
@@ -373,8 +373,8 @@ const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
       <div className="border border-gray-300 bg-gray-50 rounded p-3">
         {statusConfig && (
           <div className="flex items-center space-x-3 mb-3">
-            <div 
-              className="w-4 h-4 rounded border border-gray-400" 
+            <div
+              className="w-4 h-4 rounded border border-gray-400"
               style={{ backgroundColor: statusConfig.color }}
             />
             <div>
@@ -419,13 +419,13 @@ export const MapTooltip: React.FC = () => {
   const tooltipWidth = 320;
   const tooltipHeight = 400;
   const padding = 10;
-  
+
   // Determine available space in each direction
   const spaceRight = window.innerWidth - tooltipPosition.x;
   const spaceLeft = tooltipPosition.x;
   const spaceBelow = window.innerHeight - tooltipPosition.y;
   const spaceAbove = tooltipPosition.y;
-  
+
   const adjustedPosition = {
     left: tooltipPosition.x + tooltipDistance,
     top: tooltipPosition.y + tooltipDistance
@@ -468,7 +468,7 @@ export const MapTooltip: React.FC = () => {
     adjustedPosition.left,
     window.innerWidth - tooltipWidth - padding
   ));
-  
+
   adjustedPosition.top = Math.max(padding, Math.min(
     adjustedPosition.top,
     window.innerHeight - tooltipHeight - padding
@@ -505,4 +505,4 @@ export const MapTooltip: React.FC = () => {
   );
 };
 
-export default MapTooltip; 
+export default MapTooltip;

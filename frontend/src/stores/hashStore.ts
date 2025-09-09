@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
 interface HashState {
   currentHash: string;
@@ -6,6 +6,6 @@ interface HashState {
 }
 
 export const useHashStore = create<HashState>((set) => ({
-  currentHash: "",
+  currentHash: '',
   setCurrentHash: (hash: string) => set({ currentHash: hash }),
 }));

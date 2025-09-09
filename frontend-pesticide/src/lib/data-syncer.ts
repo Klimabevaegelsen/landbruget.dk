@@ -1,7 +1,7 @@
 import { supabase, handleSupabaseError } from './supabase';
-import type { 
-  H3RawData, 
-  H3DataQuality 
+import type {
+  H3RawData,
+  H3DataQuality
 } from '@/types/h3-data';
 import type { BNBORawData } from '@/types/bnbo-data';
 import type { BBRRawData } from '@/types/bbr-data';
@@ -63,7 +63,7 @@ export class H3DataSyncer {
   async syncH3Data(year: number): Promise<SyncResult> {
     const syncKey = `h3_${year}`;
     const startTime = Date.now();
-    
+
     this.updateSyncStatus(syncKey, {
       table: 'h3_pfas_exposure',
       year,
@@ -77,9 +77,9 @@ export class H3DataSyncer {
       // 1. Fetch data from GCS (simulated - in production would use actual GCS client)
       const gcsPath = `gs://${this.config.gcs_bucket}/${GCS_CONFIG.H3_DATA_PATH}/${year}/data.parquet`;
       console.log(`Fetching H3 data from: ${gcsPath}`);
-      
+
       const h3RawData = await this.fetchH3DataFromGCS(gcsPath);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
         records_total: h3RawData.length
@@ -115,7 +115,7 @@ export class H3DataSyncer {
 
     } catch (error) {
       console.error(`H3 data sync failed for year ${year}:`, error);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
         status: 'failed',
@@ -138,7 +138,7 @@ export class H3DataSyncer {
   async syncBNBOData(): Promise<SyncResult> {
     const syncKey = 'bnbo_areas';
     const startTime = Date.now();
-    
+
     this.updateSyncStatus(syncKey, {
       table: 'bnbo_status_areas',
       status: 'running',
@@ -150,9 +150,9 @@ export class H3DataSyncer {
     try {
       const gcsPath = `gs://${this.config.gcs_bucket}/${GCS_CONFIG.BNBO_DATA_PATH}/data.parquet`;
       console.log(`Fetching BNBO data from: ${gcsPath}`);
-      
+
       const bnboRawData = await this.fetchBNBODataFromGCS(gcsPath);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
         records_total: bnboRawData.length
@@ -182,7 +182,7 @@ export class H3DataSyncer {
 
     } catch (error) {
       console.error('BNBO data sync failed:', error);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
         status: 'failed',
@@ -205,7 +205,7 @@ export class H3DataSyncer {
   async syncBBRData(): Promise<SyncResult> {
     const syncKey = 'bbr_buildings';
     const startTime = Date.now();
-    
+
     this.updateSyncStatus(syncKey, {
       table: 'bbr_buildings',
       status: 'running',
@@ -217,9 +217,9 @@ export class H3DataSyncer {
     try {
       const gcsPath = `gs://${this.config.gcs_bucket}/${GCS_CONFIG.BBR_DATA_PATH}/data.parquet`;
       console.log(`Fetching BBR data from: ${gcsPath}`);
-      
+
       const bbrRawData = await this.fetchBBRDataFromGCS(gcsPath);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
         records_total: bbrRawData.length
@@ -249,7 +249,7 @@ export class H3DataSyncer {
 
     } catch (error) {
       console.error('BBR data sync failed:', error);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
         status: 'failed',
@@ -271,15 +271,15 @@ export class H3DataSyncer {
    */
   async syncAllData(): Promise<{ h3: SyncResult[]; bnbo: SyncResult; bbr: SyncResult }> {
     console.log('Starting full data synchronization...');
-    
+
     // Sync H3 data for all years
     const h3Results: SyncResult[] = [];
     const years = [2020, 2021, 2022, 2023, 2024, 2025];
-    
+
     for (const year of years) {
       const result = await this.syncH3Data(year);
       h3Results.push(result);
-      
+
       // Add delay between years to avoid overwhelming the database
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
@@ -289,7 +289,7 @@ export class H3DataSyncer {
     const bbrResult = await this.syncBBRData();
 
     console.log('Full data synchronization completed');
-    
+
     return {
       h3: h3Results,
       bnbo: bnboResult,
@@ -342,9 +342,9 @@ export class H3DataSyncer {
           minLat: 54.5,
           maxLat: 57.8
         },
-        dataCompleteness: (data.filter(row => 
-          row.total_pesticide_load !== null && 
-          row.total_pfas_grams !== null && 
+        dataCompleteness: (data.filter(row =>
+          row.total_pesticide_load !== null &&
+          row.total_pfas_grams !== null &&
           row.geometry
         ).length / data.length) * 100,
         lastUpdated: new Date().toISOString()
@@ -366,7 +366,7 @@ export class H3DataSyncer {
   private async fetchH3DataFromGCS(gcsPath: string): Promise<H3RawData[]> {
     // DEBUG: Simulated data - remove when implementing actual GCS integration
     console.log(`DEBUG: Simulating fetch from ${gcsPath}`);
-    
+
     // Return mock data for development
     return [
       {
@@ -391,7 +391,7 @@ export class H3DataSyncer {
    */
   private async fetchBNBODataFromGCS(gcsPath: string): Promise<BNBORawData[]> {
     console.log(`DEBUG: Simulating BNBO fetch from ${gcsPath}`);
-    
+
     return [
       {
         bnbo_id: 'BNBO_001',
@@ -409,7 +409,7 @@ export class H3DataSyncer {
    */
   private async fetchBBRDataFromGCS(gcsPath: string): Promise<BBRRawData[]> {
     console.log(`DEBUG: Simulating BBR fetch from ${gcsPath}`);
-    
+
     return [
       {
         bbr_id: 'BBR_001',
@@ -483,16 +483,16 @@ export class H3DataSyncer {
   ): Promise<SyncResult> {
     const errors: string[] = [];
     let recordsSynced = 0;
-    
+
     for (let i = 0; i < data.length; i += this.config.batch_size) {
       const batch = data.slice(i, i + this.config.batch_size);
-      
+
       try {
         const { error } = await supabase
           .from(tableName)
-          .upsert(batch, { 
+          .upsert(batch, {
             onConflict: conflictColumns.join(','),
-            ignoreDuplicates: false 
+            ignoreDuplicates: false
           });
 
         if (error) {
@@ -529,4 +529,4 @@ export class H3DataSyncer {
   private updateSyncStatus(key: string, status: SyncStatus): void {
     this.syncStatus.set(key, status);
   }
-} 
+}

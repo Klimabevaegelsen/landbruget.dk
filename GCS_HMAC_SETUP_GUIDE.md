@@ -1,4 +1,4 @@
-# DuckDB Native GCS Integration with HMAC Authentication
+!# DuckDB Native GCS Integration with HMAC Authentication
 
 This guide shows how to set up and use DuckDB's native Google Cloud Storage (GCS) integration with HMAC authentication for optimal performance.
 

@@ -429,11 +429,16 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
         self.log.info("Fetched raw data successfully")
 
         # Save raw JSON data to bronze layer with explicit JSON filename
-        self._save_data(
-            features_data, self.config.dataset, self.config.bucket, "bronze", 
-            filename="data.json"
+        # Using the new metadata-enhanced save method for complete data tracing
+        self._save_data_with_metadata(
+            data=features_data,
+            dataset=self.config.dataset,
+            source_key="cadastral",  # From DATA_SOURCE_REGISTRY
+            bucket=self.config.bucket,
+            stage="bronze",
+            filename="data.json",
         )
-        self.log.info("Saved raw data successfully")
+        self.log.info("Saved raw data successfully with pipeline metadata")
 
         # Return data for in-memory passing
         return features_data

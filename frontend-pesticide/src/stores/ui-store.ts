@@ -5,27 +5,27 @@ interface UIState {
   // UI state persistence
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
-  
+
   // User preferences
   theme: 'light' | 'dark' | 'system';
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
-  
+
   // Mobile/desktop state
   isMobile: boolean;
   setIsMobile: (isMobile: boolean) => void;
-  
+
   // Panel states
   showDataPanel: boolean;
   setShowDataPanel: (show: boolean) => void;
-  
+
   // Mobile bottom panel state
   showMobilePanel: boolean;
   setShowMobilePanel: (show: boolean) => void;
-  
+
   // Animation preferences
   reduceMotion: boolean;
   setReduceMotion: (reduce: boolean) => void;
-  
+
   // Performance mode
   performanceMode: boolean;
   setPerformanceMode: (enabled: boolean) => void;
@@ -42,7 +42,7 @@ export const useUIStore = create<UIState>()(
       showMobilePanel: false,
       reduceMotion: false,
       performanceMode: false,
-      
+
       // Actions
       setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
       setTheme: (theme: 'light' | 'dark' | 'system') => set({ theme }),
@@ -62,4 +62,4 @@ export const useUIStore = create<UIState>()(
       }),
     }
   )
-); 
+);

@@ -9,13 +9,13 @@ interface ThemeToggleProps {
 
 export function ThemeToggle({ className = '' }: ThemeToggleProps) {
   const { theme, setTheme } = useUIStore()
-  
+
   const themes = [
     { id: 'light', icon: Sun, label: 'Light' },
     { id: 'dark', icon: Moon, label: 'Dark' },
     { id: 'system', icon: Monitor, label: 'System' }
   ] as const
-  
+
   return (
     <div className={`${className}`}>
       <div className="flex items-center space-x-1 bg-black/80 backdrop-blur-sm rounded-lg border border-white/20 p-1">
@@ -37,4 +37,4 @@ export function ThemeToggle({ className = '' }: ThemeToggleProps) {
       </div>
     </div>
   )
-} 
+}

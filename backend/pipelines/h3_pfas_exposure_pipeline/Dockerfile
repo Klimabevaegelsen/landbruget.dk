@@ -50,4 +50,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.path.insert(0, '/app/src'); from h3_pfas_exposure.config import H3PFASConfig; print('OK')" || exit 1
 
 # Command to run the application
-CMD ["python", "main.py"] 
+CMD ["python", "main.py"]

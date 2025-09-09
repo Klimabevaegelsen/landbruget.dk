@@ -7,9 +7,17 @@ Simple HTML/JavaScript password protection to temporarily hide the website.
 ### Local Development
 
 1. **Copy environment file**: `cp env.example .env.local`
-2. **Set your password** in `.env.local`:
+2. **Set your accepted words** in `.env.local`:
    ```
-   NEXT_PUBLIC_SITE_PASSWORD=your_secure_password_here
+   NEXT_PUBLIC_SITE_PASSWORD=word1,word2
+   ```
+   For example (password must contain either "landbrugs" OR "data"):
+   ```
+   NEXT_PUBLIC_SITE_PASSWORD=landbrugs,data
+   ```
+   Or for email-based access (any email OR "landbrugs"):
+   ```
+   NEXT_PUBLIC_SITE_PASSWORD=@,landbrugs
    ```
 3. **Start dev server**: `npm run dev`
 
@@ -18,7 +26,7 @@ Simple HTML/JavaScript password protection to temporarily hide the website.
 1. **Go to your Vercel project settings**
 2. **Add Environment Variable**:
    - Key: `NEXT_PUBLIC_SITE_PASSWORD`
-   - Value: `your_secure_password_here`
+   - Value: `word1,word2` (e.g., `landbrugs,data`)
 3. **Redeploy** your site
 
 ## How it Works
@@ -26,6 +34,7 @@ Simple HTML/JavaScript password protection to temporarily hide the website.
 - Password overlay covers the entire site on load
 - Password comes from `NEXT_PUBLIC_SITE_PASSWORD` environment variable
 - Uses localStorage to remember authentication
+- **Flexible matching**: Any input containing one of the configured words will be accepted (e.g., set to "landbrugs,data" to accept passwords containing either word)
 
 ## To Remove Password Protection
 

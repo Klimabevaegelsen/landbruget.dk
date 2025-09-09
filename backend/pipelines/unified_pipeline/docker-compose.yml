@@ -8,20 +8,20 @@ services:
       # GCS Configuration
       - GCS_BUCKET=${GCS_BUCKET:-landbrugsdata-raw-data}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
-      
+
       # Pipeline Configuration
       - SAVE_LOCAL=${SAVE_LOCAL:-false}
       - DEV_MODE=${DEV_MODE:-false}
       - GENERATE_SCHEMAS=${GENERATE_SCHEMAS:-false}
-      
+
       # Pesticide Disaggregation Configuration
       - PESTICIDE_YEAR=${PESTICIDE_YEAR:-2021}
       - AREA_TOLERANCE_PCT=2.0  # PRESERVE ORIGINAL VALUE
-      
+
       # Optional Datafordeler credentials
       - DATAFORDELER_USERNAME=${DATAFORDELER_USERNAME}
       - DATAFORDELER_PASSWORD=${DATAFORDELER_PASSWORD}
-      
+
     volumes:
       # Mount GCS credentials if available
       - ${GOOGLE_APPLICATION_CREDENTIALS_PATH:-./credentials}:/app/credentials:ro
@@ -29,13 +29,13 @@ services:
       - ${LOCAL_DATA_DIR:-./data}:/app/data
       # Mount logs directory
       - ${LOG_DIR:-./logs}:/app/logs
-      
+
     # Default command - run pesticide disaggregation
     command: >
-      uv run python -m unified_pipeline 
-      --source pesticide_disaggregation 
+      uv run python -m unified_pipeline
+      --source pesticide_disaggregation
       --stage gold
-      
+
     # Health check
     healthcheck:
       test: ["CMD", "python", "-c", "import unified_pipeline; print('OK')"]
@@ -43,7 +43,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-      
+
     # Resource limits
     deploy:
       resources:
@@ -53,10 +53,10 @@ services:
         reservations:
           memory: 4G
           cpus: '2'
-          
+
     # Restart policy
     restart: unless-stopped
-    
+
     # Logging configuration
     logging:
       driver: "json-file"
@@ -77,8 +77,8 @@ services:
       - ${LOCAL_DATA_DIR:-./data}:/app/data
       - ${LOG_DIR:-./logs}:/app/logs
     command: >
-      uv run python -m unified_pipeline 
-      --source agricultural_fields 
+      uv run python -m unified_pipeline
+      --source agricultural_fields
       --stage all
     profiles:
       - agricultural-fields
@@ -102,8 +102,8 @@ services:
       - ${LOCAL_DATA_DIR:-./data}:/app/data
       - ${LOG_DIR:-./logs}:/app/logs
     command: >
-      uv run python -m unified_pipeline 
-      --source bnbo 
+      uv run python -m unified_pipeline
+      --source bnbo
       --stage all
     profiles:
       - bnbo
@@ -116,4 +116,4 @@ services:
 
 networks:
   default:
-    name: unified-pipeline-network 
+    name: unified-pipeline-network

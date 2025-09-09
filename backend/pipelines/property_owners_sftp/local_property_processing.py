@@ -5,7 +5,6 @@ import logging
 import os
 import sys
 import traceback
-import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +16,17 @@ from google.cloud import secretmanager, storage
 from pyproj import Transformer
 from shapely.geometry import shape
 
-# Import schema documentation
+# Import UUID utilities
+try:
+    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+except ImportError:
+    # Fallback for different import paths
+    import sys
+
+    sys.path.append("/Users/martincollignon/landbrugsdata/landbruget.dk/backend/pipelines/unified_pipeline/src")
+    from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+
+# Import schema documentation and pipeline metadata system
 try:
     import duckdb
 
@@ -28,10 +37,24 @@ try:
 
         warnings.warn(f"Schema documentation not available: {e}")
         SchemaDocumentationManager = None
+
+    # Import pipeline metadata system for data tracing
+    try:
+        from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+        PIPELINE_METADATA_AVAILABLE = True
+    except ImportError as e:
+        import warnings
+
+        warnings.warn(f"Pipeline metadata system not available: {e}")
+        PipelineMetadataManager = None
+        PIPELINE_METADATA_AVAILABLE = False
 except ImportError:
     # Fallback for when running standalone
     duckdb = None
     SchemaDocumentationManager = None
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -195,11 +218,12 @@ class PropertyDataProcessor:
             return geometry  # Return original if transformation fails
 
     def generate_uuid_for_cpr(self, cpr_id):
-        """Generate consistent UUID for CPR numbers."""
+        """Generate consistent deterministic UUID for CPR numbers."""
         if not cpr_id:
             return None
         if cpr_id not in self.cpr_to_uuid_mapping:
-            self.cpr_to_uuid_mapping[cpr_id] = str(uuid.uuid4())
+            # Generate deterministic UUID based on CPR number
+            self.cpr_to_uuid_mapping[cpr_id] = LandbrugsdataUUID.generate_deterministic_uuid("cpr", str(cpr_id))
         return self.cpr_to_uuid_mapping[cpr_id]
 
     def has_foreign_address(self, person_data):
@@ -546,8 +570,19 @@ class LocalSFTPToGCSTransfer:
 
 def main_local_test():
     """Main function for local testing."""
+    # Record start time for execution tracking
+    start_time = datetime.now()
+
     logger.info("=== Starting Local Property Owners Processing Test ===")
     flush_logs()
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
 
     try:
         transfer_instance = LocalSFTPToGCSTransfer()
@@ -588,6 +623,31 @@ def main_local_test():
                 logger.info(f"Person data sample: {str(sample_result[0])[:100]}...")
 
         conn.close()
+
+        # Create and save metadata for property owners SFTP data
+        if pipeline_metadata_manager:
+            try:
+                import time
+
+                processing_duration = time.time() - start_time.timestamp()
+
+                # Create metadata for property owners SFTP data
+                property_owners_metadata = pipeline_metadata_manager.create_metadata(
+                    source_key="property_owners_sftp",
+                    record_count=row_count,
+                    processing_duration=processing_duration,
+                    file_size_bytes=None,  # Will be calculated automatically
+                    source_datasets=None,
+                )
+
+                # Save metadata to output directory
+                metadata_path = pipeline_metadata_manager.save_metadata(
+                    property_owners_metadata, Path(local_output_dir) / "property_owners_sftp_metadata.json"
+                )
+                logger.info(f"✅ Property owners SFTP metadata saved to {metadata_path}")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to create Property Owners SFTP pipeline metadata: {e}")
 
         flush_logs()
         return True

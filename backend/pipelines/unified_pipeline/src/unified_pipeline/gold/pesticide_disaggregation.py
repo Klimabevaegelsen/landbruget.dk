@@ -1838,9 +1838,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                   AND area_ha > 0.0
             """).fetchall()
 
-            mixed_combinations = {
-                (str(row[0]), int(row[1])) for row in result if row[0] and row[1]
-            }
+            mixed_combinations = {(str(row[0]), int(row[1])) for row in result if row[0] and row[1]}
             self.log.info(
                 f"🌱 Found {len(mixed_combinations)} CVR+crop combinations with "
                 "organic fields (mixed farming)"
@@ -2323,9 +2321,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Count how many records we successfully processed
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications " +
-                "WHERE AllocationMethod = " +
-                "'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications "
+                + "WHERE AllocationMethod = "
+                + "'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'"
             ).fetchone()
             processed_count = count_result[0] if count_result else 0
 
@@ -2668,9 +2666,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 f"with pending records and 2+ fields"
             )
             self.log.info(
-                "🔍 Top combinations: " +
-                str([(cvr, crop, pending, fields) 
-                     for cvr, crop, pending, fields in pending_cvr_crops[:5]])
+                "🔍 Top combinations: "
+                + str(
+                    [
+                        (cvr, crop, pending, fields)
+                        for cvr, crop, pending, fields in pending_cvr_crops[:5]
+                    ]
+                )
             )
 
             # Convert to list of tuples for processing
@@ -2684,8 +2686,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             max_chunks = 500  # Increased limit since processing is now much more efficient
 
             self.log.info(
-                f"✅ Processing {len(cvr_crop_combinations)} CVR+crop combinations in chunks of " +
-                f"{chunk_size} (max {max_chunks} chunks)"
+                f"✅ Processing {len(cvr_crop_combinations)} CVR+crop combinations in chunks of "
+                + f"{chunk_size} (max {max_chunks} chunks)"
             )
 
             # Process in very small chunks with aggressive memory management
@@ -2732,8 +2734,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             self.log.info(
                 f"Adjacent Fields Spatial Cluster: Processed {total_processed} "
-                f"pesticide applications " +
-                f"across {chunks_processed} chunks."
+                f"pesticide applications " + f"across {chunks_processed} chunks."
             )
             return total_processed
 
@@ -2787,8 +2788,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Log current chunk for debugging
             self.log.info(
                 f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} "
-                f"CVR+crop combinations " +
-                f"(total: {total_combinations}) [1 thread, no insertion order]"
+                f"CVR+crop combinations "
+                + f"(total: {total_combinations}) [1 thread, no insertion order]"
             )
 
             # Apply DuckDB memory optimization settings
@@ -2807,8 +2808,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             if pending_for_chunk == 0:
                 self.log.info(
-                    f"⚠️ Chunk {chunk_num}: No pending records found - skipping " +
-                    "(this shouldn't happen with optimized filtering)"
+                    f"⚠️ Chunk {chunk_num}: No pending records found - skipping "
+                    + "(this shouldn't happen with optimized filtering)"
                 )
                 return 0
             else:
@@ -2820,7 +2821,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             insert_query = f"""
                 WITH PendingCVRCrops AS (
                     -- Process only this specific chunk of CVR+crop combinations
-                    SELECT CVR_Str, Crop_Str 
+                    SELECT CVR_Str, Crop_Str
                     FROM (VALUES {cvr_crop_in_clause}) AS t(CVR_Str, Crop_Str)
                 ),
                 FilteredFields AS (
@@ -2869,9 +2870,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         Crop_Str,
                         field1_id as cluster_root  -- Initially, each field is its own cluster
                     FROM SpatialAdjacency
-                    
+
                     UNION
-                    
+
                     SELECT DISTINCT
                         field2_id as field_id,
                         CVR_Str,
@@ -2897,9 +2898,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                             sa.Crop_Str,
                             sa.field2_id as connected_field
                         FROM SpatialAdjacency sa
-                        
+
                         UNION ALL
-                        
+
                         SELECT
                             sa.field2_id as field_id,
                             sa.field2_uuid as field_uuid,
@@ -2907,9 +2908,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                             sa.Crop_Str,
                             sa.field1_id as connected_field
                         FROM SpatialAdjacency sa
-                        
+
                         UNION ALL
-                        
+
                         -- Include isolated fields (not in any adjacency) from our filtered set
                         SELECT
                             f.field_id,
@@ -2958,7 +2959,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         ca.cluster_field_areas,
                         ca.cluster_field_count,
                         -- Calculate area match quality
-                        ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 
+                        ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100
                             as area_diff_pct
                     FROM pending_pesticide_rows p
                     JOIN ClusterAreas ca ON
@@ -3004,7 +3005,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     fa.AcreageSize * (fa.field_area / fa.cluster_total_area) as AllocatedArea,
                     'Adjacent_Fields_Spatial_Cluster_AreaMatched' as AllocationMethod,
                     -- Confidence based on area match quality and cluster size
-                    GREATEST(0.5, 1.0 - (fa.area_diff_pct / {self.config.area_tolerance_pct})) 
+                    GREATEST(0.5, 1.0 - (fa.area_diff_pct / {self.config.area_tolerance_pct}))
                         as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
@@ -3020,8 +3021,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Get count of processed records for this chunk
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications " +
-                "WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications "
+                + "WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'"
             ).fetchone()
             total_processed_so_far = count_result[0] if count_result else 0
 

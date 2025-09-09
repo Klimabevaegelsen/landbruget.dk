@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils';
 
 export function Container({
   className,
@@ -12,11 +12,11 @@ export function Container({
   section?: boolean;
 }) {
   return (
-    <div className={cn(className, "px-6 lg:px-8")}>
+    <div className={cn(className, 'px-6 lg:px-8')}>
       <div
         className={cn(
-          "mx-auto max-w-4xl lg:max-w-7xl",
-          section && "py-14",
+          'mx-auto max-w-4xl lg:max-w-7xl',
+          section && 'py-14',
           subclassName
         )}
       >

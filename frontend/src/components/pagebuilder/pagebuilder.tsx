@@ -1,15 +1,15 @@
-import { PageBuilderItem } from "@/services/supabase/types";
-import { NavigationItem, Sidenav } from "../layout/sidenav";
-import { BlockPlaceholder } from "./pageBlocks/block-placeholder";
-import { BlockInfoCard } from "./pageBlocks/block-info-card";
-import { BlockContainer } from "./pageBlocks/block-container";
-import { BlockTable } from "./pageBlocks/block-table";
-import { BlockBarChart } from "./pageBlocks/block-bar-chart";
-import { BlockComboChart } from "./pageBlocks/block-combo-chart";
-import { BlockTimeline } from "./pageBlocks/block-timeline";
-import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
-import { BlockMapChart } from "./pageBlocks/block-map-chart";
-import { BlockIteratedSection } from "./pageBlocks/block-iterated-section";
+import { PageBuilderItem } from '@/services/supabase/types';
+import { NavigationItem, Sidenav } from '../layout/sidenav';
+import { BlockPlaceholder } from './pageBlocks/block-placeholder';
+import { BlockInfoCard } from './pageBlocks/block-info-card';
+import { BlockContainer } from './pageBlocks/block-container';
+import { BlockTable } from './pageBlocks/block-table';
+import { BlockBarChart } from './pageBlocks/block-bar-chart';
+import { BlockComboChart } from './pageBlocks/block-combo-chart';
+import { BlockTimeline } from './pageBlocks/block-timeline';
+import { BlockKpiGroup } from './pageBlocks/block-kpi-group';
+import { BlockMapChart } from './pageBlocks/block-map-chart';
+import { BlockIteratedSection } from './pageBlocks/block-iterated-section';
 
 export function PageBlock({
   block,
@@ -19,23 +19,23 @@ export function PageBlock({
   level?: number;
 }) {
   switch (block._type) {
-    case "kpiGroup":
+    case 'kpiGroup':
       return <BlockKpiGroup kpiGroup={block} />;
-    case "infoCard":
+    case 'infoCard':
       return <BlockInfoCard infoCard={block} />;
-    case "dataGrid":
+    case 'dataGrid':
       return <BlockTable grid={block} />;
-    case "stackedBarChart":
-    case "horizontalStackedBarChart":
-    case "barChart":
+    case 'stackedBarChart':
+    case 'horizontalStackedBarChart':
+    case 'barChart':
       return <BlockBarChart chart={block} />;
-    case "comboChart":
+    case 'comboChart':
       return <BlockComboChart chart={block} />;
-    case "timeline":
+    case 'timeline':
       return <BlockTimeline timeline={block} />;
-    case "mapChart":
+    case 'mapChart':
       return <BlockMapChart chart={block} />;
-    case "iteratedSection":
+    case 'iteratedSection':
       return <BlockIteratedSection iteratedSection={block} level={level} />;
     default:
       return <BlockPlaceholder block={block} />;
@@ -49,7 +49,7 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
     current: index === 0,
     id: item._key,
     subItems:
-      item._type === "iteratedSection" && item.sections
+      item._type === 'iteratedSection' && item.sections
         ? item.sections.map((section, index) => {
             return {
               name: section.title,
@@ -62,18 +62,17 @@ export function PageBuilder({ pageBlocks }: { pageBlocks: PageBuilderItem[] }) {
   }));
 
   return (
-    <div className="flex flex-col md:flex-row w-full gap-10 md:gap-30 relative">
-      <div className="w-full md:w-4/12 md:sticky md:top-4 md:max-h-screen md:overflow-y-auto border-b md:border-b-0 md:border-none">
+    <div className="relative flex w-full flex-col gap-10 md:flex-row md:gap-30">
+      <div className="w-full border-b md:sticky md:top-4 md:max-h-screen md:w-4/12 md:overflow-y-auto md:border-b-0 md:border-none">
         <Sidenav navigation={navigationItems} title="Indholdsfortegnelse" />
       </div>
-      <div className="w-full md:w-8/12 flex flex-col gap-11">
+      <div className="flex w-full flex-col gap-11 md:w-8/12">
         {pageBlocks.map((item) => (
           <div key={item._key} id={item._key}>
             <BlockContainer
               title={item.title}
               href={`#${item._key}`}
-              secondaryTitle={item._type}
-              stickyTitle={item._type === "iteratedSection"}
+              stickyTitle={item._type === 'iteratedSection'}
             >
               <PageBlock block={item} />
             </BlockContainer>

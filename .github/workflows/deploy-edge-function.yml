@@ -6,7 +6,7 @@ on:
       - main
     paths:
       # Trigger on changes within the backend/api directory, including the Supabase config
-      - 'backend/api/**'
+      - "backend/api/**"
   workflow_dispatch:
 
 jobs:
@@ -40,3 +40,9 @@ jobs:
           # The CLI will find functions in './supabase/functions/' directory
           supabase functions deploy api --project-ref $PROJECT_ID --no-verify-jwt
           supabase functions deploy search --project-ref $PROJECT_ID --no-verify-jwt
+          supabase functions deploy company-basic --project-ref $PROJECT_ID --no-verify-jwt
+          supabase functions deploy homepage-rankings --project-ref $PROJECT_ID --no-verify-jwt
+          supabase functions deploy homepage-statistics --project-ref $PROJECT_ID --no-verify-jwt
+          supabase functions deploy municipality-rankings --project-ref $PROJECT_ID --no-verify-jwt
+          supabase functions deploy pesticide-analysis --project-ref $PROJECT_ID --no-verify-jwt
+          supabase functions deploy pesticide-company-details --project-ref $PROJECT_ID --no-verify-jwt

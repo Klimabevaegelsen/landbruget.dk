@@ -1,5 +1,6 @@
 import { serve } from 'std/http/server';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { withSecurity, validateCompanyId, createErrorResponse, createSuccessResponse } from '../_shared/security.ts';
 // import yaml from 'js-yaml'; // No longer needed
 import appConfig from './config.json' assert { type: 'json' }; // Import JSON directly
 // --- Configuration ---
@@ -47,7 +48,7 @@ type CompanyInfo = {
 };
 // --- Helper: Get Company Details (Lookup by ID - UUID) ---
 async function getCompanyDetails(supabase: SupabaseClient, companyId: string): Promise<CompanyInfo | null> {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (!uuidRegex.test(companyId)) {
     console.warn(`Received invalid format for company ID: ${companyId}`);
     return null;
@@ -100,6 +101,8 @@ type MapLayerResult = {
 }
 // Cache for getLatestYearForCompany results within a single request invocation
 const latestYearCache = new Map<string, number | null>();
+// Cache for column existence checks (if needed for future optimization)
+const columnExistenceCache = new Map<string, boolean>();
 
 // --- Helper: Get Latest Year (Generalized) ---
 async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: string, companyId: string, yearColumn = 'year', filterContext: Record<string, any> | null = {}) {
@@ -115,30 +118,15 @@ async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: st
     head: false
   });
 
-  // --- DEBUGGING for site_species_production_ranked ---
-  if (sourceTable === 'site_species_production_ranked') {
-    console.log(`DEBUG_SSPR: getLatestYearForCompany for ${sourceTable}`);
-    console.log(`DEBUG_SSPR: filterContext:`, filterContext);
-    const hasChrCol = await tableHasColumn(supabase, sourceTable, 'chr');
-    console.log(`DEBUG_SSPR: await tableHasColumn(supabase, '${sourceTable}', 'chr') result: ${hasChrCol}`);
-    const hasCompanyIdCol = await tableHasColumn(supabase, sourceTable, 'company_id');
-    console.log(`DEBUG_SSPR: await tableHasColumn(supabase, '${sourceTable}', 'company_id') result: ${hasCompanyIdCol}`);
-    if (filterContext?.chr) {
-        console.log(`DEBUG_SSPR: filterContext.chr value: ${filterContext.chr}`);
-    }
-  }
-  // --- END DEBUGGING ---
 
-  // Apply context filter (CHR for site-specific latest year)
-  if (filterContext?.chr && await tableHasColumn(supabase, sourceTable, 'chr')) {
+
+  // Apply context filter (CHR for site-specific latest year) - simplified
+  if (filterContext?.chr) {
     query = query.eq('chr', filterContext.chr);
     console.log(`getLatestYearForCompany: Filtering by CHR ${filterContext.chr} for ${sourceTable}`);
-  } else if (await tableHasColumn(supabase, sourceTable, 'company_id')) {
-    // Fallback to company_id if CHR not applicable/available
-    query = query.eq('company_id', companyId);
   } else {
-    // If no company_id or CHR, we can't reliably get the latest year *for this entity*
-    console.warn(`getLatestYearForCompany: Cannot filter ${sourceTable} by companyId or context CHR. Finding global latest year (may be inaccurate).`);
+    // Fallback to company_id - simplified
+    query = query.eq('company_id', companyId);
   }
   const { data, error } = await query.order(yearColumn, {
     ascending: false
@@ -154,29 +142,7 @@ async function getLatestYearForCompany(supabase: SupabaseClient, sourceTable: st
   latestYearCache.set(cacheKey, latestYear); // Store in cache
   return latestYear;
 }
-// --- Helper: Check if table has a column (simple check, needs improvement/caching) ---
-const columnExistenceCache = new Map();
-async function tableHasColumn(supabase: SupabaseClient, tableName: string, columnName: string): Promise<boolean> {
-  const cacheKey = `${tableName}.${columnName}`;
-  if (columnExistenceCache.has(cacheKey)) {
-    return columnExistenceCache.get(cacheKey);
-  }
-  try {
-    // console.log(`Checking column existence: ${cacheKey}`);
-    const { error } = await supabase.from(tableName).select(columnName, {
-      count: 'exact',
-      head: true
-    }).limit(0);
-    const exists = !error || error && !error.message.includes("does not exist") && !error.message.includes("relation") && !error.message.includes("missing FROM-clause");
-    // console.log(`Column check result for ${cacheKey}: ${exists} (Error: ${error?.message})`);
-    columnExistenceCache.set(cacheKey, exists);
-    return exists;
-  } catch (e) {
-    console.warn(`Error checking column existence for ${cacheKey}:`, e);
-    columnExistenceCache.set(cacheKey, false);
-    return false;
-  }
-}
+
 // --- Data Processing Functions ---
 async function processInfoCard(supabase: SupabaseClient, companyId: string, municipality: string, params: any, context: Record<string, any> | null) {
   const { source, record } = params;
@@ -185,10 +151,10 @@ async function processInfoCard(supabase: SupabaseClient, companyId: string, muni
   console.log(`processInfoCard: Source=${source}, Context=${JSON.stringify(context)}, Filter=${JSON.stringify(recordFilter)}`);
   const selectColumns = mappings.map((m: any) => m.column).join(',');
   let query = supabase.from(source).select(selectColumns);
-  // Apply company_id or primary ID filter
+  // Apply company_id or primary ID filter - simplified
   if (source === 'companies') {
     query = query.eq('id', companyId);
-  } else if (await tableHasColumn(supabase, source, 'company_id')) {
+  } else {
     query = query.eq('company_id', companyId);
   }
   // Apply specific record filters (potentially using context)
@@ -258,13 +224,9 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
   const selectColumns = columns.map((c: any) => c.column).join(',');
   let query: any = supabase.from(source).select(selectColumns);
 
-  // Apply company_id filter if applicable (This should now work for field_yearly_data)
-  if (await tableHasColumn(supabase, source, 'company_id')) {
-    console.log(`processDataGrid: Applying company_id filter for ${source}`);
-    query = query.eq('company_id', companyId);
-  } else {
-    console.log(`processDataGrid: Skipping company_id filter for ${source}`);
-  }
+  // Apply company filter - now simplified to only use company_id
+  console.log(`processDataGrid: Applying company_id filter for ${source}`);
+  query = query.eq('company_id', companyId);
 
   // Apply initial filters (potentially using context)
   if (initialFilter) {
@@ -287,24 +249,14 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
          // Check latest year based on the source table
         const latestYear = await getLatestYearForCompany(supabase, source, companyId, 'year', context);
         if (latestYear) {
-           if (await tableHasColumn(supabase, source, 'year')) {
-               query = query.eq('year', latestYear);
-           } else {
-               console.warn(`processDataGrid: Cannot apply 'latest' year filter. 'year' column not found on source ${source}.`);
-               return { rows: [], columns: columns, allowFiltering };
-           }
+           query = query.eq('year', latestYear);
         } else {
           console.warn(`processDataGrid: Cannot apply 'latest' filter for ${source}, no year found for context ${JSON.stringify(context)}.`);
           return { rows: [], columns: columns, allowFiltering };
         }
       } else {
-        // Apply other filters
-        if (await tableHasColumn(supabase, source, key)){
-             query = query.eq(key, filterValue);
-        } else {
-             console.warn(`processDataGrid: Cannot apply filter ${key}=${filterValue}. Column not found on source ${source}.`);
-             // Skip filter if column doesn't exist
-        }
+        // Apply other filters - simplified without column existence check
+        query = query.eq(key, filterValue);
       }
     }
   }
@@ -354,9 +306,13 @@ async function processDataGrid(supabase: SupabaseClient, companyId: string, _mun
   };
 }
 async function processKpiGroup(supabase: SupabaseClient, companyId: string, municipality: string, params: any, context: Record<string, any> | null) {
+  console.log(`DEBUG: processKpiGroup ENTRY: params=${JSON.stringify(params)}, context=${JSON.stringify(context)}`);
   const { source, kpis } = params;
   const { timeContext, n = 1, metrics, filter: kpiFilter } = kpis || {};
-  if (!source || !metrics) throw new Error(`Invalid config for kpiGroup: missing source or metrics.`);
+  if (!source || !metrics) {
+    console.error(`DEBUG: processKpiGroup INVALID CONFIG: source=${source}, metrics=${metrics ? 'present' : 'missing'}`);
+    throw new Error(`Invalid config for kpiGroup: missing source or metrics.`);
+  }
   console.log(`processKpiGroup: Source=${source}, Context=${JSON.stringify(context)}, Filter=${JSON.stringify(kpiFilter)}`);
   let latestYear = null;
   if (timeContext === 'last_n_years') {
@@ -384,14 +340,35 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
     ...kpiFilter ? Object.keys(kpiFilter).map((k: any)=>k) : []
   ].filter((v, i, a)=>a.indexOf(v) === i).join(',');
   let query = supabase.from(source).select(selectColumns);
-  // Apply company_id filter
-  if (await tableHasColumn(supabase, source, 'company_id')) {
-    query = query.eq('company_id', companyId);
-  }
-  // Apply municipality filter ONLY if source table expects it
-  if (TABLES_WITH_MUNICIPALITY_SUMMARY.includes(source) && await tableHasColumn(supabase, source, 'municipality')) {
-    console.log(`processKpiGroup: Applying municipality filter for ${source}`);
-    query = query.eq('municipality', municipality);
+  // Apply company filter - simplified to only use company_id
+  query = query.eq('company_id', companyId);
+  // Apply municipality filter ONLY if source table expects it - simplified
+  if (TABLES_WITH_MUNICIPALITY_SUMMARY.includes(source)) {
+    let municipalityToUse = municipality;
+
+    // For site-level data with CHR context, use the site's municipality instead of company municipality
+    if (source === 'site_details_summary_ranked' && context?.chr) {
+      try {
+        const { data: siteData } = await supabase
+          .from('site_details_summary_ranked')
+          .select('municipality')
+          .eq('chr', context.chr)
+          .limit(1)
+          .maybeSingle();
+
+        if (siteData?.municipality) {
+          municipalityToUse = siteData.municipality;
+          console.log(`processKpiGroup: Using site municipality '${municipalityToUse}' instead of company municipality '${municipality}' for CHR ${context.chr}`);
+        } else {
+          console.log(`processKpiGroup: Could not determine site municipality for CHR ${context.chr}, using company municipality '${municipality}'`);
+        }
+      } catch (error) {
+        console.warn(`processKpiGroup: Error fetching site municipality for CHR ${context.chr}:`, error);
+      }
+    }
+
+    console.log(`processKpiGroup: Applying municipality filter for ${source}: ${municipalityToUse}`);
+    query = query.eq('municipality', municipalityToUse);
   } else {
     console.log(`processKpiGroup: Skipping municipality filter for ${source}`);
   }
@@ -442,7 +419,12 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
       }
     }
   }
+  console.log(`DEBUG: KPI query for ${source}: companyId=${companyId}, municipality=${municipality}, year=${filterYear}, chr=${kpiFilter?.chr || 'none'}`);
   const { data: resultData, error } = await query.maybeSingle();
+  console.log(`DEBUG: KPI result for ${source}: data=${resultData ? 'found' : 'null'}, error=${error?.message || 'none'}`);
+  if (resultData) {
+    console.log(`DEBUG: KPI actual data for ${source}:`, JSON.stringify(resultData));
+  }
   if (error) {
     console.error(`Error fetching data for kpiGroup (${source}):`, error);
     return {
@@ -461,6 +443,7 @@ async function processKpiGroup(supabase: SupabaseClient, companyId: string, muni
       label: metric.label,
       value: formatValue(resultData[metric.column], metric.format)
     }));
+  console.log(`DEBUG: KPI final results for ${source}: ${JSON.stringify(kpiResults)}`);
   return {
     kpis: kpiResults
   };
@@ -504,8 +487,9 @@ async function processTimeSeriesChart(supabase: SupabaseClient, companyId: strin
     console.log(`processTimeSeriesChart: Applied CHR filter for ${source}:`, chrs);
   }
   // --- End special handling ---
-  // Apply standard company_id filter if applicable and not already handled
-  if (!appliedCompanyFilter && await tableHasColumn(supabase, source, 'company_id')) {
+  // Apply standard company filter if applicable and not already handled
+  if (!appliedCompanyFilter) {
+    // Apply company filter - simplified
     query = query.eq('company_id', companyId);
   }
   // Apply specific filters (potentially using context)
@@ -543,6 +527,20 @@ async function processTimeSeriesChart(supabase: SupabaseClient, companyId: strin
   const { data, error } = await query;
   if (error) {
     console.error(`Error fetching data for ${chartType} (${source}):`, error);
+
+    // Special handling for missing tables that should show placeholders
+    if (source === 'environment_summary' && error.message?.includes('does not exist')) {
+      console.log(`Table ${source} does not exist - returning placeholder data for ${chartType}`);
+      // Return placeholder data structure that will be handled by frontend
+      return {
+        data: {
+          xAxis: { label: timeColumn, values: [] },
+          series: [],
+          yAxis: { label: "Value" }
+        }
+      };
+    }
+
     return {
       data: {},
       error: `Database error: ${error.message}`
@@ -554,11 +552,45 @@ async function processTimeSeriesChart(supabase: SupabaseClient, companyId: strin
       data: {}
     };
   }
-  const timeValues = [
+
+  let timeValues = [
     ...new Set(data.map((d: any)=>d[timeColumn]))
   ].sort((a, b)=>a - b);
+
   let chartData: ChartData = {};
   if (isSimpleSeries) {
+    // For pesticide charts, create continuous range from first to last year with data
+    if (source === 'environment_summary' && metrics.some((m: any) => m.column?.includes('pesticide'))) {
+      // Find years that have meaningful data (not null, not 0, not undefined)
+      const yearsWithData = timeValues.filter((t: any) => {
+        const rowData = data.find((d: any) => d[timeColumn] === t);
+        if (!rowData) return false;
+
+        // Check if any metric has meaningful data
+        return metrics.some((metric: any) => {
+          const value = rowData[metric.column];
+          return value !== null && value !== undefined && value !== 0;
+        });
+      });
+
+      if (yearsWithData.length > 0) {
+        const minYear = Math.min(...yearsWithData);
+        const maxYear = Math.max(...yearsWithData);
+
+        // Create continuous range from min to max year
+        timeValues = [];
+        for (let year = minYear; year <= maxYear; year++) {
+          timeValues.push(year);
+        }
+
+        console.log(`Pesticide chart: showing continuous range ${minYear}-${maxYear} (${timeValues.length} years) based on ${yearsWithData.length} years with actual data`);
+      } else {
+        // No data found, keep empty
+        timeValues = [];
+        console.log(`Pesticide chart: no years with meaningful data found`);
+      }
+    }
+
     chartData.xAxis = {
       label: timeColumn,
       values: timeValues
@@ -628,16 +660,10 @@ async function processCategoryChart(supabase: SupabaseClient, companyId: string,
     ...new Set(selectList)
   ];
   let query = supabase.from(source).select(selectList.join(','));
-  // Apply company_id filter if applicable
-  if (await tableHasColumn(supabase, source, 'company_id')) {
-    query = query.eq('company_id', companyId);
-  }
-  // Apply year filter
-  if (await tableHasColumn(supabase, source, 'year')) {
-    query = query.eq('year', filterYear);
-  } else {
-    console.warn(`processCategoryChart: Source table ${source} does not have a 'year' column for filtering.`);
-  }
+  // Apply company filter - simplified
+  query = query.eq('company_id', companyId);
+  // Apply year filter - simplified
+  query = query.eq('year', filterYear);
   // Apply specific filters (potentially using context)
   if (filter) {
     for(const key in filter){
@@ -693,7 +719,12 @@ async function processCategoryChart(supabase: SupabaseClient, companyId: string,
   let chartData: ChartData = {};
   const categories = [...new Set(data.map((d: any)=>d[categoryColumn]))]; // Get unique categories from the fetched (potentially limited by topN) data
   if (stackByColumn) {
-    const stackKeys = [...new Set(data.map((d: any)=>d[stackByColumn]))].sort(); // Unique stack keys
+    // Handle NULL values in stackByColumn (treat as false for is_organic)
+    const processedData = data.map((d: any) => ({
+      ...d,
+      [stackByColumn]: stackByColumn === 'is_organic' && d[stackByColumn] === null ? false : d[stackByColumn]
+    }));
+    const stackKeys = [...new Set(processedData.map((d: any)=>d[stackByColumn]))].sort(); // Unique stack keys
     chartData.yAxis = {
       label: categoryColumn,
       values: categories
@@ -701,7 +732,7 @@ async function processCategoryChart(supabase: SupabaseClient, companyId: string,
     chartData.series = stackKeys.map((stack: any)=>({
         name: formatValue(stack, 'boolean'),
         data: categories.map((cat: any)=>{
-          const point = data.find((d: any)=>d[categoryColumn] === cat && d[stackByColumn] === stack);
+          const point = processedData.find((d: any)=>d[categoryColumn] === cat && d[stackByColumn] === stack);
           return point ? point[valueColumn] : 0; // Value for this category/stack combo
         })
       }));
@@ -752,7 +783,7 @@ async function processMapChart(supabase: SupabaseClient, companyId: string, _mun
     if (source === 'companies') {
       query = query.eq('id', companyId); // Filter companies by PRIMARY id
       console.log(`processMapChart: Applying filter id=${companyId} for ${source}`);
-    } else if (await tableHasColumn(supabase, source, 'company_id')) {
+    } else {
       query = query.eq('company_id', companyId);
       console.log(`processMapChart: Applying filter company_id=${companyId} for ${source}`);
     }
@@ -774,6 +805,19 @@ async function processMapChart(supabase: SupabaseClient, companyId: string, _mun
         error: `Database error: ${error.message}`
       });
       continue;
+    }
+
+    // Debug logging for company address layer
+    if (source === 'companies') {
+      console.log(`processMapChart: Company address layer query result:`, {
+        dataCount: data?.length || 0,
+        hasGeometry: data?.[0]?.geojson ? true : false,
+        sampleData: data?.[0] ? {
+          id: data[0].id,
+          address: data[0].address,
+          hasGeojson: !!data[0].geojson
+        } : null
+      });
     }
     if (!data?.length) {
       console.log(`No data found for map layer "${name}" (${source}) company ${companyId}.`);
@@ -815,13 +859,85 @@ async function processMapChart(supabase: SupabaseClient, companyId: string, _mun
       }
     });
   }
-  // Get company address for centering
-  const { data: companyGeomData } = await supabase.from('companies').select(`geojson: address_geom`).eq('id', companyId).maybeSingle();
-  const center = companyGeomData?.geojson?.coordinates || [
-    9.5,
-    56.0
-  ];
-  const zoom = companyGeomData?.geojson ? 13 : 9;
+  // Get company address for centering - try multiple approaches
+  let { data: companyGeomData } = await supabase.from('companies').select(`geojson: address_geom`).eq('id', companyId).maybeSingle();
+
+  // Fallback: try getting coordinates directly using ST_X and ST_Y
+  if (!companyGeomData?.geojson?.coordinates) {
+    console.log(`processMapChart: Trying direct coordinate extraction...`);
+    const { data: coordData } = await supabase.rpc('get_company_coordinates', { company_uuid: companyId });
+    if (coordData && coordData.length > 0 && coordData[0].lng && coordData[0].lat) {
+      companyGeomData = {
+        geojson: {
+          type: 'Point',
+          coordinates: [coordData[0].lng, coordData[0].lat]
+        }
+      };
+      console.log(`processMapChart: Got coordinates via RPC: [${coordData[0].lng}, ${coordData[0].lat}]`);
+    }
+  }
+
+  let center = [9.5, 56.0]; // Default center (Denmark)
+  let zoom = 9; // Default zoom
+
+  console.log(`processMapChart: Company geometry data:`, companyGeomData);
+
+  // Calculate bounds to encompass all features from all layers
+  const allCoordinates: number[][] = [];
+
+  // Add company address coordinates if available
+  if (companyGeomData?.geojson?.coordinates) {
+    allCoordinates.push(companyGeomData.geojson.coordinates);
+    console.log(`processMapChart: Added company address to bounds: [${companyGeomData.geojson.coordinates[0].toFixed(6)}, ${companyGeomData.geojson.coordinates[1].toFixed(6)}]`);
+  }
+
+  // Add coordinates from all map layers (fields, production sites, etc.)
+  processedLayers.forEach(layer => {
+    if (layer.data?.features) {
+      layer.data.features.forEach(feature => {
+        if (feature.geometry?.coordinates) {
+          if (feature.geometry.type === 'Point') {
+            allCoordinates.push(feature.geometry.coordinates);
+          } else if (feature.geometry.type === 'Polygon' && feature.geometry.coordinates[0]) {
+            // For polygons, add all vertices
+            feature.geometry.coordinates[0].forEach(coord => {
+              if (coord.length === 2) allCoordinates.push(coord);
+            });
+          }
+        }
+      });
+      console.log(`processMapChart: Added ${layer.data.features.length} features from ${layer.name} to bounds calculation`);
+    }
+  });
+
+  if (allCoordinates.length > 0) {
+    // Calculate bounding box
+    const lngs = allCoordinates.map(coord => coord[0]);
+    const lats = allCoordinates.map(coord => coord[1]);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+
+    // Calculate center
+    center = [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
+
+    // Calculate appropriate zoom level based on bounds
+    const lngDiff = maxLng - minLng;
+    const latDiff = maxLat - minLat;
+    const maxDiff = Math.max(lngDiff, latDiff);
+
+    if (maxDiff < 0.01) zoom = 15;      // Very close features
+    else if (maxDiff < 0.05) zoom = 13; // Close features
+    else if (maxDiff < 0.1) zoom = 11;  // Medium spread
+    else if (maxDiff < 0.5) zoom = 9;   // Wide spread
+    else zoom = 8;                      // Very wide spread
+
+    console.log(`processMapChart: Calculated bounds center: [${center[0].toFixed(6)}, ${center[1].toFixed(6)}], zoom: ${zoom}`);
+    console.log(`processMapChart: Bounds: lng[${minLng.toFixed(6)}, ${maxLng.toFixed(6)}], lat[${minLat.toFixed(6)}, ${maxLat.toFixed(6)}]`);
+  } else {
+    console.log(`processMapChart: No coordinates found, using default Denmark center`);
+  }
   return {
     data: {
       center: center,
@@ -845,13 +961,13 @@ async function processTimeline(supabase: SupabaseClient, companyId: string, _mun
     ...new Set(selectList)
   ];
   let query = supabase.from(source).select(selectList.join(','));
-  // Apply company_id or CHR filter based on source and context
+  // Apply company_id or CHR filter based on source and context - simplified
   let appliedContextFilter = false;
-  if (context?.chr && await tableHasColumn(supabase, source, 'chr')) {
+  if (context?.chr) {
     query = query.eq('chr', context.chr);
     appliedContextFilter = true;
     console.log(`processTimeline: Applied context CHR filter: ${context.chr}`);
-  } else if (await tableHasColumn(supabase, source, 'company_id')) {
+  } else {
     query = query.eq('company_id', companyId);
     appliedContextFilter = true;
     console.log(`processTimeline: Applied company_id filter: ${companyId}`);
@@ -922,7 +1038,7 @@ function formatValue(value: any, format: any): string {
   try {
     switch(format){
       case 'boolean':
-        return value ? 'Ja' : 'Nej';
+        return value ? 'Økologisk' : 'Konventionel';
       case 'date':
         return new Date(value).toISOString().split('T')[0];
       case 'datetime':
@@ -956,7 +1072,7 @@ type IteratedSectionResult = {
 }
 // --- Recursive Component Processor ---
 async function processComponent(componentConfig: any, supabase: SupabaseClient, companyId: string, municipality: string, parentContext: Record<string, any> | null): Promise<ComponentResult> {
-  const { _key, _type, title, dataSource, iteratorDataSource, iterationConfig, template } = componentConfig;
+  const { _key, _type, title, documentation, dataSource, iteratorDataSource, iterationConfig, template } = componentConfig;
   console.log(`Processing component: ${_key} (${_type}), Context: ${JSON.stringify(parentContext)}`);
   let resultData: any = null; // Use any temporarily for varied results
   let processingError: string | null = null;
@@ -965,13 +1081,13 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
     // --- Handle Iterated Sections Recursively ---
     if (_type === 'iteratedSection' && iteratorDataSource && template) {
       const iteratorParams = iteratorDataSource.params;
-      const { source: iterSource, columns: iterColumns, filter: iterFilter } = iteratorParams;
+      const { source: iterSource, columns: iterColumns, filter: iterFilter, orderBy: iterOrderBy } = iteratorParams;
       if (!iterSource || !iterColumns) throw new Error(`Invalid iteratorDataSource for ${_key}`);
 
       let iterQuery = supabase.from(iterSource).select(iterColumns.join(','));
 
-      // Apply base company_id filter to iterator source if applicable AND source is not the problematic one
-      if (iterSource !== 'site_species_production_ranked' && await tableHasColumn(supabase, iterSource, 'company_id')) {
+      // Apply base company_id filter to iterator source - simplified
+      if (iterSource !== 'site_species_production_ranked') {
         iterQuery = iterQuery.eq('company_id', companyId);
       }
 
@@ -991,9 +1107,34 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
         }
       }
 
-      // TODO: Add iterator ordering?
+      // Apply iterator ordering
+      if (iterOrderBy && Array.isArray(iterOrderBy)) {
+        for (const orderSpec of iterOrderBy) {
+          const { column, direction = 'asc' } = orderSpec;
+          if (column) {
+            iterQuery = iterQuery.order(column, { ascending: direction === 'asc' });
+          }
+        }
+      }
+      console.log(`DEBUG: Iterator query for ${_key}: source=${iterSource}, companyId=${companyId}, columns=${iterColumns.join(',')}`);
+      console.log(`DEBUG: Iterator SQL query for ${_key}:`, iterQuery.toString());
       const { data: iteratorItems, error: iterError } = await iterQuery;
+      console.log(`DEBUG: Iterator query completed for ${_key}`);
+      console.log(`DEBUG: Iterator result for ${_key}: items=${iteratorItems?.length || 0}, error=${iterError?.message || 'none'}`);
+      if (iteratorItems) console.log(`DEBUG: First item for ${_key}:`, iteratorItems[0]);
       if (iterError) throw new Error(`Failed to fetch iterator items for ${_key}: ${iterError.message}`);
+
+      // Add computed fields for display purposes
+      if (iteratorItems?.length > 0) {
+        for (const item of iteratorItems) {
+          // Add site_name_with_capacity field for production_sites iterator
+          if (iterSource === 'production_sites' && item.site_name && item.capacity !== undefined) {
+            const capacity = item.capacity || 0;
+            const capacityText = capacity > 0 ? ` (${capacity.toLocaleString()} dyr)` : ' (0 dyr)';
+            item.site_name_with_capacity = `${item.site_name}${capacityText}`;
+          }
+        }
+      }
 
       const iteratedSections: IteratedSectionResult[] = [];
 
@@ -1027,8 +1168,11 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
               continue;
             }
             const resolvedTemplateConfig = JSON.parse(resolvedTemplateConfigStr);
+            console.log(`DEBUG: Processing template component: ${resolvedTemplateConfig._key} (${resolvedTemplateConfig._type}) for item ${JSON.stringify(item)}`);
             // Recursively process the template component with the current 'item' as context
             const processedItem: ComponentResult = await processComponent(resolvedTemplateConfig, supabase, companyId, municipality, item);
+            console.log(`DEBUG: Template component result: ${resolvedTemplateConfig._key} has_data=${processedItem.data != null}`);
+            console.log(`DEBUG: Template component full result:`, JSON.stringify(processedItem));
             sectionContent.push(processedItem);
           } // End template component loop
           iteratedSections.push({
@@ -1073,12 +1217,13 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
   // Structure the final output for this component
   const finalResultData = resultData as (ComponentResult | null);
   if (finalResultData && !finalResultData.error && !processingError) {
-    // Spread finalResultData first, then set title
+    // Spread finalResultData first, then set title and documentation
     return {
       ...finalResultData, // Spread the processed data
       _key: _key,       // Ensure _key from config is used
       _type: _type,     // Ensure _type from config is used
-      title: title       // Ensure title from config is used
+      title: title,     // Ensure title from config is used
+      ...(documentation && { documentation }) // Include documentation if present
     };
   } else {
     // Error path remains the same
@@ -1091,33 +1236,19 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
   }
 }
 // --- Main Request Handler ---
-serve(async (req)=>{
+serve(withSecurity(async (req, rateLimitInfo) => {
   // Clear caches at the beginning of each request
   latestYearCache.clear();
   columnExistenceCache.clear();
 
-  // CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
-      }
-    });
-  }
   const url = new URL(req.url);
   const companyIdParam = url.searchParams.get('id');
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*'
-  };
-  if (!companyIdParam) return new Response(JSON.stringify({
-    error: 'Company ID (UUID) query parameter is required'
-  }), {
-    status: 400,
-    headers
-  });
+
+  // Validate company ID
+  const validation = validateCompanyId(companyIdParam);
+  if (!validation.valid) {
+    return createErrorResponse(validation.error!, 400, rateLimitInfo);
+  }
   let config;
   let companyInfo: CompanyInfo | null = null;
   let supabase: SupabaseClient;
@@ -1132,16 +1263,9 @@ serve(async (req)=>{
         fetch: fetch.bind(globalThis)
       }
     });
-    companyInfo = await getCompanyDetails(supabase, companyIdParam);
+    companyInfo = await getCompanyDetails(supabase, companyIdParam!);
     if (!companyInfo) {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      const errorMsg = uuidRegex.test(companyIdParam) ? `Company with ID ${companyIdParam} not found` : `Invalid Company ID format provided`;
-      return new Response(JSON.stringify({
-        error: errorMsg
-      }), {
-        status: 404,
-        headers
-      });
+      return createErrorResponse(`Company with ID ${companyIdParam} not found`, 404, rateLimitInfo);
     }
     config = getConfig();
     if (!config?.pageBuilder) throw new Error("Invalid or empty configuration loaded.");
@@ -1166,21 +1290,10 @@ serve(async (req)=>{
       },
       pageBuilder: pageBuilderResults
     };
-    return new Response(JSON.stringify(responseBody, null, 2), {
-      headers
-    });
+    return createSuccessResponse(responseBody, rateLimitInfo);
   } catch (error) {
     const err = error as Error;
     console.error('Critical error in edge function:', err);
-    const errorHeaders = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
-    };
-    return new Response(JSON.stringify({
-      error: `Internal Server Error: ${err.message}`
-    }), {
-      status: 500,
-      headers: errorHeaders
-    });
+    return createErrorResponse(`Internal Server Error: ${err.message}`, 500, rateLimitInfo);
   }
-});
+}));

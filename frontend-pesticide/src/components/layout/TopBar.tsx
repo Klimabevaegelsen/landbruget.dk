@@ -48,7 +48,7 @@ export function TopBar({
       <div className="bg-slate-900 border-b border-slate-700 shadow-lg">
         <div className="px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            
+
             {/* Left: Brand - Mobile Optimized */}
             <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
               <div className="w-8 h-8 sm:w-10 sm:h-10 bg-red-600 rounded-lg flex items-center justify-center shadow-sm">
@@ -62,7 +62,7 @@ export function TopBar({
 
             {/* Center: Search Bar - Mobile Optimized */}
             <div className="flex-1 mx-3 sm:mx-6 max-w-md sm:max-w-3xl">
-              <SearchBar 
+              <SearchBar
                 onLocationSelect={onLocationSelect}
                 placeholder={isMobile ? "Search locations..." : "Search Danish addresses, cities, regions..."}
                 className="w-full"
@@ -94,7 +94,7 @@ export function TopBar({
                 onClick={handleToggleSidebar}
                 className={`p-2 rounded-lg transition-colors touch-manipulation ${
                   currentSidebarState
-                    ? 'bg-blue-600 text-white' 
+                    ? 'bg-blue-600 text-white'
                     : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
                 }`}
               >
@@ -127,7 +127,7 @@ export function TopBar({
         {!isMobile && (
           <div className="bg-slate-800 border-t border-slate-700 px-6 py-3">
             <div className="flex items-center justify-between">
-              
+
               {/* Left: Data Mode */}
               <div className="flex items-center space-x-4">
                 <span className="text-sm font-medium text-slate-300">Data Mode:</span>
@@ -148,7 +148,7 @@ export function TopBar({
       {isMobileMenuOpen && (
         <div className="bg-slate-700 border-b border-slate-600 px-4 sm:px-6 py-4">
           <div className="space-y-4">
-            
+
             {/* Current Status */}
             <div className="bg-slate-600 rounded-lg p-3">
               <div className="flex items-center justify-between">
@@ -158,7 +158,7 @@ export function TopBar({
                 </span>
               </div>
             </div>
-            
+
             {/* Settings Toggle */}
             <button
               onClick={() => {
@@ -166,8 +166,8 @@ export function TopBar({
                 setIsMobileMenuOpen(false);
               }}
               className={`w-full flex items-center justify-center space-x-2 p-3 rounded-lg transition-colors touch-manipulation ${
-                showControls 
-                  ? 'bg-blue-600 text-white' 
+                showControls
+                  ? 'bg-blue-600 text-white'
                   : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
               }`}
             >
@@ -181,4 +181,4 @@ export function TopBar({
       )}
     </>
   );
-} 
+}

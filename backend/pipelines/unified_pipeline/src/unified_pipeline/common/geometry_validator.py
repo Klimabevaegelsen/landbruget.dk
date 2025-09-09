@@ -141,34 +141,28 @@ def validate_and_transform_geometries_duckdb(
             min_x, max_x, min_y, max_y = initial_bounds
 
             # Check if coordinates are already in WGS84 (longitude/latitude ranges)
-            # FIXED: Corrected variable names to match actual coordinate order detection
+            # Expanded ranges to handle edge cases and neighboring countries
             is_wgs84_lon_lat = (
-                7 <= min_x <= 16 and 7 <= max_x <= 16 and 54 <= min_y <= 58 and 54 <= max_y <= 58
+                3 <= min_x <= 17 and 3 <= max_x <= 17 and 53 <= min_y <= 59 and 53 <= max_y <= 59
             )
             is_wgs84_lat_lon = (
-                54 <= min_x <= 58 and 54 <= max_x <= 58 and 7 <= min_y <= 16 and 7 <= max_y <= 16
+                53 <= min_x <= 59 and 53 <= max_x <= 59 and 3 <= min_y <= 17 and 3 <= max_y <= 17
             )
             is_utm = 400000 <= min_x <= 900000 and 6000000 <= min_y <= 7000000
 
             if is_wgs84_lon_lat:
                 logger.info(
-                    f"{dataset_name}: Data in WGS84 (LON, LAT) order - needs coordinate flip "
-                    "for correct EPSG:4326 standard"
+                    f"{dataset_name}: Data in WGS84 (LON, LAT) order - CORRECT for "
+                    "PostGIS EPSG:4326 standard"
                 )
-                # Flip coordinates to get proper (LAT, LON) order for EPSG:4326 standard
-                logger.info(f"{dataset_name}: Applying ST_FlipCoordinates to fix coordinate order")
-                conn.execute(f"""
-                    UPDATE {table_name} SET
-                        {geometry_column} = ST_FlipCoordinates({geometry_column})
-                    WHERE {geometry_column} IS NOT NULL
-                """)
-                logger.info(f"{dataset_name}: ✅ Coordinate flip completed")
+                # No transformation needed - coordinates are already in PostGIS standard order
             elif is_wgs84_lat_lon:
                 logger.info(
-                    f"{dataset_name}: Data in WGS84 (LAT, LON) order - CORRECT for "
-                    "EPSG:4326 standard"
+                    f"{dataset_name}: Data in WGS84 (LAT, LON) order - standard WGS84 format, "
+                    "will need coordinate flip for PostGIS during migration"
                 )
-                # No transformation needed - coordinates are already in correct order
+                # Keep in WGS84 standard (LAT, LON) format
+                # Migration system will handle PostGIS conversion
             elif is_utm:
                 logger.info(
                     f"{dataset_name}: Data in Danish UTM (EPSG:25832) - transforming to WGS84"
@@ -280,9 +274,15 @@ def validate_and_transform_geometries_duckdb(
                     coord_pairs = []
                     for i, (wkt,) in enumerate(sample_wkt[:3]):
                         logger.info(f"   Raw WKT {i+1}: {wkt}")
-                        # Extract coordinates from "POINT(x y)" format
-                        if wkt and "POINT(" in wkt:
-                            coords_str = wkt.replace("POINT(", "").replace(")", "")
+                        # Extract coordinates from "POINT(x y)" or "POINT (x y)" format
+                        if wkt and ("POINT(" in wkt or "POINT (" in wkt):
+                            # Handle both "POINT(x y)" and "POINT (x y)" formats
+                            coords_str = (
+                                wkt.replace("POINT(", "")
+                                .replace("POINT (", "")
+                                .replace(")", "")
+                                .strip()
+                            )
                             try:
                                 coord_parts = coords_str.split()
                                 if len(coord_parts) >= 2:
@@ -325,11 +325,12 @@ def validate_and_transform_geometries_duckdb(
                         )
 
                         # Check coordinate order - EPSG:4326 standard is LAT/LON
+                        # Expanded ranges to match the updated CRS detection ranges
                         if (
-                            54 <= first_range[0] <= 58
-                            and 54 <= first_range[1] <= 58
-                            and 8 <= second_range[0] <= 15
-                            and 8 <= second_range[1] <= 15
+                            53 <= first_range[0] <= 59
+                            and 53 <= first_range[1] <= 59
+                            and 3 <= second_range[0] <= 17
+                            and 3 <= second_range[1] <= 17
                         ):
                             logger.info(
                                 f"✅ {dataset_name}: CONFIRMED - Data stored as "
@@ -342,10 +343,10 @@ def validate_and_transform_geometries_duckdb(
                                 "(expects LAT/LON input)"
                             )
                         elif (
-                            8 <= first_range[0] <= 15
-                            and 8 <= first_range[1] <= 15
-                            and 54 <= second_range[0] <= 58
-                            and 54 <= second_range[1] <= 58
+                            3 <= first_range[0] <= 17
+                            and 3 <= first_range[1] <= 17
+                            and 53 <= second_range[0] <= 59
+                            and 53 <= second_range[1] <= 59
                         ):
                             logger.warning(
                                 f"⚠️ {dataset_name}: ALERT - Data stored as "
