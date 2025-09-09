@@ -11,7 +11,7 @@ export interface BNBOArea {
 }
 
 // BNBO status codes
-export type BNBOStatusCode = 
+export type BNBOStatusCode =
   | 'protected'
   | 'buffer'
   | 'agricultural'
@@ -72,4 +72,4 @@ export interface BNBOStatistics {
   averageAreaHa: number;
   largestAreaHa: number;
   protectionCoverage: number; // Percentage of total area that is protected
-} 
+}

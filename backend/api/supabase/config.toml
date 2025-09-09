@@ -320,3 +320,10 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # [functions]
 #   # Path to the directory containing Edge Functions.
 #   path = "backend/api/supabase/functions"
+
+# Function-specific configurations
+[functions.company-basic]
+verify_jwt = false
+
+[functions.api]
+verify_jwt = false

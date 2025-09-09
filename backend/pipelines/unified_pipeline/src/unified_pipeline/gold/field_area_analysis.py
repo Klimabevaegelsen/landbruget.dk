@@ -101,12 +101,21 @@ class FieldAreaAnalysisGold(BaseSource[FieldAreaAnalysisGoldConfig], GoldJobInte
                 f"✅ Phase 5 completed in {self.phase_times['final_results']:.1f} seconds"
             )
 
-            # Save results
-            self.save_data_direct(
-                "field_area_analysis_final",
-                self.config.dataset,
-                self.config.bucket,
-                "gold",
+            # Save results with complete data lineage tracing
+            self._save_data_with_metadata(
+                data="field_area_analysis_final",
+                dataset=self.config.dataset,
+                source_key="field_area_analysis",  # From DATA_SOURCE_REGISTRY
+                bucket=self.config.bucket,
+                stage="gold",
+                source_datasets=[
+                    "agricultural_fields",
+                    "cadastral",
+                    "soil_types",
+                    "bnbo",
+                    "wetlands",
+                    "water_projects",
+                ],  # Complete lineage for this combined dataset
             )
 
             # Performance summary

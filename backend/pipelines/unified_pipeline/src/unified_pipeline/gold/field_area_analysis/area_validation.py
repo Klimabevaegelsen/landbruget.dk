@@ -505,7 +505,7 @@ class FieldAreaValidator:
                 SELECT
                     COUNT(*) as total_groups,
                     COUNT(*) FILTER (
-                        WHERE ABS(detail_sum - aggregate_total) > 
+                        WHERE ABS(detail_sum - aggregate_total) >
                               aggregate_total * {self.tolerance_pct}/100.0
                     ) as inconsistent_groups,
                     MAX(

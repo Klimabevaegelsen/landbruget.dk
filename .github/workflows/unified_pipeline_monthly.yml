@@ -91,6 +91,7 @@ jobs:
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
       GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -187,8 +188,8 @@ jobs:
             echo "✅ FVM WFS matrix workflow triggered successfully"
           else
             # Regular pipeline execution
-            echo "🚀 Executing: python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
+            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
           fi
 
           # Stop monitoring
@@ -253,6 +254,7 @@ jobs:
       GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
       CVR_USERID: ${{ secrets.CVR_USERID }}
       CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
+      LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -350,8 +352,8 @@ jobs:
             echo "✅ Field Area Analysis matrix workflow triggered successfully"
           else
             # Regular pipeline execution
-            echo "🚀 Executing: python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
+            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
           fi
 
           # Stop monitoring

@@ -122,8 +122,8 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         num_chunks = (total_properties + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"🚀 OPTIMIZED PROCESSING: {total_properties:,} pre-filtered properties " +
-            f"in {num_chunks} chunks of {chunk_size:,}"
+            f"🚀 OPTIMIZED PROCESSING: {total_properties:,} pre-filtered properties "
+            + f"in {num_chunks} chunks of {chunk_size:,}"
         )
         self.log.info("⚡ 13x faster than original due to Stage 0 pre-filtering")
 
@@ -223,7 +223,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         field_area_m2,
                         bfe_number,
                         property_area_m2,
-                        
+
                         -- Calculate intersection area and percentages
                         ST_Area_Spheroid(
                             ST_Intersection(field_geometry, property_geometry)
@@ -232,12 +232,12 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                          field_area_m2) * 100 as field_area_share_pct,
                         (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
                          property_area_m2) * 100 as property_area_share_pct,
-                        
+
                         -- STREAM intersection geometries for downstream spatial analysis
                         field_geometry,
                         property_geometry,
                         ST_Intersection(field_geometry, property_geometry) as intersection_geometry
-                        
+
                     FROM chunk_raw_intersections
                     WHERE
                         -- Filter out tiny intersections (< 1% of field area or < 100 m²)
@@ -390,20 +390,20 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         CASE WHEN intersection_area_m2 IS NOT NULL
                              THEN intersection_area_m2 ELSE 0 END
                     ) as total_intersection_area,
-                    
+
                     -- For fields WITHOUT property intersections: sum of field areas
                     -- (only counted once per field)
                     SUM(
                         CASE WHEN intersection_area_m2 IS NULL
                              THEN field_area_m2 ELSE 0 END
                     ) as fields_without_properties_area,
-                    
+
                     -- Number of distinct fields (should match input count)
                     COUNT(DISTINCT field_uuid) as distinct_field_count,
-                    
+
                     -- Total records created
                     COUNT(*) as total_records,
-                    
+
                     -- Fields with vs without property intersections
                     COUNT(
                         DISTINCT CASE WHEN intersection_area_m2 IS NOT NULL
@@ -413,7 +413,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         DISTINCT CASE WHEN intersection_area_m2 IS NULL
                                       THEN field_uuid END
                     ) as fields_without_properties
-                    
+
                 FROM field_property_intersections
                 WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
             """).fetchone()

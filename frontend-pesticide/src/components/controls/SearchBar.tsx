@@ -19,8 +19,8 @@ interface SearchBarProps {
   className?: string;
 }
 
-export function SearchBar({ 
-  onLocationSelect, 
+export function SearchBar({
+  onLocationSelect,
   placeholder = "Search address...",
   className = ""
 }: SearchBarProps) {
@@ -29,7 +29,7 @@ export function SearchBar({
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  
+
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -88,7 +88,7 @@ export function SearchBar({
       switch (event.key) {
         case 'ArrowDown':
           event.preventDefault();
-          setSelectedIndex(prev => 
+          setSelectedIndex(prev =>
             prev < results.length - 1 ? prev + 1 : prev
           );
           break;
@@ -180,7 +180,7 @@ export function SearchBar({
         <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400">
           <Search className="w-5 h-5" />
         </div>
-        
+
         <input
           ref={inputRef}
           type="text"
@@ -190,7 +190,7 @@ export function SearchBar({
           placeholder={placeholder}
           className="w-full pl-12 pr-12 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-base"
         />
-        
+
         {query && (
           <button
             onClick={clearSearch}
@@ -239,4 +239,4 @@ export function SearchBar({
       )}
     </div>
   );
-} 
+}

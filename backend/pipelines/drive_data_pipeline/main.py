@@ -137,16 +137,16 @@ def _save_discovered_cvr_numbers(
                 if source == "gcs":
                     # 🚀 ENHANCED: Use native HMAC acceleration for faster Drive data loading
                     try:
-                        # Use GCS access connection directly for both table creation and CVR extraction
+                        # Use GCS access connection for table creation and CVR extraction
                         gcs_access.query_parquet_native(file_path, "SELECT *", table_name)
                         # Extract CVR numbers using the GCS connection
                         cvr_numbers = extract_cvr_numbers_from_table(
                             table_name=table_name,
                             connection=gcs_access.duckdb_conn,
-                            cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                            cvr_column="cvr_number",  # Standardized column name
                         )
                     except Exception as e:
-                        print(f"Native loading failed, using fallback: {e}")
+                        logger.warning(f"Native loading failed, using fallback: {e}")
                         # Fallback to existing temp file method
                         with gcs_access._temp_download(file_path) as temp_file:
                             conn.execute(
@@ -157,7 +157,7 @@ def _save_discovered_cvr_numbers(
                         cvr_numbers = extract_cvr_numbers_from_table(
                             table_name=table_name,
                             connection=conn,
-                            cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                            cvr_column="cvr_number",  # Standardized column name
                         )
                 else:
                     # Local file - use directly
@@ -168,7 +168,7 @@ def _save_discovered_cvr_numbers(
                     cvr_numbers = extract_cvr_numbers_from_table(
                         table_name=table_name,
                         connection=conn,
-                        cvr_column="cvr_number",  # Standardized column name from Excel transformer
+                        cvr_column="cvr_number",  # Standardized column name
                     )
 
                 if cvr_numbers:

@@ -63,14 +63,14 @@ export class DataVirtualizer {
 
     // Update viewport bounds
     this.updateViewport(viewport);
-    
+
     if (!this.viewportBounds) return data;
 
     // Filter by viewport with buffer
     const buffer = this.calculateBuffer(viewport.zoom);
     const bufferedBounds = this.expandBounds(this.viewportBounds, buffer);
-    
-    let filteredData = data.filter(item => 
+
+    let filteredData = data.filter(item =>
       this.isPointInBounds(item.centroid_lon, item.centroid_lat, bufferedBounds)
     );
 
@@ -90,14 +90,14 @@ export class DataVirtualizer {
     if (!data || data.length === 0) return [];
 
     this.updateViewport(viewport);
-    
+
     if (!this.viewportBounds) return data;
 
     // Filter by viewport intersection
     const buffer = this.calculateBuffer(viewport.zoom);
     const bufferedBounds = this.expandBounds(this.viewportBounds, buffer);
-    
-    let filteredData = data.filter(area => 
+
+    let filteredData = data.filter(area =>
       this.isGeometryInBounds(area.geometry, bufferedBounds)
     );
 
@@ -117,13 +117,13 @@ export class DataVirtualizer {
     if (!data || data.length === 0) return [];
 
     this.updateViewport(viewport);
-    
+
     if (!this.viewportBounds) return data;
 
     // Filter by viewport with buffer
     const buffer = this.calculateBuffer(viewport.zoom);
     const bufferedBounds = this.expandBounds(this.viewportBounds, buffer);
-    
+
     let filteredData = data.filter(building => {
       const coords = building.geometry.coordinates;
       return this.isPointInBounds(coords[0], coords[1], bufferedBounds);
@@ -220,9 +220,9 @@ export class DataVirtualizer {
    * Check if point is within bounds
    */
   private isPointInBounds(lon: number, lat: number, bounds: BoundingBox): boolean {
-    return lon >= bounds.minLon && 
-           lon <= bounds.maxLon && 
-           lat >= bounds.minLat && 
+    return lon >= bounds.minLon &&
+           lon <= bounds.maxLon &&
+           lat >= bounds.minLat &&
            lat <= bounds.maxLat;
   }
 
@@ -235,21 +235,21 @@ export class DataVirtualizer {
       const coords = geometry.coordinates as [number, number];
       return this.isPointInBounds(coords[0], coords[1], bounds);
     }
-    
+
     if (geometry.type === 'Polygon') {
       const coords = geometry.coordinates[0] as [number, number][];
       // Check if any point of the polygon is within bounds
       return coords.some(coord => this.isPointInBounds(coord[0], coord[1], bounds));
     }
-    
+
     if (geometry.type === 'MultiPolygon') {
       const coords = geometry.coordinates as [number, number][][][];
       // Check if any polygon intersects with bounds
-      return coords.some(polygon => 
+      return coords.some(polygon =>
         polygon[0].some(coord => this.isPointInBounds(coord[0], coord[1], bounds))
       );
     }
-    
+
     return true; // Default to include if we can't determine
   }
 
@@ -258,7 +258,7 @@ export class DataVirtualizer {
    */
   private getMaxPointsForZoom(zoom: number, layerType: 'h3' | 'bnbo' | 'bbr'): number {
     const config = this.getLayerConfigForZoom(zoom);
-    
+
     switch (layerType) {
       case 'h3':
         return config.maxH3Points;
@@ -298,7 +298,7 @@ export class DataVirtualizer {
     }));
 
     scored.sort((a, b) => b.importance - a.importance);
-    
+
     return scored.slice(0, maxPoints);
   }
 
@@ -321,7 +321,7 @@ export class DataVirtualizer {
     }));
 
     scored.sort((a, b) => b.importance - a.importance);
-    
+
     return scored.slice(0, maxPolygons);
   }
 
@@ -345,7 +345,7 @@ export class DataVirtualizer {
     }));
 
     scored.sort((a, b) => b.importance - a.importance);
-    
+
     return scored.slice(0, maxPoints);
   }
 
@@ -369,4 +369,4 @@ export class DataVirtualizer {
 
     return data.length > thresholds[layerType];
   }
-} 
+}

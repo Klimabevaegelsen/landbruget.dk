@@ -12,7 +12,7 @@ Ved at tilgå eller bruge Platformen accepterer du at være bundet af disse Vilk
 
 ## 2. Platformens Formål og Beskrivelse af Tjenesten
 
-Landbruget.dk er et almennyttigt, open-source og non-profit initiativ. Vores mission er at indsamle, systematisere og formidle offentligt tilgængelige data om den danske landbrugssektor. Formålet er at fremme offentlig oplysning, transparens og en informeret demokratisk debat om den danske landbrugssektors miljø-, sundheds- og klimapåvirkning, samt at understøtte sektorens grønne omstilling. Platformen sigter mod at gøre komplekse data tilgængelige og brugbare for borgere, journalister, forskere, landmænd og embedsmænd.
+Landbruget.dk er et almennyttigt, [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) og non-profit initiativ. Vores mission er at indsamle, systematisere og formidle offentligt tilgængelige data om den danske landbrugssektor. Formålet er at fremme offentlig oplysning, transparens og en informeret demokratisk debat om den danske landbrugssektors miljø-, sundheds- og klimapåvirkning, samt at understøtte sektorens grønne omstilling. Platformen sigter mod at gøre komplekse data tilgængelige og brugbare for borgere, journalister, forskere, landmænd og embedsmænd.
 
 ## 3. Adgang til og Brug af Platformen
 
@@ -70,7 +70,7 @@ Hvis du mener, at data på Platformen er ukorrekte, opfordrer vi dig til at kont
 
 ### Platformens Indhold og Software
 
-Platformen Landbruget.dk er udviklet på open-source principper. Den specifikke software kan være underlagt en open-source licens (f.eks. MIT, GPL), som vil være angivet i Platformens dokumentation eller kildekode-repository (f.eks. på GitHub). Al anden originalt indhold skabt af Klimabevægelsen for Platformen (tekster, design, logoer) tilhører Klimabevægelsen eller er licenseret hertil, medmindre andet er angivet.
+Platformen Landbruget.dk er udviklet på [open-source](https://github.com/klimabevaegelsen/landbruget.dk/) principper. Den specifikke software kan være underlagt en open-source licens (f.eks. MIT, GPL), som vil være angivet i Platformens dokumentation eller kildekode-repository (f.eks. på GitHub). Al anden originalt indhold skabt af Klimabevægelsen for Platformen (tekster, design, logoer) tilhører Klimabevægelsen eller er licenseret hertil, medmindre andet er angivet.
 
 ### Data
 

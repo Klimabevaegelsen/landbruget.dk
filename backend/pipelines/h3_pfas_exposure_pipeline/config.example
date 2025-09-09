@@ -25,4 +25,4 @@ OUTPUT_DIR=data/gold/h3_pfas_exposure
 # Development/Debug (optional)
 # LOG_LEVEL=DEBUG
 # MEMORY_LIMIT=8GB
-# CHUNK_SIZE=10000 
+# CHUNK_SIZE=10000

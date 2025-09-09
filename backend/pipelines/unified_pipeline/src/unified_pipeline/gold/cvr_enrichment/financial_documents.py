@@ -7,13 +7,13 @@ for the companies, processing them in batches for parallel execution.
 
 import json
 import os
-import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 from unified_pipeline.util.cvr_api_client import CVRAPIClient
 from unified_pipeline.util.timing import timed
 
@@ -46,7 +46,7 @@ class FinancialDocumentsConfig(BaseJobConfig):
     )
 
     max_financial_documents: int = Field(
-        default=10, description="Maximum number of financial documents to fetch per company"
+        default=20, description="Maximum number of financial documents to fetch per company"
     )
 
     parse_financial_xml: bool = Field(
@@ -825,16 +825,16 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                             )::VARCHAR as company_uuid,
                             json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
                             'Annual Report' as publication_type,
-                            json_extract(
+                            json_extract_string(
                                 json_data, '$.latest_reporting_date'
-                            )::VARCHAR as publication_time,
+                            ) as publication_time,
                             NULL as case_number,
-                            json_extract(
+                            json_extract_string(
                                 json_data, '$.latest_reporting_date'
-                            )::VARCHAR as reporting_period_start,
-                            json_extract(
+                            ) as reporting_period_start,
+                            json_extract_string(
                                 json_data, '$.latest_reporting_date'
-                            )::VARCHAR as reporting_period_end,
+                            ) as reporting_period_end,
                             json_extract(
                                 json_data, '$.document_count'
                             )::INTEGER as document_count,
@@ -1511,9 +1511,16 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
                 if not emp_record:
                     continue
 
-                # Create employment record with UUID and proper field mapping
+                # Create employment record with deterministic UUID and proper field mapping
+                # Generate deterministic UUID based on CVR, year, month, and employment type
+                employment_key = (
+                    f"{cvr_number}-{emp_record.get('year', '')}-"
+                    f"{emp_record.get('month', '')}-{employment_field}"
+                )
                 employment_record = {
-                    "employment_uuid": str(uuid.uuid4()),
+                    "employment_uuid": LandbrugsdataUUID.generate_deterministic_uuid(
+                        "employment", employment_key
+                    ),
                     "cvr_number": cvr_number,
                     "company_uuid": None,  # Will be calculated in SQL
                     # Map fields from raw employment data to expected schema

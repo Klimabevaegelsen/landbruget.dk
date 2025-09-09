@@ -50,11 +50,11 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging) return;
-    
+
     const touch = e.touches[0];
     const startY = (e.target as any)._startY || touch.clientY;
     const deltaY = startY - touch.clientY;
-    
+
     // Only allow upward drag to expand
     if (deltaY > 0) {
       setDragOffset(Math.min(deltaY, 200));
@@ -63,14 +63,14 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (!isDragging) return;
-    
+
     setIsDragging(false);
-    
+
     // Expand if dragged up significantly
     if (dragOffset > 50) {
       setIsExpanded(true);
     }
-    
+
     setDragOffset(0);
   }, [isDragging, dragOffset]);
 
@@ -85,7 +85,7 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
         const diquatGrams = Number(hoverInfo.data.diquat_grams || 0);
         const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams || 0);
         const area = Number(hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha || 0);
-        
+
         // Calculate intensities with proper type casting
         const pfasIntensity = Number(hoverInfo.data.pfas_intensity) || (area > 0 ? pfasGrams / area : 0);
         const pesticideIntensity = Number(hoverInfo.data.pesticide_intensity) || (area > 0 ? pesticideLoad / area : 0);
@@ -129,39 +129,47 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
                 </div>
               </div>
 
-              {/* PFAS */}
-              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-red-400/30">
-                <div className="text-center">
-                  <div className="text-base font-bold text-red-300 font-mono">{formatNumber(pfasGrams, 1)}</div>
-                  <div className="text-xs text-red-400/80 uppercase tracking-wide">PFAS (g)</div>
-                  <div className="text-xs text-red-300/70 mt-1 font-mono">{formatNumber(pfasIntensity, 1)} g/ha</div>
+              {/* PFAS - only show if there are PFAS values > 0 */}
+              {pfasGrams > 0 && (
+                <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-red-400/30">
+                  <div className="text-center">
+                    <div className="text-base font-bold text-red-300 font-mono">{formatNumber(pfasGrams, 1)}</div>
+                    <div className="text-xs text-red-400/80 uppercase tracking-wide">PFAS (g)</div>
+                    <div className="text-xs text-red-300/70 mt-1 font-mono">{formatNumber(pfasIntensity, 1)} g/ha</div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Expanded Content */}
             {isExpanded && (
               <div className="space-y-3 animate-in slide-in-from-bottom-2 duration-300">
-                {/* Additional Metrics */}
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Glyphosate */}
-                  <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-green-400/30">
-                    <div className="text-center">
-                      <div className="text-base font-bold text-green-300 font-mono">{formatNumber(glyphosateGrams, 1)}</div>
-                      <div className="text-xs text-green-400/80 uppercase tracking-wide">Glyphosate (g)</div>
-                      <div className="text-xs text-green-300/70 mt-1 font-mono">{formatNumber(glyphosateIntensity, 1)} g/ha</div>
-                    </div>
-                  </div>
+                {/* Additional Metrics - only show if there are values > 0 */}
+                {(glyphosateGrams > 0 || diquatGrams > 0) && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Glyphosate - only show if there are glyphosate values > 0 */}
+                    {glyphosateGrams > 0 && (
+                      <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-green-400/30">
+                        <div className="text-center">
+                          <div className="text-base font-bold text-green-300 font-mono">{formatNumber(glyphosateGrams, 1)}</div>
+                          <div className="text-xs text-green-400/80 uppercase tracking-wide">Glyphosate (g)</div>
+                          <div className="text-xs text-green-300/70 mt-1 font-mono">{formatNumber(glyphosateIntensity, 1)} g/ha</div>
+                        </div>
+                      </div>
+                    )}
 
-                  {/* Diquat */}
-                  <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-amber-400/30">
-                    <div className="text-center">
-                      <div className="text-base font-bold text-amber-300 font-mono">{formatNumber(diquatGrams, 1)}</div>
-                      <div className="text-xs text-amber-400/80 uppercase tracking-wide">Diquat (g)</div>
-                      <div className="text-xs text-amber-300/70 mt-1 font-mono">{formatNumber(diquatIntensity, 1)} g/ha</div>
-                    </div>
+                    {/* Diquat - only show if there are diquat values > 0 */}
+                    {diquatGrams > 0 && (
+                      <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-amber-400/30">
+                        <div className="text-center">
+                          <div className="text-base font-bold text-amber-300 font-mono">{formatNumber(diquatGrams, 1)}</div>
+                          <div className="text-xs text-amber-400/80 uppercase tracking-wide">Diquat (g)</div>
+                          <div className="text-xs text-amber-300/70 mt-1 font-mono">{formatNumber(diquatIntensity, 1)} g/ha</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
 
                 {/* Activity Summary */}
                 <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
@@ -207,7 +215,7 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
                 )}
               </div>
             </div>
-            
+
             {isExpanded && (
               <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-white/20 animate-in slide-in-from-bottom-2 duration-300">
                 <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wide">Area Details</h4>
@@ -247,7 +255,7 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
                 )}
               </div>
             </div>
-            
+
             {isExpanded && (
               <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-white/20 animate-in slide-in-from-bottom-2 duration-300">
                 <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wide">Building Details</h4>
@@ -280,13 +288,13 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
   return (
     <>
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300"
         onClick={onClose}
       />
-      
+
       {/* Bottom Panel */}
-      <div 
+      <div
         className={`fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-white/20 shadow-2xl z-50 transform transition-all duration-300 ease-out ${
           isExpanded ? 'max-h-[80vh]' : 'max-h-[50vh]'
         }`}
@@ -328,4 +336,4 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
       </div>
     </>
   );
-} 
+}

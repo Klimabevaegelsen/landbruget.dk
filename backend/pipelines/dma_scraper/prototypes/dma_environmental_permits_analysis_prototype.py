@@ -276,8 +276,8 @@ class DMAPermitAnalyzer:
             pdf_part = Part.from_data(data=first_pages_data, mime_type="application/pdf")
 
             permit_check_prompt = """# ROLLE OG OPGAVE
-Du er ekspert i danske miljømyndigheds dokumenter. Din opgave er at analysere de 
-første 2 sider af dette PDF-dokument for at afgøre om det er en miljøtilladelse, 
+Du er ekspert i danske miljømyndigheds dokumenter. Din opgave er at analysere de
+første 2 sider af dette PDF-dokument for at afgøre om det er en miljøtilladelse,
 miljøafgørelse eller relateret miljødokument.
 
 # HVAD AT LEDE EFTER
@@ -295,7 +295,7 @@ Se efter følgende nøgleord og koncepter på de første sider:
 # SVAR FORMAT
 Returner kun JSON i følgende format:
 
-VIGTIGT: Sæt "is_environmental_permit" til TRUE for BÅDE miljøtilladelser OG 
+VIGTIGT: Sæt "is_environmental_permit" til TRUE for BÅDE miljøtilladelser OG
 miljøafgørelser - begge indeholder værdifulde miljødata.
 
 ```json
@@ -374,7 +374,7 @@ Du er ekspert i danske miljøtilladelser og skal ekstraktere strukturerede data 
 
 ## 1. ENERGI
 - Elektricitet (kWh/år, MWh/år)
-- Olie (liter/år, m³/år)  
+- Olie (liter/år, m³/år)
 - Gas (m³/år, GJ/år)
 - Varme/fjernvarme (GJ/år, MWh/år)
 
@@ -571,8 +571,8 @@ Returner kun JSON i følgende præcise format:
             logger.info(f"🏠 Using Gemini to intelligently group {len(addresses)} addresses...")
 
             address_grouping_prompt = f"""# OPGAVE
-Du skal intelligent gruppere disse adresser, der stammer fra danske miljøtilladelser. 
-Mange af adresserne refererer til samme fysiske lokalitet, men er skrevet med 
+Du skal intelligent gruppere disse adresser, der stammer fra danske miljøtilladelser.
+Mange af adresserne refererer til samme fysiske lokalitet, men er skrevet med
 forskellige formater, detaljer eller stavemåder.
 
 # ADRESSER AT GRUPPERE
@@ -591,7 +591,7 @@ forskellige formater, detaljer eller stavemåder.
 - Forskellige veje eller postnumre = FORSKELLIGE GRUPPER
 
 # SVAR FORMAT
-Returner kun JSON med grupper, hvor hver gruppe har en "canonical_address" 
+Returner kun JSON med grupper, hvor hver gruppe har en "canonical_address"
 (den mest komplette/præcise) og "addresses" (alle varianter):
 
 ```json
@@ -649,7 +649,7 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
 
     def group_documents_by_facility(self, permit_results: List[Dict]) -> Dict[str, List[Dict]]:
         """
-        Group documents by facility address with SMART ADDRESS GROUPING 
+        Group documents by facility address with SMART ADDRESS GROUPING
         (extracted during permit check) and sort by date (newest first)
         """
         # Step 1: Extract all valid addresses and build document mapping
@@ -722,10 +722,7 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
 
             # Show original address variants for this group
             original_variants = list(set([doc["original_facility_address"] for doc in documents]))
-            variant_info = (
-                f" (grouped from: {', '.join(original_variants)})" 
-                if len(original_variants) > 1 else ""
-            )
+            variant_info = f" (grouped from: {', '.join(original_variants)})" if len(original_variants) > 1 else ""
 
             newest_date = documents[0].get("parsed_date", datetime.min)
             date_str = newest_date.strftime("%Y-%m-%d") if newest_date != datetime.min else "unknown date"
@@ -796,7 +793,7 @@ Vær konservativ - det er bedre at have for mange grupper end at fejlagtigt saml
 
         # Create aggregate analysis prompt
         aggregate_prompt = f"""# ROLLE OG OPGAVE
-Du er ekspert i danske miljøtilladelser og skal analysere ALLE dokumenter for en 
+Du er ekspert i danske miljøtilladelser og skal analysere ALLE dokumenter for en
 specifik bedrift/facilitet for at give et samlet overblik.
 
 # FACILITET
@@ -974,16 +971,12 @@ Returner kun JSON i følgende præcise format:
             if r.get("permit_check", {}).get("analysis", {}).get("is_environmental_permit", False)
         )
         logger.info(
-            f"✅ Permit checks complete: {valid_permits}/{len(permit_results)} "
-            f"confirmed environmental permits"
+            f"✅ Permit checks complete: {valid_permits}/{len(permit_results)} " f"confirmed environmental permits"
         )
 
-        # Step 2: Group documents by facility address with SMART ADDRESS GROUPING 
+        # Step 2: Group documents by facility address with SMART ADDRESS GROUPING
         # (using addresses extracted during permit checks)
-        logger.info(
-            f"🏭 Intelligently grouping {valid_permits} environmental permits "
-            f"by facility address..."
-        )
+        logger.info(f"🏭 Intelligently grouping {valid_permits} environmental permits " f"by facility address...")
         facility_groups = self.group_documents_by_facility(permit_results)
 
         if not facility_groups:

@@ -343,16 +343,16 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 SELECT
                     -- Total soil intersection area (what we actually created)
                     SUM(COALESCE(soil_intersection_area_m2, 0)) as total_intersection_area,
-                    
+
                     -- Number of distinct fields (should match input count)
                     COUNT(DISTINCT field_uuid) as distinct_field_count,
-                    
+
                     -- Total records created
                     COUNT(*) as total_records,
-                    
+
                     -- Fields with soil coverage
                     COUNT(DISTINCT field_uuid) as fields_with_soil_data
-                    
+
                 FROM field_soil_areas
                 WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
             """).fetchone()

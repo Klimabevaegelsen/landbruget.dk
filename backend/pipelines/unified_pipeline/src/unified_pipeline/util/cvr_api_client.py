@@ -24,7 +24,6 @@ from tqdm import tqdm
 from unified_pipeline.util.cvr_pii_filter import (
     filter_cvr_pii,
 )
-from unified_pipeline.util.dawa_api_client import DAWAAPIClient
 from unified_pipeline.util.log_util import Logger
 
 
@@ -37,6 +36,34 @@ class CVRAPIClient:
     - Fetch financial reports and documents
     - Handle authentication and rate limiting
     """
+
+    @staticmethod
+    def _format_municipality_name(municipality_name: str) -> str:
+        """
+        Format municipality name from ALL CAPITALS to proper Title Case.
+
+        Args:
+            municipality_name: Municipality name (often in ALL CAPITALS from CVR API)
+
+        Returns:
+            Properly formatted municipality name in Title Case
+        """
+        if not municipality_name:
+            return municipality_name
+
+        # Convert to title case, but handle special cases for Danish municipalities
+        formatted = municipality_name.title()
+
+        # Handle special Danish characters and compound names
+        # Fix common Danish municipality name patterns
+        formatted = formatted.replace("Ø", "ø").replace("Å", "å").replace("Æ", "æ")
+
+        # Fix compound municipality names with hyphens
+        if "-" in formatted:
+            parts = formatted.split("-")
+            formatted = "-".join(part.capitalize() for part in parts)
+
+        return formatted
 
     def __init__(
         self,
@@ -85,10 +112,16 @@ class CVRAPIClient:
         self.last_request_time = 0
         self.min_request_interval = 0.1  # 100ms between requests
 
-        # Initialize DAWA client for address geocoding
+        # Initialize cached DAWA client for address geocoding
         self.enable_geocoding = enable_geocoding
         self.geocode_current_only = geocode_current_only
-        self.dawa_client = DAWAAPIClient() if enable_geocoding else None
+
+        if enable_geocoding:
+            from unified_pipeline.util.cached_dawa_api_client import CachedDAWAAPIClient
+
+            self.dawa_client = CachedDAWAAPIClient()
+        else:
+            self.dawa_client = None
 
         self.log.info("CVR API client initialized")
 
@@ -339,7 +372,9 @@ class CVRAPIClient:
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
                     "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
-                    "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                    "municipality_name": self._format_municipality_name(
+                        address_entry.get("kommune", {}).get("kommuneNavn")
+                    ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
                     "period_start": address_entry.get("periode", {}).get("gyldigFra"),
@@ -373,7 +408,9 @@ class CVRAPIClient:
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
                     "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
-                    "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                    "municipality_name": self._format_municipality_name(
+                        address_entry.get("kommune", {}).get("kommuneNavn")
+                    ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
                     "period_start": address_entry.get("periode", {}).get("gyldigFra"),
@@ -501,8 +538,8 @@ class CVRAPIClient:
                                 "municipality_code": addr_entry.get("kommune", {}).get(
                                     "kommuneKode"
                                 ),
-                                "municipality_name": addr_entry.get("kommune", {}).get(
-                                    "kommuneNavn"
+                                "municipality_name": self._format_municipality_name(
+                                    addr_entry.get("kommune", {}).get("kommuneNavn")
                                 ),
                                 "country_code": addr_entry.get("landekode"),
                                 "period_start": addr_entry.get("periode", {}).get("gyldigFra"),
@@ -1533,6 +1570,7 @@ class CVRAPIClient:
                     "VrproduktionsEnhed.elektroniskPost",
                     "VrproduktionsEnhed.telefonnummer",
                     "VrproduktionsEnhed.aarsbeskaeftigelse",
+                    "VrproduktionsEnhed.virksomhedsrelation",  # Essential for CVR mapping
                 ]
 
             # DEBUG: Log the query being sent
@@ -1694,7 +1732,9 @@ class CVRAPIClient:
             if relation.get("periode", {}).get("gyldigTil") is None:  # Current relations only
                 company_relations.append(
                     {
-                        "cvr_number": relation.get("virksomhed", {}).get("cvrNummer"),
+                        "cvr_number": relation.get(
+                            "cvrNummer"
+                        ),  # CVR number is directly in the relation
                         "relation_type": relation.get("virksomhedsrelation"),
                         "period_start": relation.get("periode", {}).get("gyldigFra"),
                         "period_end": relation.get("periode", {}).get("gyldigTil"),
@@ -1747,7 +1787,9 @@ class CVRAPIClient:
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
                     "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
-                    "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                    "municipality_name": self._format_municipality_name(
+                        address_entry.get("kommune", {}).get("kommuneNavn")
+                    ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
                     "period_start": address_entry.get("periode", {}).get("gyldigFra"),
@@ -1786,7 +1828,9 @@ class CVRAPIClient:
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
                     "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
-                    "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                    "municipality_name": self._format_municipality_name(
+                        address_entry.get("kommune", {}).get("kommuneNavn")
+                    ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
                     "period_start": address_entry.get("periode", {}).get("gyldigFra"),

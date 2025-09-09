@@ -6,6 +6,9 @@ export interface FieldAnalysisData {
   crop_name: string;
   is_organic: boolean;
 
+  // Coordinates (added for GPS display and Skråfoto link)
+  click_coordinates?: { lat: number; lng: number };
+
   // Pesticide totals
   total_pesticide_belastning: number;
   total_pesticide_applications?: number;
@@ -51,6 +54,13 @@ export interface FieldAnalysisData {
   // Additional fields
   unique_pesticide_products?: number;
   is_partial_coverage?: boolean;
+
+  // Detailed pesticide product information
+  pesticides_kg_detail?: string;
+  pesticides_liters_detail?: string;
+  pesticides_grams_detail?: string;
+  pesticides_ml_detail?: string;
+  pesticides_tons_detail?: string;
 }
 
 export interface LayerVisibility {
@@ -59,6 +69,11 @@ export interface LayerVisibility {
   wetlands: boolean;
   water_projects: boolean;
   buildings: boolean;
+}
+
+export interface YearSelection {
+  selectedYear: number;
+  availableYears: number[];
 }
 
 export type VisualizationMode =
@@ -73,16 +88,14 @@ export type VisualizationMode =
 export type ColorUnit = 'total' | 'belastning' | 'per_hectare' | 'applications';
 
 export interface FilterState {
-  kommune: string[];
-  cropTypes: string[];
   organicOnly: boolean;
-  areaRange: [number, number];
-  pesticideThreshold: number;
-  pfasThreshold: number;
-  diquatThreshold: number;
-  glyphosateThreshold: number;
-  chemicalFilter: 'all' | 'pfas' | 'diquat' | 'glyphosate' | 'none';
   visualizationMode: VisualizationMode;
   colorUnit: ColorUnit;
   useDecileColoring: boolean;
+}
+
+export function getYearRangeDisplay(year: number): string {
+  // For field analysis, we use pesticide data from the selected year
+  // with field boundaries from the following year
+  return `${year}-${year + 1}`;
 }

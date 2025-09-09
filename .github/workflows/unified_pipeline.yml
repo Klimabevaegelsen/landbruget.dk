@@ -96,6 +96,7 @@ jobs:
       PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
       GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
       GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -181,7 +182,7 @@ jobs:
           if [ -n "${{ matrix.layer_type }}" ]; then
             # FVM WFS matrix job with specific layer and year
             echo "Running FVM WFS matrix job: ${{ matrix.layer_type }} ${{ matrix.year }}"
-            python -m unified_pipeline -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
+            python -m unified_pipeline run -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
           elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
             # FVM WFS from "all" - trigger the dedicated matrix workflow with all stages
             echo "FVM WFS detected in 'all' mode - triggering dedicated FVM WFS matrix workflow"
@@ -212,7 +213,7 @@ jobs:
           else
             # Regular source job
             echo "Running regular pipeline job: ${{ matrix.source }} with stage: ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
           fi
 
           # Stop resource monitoring
@@ -343,8 +344,8 @@ jobs:
           # Step 1: Run disaggregation
           echo "🧪 Step 1: Running pesticide disaggregation for year ${{ matrix.year }}"
           echo "🚨 WORKFLOW: About to execute Python command for disaggregation"
-          echo "🚨 WORKFLOW: Command: python -m unified_pipeline --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}"
-          if python -m unified_pipeline --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}; then
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline run -s pesticide_disaggregation -j gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline run -s pesticide_disaggregation -j gold --pesticide-year ${{ matrix.year }}; then
             echo "✅ Disaggregation completed for year ${{ matrix.year }}"
           else
             DISAGG_EXIT_CODE=$?
@@ -358,8 +359,8 @@ jobs:
           echo "🏠 Analyzing building proximity (100m radius)"
           echo "🌊 Analyzing water feature proximity (100m radius)"
           echo "🚨 WORKFLOW: About to execute Python command for proximity"
-          echo "🚨 WORKFLOW: Command: python -m unified_pipeline --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}"
-          if python -m unified_pipeline --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}; then
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline run -s pesticide_proximity -j gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline run -s pesticide_proximity -j gold --pesticide-year ${{ matrix.year }}; then
             echo "✅ Proximity analysis completed for year ${{ matrix.year }}"
           else
             PROX_EXIT_CODE=$?

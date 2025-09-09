@@ -2,10 +2,21 @@ import argparse
 import logging
 import os
 import sys
+from datetime import datetime
 
 import bronze.export
 import silver.transform
 from dotenv import load_dotenv
+
+# Import pipeline metadata system for data tracing
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
 
 PIPELINE_ROOT = os.path.dirname(os.path.abspath(__file__))
 print("[DEBUG] DISPLAY =", os.environ.get("DISPLAY"))
@@ -51,6 +62,9 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    # Record start time for execution tracking
+    start_time = datetime.now()
+
     # Parse command line arguments
     args = parse_args()
     load_dotenv()
@@ -62,6 +76,14 @@ if __name__ == "__main__":
     )
     logger = logging.getLogger(__name__)
     logger.info(f"Starting pipeline with args: {args}")
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
 
     # Determine GCS bucket to use
     actual_gcs_bucket = args.gcs_bucket
@@ -117,6 +139,38 @@ if __name__ == "__main__":
                 silver_success = False
     else:
         logger.info("Skipping Silver Layer due to --stage setting.")
+
+    # Create and save metadata for Arbejdstilsynet Inspections data
+    if pipeline_metadata_manager and (bronze_success or silver_success):
+        try:
+            import time
+
+            processing_duration = time.time() - start_time.timestamp()
+
+            # Create metadata for Arbejdstilsynet inspections
+            arbejdstilsynet_metadata = pipeline_metadata_manager.create_metadata(
+                source_key="arbejdstilsynet_inspections",
+                record_count=None,  # Could be enhanced to track actual record count from bronze/silver results
+                processing_duration=processing_duration,
+                file_size_bytes=None,  # Will be calculated automatically
+                source_datasets=None,
+            )
+
+            # Save metadata to output directory
+            output_dir = os.getenv("OUTPUT_DIR", "data/output")
+            timestamp = start_time.strftime("%Y%m%d_%H%M%S")
+            metadata_dir = os.path.join(output_dir, "arbejdstilsynet_inspections", timestamp)
+            os.makedirs(metadata_dir, exist_ok=True)
+
+            from pathlib import Path
+
+            metadata_path = pipeline_metadata_manager.save_metadata(
+                arbejdstilsynet_metadata, Path(metadata_dir) / "arbejdstilsynet_inspections_metadata.json"
+            )
+            logger.info(f"✅ Arbejdstilsynet inspections metadata saved to {metadata_path}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to create Arbejdstilsynet pipeline metadata: {e}")
 
     if bronze_success and silver_success:
         print("[main.py] Pipeline finished successfully.")

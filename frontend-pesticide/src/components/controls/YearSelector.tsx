@@ -12,7 +12,7 @@ export function YearSelector({ className = '' }: YearSelectorProps) {
   const selectedYear = useSelectedYear();
   const availableYearOptions = useAvailableYearOptions();
   const { setSelectedYear } = useMapStore();
-  
+
   const [isAnimating, setIsAnimating] = useState(false);
   const [animationInterval, setAnimationInterval] = useState<NodeJS.Timeout | null>(null);
 
@@ -21,14 +21,14 @@ export function YearSelector({ className = '' }: YearSelectorProps) {
 
   const startAnimation = () => {
     if (numericYears.length <= 1) return;
-    
+
     setIsAnimating(true);
     const interval = setInterval(() => {
       const currentIndex = numericYears.indexOf(selectedYear as number);
       const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % numericYears.length : 0;
       setSelectedYear(numericYears[nextIndex]);
     }, 1500); // Change year every 1.5 seconds
-    
+
     setAnimationInterval(interval);
   };
 
@@ -107,7 +107,7 @@ export function YearSelector({ className = '' }: YearSelectorProps) {
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
-        
+
         <button
           onClick={isAnimating ? stopAnimation : startAnimation}
           disabled={numericYears.length <= 1}
@@ -115,7 +115,7 @@ export function YearSelector({ className = '' }: YearSelectorProps) {
         >
           {isAnimating ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
         </button>
-        
+
         <button
           onClick={goToNextYear}
           disabled={!canGoNext() || isAnimating}
@@ -189,4 +189,4 @@ export function YearSelector({ className = '' }: YearSelectorProps) {
       )}
     </div>
   );
-} 
+}

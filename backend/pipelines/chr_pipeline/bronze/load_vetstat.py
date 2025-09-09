@@ -21,6 +21,21 @@ from lxml import etree
 # Import the exporter function
 from .export import save_raw_data
 
+# Import UUID utilities for deterministic TrackID generation
+try:
+    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+except ImportError:
+    try:
+        import sys
+        from pathlib import Path
+
+        unified_pipeline_path = Path(__file__).parent.parent.parent / "unified_pipeline" / "src"
+        if unified_pipeline_path.exists():
+            sys.path.append(str(unified_pipeline_path))
+        from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+    except ImportError:
+        LandbrugsdataUUID = None
+
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_vetstat")
 
@@ -193,6 +208,18 @@ def get_element_prefixes(element_type: str) -> List[str]:
 def generate_uuid_id(prefix: str) -> str:
     """Generate a UUID-based ID with a specific prefix."""
     return f"{prefix}{uuid.uuid4().hex.upper()}"
+
+
+def generate_deterministic_track_id(species_code: str, periode_fra: str, periode_til: str) -> str:
+    """Generate deterministic TrackID for VetStat requests based on parameters."""
+    if LandbrugsdataUUID:
+        # Create deterministic ID based on request parameters
+        request_key = f"{species_code}-{periode_fra}-{periode_til}"
+        track_uuid = LandbrugsdataUUID.generate_deterministic_uuid("vetstat-request", request_key)
+        return f"vetstat_request-{track_uuid}"
+    else:
+        # Fallback to random UUID if LandbrugsdataUUID not available
+        return generate_uuid_id("vetstat_request-")
 
 
 def update_security_elements(root: etree._Element, username: str, password: str, certificate: Any):
@@ -409,7 +436,7 @@ def create_soap_envelope_template(
         <glr:BrugerNavn>{username}</glr:BrugerNavn>
         <glr:SessionId>1</glr:SessionId>
         <glr:IPAdresse></glr:IPAdresse>
-        <glr:TrackID>{generate_uuid_id("vetstat_request-")}</glr:TrackID>
+        <glr:TrackID>{generate_deterministic_track_id(species_code, periode_fra, periode_til)}</glr:TrackID>
       </glr:GLRCHRWSInfoInbound>
       <eks:Request>
         <glr:DyreArtKode>{species_code}</glr:DyreArtKode>

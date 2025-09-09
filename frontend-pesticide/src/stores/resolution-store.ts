@@ -4,25 +4,25 @@ import { persist } from 'zustand/middleware'
 interface ResolutionState {
   // Current resolution - 'kommune' | 8 | 10
   currentResolution: 'kommune' | 8 | 10
-  
+
   // Auto-resolution settings
   autoResolution: boolean
-  
+
   // Resolution history for smooth transitions
   previousResolution: 'kommune' | 8 | 10 | null
-  
+
   // Zoom level tracking
   currentZoom: number
-  
+
   // Actions
   setResolution: (resolution: 'kommune' | 8 | 10) => void
   setAutoResolution: (auto: boolean) => void
   setZoom: (zoom: number) => void
-  
+
   // Utility functions
   getResolutionForZoom: (zoom: number) => 'kommune' | 8 | 10
   shouldUpdateResolution: (newZoom: number) => boolean
-  
+
   // Resolution info
   getResolutionInfo: (resolution: 'kommune' | 8 | 10) => {
     name: string
@@ -40,19 +40,19 @@ export const useResolutionStore = create<ResolutionState>()(
       autoResolution: true,
       previousResolution: null,
       currentZoom: 7,
-      
+
       // Actions
       setResolution: (resolution) => set((state) => ({
         currentResolution: resolution,
         previousResolution: state.currentResolution,
       })),
-      
+
       setAutoResolution: (auto) => set({ autoResolution: auto }),
-      
+
       setZoom: (zoom) => {
         const state = get()
         const newResolution = state.getResolutionForZoom(zoom)
-        
+
         if (state.autoResolution && newResolution !== state.currentResolution) {
           set({
             currentZoom: zoom,
@@ -63,7 +63,7 @@ export const useResolutionStore = create<ResolutionState>()(
           set({ currentZoom: zoom })
         }
       },
-      
+
       // Utility functions
       getResolutionForZoom: (zoom) => {
         // Simplified zoom-to-resolution mapping
@@ -71,15 +71,15 @@ export const useResolutionStore = create<ResolutionState>()(
         if (zoom >= 9) return 8      // Medium zoom = sub-regional detail (res8)
         return 'kommune'             // Low zoom = municipal boundaries
       },
-      
+
       shouldUpdateResolution: (newZoom) => {
         const state = get()
         if (!state.autoResolution) return false
-        
+
         const newResolution = state.getResolutionForZoom(newZoom)
         return newResolution !== state.currentResolution
       },
-      
+
       getResolutionInfo: (resolution) => {
         const resolutionInfo = {
           'kommune': {
@@ -101,7 +101,7 @@ export const useResolutionStore = create<ResolutionState>()(
             cellSize: '~15 ha',
           },
         }
-        
+
         return resolutionInfo[resolution] || {
           name: 'Unknown',
           description: 'Unknown resolution',
@@ -119,4 +119,4 @@ export const useResolutionStore = create<ResolutionState>()(
       }),
     }
   )
-) 
+)

@@ -11,7 +11,7 @@ interface DataModeSelectorProps {
 
 const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
   const config = DATA_MODE_CONFIG[mode];
-  
+
   // Generate color scale for visualization
   const colorStops = [
     { value: 0, color: 'rgba(255, 255, 255, 0.8)' },
@@ -31,14 +31,14 @@ const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
       <div className="text-sm font-medium text-gray-900 mb-2">
         {config.label} Scale
       </div>
-      
+
       {/* Color gradient bar */}
       <div className="relative h-4 rounded mb-2" style={{
         background: `linear-gradient(to right, ${colorStops.map(stop => stop.color).join(', ')})`
       }}>
         <div className="absolute inset-0 border border-gray-300 rounded"></div>
       </div>
-      
+
       {/* Scale labels */}
       <div className="flex justify-between text-xs text-gray-600">
         <span>0</span>
@@ -47,7 +47,7 @@ const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
         <span>High</span>
         <span>1000+ {config.unit}</span>
       </div>
-      
+
       <div className="mt-2 text-xs text-gray-500">
         {config.description}
       </div>
@@ -91,9 +91,9 @@ const modes: { key: DataMode; label: string; shortLabel: string; mobileLabel: st
   },
 ];
 
-export const DataModeSelector: React.FC<DataModeSelectorProps> = ({ 
-  className = '', 
-  variant = 'sidebar' 
+export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
+  className = '',
+  variant = 'sidebar'
 }) => {
   const { selectedDataMode } = useDataState();
   const { setSelectedDataMode } = useMapStore();
@@ -194,4 +194,4 @@ export const DataModeSelector: React.FC<DataModeSelectorProps> = ({
   );
 };
 
-export default DataModeSelector; 
+export default DataModeSelector;

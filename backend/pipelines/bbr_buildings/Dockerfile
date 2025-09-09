@@ -32,4 +32,4 @@ COPY . .
 RUN mkdir -p /app/data
 
 # Default command
-CMD ["python", "main.py", "--help"] 
+CMD ["python", "main.py", "--help"]

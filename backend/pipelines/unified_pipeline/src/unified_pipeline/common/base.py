@@ -10,8 +10,10 @@ import json
 import os
 import re
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Generic, Optional, TypeVar
 
 import duckdb
@@ -21,6 +23,16 @@ from unified_pipeline.common.native_schema_manager import NativeSchemaManager
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
+
+# Import the new data tracing system
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
 
 # Import schema documentation
 try:
@@ -160,14 +172,24 @@ class BaseSource(Generic[T], ABC):
         # Create GCS access layer with shared connection
         self.gcs_access = GCSDataAccess(connection=self.conn)
 
+        # Initialize pipeline metadata manager (pipeline-level data tracing)
+        if PIPELINE_METADATA_AVAILABLE:
+            self.pipeline_metadata_manager = PipelineMetadataManager()
+            self.processing_start_time = time.time()
+            self.log.info("✅ Pipeline metadata system initialized for unified pipeline")
+        else:
+            self.pipeline_metadata_manager = None
+            self.processing_start_time = None
+            self.log.warning("⚠️  Pipeline metadata system not available")
+
         # Use pipeline start time consistently (not save time)
         # Check if shared timestamp is provided via environment variable (for GitHub Actions)
-        pipeline_start_env = os.getenv('PIPELINE_START_TIME')
+        pipeline_start_env = os.getenv("PIPELINE_START_TIME")
         if pipeline_start_env:
             try:
                 # Parse GitHub's ISO timestamp format
                 self.pipeline_start_time = datetime.fromisoformat(
-                    pipeline_start_env.replace('Z', '+00:00')
+                    pipeline_start_env.replace("Z", "+00:00")
                 )
                 self.log.info(
                     f"Using shared pipeline start time from environment: "
@@ -178,11 +200,120 @@ class BaseSource(Generic[T], ABC):
                 self.pipeline_start_time = datetime.now()
         else:
             self.pipeline_start_time = datetime.now()
-        
+
         self.date_pattern = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
         # Initialize schema managers with shared connection
         self._initialize_schema_managers()
+
+    def _save_data_with_metadata(
+        self,
+        data: Any,
+        dataset: str,
+        source_key: str,  # Must be in DATA_SOURCE_REGISTRY
+        bucket: str = None,
+        stage: str = "bronze",
+        subdataset: str = None,
+        conn: Any = None,
+        filename: str = None,
+        source_datasets: Optional[list] = None,  # For gold layer lineage
+    ) -> str:
+        """
+        Enhanced save method with pipeline metadata for data tracing.
+
+        This method combines the existing _save_data functionality with automatic
+        pipeline metadata creation and saving for complete data traceability.
+
+        Args:
+            data: Table name (str) or data structure to save
+            dataset: Primary dataset name
+            source_key: Key from DATA_SOURCE_REGISTRY for metadata
+            bucket: GCS bucket name (optional, uses config if not provided)
+            stage: Pipeline stage (bronze/silver/gold)
+            subdataset: Optional subdataset name for multi-table outputs
+            conn: Optional DuckDB connection (deprecated - uses shared connection)
+            filename: Optional filename override
+            source_datasets: For gold datasets, list of source dataset keys
+
+        Returns:
+            str: Path where the data was saved
+        """
+        # Use the regular _save_data method first
+        self._save_data(
+            data=data,
+            dataset=dataset,
+            bucket=bucket or self.config.bucket,
+            stage=stage,
+            subdataset=subdataset,
+            conn=conn,
+            filename=filename,
+        )
+
+        # Create and save pipeline metadata if available
+        if self.pipeline_metadata_manager and self.processing_start_time:
+            try:
+                # Calculate record count if data is available
+                record_count = None
+                if isinstance(data, str):  # Table name
+                    try:
+                        result = self.conn.execute(f"SELECT COUNT(*) FROM {data}").fetchone()
+                        record_count = result[0] if result else None
+                    except Exception:
+                        pass  # Skip if table doesn't exist or other error
+                elif isinstance(data, list):
+                    record_count = len(data)
+                elif isinstance(data, dict) and "features" in data:
+                    record_count = len(data["features"])
+
+                # Calculate processing duration
+                processing_duration = time.time() - self.processing_start_time
+
+                # Create metadata
+                pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                    source_key=source_key,
+                    record_count=record_count,
+                    processing_duration=processing_duration,
+                    source_datasets=source_datasets,
+                )
+
+                # Determine save path for metadata
+                final_dataset = f"{dataset}_{subdataset}" if subdataset else dataset
+                timestamp = self.date_pattern
+                metadata_filename = (
+                    f"{Path(filename).stem}_metadata.json" if filename else "pipeline_metadata.json"
+                )
+                metadata_path = Path(
+                    f"/tmp/{stage}_{final_dataset}_{timestamp}_{metadata_filename}"
+                )
+
+                # Save pipeline metadata
+                metadata_file_path = self.pipeline_metadata_manager.save_metadata(
+                    pipeline_metadata, metadata_path
+                )
+
+                self.log.info(f"✅ Pipeline metadata saved to {metadata_file_path}")
+
+                # If using GCS, also upload the metadata file
+                if not self.config.save_local:
+                    try:
+                        metadata_gcs_path = (
+                            f"{stage}/{final_dataset}/{timestamp}/{metadata_filename}"
+                        )
+                        # Read JSON metadata and upload using upload_json_string method
+                        with open(metadata_file_path, "r", encoding="utf-8") as f:
+                            metadata_json_string = f.read()
+
+                        self.gcs_access.upload_json_string(metadata_json_string, metadata_gcs_path)
+                        self.log.info(f"✅ Pipeline metadata uploaded to GCS: {metadata_gcs_path}")
+                    except Exception as e:
+                        self.log.warning(f"⚠️  Failed to upload metadata to GCS: {e}")
+
+            except Exception as e:
+                self.log.error(f"❌ Failed to create pipeline metadata: {e}")
+
+        # Return the data path for reference
+        final_dataset = f"{dataset}_{subdataset}" if subdataset else dataset
+        return f"{stage}/{final_dataset}/{self.date_pattern}/{filename or 'data.parquet'}"
 
     def _configure_duckdb(self):
         """

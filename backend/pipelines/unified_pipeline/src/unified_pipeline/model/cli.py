@@ -74,6 +74,7 @@ class Source(Enum):
     pesticide_proximity = "pesticide_proximity"
     pesticide_compliance = "pesticide_compliance"
     cvr_enrichment = "cvr_enrichment"
+    cvr_geometry_datasets = "cvr_geometry_datasets"
     dst = "dst"
     dmi = "dmi"
     arbejdstilsynet_inspections = "arbejdstilsynet_inspections"
@@ -177,3 +178,6 @@ class CliConfig(BaseModel):
     # Batch processing parameters
     batch_number: Optional[int] = None
     total_batches: Optional[int] = None
+
+    # General year parameter for matrix jobs
+    target_year: Optional[int] = None

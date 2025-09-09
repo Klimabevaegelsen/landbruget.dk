@@ -213,7 +213,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         invalid_water = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_wetland_water_intersections
-            WHERE property_wetland_water_geometry IS NULL OR 
+            WHERE property_wetland_water_geometry IS NULL OR
                 NOT ST_IsValid(property_wetland_water_geometry)
         """).fetchone()[0]
 
@@ -227,7 +227,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         empty_water = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_wetland_water_intersections
-            WHERE property_wetland_water_geometry IS NOT NULL AND 
+            WHERE property_wetland_water_geometry IS NOT NULL AND
                 ST_IsEmpty(property_wetland_water_geometry)
         """).fetchone()[0]
 
@@ -336,7 +336,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         water_only_properties = self.conn.execute("""
             SELECT COUNT(DISTINCT pww.bfe_number)
             FROM property_wetland_water_intersections pww
-            LEFT JOIN property_wetland_intersections pw ON 
+            LEFT JOIN property_wetland_intersections pw ON
                 pww.bfe_number = pw.bfe_number AND pww.field_uuid = pw.field_uuid
             WHERE pw.bfe_number IS NULL
         """).fetchone()[0]
@@ -357,7 +357,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         invalid_bfe_numbers = self.conn.execute("""
             SELECT COUNT(*)
             FROM property_wetland_intersections pw
-            LEFT JOIN field_property_intersections fp ON 
+            LEFT JOIN field_property_intersections fp ON
                 pw.field_uuid = fp.field_uuid AND pw.bfe_number = fp.bfe_number
             WHERE fp.bfe_number IS NULL
         """).fetchone()[0]
@@ -376,7 +376,7 @@ class FinalWetlandAnalysis(FieldAnalysisStageBase):
         ).fetchone()[0]
         unique_combinations = self.conn.execute("""
             SELECT COUNT(*) FROM (
-                SELECT DISTINCT field_uuid, bfe_number, wetland_id 
+                SELECT DISTINCT field_uuid, bfe_number, wetland_id
                 FROM property_wetland_intersections
             )
         """).fetchone()[0]

@@ -211,6 +211,10 @@ async def execute_pipeline_jobs(
                 f"🚨 APP: After CLI filters - pesticide_year = "
                 f"{getattr(config_instance, 'pesticide_year', 'NOT_SET')}"
             )
+            print(
+                f"🚨 APP: After CLI filters - target_year = "
+                f"{getattr(config_instance, 'target_year', 'NOT_SET')}"
+            )
         else:
             print(f"🚨 APP: No apply_cli_filters method found on {config_cls.__name__}")
 
@@ -727,6 +731,14 @@ def cli():
     "Used with CVR enrichment pipeline steps.",
     required=False,
 )
+@click.option(
+    "--year",
+    "target_year",
+    type=int,
+    help="Year filter for matrix jobs (e.g., 2020). "
+    "Used with field production and other gold layer pipelines.",
+    required=False,
+)
 def run_cli(
     ctx,
     env: str,
@@ -740,6 +752,7 @@ def run_cli(
     pesticide_year: int = None,
     batch_number: int = None,
     total_batches: int = None,
+    target_year: int = None,
 ) -> None:
     """
     CLI entry point for the unified pipeline application.
@@ -772,6 +785,7 @@ def run_cli(
         pesticide_year=pesticide_year,
         batch_number=batch_number,
         total_batches=total_batches,
+        target_year=target_year,
     )
     print(app_config)
     exit_code = execute(app_config)

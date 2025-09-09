@@ -11,6 +11,18 @@ from dotenv import load_dotenv
 from google.cloud import storage
 from zeep.helpers import serialize_object
 
+# Import the unified metadata system
+try:
+    import sys
+
+    sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+    from common.pipeline_metadata import MetadataManager
+
+    METADATA_AVAILABLE = True
+except ImportError:
+    MetadataManager = None
+    METADATA_AVAILABLE = False
+
 # Load environment variables
 load_dotenv()
 
@@ -50,6 +62,16 @@ _data_buffer: Dict[str, Dict[str, List[Any]]] = {}
 EXPORT_TIMESTAMP = os.getenv("BRONZE_EXPORT_TIMESTAMP") or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 timestamp_source = "environment" if os.getenv("BRONZE_EXPORT_TIMESTAMP") else "current time"
 logger.info(f"Using export timestamp: {EXPORT_TIMESTAMP} (from {timestamp_source})")
+
+# Initialize metadata manager
+_metadata_manager = None
+if METADATA_AVAILABLE:
+    try:
+        _metadata_manager = MetadataManager()
+        logger.info("✅ CHR pipeline metadata system initialized")
+    except Exception as e:
+        logger.warning(f"⚠️  Failed to initialize metadata manager: {e}")
+        _metadata_manager = None
 
 
 def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -> bool:
@@ -95,6 +117,35 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
         blob.upload_from_string(content, content_type=content_type)
 
         logger.info(f"✅ Saved {data_type} data immediately to gs://{GCS_BUCKET}/{blob_path}")
+
+        # Create and upload metadata using existing upload method
+        if _metadata_manager:
+            try:
+                record_count = len(data) if isinstance(data, list) else None
+                source_key_mapping = {
+                    "chr_dyr_movement_summaries": "chr_animal_movements",
+                    "vetstat_antibiotics": "chr_animal_movements",
+                    "chr_properties": "chr_properties",
+                    "chr_herds": "chr_herds",
+                    "spf_su_herds": "spf_su_herds",
+                }
+                source_key = source_key_mapping.get(data_type, "chr_animal_movements")
+
+                metadata = _metadata_manager.create_metadata(
+                    source_key=source_key,
+                    record_count=record_count,
+                    file_size_bytes=len(str(data).encode("utf-8")) if data else None,
+                )
+
+                # Use existing upload method
+                metadata_content = json.dumps(metadata.model_dump(mode="json"), indent=2, default=str)
+                metadata_blob_path = blob_path.replace(".json", "_metadata.json").replace(".xml", "_metadata.json")
+                metadata_blob = bucket.blob(metadata_blob_path)
+                metadata_blob.upload_from_string(metadata_content, content_type="application/json")
+                logger.info(f"✅ Uploaded metadata to gs://{GCS_BUCKET}/{metadata_blob_path}")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to create metadata for {data_type}: {e}")
+
         return True
 
     except Exception as e:
@@ -369,6 +420,23 @@ def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str
             f.write("\n]")
 
         logger.info(f"Completed streaming upload to GCS for {filename}")
+
+        # Create and upload metadata using existing methods
+        if _metadata_manager:
+            try:
+                metadata = _metadata_manager.create_metadata(
+                    source_key="chr_animal_movements",  # Default for streaming uploads
+                    record_count=len(data_list),
+                    file_size_bytes=estimated_size_mb * 1024 * 1024,  # Convert back to bytes
+                )
+
+                metadata_content = json.dumps(metadata.model_dump(mode="json"), indent=2, default=str)
+                metadata_filename = filename.replace(".json", "_metadata.json")
+                metadata_blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}{path_suffix}/{metadata_filename}")
+                metadata_blob.upload_from_string(metadata_content, content_type="application/json")
+                logger.info(f"✅ Uploaded streaming metadata for {filename}")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to create streaming metadata for {filename}: {e}")
 
         # CRITICAL: Clear the data_list immediately after successful upload to free memory
         data_list.clear()

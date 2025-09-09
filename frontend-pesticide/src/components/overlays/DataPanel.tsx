@@ -11,7 +11,7 @@ export function DataPanel() {
   const { selectedYear, cumulativeMode, heatmapMode } = useMapStore();
   const { currentH3Data, currentBNBOData, currentBBRData, isLoading } = useDataStore();
   const { showDataPanel, setShowDataPanel } = useUIStore();
-  
+
   if (!showDataPanel) {
     return (
       <motion.button
@@ -24,20 +24,20 @@ export function DataPanel() {
       </motion.button>
     );
   }
-  
+
   // Calculate statistics from current data
   const stats = {
     totalHexagons: currentH3Data.length,
     totalPesticideLoad: currentH3Data.reduce((sum, item) => sum + (item.total_pesticide_load || 0), 0),
     totalPFASMass: currentH3Data.reduce((sum, item) => sum + (item.total_pfas_grams || 0), 0),
     totalArea: currentH3Data.reduce((sum, item) => sum + (item.agricultural_area_ha || 0), 0),
-    avgCoverage: currentH3Data.length > 0 
-      ? currentH3Data.reduce((sum, item) => sum + (item.avg_field_coverage || 0), 0) / currentH3Data.length 
+    avgCoverage: currentH3Data.length > 0
+      ? currentH3Data.reduce((sum, item) => sum + (item.avg_field_coverage || 0), 0) / currentH3Data.length
       : 0,
     protectedAreas: currentBNBOData.length,
     buildings: currentBBRData.length
   };
-  
+
   const exportData = () => {
     const dataToExport = {
       metadata: {
@@ -52,11 +52,11 @@ export function DataPanel() {
       bbrData: currentBBRData,
       statistics: stats
     };
-    
+
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
       type: 'application/json'
     });
-    
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -66,7 +66,7 @@ export function DataPanel() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
-  
+
   return (
     <AnimatePresence>
       <motion.div
@@ -89,7 +89,7 @@ export function DataPanel() {
             <X size={16} className="text-gray-400" />
           </button>
         </div>
-        
+
         {/* Current Selection Info */}
         <div className="mb-4 p-3 bg-blue-50 rounded-lg">
           <div className="text-sm font-medium text-blue-900 mb-1">
@@ -101,14 +101,14 @@ export function DataPanel() {
             <div>Type: {cumulativeMode ? 'Cumulative' : 'Single Year'}</div>
           </div>
         </div>
-        
+
         {/* Statistics */}
         <div className="space-y-3 mb-4">
           <div className="text-sm font-medium text-gray-700 flex items-center space-x-1">
             <Info size={14} />
             <span>Statistics</span>
           </div>
-          
+
           {isLoading ? (
             <div className="space-y-2">
               {[...Array(6)].map((_, i) => (
@@ -121,12 +121,12 @@ export function DataPanel() {
                 <span className="text-gray-600">H3 Hexagons:</span>
                 <span className="font-medium">{formatNumber(stats.totalHexagons, 0)}</span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Area:</span>
                 <span className="font-medium">{formatNumber(stats.totalArea)} ha</span>
               </div>
-              
+
               {heatmapMode === 'pesticide' ? (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Pesticide Load:</span>
@@ -138,17 +138,17 @@ export function DataPanel() {
                   <span className="font-medium">{formatNumber(stats.totalPFASMass)} g</span>
                 </div>
               )}
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Avg Coverage:</span>
                 <span className="font-medium">{formatNumber(stats.avgCoverage * 100, 1)}%</span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Protected Areas:</span>
                 <span className="font-medium">{formatNumber(stats.protectedAreas, 0)}</span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Buildings:</span>
                 <span className="font-medium">{formatNumber(stats.buildings, 0)}</span>
@@ -156,7 +156,7 @@ export function DataPanel() {
             </div>
           )}
         </div>
-        
+
         {/* Quick Actions */}
         <div className="space-y-2">
           <motion.button
@@ -169,7 +169,7 @@ export function DataPanel() {
             <Download size={14} />
             <span>Export Data</span>
           </motion.button>
-          
+
           <motion.button
             className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
             whileHover={{ scale: 1.02 }}
@@ -179,7 +179,7 @@ export function DataPanel() {
             <span>Advanced Filters</span>
           </motion.button>
         </div>
-        
+
         {/* Data Quality Indicator */}
         <div className="mt-4 pt-3 border-t border-gray-200">
           <div className="text-xs text-gray-500">
@@ -198,4 +198,4 @@ export function DataPanel() {
       </motion.div>
     </AnimatePresence>
   );
-} 
+}

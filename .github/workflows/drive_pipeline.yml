@@ -42,15 +42,15 @@ jobs:
   discover-folders:
     if: ${{ inputs.use_matrix == true }}
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: 'read'
       id-token: 'write'
-    
+
     outputs:
       folders: ${{ steps.get-folders.outputs.folders }}
       folder_count: ${{ steps.get-folders.outputs.folder_count }}
-    
+
     env:
       ENVIRONMENT: production
       GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
@@ -74,7 +74,7 @@ jobs:
         # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
-        
+
         # Install drive pipeline dependencies
         cd ../drive_data_pipeline
         sudo apt-get update
@@ -116,54 +116,54 @@ jobs:
         import json
         import sys
         import os
-        
+
         # Add the parent directory to sys.path to enable imports
         parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if parent_dir not in sys.path:
             sys.path.insert(0, parent_dir)
-        
+
         from drive_data_pipeline.bronze.drive import get_drive_service, GoogleDriveFetcher
         from drive_data_pipeline.config import get_settings
-        
+
         try:
             print("DEBUG: Starting folder discovery...", file=sys.stderr)
             settings = get_settings()
-            
+
             print(f"DEBUG: Google Drive Folder ID: {settings.google_drive_folder_id}", file=sys.stderr)
             print(f"DEBUG: Use public access: {settings.use_public_access}", file=sys.stderr)
             print(f"DEBUG: Credentials path exists: {settings.google_application_credentials and settings.google_application_credentials.exists() if settings.google_application_credentials else 'None'}", file=sys.stderr)
-            
+
             if not settings.google_drive_folder_id:
                 print("Error: GOOGLE_DRIVE_FOLDER_ID not set", file=sys.stderr)
                 sys.exit(1)
-            
+
             print("DEBUG: Authenticating with Google Drive...", file=sys.stderr)
             drive_service = get_drive_service(
                 credentials_path=settings.google_application_credentials,
                 use_public_access=settings.use_public_access,
             )
-            
+
             print("DEBUG: Creating fetcher...", file=sys.stderr)
             fetcher = GoogleDriveFetcher(drive_service, use_public_access=settings.use_public_access)
-            
+
             print("DEBUG: Listing folder contents (non-recursive)...", file=sys.stderr)
             folder = fetcher.list_folder_contents(
-                folder_id=settings.google_drive_folder_id, 
+                folder_id=settings.google_drive_folder_id,
                 recursive=False
             )
-            
+
             print(f"DEBUG: Main folder name: {folder.name}", file=sys.stderr)
             print(f"DEBUG: Main folder ID: {folder.id}", file=sys.stderr)
             print(f"DEBUG: Number of files in root: {len(folder.files)}", file=sys.stderr)
             print(f"DEBUG: Number of subfolders: {len(folder.subfolders)}", file=sys.stderr)
-            
+
             # Get folder names, filtering out empty folders if desired
             folder_names = []
             print("DEBUG: Processing subfolders...", file=sys.stderr)
             for i, subfolder in enumerate(folder.subfolders):
                 print(f"DEBUG: Subfolder {i+1}: {subfolder.name} (ID: {subfolder.id})", file=sys.stderr)
                 folder_names.append(subfolder.name)
-            
+
             # If specific subfolders were requested, filter to only those
             requested_subfolders = os.getenv('REQUESTED_SUBFOLDERS', '').strip()
             if requested_subfolders:
@@ -172,49 +172,49 @@ jobs:
                 original_count = len(folder_names)
                 folder_names = [f for f in folder_names if f in requested_list]
                 print(f"DEBUG: Filtered from {original_count} to {len(folder_names)} folders", file=sys.stderr)
-            
+
             print(f"DEBUG: Final folder list: {folder_names}", file=sys.stderr)
             print(f"DEBUG: JSON output will be: {json.dumps(folder_names)}", file=sys.stderr)
-            
+
             # Output ONLY the JSON to stdout (this is what gets captured)
             print(json.dumps(folder_names))
-            
+
         except Exception as e:
             print(f"Error discovering folders: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc(file=sys.stderr)
             sys.exit(1)
         EOF
-        
+
         # Set requested subfolders if specified
         if [[ -n "${{ inputs.subfolders }}" ]]; then
           export REQUESTED_SUBFOLDERS="${{ inputs.subfolders }}"
         fi
-        
+
         # Run the discovery script
         folders=$(python discover_folders.py | tail -n 1)
         folder_count=$(echo "$folders" | jq '. | length')
-        
+
         echo "folders=$folders" >> $GITHUB_OUTPUT
         echo "folder_count=$folder_count" >> $GITHUB_OUTPUT
-        
+
         echo "Discovered $folder_count folders for matrix processing"
 
   run-matrix:
     if: ${{ inputs.use_matrix == true && needs.discover-folders.outputs.folders != '[]' && needs.discover-folders.outputs.folders != '' }}
     needs: discover-folders
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: 'read'
       id-token: 'write'
-    
+
     strategy:
       max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
       fail-fast: false  # Don't stop other jobs if one fails
       matrix:
         folder: ${{ fromJson(needs.discover-folders.outputs.folders) }}
-    
+
     env:
       ENVIRONMENT: production
       GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
@@ -238,7 +238,7 @@ jobs:
         # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
-        
+
         # Install drive pipeline dependencies
         cd ../drive_data_pipeline
         sudo apt-get update
@@ -278,7 +278,7 @@ jobs:
       run: |
         # Build command for this specific folder
         CMD="python main.py --subfolders '${{ matrix.folder }}'"
-        
+
         if [[ "${{ inputs.bronze_only }}" == "true" ]]; then
           CMD="$CMD --bronze-only"
         elif [[ "${{ inputs.silver_only }}" == "true" ]]; then
@@ -287,17 +287,17 @@ jobs:
           # Default to --both for in-memory processing (faster and more reliable)
           CMD="$CMD --both"
         fi
-        
+
         if [[ -n "${{ inputs.file_types }}" ]]; then
           CMD="$CMD --file-types '${{ inputs.file_types }}'"
         fi
-        
+
         if [[ -n "${{ inputs.log_level }}" ]]; then
           CMD="$CMD --log-level ${{ inputs.log_level }}"
         fi
-        
+
         CMD="$CMD --verbose"
-        
+
         echo "Processing folder '${{ matrix.folder }}' with command: $CMD"
         eval $CMD
 
@@ -310,7 +310,7 @@ jobs:
   run-single:
     if: ${{ inputs.use_matrix != true }}
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -338,7 +338,7 @@ jobs:
         # Install unified pipeline dependencies FIRST (needed for GCS access)
         cd backend/pipelines/unified_pipeline
         uv pip install --system -e .
-        
+
         # Install drive pipeline dependencies
         cd ../drive_data_pipeline
         sudo apt-get update
@@ -378,7 +378,7 @@ jobs:
       run: |
         # Build command based on inputs
         CMD="python main.py"
-        
+
         if [[ "${{ inputs.bronze_only }}" == "true" ]]; then
           CMD="$CMD --bronze-only"
         elif [[ "${{ inputs.silver_only }}" == "true" ]]; then
@@ -387,21 +387,21 @@ jobs:
           # Default to --both for in-memory processing (faster and more reliable)
           CMD="$CMD --both"
         fi
-        
+
         if [[ -n "${{ inputs.subfolders }}" ]]; then
           CMD="$CMD --subfolders '${{ inputs.subfolders }}'"
         fi
-        
+
         if [[ -n "${{ inputs.file_types }}" ]]; then
           CMD="$CMD --file-types '${{ inputs.file_types }}'"
         fi
-        
+
         if [[ -n "${{ inputs.log_level }}" ]]; then
           CMD="$CMD --log-level ${{ inputs.log_level }}"
         fi
-        
+
         CMD="$CMD --verbose"
-        
+
         echo "Running command: $CMD"
         eval $CMD
 
@@ -409,4 +409,4 @@ jobs:
       if: failure()
       run: |
         echo "Google Drive Pipeline failed. Please check the logs above for details."
-        exit 1 
+        exit 1

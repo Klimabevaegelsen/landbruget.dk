@@ -6,6 +6,7 @@ import concurrent.futures
 import logging
 import os
 import time
+from calendar import monthrange
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -40,6 +41,16 @@ from silver import config
 from silver.chr_silver_processing import process_chr_data as run_silver_processing
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
+
+# Import pipeline metadata system for data tracing
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +111,47 @@ def get_default_dates() -> tuple[date, date]:
     end_date = today.replace(day=1) - timedelta(days=1)  # Last day of previous month
     start_date = end_date.replace(day=1)  # First day of previous month
     return start_date, end_date
+
+
+def generate_monthly_date_ranges(start_date: date, end_date: date) -> List[tuple[date, date]]:
+    """
+    Generate monthly date ranges for VetStat API calls.
+    VetStat API can only handle one month at a time.
+
+    Args:
+        start_date: Start date for the overall period
+        end_date: End date for the overall period
+
+    Returns:
+        List of (month_start, month_end) tuples
+    """
+    monthly_ranges = []
+
+    # Start from the first day of the start month
+    current_date = start_date.replace(day=1)
+
+    while current_date <= end_date:
+        # Get the last day of the current month
+        last_day = monthrange(current_date.year, current_date.month)[1]
+        month_end = current_date.replace(day=last_day)
+
+        # Don't go beyond the requested end date
+        if month_end > end_date:
+            month_end = end_date
+
+        monthly_ranges.append((current_date, month_end))
+
+        # Move to the first day of the next month
+        if current_date.month == 12:
+            current_date = current_date.replace(year=current_date.year + 1, month=1)
+        else:
+            current_date = current_date.replace(month=current_date.month + 1)
+
+        # Break if we've gone past the end date
+        if current_date > end_date:
+            break
+
+    return monthly_ranges
 
 
 def parse_args() -> Dict[str, Any]:
@@ -658,16 +710,31 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if "chr_to_species" not in context:
             raise ValueError("Cannot run 'vetstat' step without first running 'herd_details'")
 
+        # Generate monthly date ranges for VetStat API limitation
+        start_date = context["args"]["start_date"]
+        end_date = context["args"]["end_date"]
+        monthly_ranges = generate_monthly_date_ranges(start_date, end_date)
+
+        logging.info(f"VetStat will process {len(monthly_ranges)} monthly chunks from {start_date} to {end_date}")
+        for i, (month_start, month_end) in enumerate(monthly_ranges):
+            logging.debug(f"  Month {i+1}: {month_start} to {month_end}")
+
+        # Create tasks for each CHR/species/month combination
         vetstat_tasks = [
-            (chr_num, species, context["args"]["start_date"], context["args"]["end_date"])
+            (chr_num, species, month_start, month_end)
             for chr_num, species_set in context["chr_to_species"].items()
             for species in species_set
+            for month_start, month_end in monthly_ranges
         ]
 
         if not vetstat_tasks:
             logging.warning("No valid CHR number and species code combinations found for VetStat data")
         elif context["args"]["progress"]:
-            logging.info(f"Processing {len(vetstat_tasks)} VetStat tasks")
+            combinations = sum(len(species_set) for species_set in context["chr_to_species"].values())
+            logging.info(
+                f"Processing {len(vetstat_tasks)} VetStat tasks "
+                f"({combinations} CHR/species combinations × {len(monthly_ranges)} months)"
+            )
 
         try:
             results = process_parallel(
@@ -725,6 +792,14 @@ def main():
 
     args = parse_args()
     setup_logging(args["log_level"])
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
 
     try:
         # Determine steps to run first to decide if we need FVM credentials
@@ -1003,6 +1078,58 @@ def main():
                     raise RuntimeError("No bronze data source available for silver processing")
 
                 logging.warning(f"✅ Silver processing completed. Output in: {silver_dir}")
+
+                # Create and save metadata for CHR data sources
+                if pipeline_metadata_manager:
+                    try:
+                        processing_duration = time.time() - start_time.timestamp()
+
+                        # Create metadata for CHR animal movements
+                        if unique_bronze_steps and "animal_movements" in unique_bronze_steps:
+                            chr_movements_metadata = pipeline_metadata_manager.create_metadata(
+                                source_key="chr_animal_movements",
+                                record_count=len(context.get("animal_movements_results", [])),
+                                processing_duration=processing_duration,
+                                file_size_bytes=None,  # Will be calculated automatically
+                                source_datasets=None,
+                            )
+                            metadata_path = pipeline_metadata_manager.save_metadata(
+                                chr_movements_metadata, silver_dir / "chr_animal_movements_metadata.json"
+                            )
+                            logger.info(f"✅ CHR animal movements metadata saved to {metadata_path}")
+
+                        # Create metadata for CHR properties
+                        if unique_bronze_steps and any(
+                            step in unique_bronze_steps for step in ["ejendom", "herd_details"]
+                        ):
+                            chr_properties_metadata = pipeline_metadata_manager.create_metadata(
+                                source_key="chr_properties",
+                                record_count=len(context.get("chr_to_species", {})),
+                                processing_duration=processing_duration,
+                                file_size_bytes=None,
+                                source_datasets=None,
+                            )
+                            metadata_path = pipeline_metadata_manager.save_metadata(
+                                chr_properties_metadata, silver_dir / "chr_properties_metadata.json"
+                            )
+                            logger.info(f"✅ CHR properties metadata saved to {metadata_path}")
+
+                        # Create metadata for CHR herds
+                        if unique_bronze_steps and "herd_details" in unique_bronze_steps:
+                            chr_herds_metadata = pipeline_metadata_manager.create_metadata(
+                                source_key="chr_herds",
+                                record_count=len(context.get("herd_details", [])),
+                                processing_duration=processing_duration,
+                                file_size_bytes=None,
+                                source_datasets=None,
+                            )
+                            metadata_path = pipeline_metadata_manager.save_metadata(
+                                chr_herds_metadata, silver_dir / "chr_herds_metadata.json"
+                            )
+                            logger.info(f"✅ CHR herds metadata saved to {metadata_path}")
+
+                    except Exception as e:
+                        logger.error(f"❌ Failed to create CHR pipeline metadata: {e}")
 
                 # --- Gold Layer Processing ---
                 # Run gold processing if this is an "all" run or a specific gold step

@@ -5,16 +5,16 @@ import { useMapStore } from '@/stores/map-store';
 
 export function HeatmapToggle() {
   const { heatmapMode, setHeatmapMode } = useMapStore();
-  
+
   return (
-    <motion.div 
+    <motion.div
       className="heatmap-toggle"
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3 }}
     >
       <h3 className="text-sm font-medium text-gray-700 mb-3">Data Layer</h3>
-      
+
       <div className="relative bg-gray-100 rounded-lg p-1 flex">
         <motion.div
           className="absolute top-1 bottom-1 bg-white rounded-md shadow-sm"
@@ -25,7 +25,7 @@ export function HeatmapToggle() {
           }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
         />
-        
+
         <button
           onClick={() => setHeatmapMode('pesticide')}
           className={`relative z-10 flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -39,7 +39,7 @@ export function HeatmapToggle() {
             <span>Pesticide Load</span>
           </div>
         </button>
-        
+
         <button
           onClick={() => setHeatmapMode('pfas')}
           className={`relative z-10 flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
@@ -54,7 +54,7 @@ export function HeatmapToggle() {
           </div>
         </button>
       </div>
-      
+
       <div className="mt-3 text-xs text-gray-500">
         {heatmapMode === 'pesticide' ? (
           <div>
@@ -70,4 +70,4 @@ export function HeatmapToggle() {
       </div>
     </motion.div>
   );
-} 
+}
