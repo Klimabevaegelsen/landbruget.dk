@@ -33,9 +33,9 @@ interface MunicipalityRankingResponse {
   rankings: {
     land_use?: MunicipalityRanking[];
     production?: MunicipalityRanking[];
-    environmental?: MunicipalityRanking[];
-    animal_health?: MunicipalityRanking[];
-    worker_safety?: MunicipalityRanking[];
+    // Removed nonsensical categories:
+    // environmental, animal_health, worker_safety
+    // These had meaningless composite scores
   };
   metadata: {
     year: number;
@@ -49,14 +49,10 @@ const formatValue = (value: number, metric: string): string => {
   switch (metric) {
     case 'total_agricultural_area_ha':
       return `${value.toLocaleString('da-DK')} ha`;
-    case 'total_production_capacity':
-      return value.toLocaleString('da-DK');
+    case 'total_animal_capacity':
+      return `${value.toLocaleString('da-DK')} dyr`;
     case 'organic_farming_percentage':
       return `${value.toFixed(1)}%`;
-    case 'avg_antibiotic_usage_add_per_100_animals_per_day':
-      return `${value.toFixed(2)} ADD/100 dyr/dag`;
-    case 'worker_safety_burden_score':
-      return value.toFixed(1);
     default:
       return value.toLocaleString('da-DK');
   }
@@ -273,42 +269,31 @@ export default function MunicipalityRankingsPage() {
             />
           )}
 
-          {/* Production Rankings */}
+          {/* Animal Production Rankings - Now meaningful! */}
           {data.rankings.production && (
             <SimpleRankingTable
-              title="Højest produktionskapacitet"
-              description="Kommuner med den højeste produktionskapacitet i 2024"
+              title="Størst dyreproduktion"
+              description="Kommuner med den største samlede dyreproduktionskapacitet i 2024"
               items={data.rankings.production}
               showTop={20}
             />
           )}
 
-          {/* Environmental Rankings */}
-          {data.rankings.environmental && (
+          {/* Organic Farming Rankings - Use the land_use data for organic percentage */}
+          {data.rankings.land_use && (
             <SimpleRankingTable
               title="Højest økologisk andel"
               description="Kommuner med den højeste andel økologisk landbrug i 2024"
-              items={data.rankings.environmental}
-              showTop={20}
-            />
-          )}
-
-          {/* Animal Health Rankings */}
-          {data.rankings.animal_health && (
-            <SimpleRankingTable
-              title="Lavest antibiotikaforbrug"
-              description="Kommuner med det laveste antibiotikaforbrug per dyr i 2024"
-              items={data.rankings.animal_health}
-              showTop={20}
-            />
-          )}
-
-          {/* Worker Safety Rankings */}
-          {data.rankings.worker_safety && (
-            <SimpleRankingTable
-              title="Bedst arbejdssikkerhed"
-              description="Kommuner med den bedste arbejdssikkerhed i 2024"
-              items={data.rankings.worker_safety}
+              items={data.rankings.land_use
+                .filter(item => item.additional_data?.organic_percentage > 0)
+                .sort((a, b) => (b.additional_data?.organic_percentage || 0) - (a.additional_data?.organic_percentage || 0))
+                .map((item, index) => ({
+                  ...item,
+                  rank: index + 1,
+                  value: item.additional_data?.organic_percentage || 0,
+                  metric: 'organic_farming_percentage'
+                }))
+              }
               showTop={20}
             />
           )}

@@ -822,8 +822,8 @@ serve(async (req) => {
               company_name: company?.company_name || 'Ukendt virksomhed',
               municipality: company?.municipality || 'Ukendt kommune',
               rank: index + 1,
-              value: item.water_covered_hectares,
-              formatted_value: `${item.water_covered_hectares.toFixed(1)} ha`,
+              value: item.wetlands_dealt_with_hectares,
+              formatted_value: `${item.wetlands_dealt_with_hectares.toFixed(1)} ha`,
               year: item.year
             }
           })
@@ -1138,7 +1138,7 @@ serve(async (req) => {
 
     // Worker Rankings
     if (!category || category === 'all' || category === 'worker') {
-      // 21. Most Employees (Worker data)
+      // 21. Most Employees (Worker data) - Use worker_yearly_summary materialized view
       const { data: workerEmployeeData } = await supabase
         .from('worker_yearly_summary')
         .select(`
@@ -1148,8 +1148,7 @@ serve(async (req) => {
           companies!inner(cvr_number, company_name, municipality)
         `)
         .eq('year', 2024)
-        .not('average_employee_count', 'is', null)
-        .gt('average_employee_count', 0) // Only include companies with actual employees
+        .gt('average_employee_count', 0)
         .order('average_employee_count', { ascending: false })
         .limit(limit)
 
@@ -1157,7 +1156,6 @@ serve(async (req) => {
         .from('worker_yearly_summary')
         .select('company_id', { count: 'exact' })
         .eq('year', 2024)
-        .not('average_employee_count', 'is', null)
         .gt('average_employee_count', 0)
 
       if (workerEmployeeData) {
@@ -1181,7 +1179,7 @@ serve(async (req) => {
         })
       }
 
-      // 22. Most Work Permits (using 2023 data as 2024 has no permits)
+      // 22. Most Work Permits - Use worker_yearly_summary materialized view (2024 is latest year with substantial visa data)
       const { data: visaData } = await supabase
         .from('worker_yearly_summary')
         .select(`
@@ -1190,7 +1188,7 @@ serve(async (req) => {
           year,
           companies!inner(cvr_number, company_name, municipality)
         `)
-        .eq('year', 2023)
+        .eq('year', 2024)
         .gt('active_visa_count', 0)
         .order('active_visa_count', { ascending: false })
         .limit(limit)
