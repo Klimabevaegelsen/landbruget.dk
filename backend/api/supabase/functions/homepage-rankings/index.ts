@@ -615,16 +615,18 @@ serve(async (req) => {
           area_ha,
           year
         `)
-        .eq('status', 'Action Required')
         .eq('year', 2025)
+        .eq('status', 'Action Required')
+        .gt('area_ha', 0)
         .order('area_ha', { ascending: false })
         .limit(limit)
 
       const { count: bnboNotDealtCount } = await supabase
         .from('bnbo_summary')
         .select('company_id', { count: 'exact' })
-        .eq('status', 'Action Required')
         .eq('year', 2025)
+        .eq('status', 'Action Required')
+        .gt('area_ha', 0)
 
       console.log('BNBO Action Required result:', { data: bnboNotDealtData?.length || 0, error: bnboError1 })
 
@@ -671,16 +673,18 @@ serve(async (req) => {
           area_ha,
           year
         `)
-        .in('status', ['Completed', 'Action Required, Completed'])
         .eq('year', 2025)
+        .in('status', ['Completed', 'Action Required, Completed'])
+        .gt('area_ha', 0)
         .order('area_ha', { ascending: false })
         .limit(limit)
 
       const { count: bnboCompletedCount } = await supabase
         .from('bnbo_summary')
         .select('company_id', { count: 'exact' })
-        .in('status', ['Completed', 'Action Required, Completed'])
         .eq('year', 2025)
+        .in('status', ['Completed', 'Action Required, Completed'])
+        .gt('area_ha', 0)
 
       console.log('BNBO Completed result:', { data: bnboCompletedData?.length || 0, error: bnboError2 })
 
@@ -822,8 +826,8 @@ serve(async (req) => {
               company_name: company?.company_name || 'Ukendt virksomhed',
               municipality: company?.municipality || 'Ukendt kommune',
               rank: index + 1,
-              value: item.wetlands_dealt_with_hectares,
-              formatted_value: `${item.wetlands_dealt_with_hectares.toFixed(1)} ha`,
+              value: item.water_covered_hectares,
+              formatted_value: `${item.water_covered_hectares.toFixed(1)} ha`,
               year: item.year
             }
           })
