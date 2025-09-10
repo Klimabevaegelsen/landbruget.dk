@@ -285,7 +285,7 @@ export default function MunicipalityRankingsPage() {
               title="Højest økologisk andel"
               description="Kommuner med den højeste andel økologisk landbrug i 2024"
               items={data.rankings.land_use
-                .filter(item => item.additional_data?.organic_percentage > 0)
+                .filter(item => (item.additional_data?.organic_percentage ?? 0) > 0)
                 .sort((a, b) => (b.additional_data?.organic_percentage || 0) - (a.additional_data?.organic_percentage || 0))
                 .map((item, index) => ({
                   ...item,
