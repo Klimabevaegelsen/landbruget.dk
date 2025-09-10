@@ -105,7 +105,7 @@ export default function CompanyDetailsPanel({
             <div className="truncate text-xs font-medium">
               {product.product_name || 'Ukendt produkt'}
             </div>
-            <div className="flex gap-1 text-xs text-gray-500">
+            <div className="flex gap-1 text-xs text-muted-foreground">
               {product.contains_pfas && (
                 <Badge variant="destructive" className="px-1 py-0 text-xs">
                   PFAS
@@ -127,7 +127,7 @@ export default function CompanyDetailsPanel({
             <div className="text-xs font-medium">
               {formatBelastning(product.total_belastning)}
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-muted-foreground">
               {product.applications} anvendelser
             </div>
           </div>
@@ -164,12 +164,12 @@ export default function CompanyDetailsPanel({
       {/* Company Header */}
       <div>
         <div className="mb-2 flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-gray-500" />
-          <h3 className="text-sm font-semibold">
+          <Building2 className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold text-foreground">
             {company.company_name || `Virksomhed ${company.cvr_number}`}
           </h3>
         </div>
-        <div className="space-y-1 text-xs text-gray-500">
+        <div className="space-y-1 text-xs text-muted-foreground">
           <div>CVR: {company.cvr_number}</div>
           <div className="flex items-center gap-1">
             <MapPin className="h-3 w-3" />
@@ -184,30 +184,30 @@ export default function CompanyDetailsPanel({
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 gap-3 text-xs">
-        <div className="rounded bg-blue-50 p-2">
-          <div className="font-medium text-blue-900">Total Belastning</div>
-          <div className="text-lg font-bold text-blue-600">
+        <div className="rounded bg-primary/10 p-2">
+          <div className="font-medium text-primary">Total Belastning</div>
+          <div className="text-lg font-bold text-primary">
             {formatBelastning(company.total_belastning)}
           </div>
         </div>
-        <div className="rounded bg-gray-50 p-2">
-          <div className="font-medium text-gray-700">Anvendelser</div>
-          <div className="text-lg font-bold text-gray-900">
+        <div className="rounded bg-muted p-2">
+          <div className="font-medium text-muted-foreground">Anvendelser</div>
+          <div className="text-lg font-bold text-foreground">
             {company.total_applications.toLocaleString()}
           </div>
         </div>
-        <div className="rounded bg-green-50 p-2">
-          <div className="font-medium text-green-900">Behandlet Areal</div>
-          <div className="text-lg font-bold text-green-600">
+        <div className="rounded bg-accent/10 p-2">
+          <div className="font-medium text-accent-foreground">Behandlet Areal</div>
+          <div className="text-lg font-bold text-accent-foreground">
             {company.total_treated_area_ha.toLocaleString('da-DK', {
               maximumFractionDigits: 0,
             })}{' '}
             ha
           </div>
         </div>
-        <div className="rounded bg-purple-50 p-2">
-          <div className="font-medium text-purple-900">Produkter</div>
-          <div className="text-lg font-bold text-purple-600">
+        <div className="rounded bg-secondary/10 p-2">
+          <div className="font-medium text-secondary-foreground">Produkter</div>
+          <div className="text-lg font-bold text-secondary-foreground">
             {company.unique_products}
           </div>
         </div>
@@ -298,7 +298,7 @@ export default function CompanyDetailsPanel({
               ? company.municipality
               : 'kommunen'}
           </h4>
-          <div className="rounded bg-gray-50 p-2 text-xs">
+          <div className="rounded bg-muted p-2 text-xs">
             <div>
               Rang: #{details.municipality_ranking.rank} af{' '}
               {details.municipality_ranking.total_companies_in_municipality}
@@ -313,7 +313,7 @@ export default function CompanyDetailsPanel({
       {/* Actions */}
       <div className="space-y-2">
         {details && details.yearly_breakdown.length > 0 && (
-          <div className="text-center text-xs text-gray-500">
+          <div className="text-center text-xs text-muted-foreground">
             Detaljeret data tilgængelig for {details.yearly_breakdown.length} år
           </div>
         )}

@@ -9,7 +9,9 @@ export function CompanySkeleton() {
       <div className="flex w-full animate-pulse flex-col gap-8">
         <div className="flex flex-col gap-8 md:flex-row">
           <div className="skeleton-item flex h-80 w-full items-center justify-center">
-            <p className="text-xl font-bold text-gray-500">Henter data</p>
+            <p className="text-muted-foreground text-xl font-bold">
+              Henter data
+            </p>
           </div>
           <div className="skeleton-item h-80 w-full"></div>
         </div>
