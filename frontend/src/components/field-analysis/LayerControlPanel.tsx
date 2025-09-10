@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { LayerVisibility, FilterState } from './types';
+import { Wheat, Droplets, Wind, Waves, Home, TestTube, Leaf } from 'lucide-react';
 
 interface LayerControlPanelProps {
   layerVisibility: LayerVisibility;
@@ -21,35 +22,35 @@ export function LayerControlPanel({
       key: 'fields' as const,
       name: 'Landbrugsmarker',
       description: '617.774 marker med pesticidforbrug og miljødata',
-      icon: '🌾',
+      icon: Wheat,
       color: 'bg-green-500',
     },
     {
       key: 'bnbo' as const,
       name: 'BNBO Områder',
       description: '2.761 boringsnære beskyttelsesområder',
-      icon: '💧',
+      icon: Droplets,
       color: 'bg-blue-600',
     },
     {
       key: 'wetlands' as const,
       name: 'Lavbundsområder',
       description: '768.646 lavbundsjorder med tørvindhold',
-      icon: '💨',
+      icon: Wind,
       color: 'bg-gray-600',
     },
     {
       key: 'water_projects' as const,
       name: 'Vandprojekter',
       description: '2.138 vandprojekter til miljøgenopretning',
-      icon: '🌊',
+      icon: Waves,
       color: 'bg-teal-500',
     },
     {
       key: 'buildings' as const,
       name: 'Bygninger',
       description: '268.260 bygninger inden for 100m af pesticidmarker',
-      icon: '🏠',
+      icon: Home,
       color: 'bg-gray-500',
     },
   ];
@@ -98,7 +99,7 @@ export function LayerControlPanel({
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center space-x-2">
-                  <span className="text-xl lg:text-lg">{layer.icon}</span>
+                  <layer.icon className="h-5 w-5 lg:h-4 lg:w-4" />
                   <h3 className="text-base font-medium text-gray-900 lg:text-sm">
                     {layer.name}
                   </h3>
@@ -264,8 +265,9 @@ export function LayerControlPanel({
           {/* Chemical-specific legend */}
           {filterState.visualizationMode.includes('pfas') && (
             <div className="mb-4">
-              <h4 className="mb-2 text-sm font-medium text-red-800">
-                🧪 PFAS Pesticider
+              <h4 className="mb-2 flex items-center text-sm font-medium text-red-800">
+                <TestTube className="mr-1 h-4 w-4" />
+                PFAS Pesticider
               </h4>
               <div className="space-y-1 text-xs text-red-700">
                 <div>Per- og polyfluorerede alkylstoffer</div>
@@ -277,8 +279,9 @@ export function LayerControlPanel({
 
           {filterState.visualizationMode.includes('diquat') && (
             <div className="mb-4">
-              <h4 className="mb-2 text-sm font-medium text-blue-800">
-                💧 Diquat Pesticider
+              <h4 className="mb-2 flex items-center text-sm font-medium text-blue-800">
+                <Droplets className="mr-1 h-4 w-4" />
+                Diquat Pesticider
               </h4>
               <div className="space-y-1 text-xs text-blue-700">
                 <div>Kontakt herbicid</div>
@@ -290,8 +293,9 @@ export function LayerControlPanel({
 
           {filterState.visualizationMode.includes('glyphosate') && (
             <div className="mb-4">
-              <h4 className="mb-2 text-sm font-medium text-green-800">
-                🌿 Glyphosate Pesticider
+              <h4 className="mb-2 flex items-center text-sm font-medium text-green-800">
+                <Leaf className="mr-1 h-4 w-4" />
+                Glyphosate Pesticider
               </h4>
               <div className="space-y-1 text-xs text-green-700">
                 <div>Systemisk herbicid</div>

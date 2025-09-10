@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import Map, {
   MapLayerMouseEvent,
   NavigationControl,
@@ -504,7 +505,7 @@ export default function FieldAnalysisMap({
 
     // Set a 10-second timeout for map loading
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('⚠️ Map loading timeout - forcing loading state to false');
+      console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
       onMapReady?.();
     }, 10000);
@@ -528,7 +529,7 @@ export default function FieldAnalysisMap({
     );
 
     if (allLoaded && isLoading) {
-      console.log('✅ All PMTiles sources loaded successfully');
+      console.log('All PMTiles sources loaded successfully');
       clearLoadingTimeout();
       setIsLoading(false);
       onMapReady?.();
@@ -540,7 +541,7 @@ export default function FieldAnalysisMap({
     (e: { sourceId: string; isSourceLoaded: boolean }) => {
       if (e.isSourceLoaded && Object.keys(pmtilesUrls).includes(e.sourceId)) {
         loadedSourcesRef.current.add(e.sourceId);
-        console.log(`✅ PMTiles source loaded: ${e.sourceId}`);
+        console.log(`PMTiles source loaded: ${e.sourceId}`);
         checkAllSourcesLoaded();
       }
     },
@@ -563,7 +564,7 @@ export default function FieldAnalysisMap({
           import('pmtiles'),
         ]);
 
-        console.log('✅ MapLibre and PMTiles loaded successfully');
+        console.log('MapLibre and PMTiles loaded successfully');
 
         // Register PMTiles protocol with MapLibre (only once globally)
         if (
@@ -575,20 +576,20 @@ export default function FieldAnalysisMap({
           (
             window as unknown as { __pmtiles_protocol_registered?: boolean }
           ).__pmtiles_protocol_registered = true;
-          console.log('✅ PMTiles protocol registered');
+          console.log('PMTiles protocol registered');
         }
 
         // Don't set loading false here - let the map load callback handle it
       } catch (err) {
         console.error(
-          `❌ Failed to initialize PMTiles (attempt ${retryCount + 1}):`,
+          `Failed to initialize PMTiles (attempt ${retryCount + 1}):`,
           err
         );
         // Retry up to maxRetries times
         if (retryCount < maxRetries) {
           retryCount++;
           console.log(
-            `🔄 Retrying PMTiles initialization (${retryCount}/${maxRetries})...`
+            `Retrying PMTiles initialization (${retryCount}/${maxRetries})...`
           );
           setTimeout(initializePMTiles, 1000 * retryCount); // Exponential backoff
           return;
@@ -666,7 +667,7 @@ export default function FieldAnalysisMap({
     };
 
     const fieldName = getFieldName(visualizationMode);
-    console.log('🎨 Color generation:', {
+    console.log('Color generation:', {
       visualizationMode,
       fieldName,
       colorScheme: colorScheme.name,
@@ -787,7 +788,7 @@ export default function FieldAnalysisMap({
               'text-halo-width': 1,
             },
             layout: {
-              'text-field': '🌿',
+              'text-field': 'ØKO',
               'text-size': 16,
               'text-allow-overlap': false,
               'text-ignore-placement': false,
@@ -1191,11 +1192,11 @@ export default function FieldAnalysisMap({
               type: 'vector',
               url: `pmtiles://${url}`,
             });
-            console.log(`✅ Added ${layerName} source:`, url);
+            console.log(`Added ${layerName} source:`, url);
             sourcesAdded++;
           } catch (error) {
             const errorMessage = `Failed to add ${layerName} source: ${error}`;
-            console.warn(`⚠️ ${errorMessage}`);
+            console.warn(`${errorMessage}`);
             sourceErrors.push(errorMessage);
           }
         }
@@ -1203,7 +1204,7 @@ export default function FieldAnalysisMap({
 
       // If no sources were added (all URLs empty or sources already exist)
       if (sourcesAdded === 0) {
-        console.log('ℹ️ No new sources to add, marking as ready');
+        console.log('No new sources to add, marking as ready');
         clearLoadingTimeout();
         setIsLoading(false);
         onMapReady?.();
@@ -1212,7 +1213,7 @@ export default function FieldAnalysisMap({
 
       // If there are source errors, show a warning but continue
       if (sourceErrors.length > 0) {
-        console.warn('⚠️ Some map sources failed to load:', sourceErrors);
+        console.warn('Some map sources failed to load:', sourceErrors);
         // Don't set error state for source failures - the map can still work with partial data
       }
 
@@ -1224,7 +1225,7 @@ export default function FieldAnalysisMap({
       addBuildingsLayers(map);
 
       // Don't set loading to false here - wait for sourcedata events
-      console.log(`🔄 Waiting for ${sourcesAdded} PMTiles sources to load...`);
+      console.log(`Waiting for ${sourcesAdded} PMTiles sources to load...`);
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
       clearLoadingTimeout();
@@ -1253,7 +1254,7 @@ export default function FieldAnalysisMap({
     const fieldsSource = map.getSource('fields');
     if (fieldsSource && pmtilesUrls.fields) {
       console.log(
-        `🔄 Updating fields source for year change:`,
+        `Updating fields source for year change:`,
         pmtilesUrls.fields
       );
 
@@ -1290,7 +1291,7 @@ export default function FieldAnalysisMap({
         addFieldsLayers(map);
 
         // Don't set loading to false here - wait for sourcedata event
-        console.log(`🔄 Waiting for updated fields source to load...`);
+        console.log(`Waiting for updated fields source to load...`);
       } catch (error) {
         console.error('Error loading PMTiles for year:', error);
         clearLoadingTimeout();
@@ -1432,7 +1433,7 @@ export default function FieldAnalysisMap({
               'text-halo-width': 1,
             },
             layout: {
-              'text-field': '🌿',
+              'text-field': 'ØKO',
               'text-size': 16,
               'text-allow-overlap': false,
               'text-ignore-placement': false,
@@ -1513,7 +1514,10 @@ export default function FieldAnalysisMap({
     return (
       <div className="flex h-full items-center justify-center bg-red-50">
         <div className="text-center">
-          <div className="mb-2 text-xl text-red-600">⚠️ Fejl</div>
+          <div className="mb-2 flex items-center justify-center text-xl text-red-600">
+            <AlertTriangle className="mr-2 h-6 w-6" />
+            Fejl
+          </div>
           <div className="text-gray-700">{error}</div>
         </div>
       </div>

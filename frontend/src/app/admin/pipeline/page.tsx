@@ -1,12 +1,14 @@
 import { H3PfasTrigger } from '@/components/pipeline/h3-pfas-trigger';
+import { TestTube, BarChart3, BookOpen } from 'lucide-react';
 
 export default function PipelinePage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4">
         <div className="mb-8 text-center">
-          <h1 className="mb-4 text-4xl font-bold text-gray-900">
-            🧪 Pipeline Administration
+          <h1 className="mb-4 flex items-center justify-center text-4xl font-bold text-gray-900">
+            <TestTube className="mr-3 h-8 w-8" />
+            Pipeline Administration
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-gray-600">
             Trigger and monitor data processing pipelines for agricultural and
@@ -33,8 +35,9 @@ export default function PipelinePage() {
 
           {/* Pipeline Status Section */}
           <section className="rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-4 text-2xl font-semibold text-gray-900">
-              📊 Pipeline Status
+            <h2 className="mb-4 flex items-center text-2xl font-semibold text-gray-900">
+              <BarChart3 className="mr-2 h-6 w-6" />
+              Pipeline Status
             </h2>
             <div className="space-y-4">
               <div className="flex items-center justify-between rounded-lg bg-gray-50 p-4">
@@ -58,8 +61,9 @@ export default function PipelinePage() {
 
           {/* Documentation Section */}
           <section className="rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-4 text-2xl font-semibold text-gray-900">
-              📚 Documentation
+            <h2 className="mb-4 flex items-center text-2xl font-semibold text-gray-900">
+              <BookOpen className="mr-2 h-6 w-6" />
+              Documentation
             </h2>
             <div className="prose max-w-none">
               <h3>H3 PFAS Pipeline Features:</h3>

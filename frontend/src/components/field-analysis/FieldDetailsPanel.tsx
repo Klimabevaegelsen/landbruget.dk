@@ -7,6 +7,7 @@ import {
   generateSkraafotoUrl,
   copyCoordinatesToClipboard,
 } from './coordinateUtils';
+import { MapPin, Copy, Check, Plane, Map, TestTube, Leaf, AlertTriangle, Home, School } from 'lucide-react';
 
 interface FieldDetailsPanelProps {
   fieldData: FieldAnalysisData;
@@ -199,15 +200,26 @@ export function FieldDetailsPanel({
           </h3>
           <div className="rounded-lg bg-blue-50 p-3">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium text-blue-800">
-                📍 GPS Position
+              <span className="flex items-center text-sm font-medium text-blue-800">
+                <MapPin className="mr-1 h-4 w-4" />
+                GPS Position
               </span>
               <button
                 onClick={handleCopyCoordinates}
                 className="flex min-h-[32px] items-center rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-200 active:bg-blue-300"
                 title="Kopier koordinater"
               >
-                {copiedCoordinates ? '✓ Kopieret!' : '📋 Kopier'}
+                {copiedCoordinates ? (
+                  <>
+                    <Check className="mr-1 h-3 w-3" />
+                    Kopieret!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="mr-1 h-3 w-3" />
+                    Kopier
+                  </>
+                )}
               </button>
             </div>
             <div className="mb-2 font-mono text-xs text-blue-700">
@@ -226,7 +238,8 @@ export function FieldDetailsPanel({
                 rel="noopener noreferrer"
                 className="flex min-h-[36px] flex-1 items-center justify-center rounded bg-blue-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
               >
-                🛩️ Åbn i Skråfoto
+                <Plane className="mr-1 h-3 w-3" />
+                Åbn i Skråfoto
               </a>
               <button
                 onClick={() => {
@@ -236,7 +249,8 @@ export function FieldDetailsPanel({
                 }}
                 className="flex min-h-[36px] flex-1 items-center justify-center rounded bg-green-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-green-700 active:bg-green-800"
               >
-                🗺️ Google Maps
+                <Map className="mr-1 h-3 w-3" />
+                Google Maps
               </button>
             </div>
           </div>
@@ -450,8 +464,9 @@ export function FieldDetailsPanel({
           {fieldData.pfas_applications && fieldData.pfas_applications > 0 && (
             <div className="rounded-lg bg-red-50 p-2">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-sm font-medium text-red-800">
-                  🧪 PFAS
+                <span className="flex items-center text-sm font-medium text-red-800">
+                  <TestTube className="mr-1 h-4 w-4" />
+                  PFAS
                 </span>
                 <span className="text-sm font-bold text-red-800">
                   {fieldData.pfas_applications} apps
@@ -513,8 +528,9 @@ export function FieldDetailsPanel({
             fieldData.glyphosate_applications > 0 && (
               <div className="rounded-lg bg-green-50 p-2">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-sm font-medium text-green-800">
-                    🌿 Glyphosate
+                  <span className="flex items-center text-sm font-medium text-green-800">
+                    <Leaf className="mr-1 h-4 w-4" />
+                    Glyphosate
                   </span>
                   <span className="text-sm font-bold text-green-800">
                     {fieldData.glyphosate_applications} apps
@@ -550,7 +566,7 @@ export function FieldDetailsPanel({
           {/* Partial coverage warning */}
           {fieldData.is_partial_coverage && (
             <div className="flex items-center space-x-2 rounded-lg bg-orange-50 p-2">
-              <span className="text-orange-600">⚠️</span>
+              <AlertTriangle className="h-4 w-4 text-orange-600" />
               <span className="text-xs text-orange-700">
                 Delvis markdækning
               </span>
@@ -608,7 +624,10 @@ export function FieldDetailsPanel({
         <div className="space-y-1 text-sm">
           {fieldData.residential_buildings_proximity && (
             <div className="flex justify-between">
-              <span className="text-gray-600">🏠 Boliger:</span>
+              <span className="flex items-center text-gray-600">
+                <Home className="mr-1 h-4 w-4" />
+                Boliger:
+              </span>
               <span className="text-xs font-medium">
                 {fieldData.residential_buildings_proximity}
               </span>
@@ -617,7 +636,10 @@ export function FieldDetailsPanel({
 
           {fieldData.educational_facilities_proximity && (
             <div className="flex justify-between">
-              <span className="text-gray-600">🏫 Skoler:</span>
+              <span className="flex items-center text-gray-600">
+                <School className="mr-1 h-4 w-4" />
+                Skoler:
+              </span>
               <span className="text-xs font-medium">
                 {fieldData.educational_facilities_proximity}
               </span>

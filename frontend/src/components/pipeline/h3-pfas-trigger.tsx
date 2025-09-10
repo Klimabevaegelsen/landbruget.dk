@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { TestTube, Rocket } from 'lucide-react';
 
 interface PipelineConfig {
   years: string;
@@ -57,7 +58,10 @@ export function H3PfasTrigger() {
 
   return (
     <div className="mx-auto max-w-2xl rounded-lg bg-white p-6 shadow-lg">
-      <h2 className="mb-6 text-2xl font-bold">🧪 H3 PFAS Pipeline Trigger</h2>
+      <h2 className="mb-6 flex items-center text-2xl font-bold">
+        <TestTube className="mr-2 h-6 w-6" />
+        H3 PFAS Pipeline Trigger
+      </h2>
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Years Selection */}
         <div>
@@ -178,7 +182,10 @@ export function H3PfasTrigger() {
             Triggering Pipeline...
           </>
         ) : (
-          <>🚀 Trigger H3 PFAS Analysis</>
+          <>
+            <Rocket className="mr-2 h-4 w-4" />
+            Trigger H3 PFAS Analysis
+          </>
         )}
       </Button>
 

@@ -6,6 +6,7 @@ import {
   generateSkraafotoUrl,
   copyCoordinatesToClipboard,
 } from './coordinateUtils';
+import { MapPin, Copy, Check, Plane, Map } from 'lucide-react';
 
 interface CoordinatePanelProps {
   coordinates: { lat: number; lng: number };
@@ -95,15 +96,26 @@ export function CoordinatePanel({
       <div className="mb-4">
         <div className="rounded-lg bg-blue-50 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-blue-800">
-              📍 GPS Position
+            <span className="flex items-center text-sm font-medium text-blue-800">
+              <MapPin className="mr-1 h-4 w-4" />
+              GPS Position
             </span>
             <button
               onClick={handleCopyCoordinates}
               className="flex min-h-[32px] items-center rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-200 active:bg-blue-300"
               title="Kopier koordinater"
             >
-              {copiedCoordinates ? '✓ Kopieret!' : '📋 Kopier'}
+              {copiedCoordinates ? (
+                <>
+                  <Check className="mr-1 h-3 w-3" />
+                  Kopieret!
+                </>
+              ) : (
+                <>
+                  <Copy className="mr-1 h-3 w-3" />
+                  Kopier
+                </>
+              )}
             </button>
           </div>
           <div className="mb-3 font-mono text-xs text-blue-700">
@@ -116,7 +128,8 @@ export function CoordinatePanel({
               rel="noopener noreferrer"
               className="block flex min-h-[36px] items-center justify-center rounded bg-blue-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
             >
-              🛩️ Åbn i Skråfoto
+              <Plane className="mr-1 h-3 w-3" />
+              Åbn i Skråfoto
             </a>
             <button
               onClick={() => {
@@ -125,7 +138,8 @@ export function CoordinatePanel({
               }}
               className="flex min-h-[36px] w-full items-center justify-center rounded bg-green-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-green-700 active:bg-green-800"
             >
-              🗺️ Google Maps
+              <Map className="mr-1 h-3 w-3" />
+              Google Maps
             </button>
           </div>
         </div>
