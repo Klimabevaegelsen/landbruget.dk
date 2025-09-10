@@ -25,6 +25,8 @@ interface MarkanalyseLayoutProps {
   children: React.ReactNode;
 }
 
-export default function MarkanalyseLayout({ children }: MarkanalyseLayoutProps) {
+export default function MarkanalyseLayout({
+  children,
+}: MarkanalyseLayoutProps) {
   return children;
 }

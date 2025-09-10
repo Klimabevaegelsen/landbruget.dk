@@ -16,10 +16,13 @@ import {
 } from '@/components/field-analysis/types';
 
 // Dynamically import the map component to avoid SSR issues
-const FieldAnalysisMap = dynamic(() => import('@/components/field-analysis/FieldAnalysisMap'), {
-  ssr: false,
-  loading: () => <LoadingState message="Indlæser kort..." />,
-});
+const FieldAnalysisMap = dynamic(
+  () => import('@/components/field-analysis/FieldAnalysisMap'),
+  {
+    ssr: false,
+    loading: () => <LoadingState message="Indlæser kort..." />,
+  }
+);
 
 export default function FieldAnalysisMain() {
   const [isClient, setIsClient] = useState(false);
@@ -47,7 +50,9 @@ export default function FieldAnalysisMain() {
     availableYears: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023], // Available years from PMTiles generation
   });
 
-  const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(null);
+  const [selectedField, setSelectedField] = useState<FieldAnalysisData | null>(
+    null
+  );
   const [clickedCoordinates, setClickedCoordinates] = useState<{
     lat: number;
     lng: number;
@@ -183,7 +188,7 @@ export default function FieldAnalysisMain() {
   }
 
   return (
-    <div className="h-screen flex bg-background">
+    <div className="bg-background flex h-screen">
       {/* Desktop Sidebar */}
       {!isMobile && (
         <FieldSidebar
@@ -209,9 +214,9 @@ export default function FieldAnalysisMain() {
       )}
 
       {/* Main Map Area */}
-      <div className="flex-1 relative">
+      <div className="relative flex-1">
         {/* Year Slider - positioned for both mobile and desktop */}
-        <div className="absolute top-4 right-4 left-4 md:left-auto md:right-4 z-30 pointer-events-auto">
+        <div className="pointer-events-auto absolute top-4 right-4 left-4 z-30 md:right-4 md:left-auto">
           <YearSlider
             yearSelection={yearSelection}
             onYearChange={handleYearChange}
@@ -242,22 +247,26 @@ export default function FieldAnalysisMain() {
 
       {/* Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
       {!selectedField && clickedCoordinates && !isMobile && (
-        <div className="w-80 border-l bg-card shadow-lg">
+        <div className="bg-card w-80 border-l shadow-lg">
           <div className="p-4">
-            <h3 className="text-lg font-semibold mb-3">GPS Koordinater</h3>
+            <h3 className="mb-3 text-lg font-semibold">GPS Koordinater</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Latitude:</span>
-                <span className="font-mono">{clickedCoordinates.lat.toFixed(5)}</span>
+                <span className="font-mono">
+                  {clickedCoordinates.lat.toFixed(5)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Longitude:</span>
-                <span className="font-mono">{clickedCoordinates.lng.toFixed(5)}</span>
+                <span className="font-mono">
+                  {clickedCoordinates.lng.toFixed(5)}
+                </span>
               </div>
             </div>
             <button
               onClick={() => setClickedCoordinates(null)}
-              className="mt-4 w-full py-2 px-4 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 mt-4 w-full rounded-lg px-4 py-2 transition-colors"
             >
               Luk
             </button>

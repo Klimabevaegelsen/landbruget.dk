@@ -75,7 +75,7 @@
   }
 
   .sidebar-transition {
-    transition: all 0.2s ease-[cubic-bezier(0.4,0,0.2,1)];
+    transition: all 0.2s ease-[cubic-bezier(0.4, 0, 0.2, 1)];
   }
 }
 
@@ -92,7 +92,7 @@
   /* Agricultural Primary Theme */
   --color-primary: oklch(55% 0.15 142);
   --color-primary-foreground: oklch(98% 0.01 142);
-  
+
   /* Secondary & Accent Colors */
   --color-secondary: oklch(96% 0.01 106);
   --color-secondary-foreground: oklch(20% 0 0);
@@ -114,14 +114,14 @@
   --color-high-risk: oklch(65% 0.15 25);
   --color-low-risk: oklch(70% 0.12 142);
   --color-bnbo: oklch(75% 0.08 230);
-  --color-wetland: oklch(70% 0.10 230);
+  --color-wetland: oklch(70% 0.1 230);
 
   /* Professional Chart Colors */
-  --color-chart-1: oklch(15% 0 0);       /* Primary dark */
-  --color-chart-2: oklch(40% 0.01 106);  /* Gray-700 */
-  --color-chart-3: oklch(50% 0.01 106);  /* Gray-500 */
-  --color-chart-4: oklch(65% 0.01 106);  /* Gray-400 */
-  --color-chart-5: oklch(80% 0.01 106);  /* Gray-300 */
+  --color-chart-1: oklch(15% 0 0); /* Primary dark */
+  --color-chart-2: oklch(40% 0.01 106); /* Gray-700 */
+  --color-chart-3: oklch(50% 0.01 106); /* Gray-500 */
+  --color-chart-4: oklch(65% 0.01 106); /* Gray-400 */
+  --color-chart-5: oklch(80% 0.01 106); /* Gray-300 */
 
   /* Sidebar Colors */
   --color-sidebar: oklch(98% 0.005 106);
@@ -150,7 +150,7 @@
   /* Agricultural Primary Theme - Dark */
   --color-primary: oklch(65% 0.12 142);
   --color-primary-foreground: oklch(10% 0.01 106);
-  
+
   /* Secondary & Accent Colors - Dark */
   --color-secondary: oklch(15% 0.01 106);
   --color-secondary-foreground: oklch(85% 0.01 106);
@@ -168,18 +168,18 @@
 
   /* Agricultural Domain Colors - Dark */
   --color-organic: oklch(70% 0.12 142);
-  --color-conventional: oklch(75% 0.10 85);
+  --color-conventional: oklch(75% 0.1 85);
   --color-high-risk: oklch(70% 0.12 25);
-  --color-low-risk: oklch(75% 0.10 142);
+  --color-low-risk: oklch(75% 0.1 142);
   --color-bnbo: oklch(80% 0.06 230);
   --color-wetland: oklch(75% 0.08 230);
 
   /* Professional Chart Colors - Dark */
-  --color-chart-1: oklch(95% 0.01 106);  /* Light primary */
-  --color-chart-2: oklch(75% 0.01 106);  /* Light gray-300 */
-  --color-chart-3: oklch(65% 0.01 106);  /* Light gray-400 */
-  --color-chart-4: oklch(55% 0.01 106);  /* Light gray-500 */
-  --color-chart-5: oklch(45% 0.01 106);  /* Light gray-600 */
+  --color-chart-1: oklch(95% 0.01 106); /* Light primary */
+  --color-chart-2: oklch(75% 0.01 106); /* Light gray-300 */
+  --color-chart-3: oklch(65% 0.01 106); /* Light gray-400 */
+  --color-chart-4: oklch(55% 0.01 106); /* Light gray-500 */
+  --color-chart-5: oklch(45% 0.01 106); /* Light gray-600 */
 
   /* Sidebar Colors - Dark */
   --color-sidebar: oklch(10% 0.01 106);
@@ -196,15 +196,17 @@
   * {
     @apply border-border outline-ring/50;
   }
-  
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-plus-jakarta-sans);
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
   }
 
   .skeleton-item {
-    @apply rounded-md bg-muted animate-pulse;
+    @apply bg-muted animate-pulse rounded-md;
   }
 
   /* Mobile safe area support */
@@ -235,6 +237,9 @@
 
   /* Smooth theme transitions */
   .theme-transition {
-    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease,
+      border-color 0.3s ease;
   }
 }

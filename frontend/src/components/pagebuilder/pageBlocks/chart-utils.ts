@@ -69,11 +69,20 @@ function hasData(item: PageBuilderItem): boolean {
       return item.rows.some((row) => {
         return Object.entries(row).some(([key, value]) => {
           // Skip non-data columns like year, id, etc.
-          if (key === 'year' || key === 'id' || key.toLowerCase().includes('year')) {
+          if (
+            key === 'year' ||
+            key === 'id' ||
+            key.toLowerCase().includes('year')
+          ) {
             return false;
           }
           // Consider row has data if any value is not N/A, null, undefined, or empty string
-          return value !== 'N/A' && value !== null && value !== undefined && value !== '';
+          return (
+            value !== 'N/A' &&
+            value !== null &&
+            value !== undefined &&
+            value !== ''
+          );
         });
       });
 
