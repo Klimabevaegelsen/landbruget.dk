@@ -65,12 +65,16 @@ export function CompanyHero({
 
           {/* Company Identity Info */}
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold text-gray-800">{companyName}</h1>
+            <h1 className="text-foreground text-4xl font-bold">
+              {companyName}
+            </h1>
             <div className="space-y-1">
-              <p className="text-lg text-gray-700">CVR: {cvrNumber}</p>
-              {address && <p className="text-base text-gray-600">{address}</p>}
+              <p className="text-foreground text-lg">CVR: {cvrNumber}</p>
+              {address && (
+                <p className="text-muted-foreground text-base">{address}</p>
+              )}
               {basicInfo?.municipality && (
-                <p className="text-base text-gray-600">
+                <p className="text-muted-foreground text-base">
                   {basicInfo.municipality}
                 </p>
               )}
@@ -79,7 +83,10 @@ export function CompanyHero({
 
           <div>
             <Button>
-              <ArrowDownIcon strokeWidth={2.5} className="size-3 text-white" />
+              <ArrowDownIcon
+                strokeWidth={2.5}
+                className="text-primary-foreground size-3"
+              />
               Download data (CSV)
             </Button>
           </div>
