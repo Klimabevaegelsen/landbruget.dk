@@ -79,6 +79,25 @@ export function DynamicDataTable<TData, TValue>({
             <ArrowTopRightOnSquareIcon className="ml-1 h-3 w-3" />
           </a>
         );
+      case 'skraafoto_button':
+        return value && String(value) !== '' ? (
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+            className="h-8 px-3 text-xs"
+          >
+            <a
+              href={String(value)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1"
+            >
+              Skråfoto
+              <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+            </a>
+          </Button>
+        ) : null;
       case 'destination_type':
         return translateDestinationType(String(value));
       case 'origin_type':
