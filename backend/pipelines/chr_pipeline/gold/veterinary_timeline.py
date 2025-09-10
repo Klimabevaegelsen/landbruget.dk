@@ -334,24 +334,44 @@ def get_chr_column(con: duckdb.DuckDBPyConnection, table_name: str) -> Optional[
 
 
 def get_date_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> Dict[str, Optional[str]]:
-    """Find date-related columns dynamically."""
+    """Find date-related columns dynamically with improved logic for animal welfare data."""
     try:
         columns = con.execute(f"DESCRIBE {table_name}").fetchall()
         column_names = [col[0] for col in columns]
 
         result = {}
 
-        # Look for start date
-        start_candidates = [
-            col for col in column_names if any(word in col.lower() for word in ["start", "from", "begin"])
-        ]
-        result["start"] = start_candidates[0] if start_candidates else None
+        # Special handling for animal welfare data
+        if table_name == "animal_welfare":
+            # For animal welfare, prefer the specific intervention dates
+            intervention_start = next((col for col in column_names if "indsatsomraade_startdato" in col.lower()), None)
+            intervention_end = next((col for col in column_names if "indsatsomraade_slutdato" in col.lower()), None)
 
-        # Look for end date
-        end_candidates = [
-            col for col in column_names if any(word in col.lower() for word in ["end", "slut", "to", "expir"])
-        ]
-        result["end"] = end_candidates[0] if end_candidates else None
+            if intervention_start:
+                result["start"] = intervention_start
+            if intervention_end:
+                result["end"] = intervention_end
+
+            logger.info(f"🎯 Animal welfare date columns: start={result.get('start')}, end={result.get('end')}")
+        else:
+            # Generic logic for other tables
+            # Look for start date
+            start_candidates = [
+                col for col in column_names if any(word in col.lower() for word in ["start", "from", "begin"])
+            ]
+            result["start"] = start_candidates[0] if start_candidates else None
+
+            # Look for end date - improved pattern matching
+            end_candidates = []
+            for col in column_names:
+                col_lower = col.lower()
+                # Only match actual end patterns, avoid false positives like "to" in "startdato"
+                if any(word in col_lower for word in ["end", "slut", "expir"]) and "start" not in col_lower:
+                    end_candidates.append(col)
+                elif col_lower.endswith("_to") or col_lower.endswith("to_date"):
+                    end_candidates.append(col)
+
+            result["end"] = end_candidates[0] if end_candidates else None
 
         # Look for general date
         date_candidates = [col for col in column_names if any(word in col.lower() for word in ["date", "dato", "time"])]
@@ -420,6 +440,8 @@ def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List
             FROM animal_welfare
             WHERE {chr_col} IS NOT NULL
               AND {date_cols["end"]} IS NOT NULL
+              AND TRIM({date_cols["end"]}) != ''
+              AND TRY_CAST({date_cols["end"]} AS TIMESTAMP) IS NOT NULL
             """)
 
         logger.info(f"✅ Created {len(parts)} animal welfare timeline parts")
