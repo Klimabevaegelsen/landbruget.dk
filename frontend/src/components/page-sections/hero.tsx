@@ -157,7 +157,8 @@ export default function Hero() {
 
           {usingCache && !loading && (
             <p className="mt-2 text-xs text-white/70">
-              <BarChart3 className="mr-1 inline h-3 w-3" /> Data fra cache • Opdateres automatisk hver uge
+              <BarChart3 className="mr-1 inline h-3 w-3" /> Data fra cache •
+              Opdateres automatisk hver uge
             </p>
           )}
         </div>

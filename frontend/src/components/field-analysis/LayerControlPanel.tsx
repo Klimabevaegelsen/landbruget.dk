@@ -2,7 +2,15 @@
 
 import React from 'react';
 import { LayerVisibility, FilterState } from './types';
-import { Wheat, Droplets, Wind, Waves, Home, TestTube, Leaf } from 'lucide-react';
+import {
+  Wheat,
+  Droplets,
+  Wind,
+  Waves,
+  Home,
+  TestTube,
+  Leaf,
+} from 'lucide-react';
 
 interface LayerControlPanelProps {
   layerVisibility: LayerVisibility;

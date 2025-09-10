@@ -62,7 +62,20 @@ function hasData(item: PageBuilderItem): boolean {
       );
 
     case 'dataGrid':
-      return item.rows?.length > 0;
+      if (!item.rows || item.rows.length === 0) {
+        return false;
+      }
+      // Check if all rows have only N/A values (excluding keys like 'year', 'id', etc.)
+      return item.rows.some((row) => {
+        return Object.entries(row).some(([key, value]) => {
+          // Skip non-data columns like year, id, etc.
+          if (key === 'year' || key === 'id' || key.toLowerCase().includes('year')) {
+            return false;
+          }
+          // Consider row has data if any value is not N/A, null, undefined, or empty string
+          return value !== 'N/A' && value !== null && value !== undefined && value !== '';
+        });
+      });
 
     case 'kpiGroup':
       return item.kpis?.length > 0;
