@@ -228,15 +228,15 @@ export default function FieldAnalysisVisualization() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden lg:flex-row">
+    <div className="relative flex h-screen touch-pan-x touch-pan-y flex-col overflow-hidden lg:flex-row">
       {/* Mobile Control Panel Toggle */}
       <div
-        className="absolute top-4 left-4 z-30 lg:hidden"
+        className="pointer-events-auto absolute top-4 left-4 z-40 lg:hidden"
         style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
       >
         <button
           onClick={() => setMobileControlsOpen(!mobileControlsOpen)}
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-white p-3 shadow-lg transition-colors hover:bg-gray-50 active:bg-gray-100"
+          className="flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg bg-white p-3 shadow-lg transition-colors hover:bg-gray-50 active:bg-gray-100"
           aria-label="Toggle controls"
         >
           <svg
@@ -257,7 +257,7 @@ export default function FieldAnalysisVisualization() {
 
       {/* Left Control Panel - Desktop: sidebar, Mobile: overlay */}
       <div
-        className={` ${mobileControlsOpen ? 'block' : 'hidden'} fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:shadow-lg`}
+        className={` ${mobileControlsOpen ? 'block' : 'hidden'} fixed inset-0 z-50 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:shadow-lg`}
         style={{
           paddingTop: mobileControlsOpen
             ? 'env(safe-area-inset-top)'
@@ -315,15 +315,15 @@ export default function FieldAnalysisVisualization() {
       {/* Mobile Controls Backdrop */}
       {mobileControlsOpen && (
         <div
-          className="bg-opacity-50 fixed inset-0 z-20 bg-black lg:hidden"
+          className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
           onClick={() => setMobileControlsOpen(false)}
         />
       )}
 
       {/* Main Map Area */}
-      <div className="relative flex-1">
+      <div className="relative flex-1 touch-pan-x touch-pan-y">
         {/* Year Slider - positioned below search bar */}
-        <div className="absolute top-20 right-4 left-4 z-10 lg:top-4 lg:right-4 lg:left-[22rem]">
+        <div className="pointer-events-auto absolute top-20 right-4 left-4 z-30 lg:top-4 lg:right-4 lg:left-[22rem]">
           <YearSlider
             yearSelection={yearSelection}
             onYearChange={handleYearChange}
@@ -349,7 +349,7 @@ export default function FieldAnalysisVisualization() {
       {selectedField && (
         <>
           <div
-            className={`fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
+            className={`fixed inset-0 z-50 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
@@ -363,7 +363,7 @@ export default function FieldAnalysisVisualization() {
 
           {/* Mobile Details Backdrop */}
           <div
-            className="bg-opacity-50 fixed inset-0 z-20 bg-black lg:hidden"
+            className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
             onClick={() => setSelectedField(null)}
           />
         </>
@@ -373,7 +373,7 @@ export default function FieldAnalysisVisualization() {
       {!selectedField && clickedCoordinates && (
         <>
           <div
-            className={`fixed inset-0 z-30 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
+            className={`fixed inset-0 z-50 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
@@ -387,7 +387,7 @@ export default function FieldAnalysisVisualization() {
 
           {/* Mobile Coordinate Panel Backdrop */}
           <div
-            className="bg-opacity-50 fixed inset-0 z-20 bg-black lg:hidden"
+            className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
             onClick={() => setClickedCoordinates(null)}
           />
         </>
