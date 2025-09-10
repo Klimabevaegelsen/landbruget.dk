@@ -411,7 +411,7 @@ function MapTooltip({
 
   return (
     <div
-      className="absolute z-50 max-w-sm rounded-xl border border-gray-300 bg-white shadow-xl backdrop-blur-sm"
+      className="absolute z-[60] max-w-sm rounded-xl border border-gray-300 bg-white shadow-xl backdrop-blur-sm"
       style={{
         left: x,
         top: y,
@@ -1543,10 +1543,10 @@ export default function FieldAnalysisMap({
   ];
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full touch-manipulation">
       {/* Search Bar */}
       <div
-        className="absolute top-4 right-4 left-20 z-10 lg:right-auto lg:left-4 lg:w-80"
+        className="pointer-events-auto absolute top-4 right-4 left-20 z-30 lg:right-auto lg:left-4 lg:w-80"
         style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
       >
         <SearchBar

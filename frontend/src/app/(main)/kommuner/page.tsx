@@ -1,14 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -17,23 +9,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TrendingUp, Loader2 } from 'lucide-react';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { MapPin, Leaf, Factory, Heart, Shield, TrendingUp } from 'lucide-react';
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 interface MunicipalityRanking {
   municipality: string;
   rank: number;
   value: number;
   metric: string;
-  additional_data?: Record<string, unknown>;
+  additional_data?: {
+    unique_companies?: number;
+    organic_percentage?: number;
+  };
 }
 
 interface MunicipalityRankingResponse {
@@ -52,46 +45,111 @@ interface MunicipalityRankingResponse {
   };
 }
 
-const categoryConfig = {
-  land_use: {
-    title: 'Landbrugsarealer',
-    icon: MapPin,
-    description: 'Ranking baseret på landbrugsareal og markfordeling',
-    color: 'bg-green-100 text-green-800',
-  },
-  environmental: {
-    title: 'Miljøpræstation',
-    icon: Leaf,
-    description: 'Ranking baseret på økologisk landbrug og miljøindikatorer',
-    color: 'bg-emerald-100 text-emerald-800',
-  },
-  production: {
-    title: 'Produktionskapacitet',
-    icon: Factory,
-    description: 'Ranking baseret på produktionsanlæg og kapacitet',
-    color: 'bg-blue-100 text-blue-800',
-  },
-  animal_health: {
-    title: 'Dyresundhed',
-    icon: Heart,
-    description: 'Ranking baseret på antibiotikaforbrug (lavere er bedre)',
-    color: 'bg-red-100 text-red-800',
-  },
-  worker_safety: {
-    title: 'Arbejdssikkerhed',
-    icon: Shield,
-    description: 'Ranking baseret på arbejdsulykker og sikkerhed',
-    color: 'bg-purple-100 text-purple-800',
-  },
+const formatValue = (value: number, metric: string): string => {
+  switch (metric) {
+    case 'total_agricultural_area_ha':
+      return `${value.toLocaleString('da-DK')} ha`;
+    case 'total_production_capacity':
+      return value.toLocaleString('da-DK');
+    case 'organic_farming_percentage':
+      return `${value.toFixed(1)}%`;
+    case 'avg_antibiotic_usage_add_per_100_animals_per_day':
+      return `${value.toFixed(2)} ADD/100 dyr/dag`;
+    case 'worker_safety_burden_score':
+      return value.toFixed(1);
+    default:
+      return value.toLocaleString('da-DK');
+  }
 };
+
+// Simple ranking table component like the old front page
+function SimpleRankingTable({
+  title,
+  description,
+  items,
+  showTop = 20,
+}: {
+  title: string;
+  description: string;
+  items: MunicipalityRanking[];
+  showTop?: number;
+}) {
+  const displayItems = items.slice(0, showTop);
+
+  return (
+    <Card className="w-full">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg font-semibold">{title}</CardTitle>
+        <CardDescription className="text-sm text-gray-600">
+          {description}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-0">
+        <div className="overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="w-16 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                  Rang
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                  Kommune
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase">
+                  Værdi
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 bg-white">
+              {displayItems.map((item) => (
+                <tr key={item.municipality} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex h-8 w-8 items-center justify-center text-sm font-bold text-gray-900">
+                      {item.rank}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-gray-900">
+                        {item.municipality}
+                      </div>
+                      {item.additional_data?.unique_companies && (
+                        <div className="text-xs text-gray-500">
+                          {item.additional_data.unique_companies} virksomheder
+                          {item.additional_data.organic_percentage &&
+                            ` • ${item.additional_data.organic_percentage.toFixed(1)}% økologisk`}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <div className="text-sm font-semibold text-gray-900">
+                      {formatValue(item.value, item.metric)}
+                    </div>
+                    <div className="text-xs text-gray-500">2024</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function MunicipalityRankingsPage() {
   const [data, setData] = useState<MunicipalityRankingResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState('land_use');
   const [selectedYear, setSelectedYear] = useState('2024');
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(100);
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration issues
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchRankings = useCallback(async () => {
     try {
@@ -118,38 +176,18 @@ export default function MunicipalityRankingsPage() {
   }, [selectedYear, limit]);
 
   useEffect(() => {
-    fetchRankings();
-  }, [fetchRankings]);
-
-  const formatValue = (value: number, metric: string): string => {
-    switch (metric) {
-      case 'total_agricultural_area_ha':
-        return `${value.toLocaleString('da-DK')} ha`;
-      case 'total_production_capacity':
-        return value.toLocaleString('da-DK');
-      case 'organic_farming_percentage':
-        return `${value.toFixed(1)}%`;
-      case 'avg_antibiotic_usage_add_per_100_animals_per_day':
-        return `${value.toFixed(2)} ADD/100 dyr/dag`;
-      case 'worker_safety_burden_score':
-        return value.toFixed(1);
-      default:
-        return value.toLocaleString('da-DK');
+    if (mounted) {
+      fetchRankings();
     }
-  };
+  }, [fetchRankings, mounted]);
 
-  const getRankingColor = (rank: number): string => {
-    if (rank <= 3) return 'bg-yellow-100 text-yellow-800';
-    if (rank <= 10) return 'bg-gray-100 text-gray-800';
-    return 'bg-white text-gray-600';
-  };
-
-  if (loading) {
+  // Loading state
+  if (!mounted || loading) {
     return (
       <div className="container mx-auto py-8">
         <div className="flex min-h-[400px] items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-green-600"></div>
+            <Loader2 className="mx-auto h-12 w-12 animate-spin text-green-600" />
             <p className="mt-4 text-gray-600">Indlæser kommuneranglister...</p>
           </div>
         </div>
@@ -157,32 +195,21 @@ export default function MunicipalityRankingsPage() {
     );
   }
 
+  // Error state
   if (error) {
     return (
       <div className="container mx-auto py-8">
-        <Card className="border-red-200">
-          <CardHeader>
-            <CardTitle className="text-red-800">Fejl ved indlæsning</CardTitle>
-            <CardDescription className="text-red-600">
-              {error.includes('404')
-                ? 'Kommune ranglister data er ikke tilgængelige endnu. Systemet er ved at blive opdateret.'
-                : error}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <Button onClick={fetchRankings} className="mt-4">
-                Prøv igen
-              </Button>
-              {error.includes('404') && (
-                <p className="text-sm text-gray-600">
-                  💡 Tip: Siden er lige blevet oprettet og data indlæses. Prøv
-                  igen om et par minutter.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex min-h-[400px] items-center justify-center">
+          <div className="text-center">
+            <p className="font-medium text-red-600">
+              Fejl ved indlæsning af data
+            </p>
+            <p className="mt-2 text-gray-600">{error}</p>
+            <Button onClick={fetchRankings} className="mt-4">
+              Prøv igen
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -196,24 +223,6 @@ export default function MunicipalityRankingsPage() {
           Sammenlign danske kommuner på tværs af landbrug, miljø, produktion og
           dyrevelfærd
         </p>
-
-        {data && (
-          <div className="flex items-center justify-center space-x-4 text-sm text-gray-500">
-            <span>📊 {data.metadata.total_municipalities} kommuner</span>
-            <span>📅 Data fra {data.metadata.year}</span>
-            <span>
-              🕒 Opdateret{' '}
-              {new Date(data.metadata.generated_at).toLocaleDateString(
-                'da-DK',
-                {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                }
-              )}
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Controls */}
@@ -240,7 +249,7 @@ export default function MunicipalityRankingsPage() {
               <SelectItem value="10">Top 10</SelectItem>
               <SelectItem value="20">Top 20</SelectItem>
               <SelectItem value="50">Top 50</SelectItem>
-              <SelectItem value="100">Alle</SelectItem>
+              <SelectItem value="100">Alle kommuner</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -251,171 +260,72 @@ export default function MunicipalityRankingsPage() {
         </Button>
       </div>
 
-      {/* Rankings Tabs */}
-      <Tabs
-        value={selectedCategory}
-        onValueChange={setSelectedCategory}
-        className="space-y-6"
-      >
-        <TabsList className="grid w-full grid-cols-5">
-          {Object.entries(categoryConfig).map(([key, config]) => {
-            const Icon = config.icon;
-            return (
-              <TabsTrigger
-                key={key}
-                value={key}
-                className="flex items-center gap-2"
-              >
-                <Icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{config.title}</span>
-              </TabsTrigger>
-            );
-          })}
-        </TabsList>
+      {/* Rankings Grid - Like old front page */}
+      {data && (
+        <div className="grid grid-cols-1 gap-6">
+          {/* Land Use Rankings */}
+          {data.rankings.land_use && (
+            <SimpleRankingTable
+              title="Størst landbrugsareal"
+              description="Kommuner med det største samlede landbrugsareal i 2024"
+              items={data.rankings.land_use}
+              showTop={20}
+            />
+          )}
 
-        {Object.entries(categoryConfig).map(([categoryKey, config]) => {
-          const rankings =
-            data?.rankings[categoryKey as keyof typeof data.rankings];
-          const Icon = config.icon;
+          {/* Production Rankings */}
+          {data.rankings.production && (
+            <SimpleRankingTable
+              title="Højest produktionskapacitet"
+              description="Kommuner med den højeste produktionskapacitet i 2024"
+              items={data.rankings.production}
+              showTop={20}
+            />
+          )}
 
-          return (
-            <TabsContent
-              key={categoryKey}
-              value={categoryKey}
-              className="space-y-4"
-            >
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3">
-                    <Icon className="h-6 w-6" />
-                    {config.title}
-                  </CardTitle>
-                  <CardDescription>{config.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {rankings && rankings.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-16">Rang</TableHead>
-                          <TableHead>Kommune</TableHead>
-                          <TableHead className="text-right">Værdi</TableHead>
-                          <TableHead className="hidden md:table-cell">
-                            Detaljer
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rankings.map((ranking) => (
-                          <TableRow
-                            key={ranking.municipality}
-                            className="hover:bg-gray-50"
-                          >
-                            <TableCell>
-                              <Badge className={getRankingColor(ranking.rank)}>
-                                #{ranking.rank}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {ranking.municipality}
-                            </TableCell>
-                            <TableCell className="text-right font-mono">
-                              {formatValue(ranking.value, ranking.metric)}
-                            </TableCell>
-                            <TableCell className="hidden text-sm text-gray-600 md:table-cell">
-                              {categoryKey === 'land_use' &&
-                                ranking.additional_data && (
-                                  <div className="space-y-1">
-                                    <div>
-                                      {ranking.additional_data.total_fields?.toLocaleString()}{' '}
-                                      marker
-                                    </div>
-                                    <div>
-                                      {String(
-                                        ranking.additional_data.unique_companies
-                                      )}{' '}
-                                      virksomheder
-                                    </div>
-                                    <div>
-                                      {typeof ranking.additional_data
-                                        .organic_percentage === 'number'
-                                        ? ranking.additional_data.organic_percentage.toFixed(
-                                            1
-                                          )
-                                        : String(
-                                            ranking.additional_data
-                                              .organic_percentage
-                                          )}
-                                      % økologisk
-                                    </div>
-                                  </div>
-                                )}
-                              {categoryKey === 'production' &&
-                                ranking.additional_data && (
-                                  <div className="space-y-1">
-                                    <div>
-                                      {String(
-                                        ranking.additional_data.total_sites
-                                      )}{' '}
-                                      anlæg
-                                    </div>
-                                    <div>
-                                      {String(
-                                        ranking.additional_data.unique_companies
-                                      )}{' '}
-                                      virksomheder
-                                    </div>
-                                  </div>
-                                )}
-                              {categoryKey === 'environmental' &&
-                                ranking.additional_data && (
-                                  <div className="space-y-1">
-                                    <div>
-                                      {ranking.additional_data.total_fields?.toLocaleString()}{' '}
-                                      marker
-                                    </div>
-                                    <div>
-                                      {ranking.additional_data.organic_fields?.toLocaleString()}{' '}
-                                      økologiske
-                                    </div>
-                                  </div>
-                                )}
-                              {categoryKey === 'animal_health' &&
-                                ranking.additional_data && (
-                                  <div className="space-y-1">
-                                    <div>
-                                      {String(
-                                        ranking.additional_data
-                                          .companies_with_antibiotics
-                                      )}{' '}
-                                      virksomheder
-                                    </div>
-                                    <div>
-                                      {String(
-                                        ranking.additional_data
-                                          .sites_with_antibiotics
-                                      )}{' '}
-                                      steder
-                                    </div>
-                                  </div>
-                                )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <div className="py-8 text-center text-gray-500">
-                      <Icon className="mx-auto mb-4 h-12 w-12 opacity-50" />
-                      <p>Ingen data tilgængelig for denne kategori</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          );
-        })}
-      </Tabs>
+          {/* Environmental Rankings */}
+          {data.rankings.environmental && (
+            <SimpleRankingTable
+              title="Højest økologisk andel"
+              description="Kommuner med den højeste andel økologisk landbrug i 2024"
+              items={data.rankings.environmental}
+              showTop={20}
+            />
+          )}
+
+          {/* Animal Health Rankings */}
+          {data.rankings.animal_health && (
+            <SimpleRankingTable
+              title="Lavest antibiotikaforbrug"
+              description="Kommuner med det laveste antibiotikaforbrug per dyr i 2024"
+              items={data.rankings.animal_health}
+              showTop={20}
+            />
+          )}
+
+          {/* Worker Safety Rankings */}
+          {data.rankings.worker_safety && (
+            <SimpleRankingTable
+              title="Bedst arbejdssikkerhed"
+              description="Kommuner med den bedste arbejdssikkerhed i 2024"
+              items={data.rankings.worker_safety}
+              showTop={20}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Footer like old front page */}
+      <div className="border-t border-gray-200 pt-8 text-center">
+        <p className="text-xs text-gray-500">
+          Data opdateret:{' '}
+          {data?.metadata.generated_at
+            ? new Date(data.metadata.generated_at).toLocaleDateString('da-DK')
+            : ''}{' '}
+          • {data?.metadata.categories_included.length || 0} ranglister baseret
+          på officielle data fra 2024
+        </p>
+      </div>
     </div>
   );
 }
