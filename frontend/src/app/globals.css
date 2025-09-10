@@ -39,15 +39,106 @@
   .animate-morph {
     animation: morphShape 5s ease-in-out infinite;
   }
+
+  /* Mobile-first touch optimizations */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .mobile-controls {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .mobile-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 50;
+  }
+
+  /* iOS safe area support */
+  .mobile-header {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .mobile-footer {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  .mobile-content {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Enhanced transitions for mobile */
+  .sheet-transition {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar-transition {
+    transition: all 0.2s ease-[cubic-bezier(0.4,0,0.2,1)];
+  }
 }
 
-@theme inline {
+/* Dark mode support - Tailwind v4 syntax */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: hsl(0 0% 7%);
+    --color-foreground: hsl(0 0% 98%);
+    --color-card: hsl(0 0% 7%);
+    --color-card-foreground: hsl(0 0% 98%);
+    --color-primary: hsl(142 76% 42%);
+    --color-secondary: hsl(240 3.7% 15.9%);
+    --color-muted: hsl(240 3.7% 15.9%);
+    --color-muted-foreground: hsl(240 5% 64.9%);
+    --color-accent: hsl(240 3.7% 15.9%);
+    --color-accent-foreground: hsl(0 0% 98%);
+    --color-border: hsl(240 3.7% 15.9%);
+    --color-input: hsl(240 3.7% 15.9%);
+  }
+}
+
+@theme {
+  /* Enhanced design tokens matching Midday's approach - Tailwind v4 syntax */
+  
+  /* Core colors - neutral base like Midday */
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(0 0% 7%);
+  --color-card: hsl(45 18% 96%);
+  --color-card-foreground: hsl(240 10% 3.9%);
+  
+  /* Agricultural theme colors */
+  --color-primary: hsl(142 76% 36%);
+  --color-primary-foreground: hsl(0 0% 98%);
+  --color-secondary: hsl(45 18% 89%);
+  --color-secondary-foreground: hsl(240 5.9% 10%);
+  
+  /* Muted tones for data visualization */
+  --color-muted: hsl(45 11% 89%);
+  --color-muted-foreground: hsl(240 3.8% 46.1%);
+  --color-accent: hsl(45 10% 94%);
+  --color-accent-foreground: hsl(240 5.9% 10%);
+  
+  /* Border and input */
+  --color-border: hsl(240 5.9% 90%);
+  --color-input: hsl(240 5.9% 90%);
+  --color-ring: hsl(142 76% 36%);
+  
+  /* Agricultural-specific colors */
+  --color-organic: hsl(142 71% 45%);
+  --color-conventional: hsl(43 74% 49%);
+  --color-high-risk: hsl(0 84% 60%);
+  --color-low-risk: hsl(142 69% 58%);
+  --color-bnbo: hsl(200 94% 86%);
+  --color-wetland: hsl(200 100% 70%);
+  
+  /* Enhanced radius system */
+  --radius: 0.5rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -83,6 +174,11 @@
 @theme {
   --color-primary-darker: #166534;
   --color-foreground-darker: #e0f5e8;
+  /* Midday-inspired chart colors for Tailwind v4 */
+  --color-chart-primary: #121212;
+  --color-chart-secondary: #C6C6C6;
+  --color-chart-muted: #878787;
+  --color-chart-accent: #6B7280;
 }
 
 :root {
@@ -118,6 +214,14 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* Dark mode chart colors - Tailwind v4 approach */
+.dark {
+  --color-chart-primary: #F5F5F3;
+  --color-chart-secondary: #606060;
+  --color-chart-muted: #878787;
+  --color-chart-accent: #9CA3AF;
 }
 
 @layer base {

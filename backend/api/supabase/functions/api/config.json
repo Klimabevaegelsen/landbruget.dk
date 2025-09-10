@@ -1119,15 +1119,15 @@
                 "isHidden": true
               },
               {
-                "key": "field_uuid",
-                "label": "Mark UUID",
-                "column": "field_uuid",
+                "key": "block_id",
+                "label": "Markblok ID",
+                "column": "block_id",
                 "isFilterable": true
               },
               {
-                "key": "risk_category",
-                "label": "Risiko Kategori",
-                "column": "risk_category",
+                "key": "field_id",
+                "label": "Mark ID",
+                "column": "field_id",
                 "isFilterable": true
               },
               {
@@ -1135,11 +1135,6 @@
                 "label": "Pesticid",
                 "column": "product_name",
                 "isFilterable": true
-              },
-              {
-                "key": "risk_details",
-                "label": "Specifik Risiko Detalje",
-                "column": "risk_details"
               },
               {
                 "key": "ha_sprayed",
@@ -1180,7 +1175,8 @@
               {
                 "key": "skraafoto",
                 "label": "Skr\u00e5foto",
-                "column": "skraafoto_url"
+                "column": "skraafoto_url",
+                "format": "skraafoto_button"
               }
             ],
             "initialFilter": {
@@ -1189,11 +1185,11 @@
           },
           "orderBy": [
             {
-              "column": "risk_category",
+              "column": "product_name",
               "direction": "asc"
             },
             {
-              "column": "product_name",
+              "column": "block_id",
               "direction": "asc"
             }
           ]
