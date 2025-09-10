@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import PasswordProtection from '@/components/PasswordProtection';
 import { ToastProvider_ } from '@/components/ui/toast';
+import { ThemeProvider } from '@/components/theme/theme-provider';
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: '--font-plus-jakarta-sans',
@@ -22,12 +23,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="da" className="bg-primary-foreground">
+    <html lang="da" suppressHydrationWarning>
       <body className={`${plusJakartaSans.variable} antialiased`}>
-        <ToastProvider_>
-          {process.env.NODE_ENV === 'production' && <PasswordProtection />}
-          {children}
-        </ToastProvider_>
+        <ThemeProvider defaultTheme="system" storageKey="landbruget-theme">
+          <ToastProvider_>
+            {process.env.NODE_ENV === 'production' && <PasswordProtection />}
+            {children}
+          </ToastProvider_>
+        </ThemeProvider>
       </body>
     </html>
   );
