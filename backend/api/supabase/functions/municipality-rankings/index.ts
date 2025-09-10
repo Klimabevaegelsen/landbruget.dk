@@ -87,26 +87,14 @@ serve(async (req) => {
       response.metadata.categories_included.push('production');
     }
 
-    // Environmental Rankings
-    if (params.category === 'all' || params.category === 'environmental') {
-      const environmentalRankings = await getEnvironmentalRankings(supabase, params);
-      response.rankings.environmental = environmentalRankings;
-      response.metadata.categories_included.push('environmental');
-    }
-
-    // Animal Health Rankings
-    if (params.category === 'all' || params.category === 'animal_health') {
-      const animalHealthRankings = await getAnimalHealthRankings(supabase, params);
-      response.rankings.animal_health = animalHealthRankings;
-      response.metadata.categories_included.push('animal_health');
-    }
-
-    // Worker Safety Rankings
-    if (params.category === 'all' || params.category === 'worker_safety') {
-      const workerSafetyRankings = await getWorkerSafetyRankings(supabase, params);
-      response.rankings.worker_safety = workerSafetyRankings;
-      response.metadata.categories_included.push('worker_safety');
-    }
+    // Environmental Rankings - TEMPORARILY DISABLED (views deleted due to nonsensical composite scores)
+    // TODO: Create meaningful environmental rankings based on specific pesticide metrics
+    
+    // Animal Health Rankings - TEMPORARILY DISABLED (views deleted due to nonsensical composite scores)  
+    // TODO: Create meaningful species-specific antibiotic rankings
+    
+    // Worker Safety Rankings - TEMPORARILY DISABLED (views deleted due to made-up burden scores)
+    // TODO: Create meaningful worker safety metrics if real data exists
 
     // Calculate total municipalities (use land use as baseline)
     if (response.rankings.land_use) {
@@ -168,9 +156,9 @@ async function getLandUseRankings(supabase: any, params: MunicipalityRankingRequ
 
 async function getProductionRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
   const { data, error } = await supabase
-    .from('municipality_production_summary')
+    .from('municipality_animal_production_summary')
     .select('*')
-    .order('total_capacity', { ascending: false })
+    .order('total_animal_capacity', { ascending: false })
     .limit(params.limit);
 
   if (error) throw error;
@@ -178,15 +166,12 @@ async function getProductionRankings(supabase: any, params: MunicipalityRankingR
   return data.map((row: any, index: number) => ({
     municipality: row.municipality,
     rank: index + 1,
-    value: row.total_capacity || 0,
-    metric: 'total_production_capacity',
+    value: row.total_animal_capacity,
+    metric: 'total_animal_capacity',
     additional_data: {
-      total_sites: row.total_sites,
-      sites_with_capacity: row.sites_with_capacity,
-      avg_capacity: row.avg_capacity,
-      unique_companies: row.unique_companies,
-      total_antibiotics_ddd_2024: row.total_antibiotics_ddd_2024 || 0,
-      total_transports_2024: row.total_transports_2024 || 0
+      total_production_sites: row.total_production_sites,
+      avg_site_capacity: Math.round(row.avg_site_capacity || 0),
+      unique_companies: row.unique_companies
     }
   }));
 }
