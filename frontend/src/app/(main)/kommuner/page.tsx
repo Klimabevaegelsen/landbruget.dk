@@ -84,33 +84,36 @@ function SimpleRankingTable({
         <div className="overflow-hidden">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="w-16 px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+              <tr className="border-border bg-muted/30 border-b">
+                <th className="text-muted-foreground w-16 px-4 py-3 text-left text-xs font-medium tracking-wider uppercase">
                   Rang
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
+                <th className="text-muted-foreground px-4 py-3 text-left text-xs font-medium tracking-wider uppercase">
                   Kommune
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium tracking-wider text-gray-500 uppercase">
+                <th className="text-muted-foreground px-4 py-3 text-right text-xs font-medium tracking-wider uppercase">
                   Værdi
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
+            <tbody className="divide-border divide-y">
               {displayItems.map((item) => (
-                <tr key={item.municipality} className="hover:bg-gray-50">
+                <tr
+                  key={item.municipality}
+                  className="hover:bg-muted/50 transition-colors"
+                >
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex h-8 w-8 items-center justify-center text-sm font-bold text-gray-900">
+                    <div className="text-foreground flex h-8 w-8 items-center justify-center text-sm font-bold">
                       {item.rank}
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="space-y-1">
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-foreground text-sm font-medium">
                         {item.municipality}
                       </div>
                       {item.additional_data?.unique_companies && (
-                        <div className="text-xs text-gray-500">
+                        <div className="text-muted-foreground text-xs">
                           {item.additional_data.unique_companies} virksomheder
                           {item.additional_data.organic_percentage &&
                             ` • ${item.additional_data.organic_percentage.toFixed(1)}% økologisk`}
@@ -119,10 +122,10 @@ function SimpleRankingTable({
                     </div>
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <div className="text-sm font-semibold text-gray-900">
+                    <div className="text-foreground text-sm font-semibold">
                       {formatValue(item.value, item.metric)}
                     </div>
-                    <div className="text-xs text-gray-500">2024</div>
+                    <div className="text-muted-foreground text-xs">2024</div>
                   </td>
                 </tr>
               ))}
@@ -285,15 +288,20 @@ export default function MunicipalityRankingsPage() {
               title="Højest økologisk andel"
               description="Kommuner med den højeste andel økologisk landbrug i 2024"
               items={data.rankings.land_use
-                .filter(item => (item.additional_data?.organic_percentage ?? 0) > 0)
-                .sort((a, b) => (b.additional_data?.organic_percentage || 0) - (a.additional_data?.organic_percentage || 0))
+                .filter(
+                  (item) => (item.additional_data?.organic_percentage ?? 0) > 0
+                )
+                .sort(
+                  (a, b) =>
+                    (b.additional_data?.organic_percentage || 0) -
+                    (a.additional_data?.organic_percentage || 0)
+                )
                 .map((item, index) => ({
                   ...item,
                   rank: index + 1,
                   value: item.additional_data?.organic_percentage || 0,
-                  metric: 'organic_farming_percentage'
-                }))
-              }
+                  metric: 'organic_farming_percentage',
+                }))}
               showTop={20}
             />
           )}

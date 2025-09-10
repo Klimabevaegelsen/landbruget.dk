@@ -77,7 +77,6 @@ type SidebarHeaderProps = React.HTMLAttributes<HTMLDivElement>;
 
 const SidebarHeader = React.forwardRef<HTMLDivElement, SidebarHeaderProps>(
   ({ className, children, ...props }, ref) => {
-
     return (
       <div
         ref={ref}
