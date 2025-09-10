@@ -16,6 +16,7 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
+import { MapCSVDownloadButton } from '@/components/chart/map-csv-download-button';
 
 const getLayerStyle = (style: string | undefined, index: number) => {
   // Handle specific marker types with distinct colors
@@ -472,82 +473,93 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
   }
 
   return (
-    <div className="relative overflow-hidden rounded">
-      <Map
-        initialViewState={{
-          longitude: chartData.center[0],
-          latitude: chartData.center[1],
-          zoom: chartData.zoom,
-        }}
-        style={{ width: '100%', height: 600 }}
-        mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
-        interactiveLayerIds={chartData.validLayers.map(
-          (_, index) => `layer-${index}`
-        )}
-        onMouseMove={onHover}
-        onMouseLeave={() => setHoverInfo(null)}
-        scrollZoom={false}
-      >
-        <NavigationControl position="top-right" />
-        {chartData.validLayers.map((layer, index) => {
-          const style = getLayerStyle(layer.style, index);
+    <div className="space-y-4">
+      {/* Header with download button */}
+      <div className="flex items-center justify-end">
+        <MapCSVDownloadButton
+          mapChart={chart}
+          chartTitle={chart.title}
+          chartKey={chart._key}
+        />
+      </div>
 
-          return (
-            <Source
-              key={`${layer.name}-${index}`}
-              id={`source-${layer.name}-${index}`}
-              type="geojson"
-              data={layer.data as GeoJSON.FeatureCollection}
-            >
-              {layer.style && layer.style.includes('marker') ? (
-                <Layer
-                  id={`layer-${index}`}
-                  type="circle"
-                  paint={{
-                    'circle-radius': style.circleRadius,
-                    'circle-color': style.circleColor,
-                    'circle-stroke-width': style.circleStrokeWidth,
-                    'circle-stroke-color': style.circleStrokeColor,
+      <div className="relative overflow-hidden rounded">
+        <Map
+          initialViewState={{
+            longitude: chartData.center[0],
+            latitude: chartData.center[1],
+            zoom: chartData.zoom,
+          }}
+          style={{ width: '100%', height: 600 }}
+          mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
+          interactiveLayerIds={chartData.validLayers.map(
+            (_, index) => `layer-${index}`
+          )}
+          onMouseMove={onHover}
+          onMouseLeave={() => setHoverInfo(null)}
+          scrollZoom={false}
+        >
+          <NavigationControl position="top-right" />
+          {chartData.validLayers.map((layer, index) => {
+            const style = getLayerStyle(layer.style, index);
+
+            return (
+              <Source
+                key={`${layer.name}-${index}`}
+                id={`source-${layer.name}-${index}`}
+                type="geojson"
+                data={layer.data as GeoJSON.FeatureCollection}
+              >
+                {layer.style && layer.style.includes('marker') ? (
+                  <Layer
+                    id={`layer-${index}`}
+                    type="circle"
+                    paint={{
+                      'circle-radius': style.circleRadius,
+                      'circle-color': style.circleColor,
+                      'circle-stroke-width': style.circleStrokeWidth,
+                      'circle-stroke-color': style.circleStrokeColor,
+                    }}
+                  />
+                ) : (
+                  <Layer
+                    id={`layer-${index}`}
+                    type="fill"
+                    paint={{
+                      'fill-color': style.fillColor,
+                      'fill-opacity': style.fillOpacity,
+                      'fill-outline-color': style.strokeColor,
+                    }}
+                  />
+                )}
+              </Source>
+            );
+          })}
+        </Map>
+
+        {hoverInfo && <Tooltip {...hoverInfo} />}
+
+        {/* Custom legends */}
+        <div className="mt-2 flex flex-wrap gap-4">
+          {chartData.validLayers.map((layer, index) => {
+            const style = getLayerStyle(layer.style, index);
+            return (
+              <button
+                key={`${layer.name}-${index}`}
+                className="flex items-center gap-2 rounded-md transition-colors hover:bg-gray-50"
+              >
+                <div
+                  className="size-4 rounded-full"
+                  style={{
+                    backgroundColor:
+                      style.fillColor || style.strokeColor || style.circleColor,
                   }}
                 />
-              ) : (
-                <Layer
-                  id={`layer-${index}`}
-                  type="fill"
-                  paint={{
-                    'fill-color': style.fillColor,
-                    'fill-opacity': style.fillOpacity,
-                    'fill-outline-color': style.strokeColor,
-                  }}
-                />
-              )}
-            </Source>
-          );
-        })}
-      </Map>
-
-      {hoverInfo && <Tooltip {...hoverInfo} />}
-
-      {/* Custom legends */}
-      <div className="mt-2 flex flex-wrap gap-4">
-        {chartData.validLayers.map((layer, index) => {
-          const style = getLayerStyle(layer.style, index);
-          return (
-            <button
-              key={`${layer.name}-${index}`}
-              className="flex items-center gap-2 rounded-md transition-colors hover:bg-gray-50"
-            >
-              <div
-                className="size-4 rounded-full"
-                style={{
-                  backgroundColor:
-                    style.fillColor || style.strokeColor || style.circleColor,
-                }}
-              />
-              <span className="text-xs font-medium">{layer.name}</span>
-            </button>
-          );
-        })}
+                <span className="text-xs font-medium">{layer.name}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

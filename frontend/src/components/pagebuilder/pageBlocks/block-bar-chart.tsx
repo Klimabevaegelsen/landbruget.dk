@@ -7,8 +7,6 @@ import {
   YAxis,
   CartesianGrid,
   Legend,
-  ResponsiveContainer,
-  Tooltip,
   XAxisProps,
   YAxisProps,
 } from 'recharts';
@@ -18,28 +16,35 @@ import {
   HorizontalStackedBarChart,
   StackedBarChart,
 } from '@/services/supabase/types';
-import CustomTooltip from '@/components/chart/custom-tooltip';
 import { useEffect, useState } from 'react';
 import CustomLegend from '@/components/chart/custom-legend';
 import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
-import { VizColors } from '@/lib/utils';
+import {
+  chartColors,
+  chartAxisStyles,
+  chartGridStyles,
+  generateChartConfig,
+} from '@/lib/chart-colors';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
 import { translateDestinationType } from '@/lib/translations/animal-transportation';
+import {
+  ChartContainer,
+  ChartTooltip,
+} from '@/components/chart/chart-container';
+import { AnimatedNumber } from '@/components/chart/animated-number';
+import { EnhancedTooltip } from '@/components/chart/enhanced-tooltip';
+import { CSVDownloadButton } from '@/components/chart/csv-download-button';
 
 export const xAxisDefaultProps: XAxisProps = {
-  tickLine: true,
-  axisLine: true,
-  tickMargin: 8,
+  ...chartAxisStyles.x,
   height: 38,
 };
 
 export const yAxisDefaultProps: YAxisProps = {
-  tickLine: false,
-  axisLine: false,
-  tickMargin: 6,
+  ...chartAxisStyles.y,
 };
 
 // Helper function to check if a value looks like a destination type
@@ -86,6 +91,23 @@ const translateCategoryValue = (value: string | number): string => {
   return isDestinationType(strValue)
     ? translateDestinationType(strValue)
     : strValue;
+};
+
+// Helper function to calculate total value for large display number
+const calculateTotalValue = (chartData: ChartData) => {
+  if (!chartData.series || chartData.series.length === 0) return 0;
+
+  // Sum all values from all series
+  return chartData.series.reduce((total, series) => {
+    return (
+      total +
+      series.data.reduce(
+        (seriesSum, value) =>
+          seriesSum + (typeof value === 'number' ? value : 0),
+        0
+      )
+    );
+  }, 0);
 };
 
 // Helper function to transform your data into the format Recharts expects
@@ -183,74 +205,108 @@ export function BlockBarChart({
     );
   }
 
-  // Assuming a simple case with a few predefined colors.
-  // You might want to make this more dynamic or configurable.
-  const barColors = VizColors;
+  // Generate chart colors based on series
+  const seriesNames = chart.data.series.map((s) => s.name);
+  const chartConfig = generateChartConfig(seriesNames);
+  const barColors = chartColors.data;
+  const totalValue = calculateTotalValue(chart.data);
 
   return (
-    <div>
-      <div
-        style={{ width: '100%', height: 400, minHeight: 400, minWidth: 100 }}
-        className="mt-4"
-      >
-        <ResponsiveContainer>
-          <RechartsBarChart
-            data={transformedData}
-            layout={isHorizontal ? 'vertical' : 'horizontal'}
-            {...{ overflow: 'visible' }}
-          >
-            <CartesianGrid vertical={false} />
-            {isHorizontal ? (
-              <XAxis
-                type="number"
-                tickFormatter={(tick) => {
-                  const formattedTick = tick.toLocaleString('da-DK');
-                  return chart.unit
-                    ? `${formattedTick} ${chart.unit}`
-                    : formattedTick;
-                }}
-                {...xAxisDefaultProps}
+    <div className="space-y-6">
+      {/* Header with download button */}
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          {/* Large display number - Midday style */}
+          {totalValue > 0 && (
+            <div className="space-y-2">
+              <AnimatedNumber
+                value={totalValue}
+                unit={chart.unit}
+                className="text-4xl"
               />
-            ) : (
-              <XAxis dataKey="name" {...xAxisDefaultProps} />
-            )}
-            {isHorizontal ? (
-              <YAxis
-                dataKey="category"
-                type="category"
-                {...yAxisDefaultProps}
-                width={yWidth}
-              />
-            ) : (
-              <YAxis
-                tickFormatter={(tick) => {
-                  const formattedTick = tick.toLocaleString('da-DK');
-                  return chart.unit
-                    ? `${formattedTick} ${chart.unit}`
-                    : formattedTick;
-                }}
-                {...yAxisDefaultProps}
-                width={yWidth}
-              />
-            )}
-            <Tooltip
-              content={<CustomTooltip unit={chart.unit} />}
-              cursor={{ fill: '#eef8f2' }}
-            />
-            <Legend content={<CustomLegend />} />
-            {chart.data.series.map((s, index) => (
-              <Bar
-                key={s.name}
-                dataKey={s.name}
-                fill={barColors[index % barColors.length]}
-                stackId={
-                  chart._type === 'stackedBarChart' ? 'stack' : undefined
-                }
-              />
-            ))}
-          </RechartsBarChart>
-        </ResponsiveContainer>
+              <div className="text-muted-foreground flex items-center space-x-2 text-sm">
+                <p>Total på tværs af alle kategorier</p>
+              </div>
+            </div>
+          )}
+        </div>
+        <CSVDownloadButton
+          chartData={chart.data}
+          chartTitle={chart.title}
+          chartKey={chart._key}
+          className="ml-4"
+        />
       </div>
+
+      {/* Chart container with Midday styling */}
+      <ChartContainer config={chartConfig} className="h-[400px] w-full">
+        <RechartsBarChart
+          data={transformedData}
+          layout={isHorizontal ? 'vertical' : 'horizontal'}
+          margin={{
+            top: 20,
+            right: 30,
+            left: 20,
+            bottom: 5,
+          }}
+        >
+          <CartesianGrid {...chartGridStyles} />
+          {isHorizontal ? (
+            <XAxis
+              type="number"
+              tickFormatter={(tick) => {
+                const formattedTick = tick.toLocaleString('da-DK');
+                return chart.unit
+                  ? `${formattedTick} ${chart.unit}`
+                  : formattedTick;
+              }}
+              {...xAxisDefaultProps}
+            />
+          ) : (
+            <XAxis dataKey="name" {...xAxisDefaultProps} />
+          )}
+          {isHorizontal ? (
+            <YAxis
+              dataKey="category"
+              type="category"
+              {...yAxisDefaultProps}
+              width={yWidth}
+            />
+          ) : (
+            <YAxis
+              tickFormatter={(tick) => {
+                const formattedTick = tick.toLocaleString('da-DK');
+                return chart.unit
+                  ? `${formattedTick} ${chart.unit}`
+                  : formattedTick;
+              }}
+              {...yAxisDefaultProps}
+              width={yWidth}
+            />
+          )}
+          <ChartTooltip
+            content={
+              <EnhancedTooltip
+                unit={chart.unit}
+                chartType="Bar Chart"
+                showComparison={false}
+              />
+            }
+            cursor={{ fill: 'hsl(var(--muted))', opacity: 0.1 }}
+          />
+          <Legend content={<CustomLegend />} />
+          {chart.data.series.map((s, index) => (
+            <Bar
+              key={s.name}
+              dataKey={s.name}
+              fill={barColors[index % barColors.length]}
+              stackId={chart._type === 'stackedBarChart' ? 'stack' : undefined}
+              radius={[2, 2, 0, 0]}
+            />
+          ))}
+        </RechartsBarChart>
+      </ChartContainer>
+
       {/* <JsonRender
         json={JSON.parse(JSON.stringify(transformedData))}
         title={`Component ${chart._type} placeholder (data)`}
