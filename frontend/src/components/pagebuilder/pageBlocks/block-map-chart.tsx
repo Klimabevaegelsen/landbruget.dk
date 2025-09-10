@@ -384,7 +384,7 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
       return { isValid: false, error: 'Invalid map configuration' };
     }
 
-    // Filter out layers with invalid data
+    // Filter out layers with invalid data or no features
     const validLayers = layers.filter((layer, index) => {
       if (!layer?.data) {
         console.warn(
@@ -404,6 +404,14 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
         console.warn(
           `BlockMapChart: Layer ${index} (${layer?.name || 'unnamed'}) has invalid GeoJSON data`,
           geojsonData
+        );
+        return false;
+      }
+
+      // Check if layer has any features (data points)
+      if (geojsonData.features.length === 0) {
+        console.log(
+          `BlockMapChart: Layer ${index} (${layer?.name || 'unnamed'}) has no features, excluding from display`
         );
         return false;
       }

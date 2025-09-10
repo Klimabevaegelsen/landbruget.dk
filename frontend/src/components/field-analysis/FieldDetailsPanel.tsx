@@ -7,7 +7,18 @@ import {
   generateSkraafotoUrl,
   copyCoordinatesToClipboard,
 } from './coordinateUtils';
-import { MapPin, Copy, Check, Plane, Map, TestTube, Leaf, AlertTriangle, Home, School } from 'lucide-react';
+import {
+  MapPin,
+  Copy,
+  Check,
+  Plane,
+  Map,
+  TestTube,
+  Leaf,
+  AlertTriangle,
+  Home,
+  School,
+} from 'lucide-react';
 
 interface FieldDetailsPanelProps {
   fieldData: FieldAnalysisData;
