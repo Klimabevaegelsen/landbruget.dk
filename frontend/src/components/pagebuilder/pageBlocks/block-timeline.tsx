@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { useCategoryDataContext } from './CategoryDataContext';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import { TimelineCSVDownloadButton } from '@/components/chart/timeline-csv-download-button';
 
 type TimelineEvent = {
   date: string;
@@ -173,31 +174,42 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
   return (
     <div>
       <div className="mx-auto w-full max-w-6xl py-4">
-        {/* Filter buttons - only show if we have filterColumns */}
-        {timeline.config?.filterColumns?.length > 0 && (
-          <div className="mb-8 flex flex-wrap gap-2">
-            {Object.entries(eventTypes).map(([type, color]) => (
-              <Button
-                size="sm"
-                key={type}
-                onClick={() => toggleEventType(type)}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                  selectedTypes.has(type)
-                    ? 'text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-                style={{
-                  backgroundColor: selectedTypes.has(type)
-                    ? color
-                    : 'transparent',
-                  border: `1px solid ${color}`,
-                }}
-              >
-                {translateEventType(type)}
-              </Button>
-            ))}
+        {/* Header with filters and download button */}
+        <div className="mb-8 flex items-start justify-between">
+          <div className="flex-1">
+            {/* Filter buttons - only show if we have filterColumns */}
+            {timeline.config?.filterColumns?.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(eventTypes).map(([type, color]) => (
+                  <Button
+                    size="sm"
+                    key={type}
+                    onClick={() => toggleEventType(type)}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                      selectedTypes.has(type)
+                        ? 'text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                    style={{
+                      backgroundColor: selectedTypes.has(type)
+                        ? color
+                        : 'transparent',
+                      border: `1px solid ${color}`,
+                    }}
+                  >
+                    {translateEventType(type)}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+          <TimelineCSVDownloadButton
+            timeline={timeline}
+            chartTitle={timeline.title}
+            chartKey={timeline._key}
+            className="ml-4"
+          />
+        </div>
 
         {/* Timeline */}
         <VerticalTimeline

@@ -13,6 +13,7 @@ import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
 import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import { TableCSVDownloadButton } from '@/components/chart/table-csv-download-button';
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   const { isInCategoryWithData } = useCategoryDataContext();
@@ -64,6 +65,15 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
 
   return (
     <div className="">
+      {/* Header with download button */}
+      <div className="mb-4 flex items-center justify-end">
+        <TableCSVDownloadButton
+          table={grid}
+          chartTitle={grid.title}
+          chartKey={grid._key}
+        />
+      </div>
+
       <DynamicDataTable
         columns={columns}
         data={grid.rows}
