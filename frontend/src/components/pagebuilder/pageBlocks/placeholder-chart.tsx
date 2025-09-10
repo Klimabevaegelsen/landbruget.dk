@@ -36,13 +36,13 @@ export function PlaceholderChart({ dataType }: PlaceholderChartProps) {
       {/* Placeholder chart area */}
       <div
         style={{ width: '100%', height: 250, minHeight: 250, minWidth: 100 }}
-        className="mt-4 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50"
+        className="border-muted-foreground/25 bg-muted/50 mt-4 flex items-center justify-center rounded-lg border-2 border-dashed"
       >
         <ResponsiveContainer>
           <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg bg-gray-200">
+            <div className="bg-muted mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg">
               <svg
-                className="h-10 w-10 text-gray-400"
+                className="text-muted-foreground h-10 w-10"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -55,21 +55,23 @@ export function PlaceholderChart({ dataType }: PlaceholderChartProps) {
                 />
               </svg>
             </div>
-            <p className="mb-2 text-lg font-medium text-gray-600">
+            <p className="text-muted-foreground mb-2 text-lg font-medium">
               Data kommer snart
             </p>
-            <p className="text-sm text-gray-500">Klik for at hjælpe til</p>
+            <p className="text-muted-foreground/80 text-sm">
+              Klik for at hjælpe til
+            </p>
           </div>
         </ResponsiveContainer>
       </div>
 
       {/* Overlay with call-to-action */}
-      <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/80 opacity-0 backdrop-blur-sm transition-opacity hover:opacity-100">
+      <div className="bg-background/80 absolute inset-0 flex items-center justify-center rounded-lg opacity-0 backdrop-blur-sm transition-opacity hover:opacity-100">
         <div className="max-w-sm p-6 text-center">
-          <p className="mb-3 text-xl font-semibold text-gray-800">
+          <p className="text-foreground mb-3 text-xl font-semibold">
             Data er der snart
           </p>
-          <p className="mb-4 text-sm text-gray-600">
+          <p className="text-muted-foreground mb-4 text-sm">
             Hjælp os med at få det endnu hurtigere udgivet
           </p>
           <button

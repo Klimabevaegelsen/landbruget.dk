@@ -76,7 +76,7 @@ function SimpleRankingTable({
     <Card className="w-full">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg font-semibold">{title}</CardTitle>
-        <CardDescription className="text-sm text-gray-600">
+        <CardDescription className="text-sm text-muted-foreground">
           {description}
         </CardDescription>
       </CardHeader>
@@ -187,7 +187,7 @@ export default function MunicipalityRankingsPage() {
         <div className="flex min-h-[400px] items-center justify-center">
           <div className="text-center">
             <Loader2 className="mx-auto h-12 w-12 animate-spin text-green-600" />
-            <p className="mt-4 text-gray-600">Indlæser kommuneranglister...</p>
+            <p className="mt-4 text-muted-foreground">Indlæser kommuneranglister...</p>
           </div>
         </div>
       </div>
@@ -203,7 +203,7 @@ export default function MunicipalityRankingsPage() {
             <p className="font-medium text-red-600">
               Fejl ved indlæsning af data
             </p>
-            <p className="mt-2 text-gray-600">{error}</p>
+            <p className="mt-2 text-muted-foreground">{error}</p>
             <Button onClick={fetchRankings} className="mt-4">
               Prøv igen
             </Button>
@@ -217,8 +217,8 @@ export default function MunicipalityRankingsPage() {
     <div className="container mx-auto space-y-6 py-8">
       {/* Header */}
       <div className="space-y-4 text-center">
-        <h1 className="text-4xl font-bold text-gray-900">Kommune Ranglister</h1>
-        <p className="mx-auto max-w-3xl text-xl text-gray-600">
+        <h1 className="text-4xl font-bold text-foreground">Kommune Ranglister</h1>
+        <p className="mx-auto max-w-3xl text-xl text-muted-foreground">
           Sammenlign danske kommuner på tværs af landbrug, miljø, produktion og
           dyrevelfærd
         </p>
@@ -309,8 +309,8 @@ export default function MunicipalityRankingsPage() {
       )}
 
       {/* Footer like old front page */}
-      <div className="border-t border-gray-200 pt-8 text-center">
-        <p className="text-xs text-gray-500">
+      <div className="border-t border-border pt-8 text-center">
+        <p className="text-xs text-muted-foreground">
           Data opdateret:{' '}
           {data?.metadata.generated_at
             ? new Date(data.metadata.generated_at).toLocaleDateString('da-DK')

@@ -221,7 +221,7 @@ function SearchOverlay({
       <div
         className={cn(
           'h-auto w-full rounded-lg shadow-lg',
-          !borderless && 'border border-gray-100'
+          !borderless && 'border border-border'
         )}
       >
         <Input
@@ -252,7 +252,7 @@ function SearchOverlay({
           {isLoading && (
             <div className="flex items-center justify-center p-8">
               <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
-              <span className="ml-3 text-sm text-gray-600">Søger...</span>
+              <span className="ml-3 text-sm text-muted-foreground">Søger...</span>
             </div>
           )}
 
@@ -267,7 +267,7 @@ function SearchOverlay({
             searchResults.length === 0 &&
             search.trim().length >= 2 && (
               <div className="flex items-center justify-center p-8">
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-muted-foreground">
                   Ingen resultater fundet for &ldquo;{search}&rdquo;
                 </div>
               </div>
@@ -275,7 +275,7 @@ function SearchOverlay({
 
           {!isLoading && !error && search.trim().length < 2 && (
             <div className="flex items-center justify-center p-8">
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 Indtast mindst 2 tegn for at søge
               </div>
             </div>
@@ -319,7 +319,7 @@ function SearchResultCard({
 
   return (
     <Link href={`/virksomhed/${result.id}`} onClick={handleClick}>
-      <div className="group flex items-center justify-between gap-2 p-4 hover:bg-gray-100">
+      <div className="group flex items-center justify-between gap-2 p-4 hover:bg-muted/50">
         <div className="flex items-center gap-2">
           <Image
             src={'/farm-icon.png'}

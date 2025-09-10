@@ -97,7 +97,7 @@ export function LoadingToastDemo() {
           </Button>
         </div>
 
-        <div className="text-sm text-gray-600">
+        <div className="text-muted-foreground text-sm">
           Status: {isLoading ? 'Loading...' : 'Ready'}
         </div>
       </CardContent>

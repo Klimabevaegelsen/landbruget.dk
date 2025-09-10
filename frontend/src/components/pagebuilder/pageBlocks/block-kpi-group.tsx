@@ -20,7 +20,7 @@ export function BlockKpiGroup({ kpiGroup }: { kpiGroup: KPIGroup }) {
       return <NoDataPlaceholder />;
     } else {
       return (
-        <div className="py-8 text-center text-gray-500">
+        <div className="text-muted-foreground py-8 text-center">
           Ingen KPI data tilgængelig
         </div>
       );
