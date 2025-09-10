@@ -29,6 +29,27 @@ repos:
       - id: ruff-format
         types_or: [python, pyi]
 
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            .*\.lock$|
+            package-lock\.json$|
+            .*\.min\.js$|
+            .*\.min\.css$|
+            .*test.*\.py$|
+            .*tests/.*\.py$|
+            .*\.md$|
+            .*\.example$|
+            .*config\.toml$|
+            .*\.parquet$|
+            .*\.json$
+          )$
+
   - repo: local
     hooks:
       # Prettier for frontend projects
