@@ -93,18 +93,18 @@ export default function RankingTable({
             </Badge>
           </div>
         </div>
-        <p className="text-sm text-gray-600">{description}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
       </CardHeader>
 
       <CardContent className="p-0">
-        <div className="divide-y divide-gray-100">
+        <div className="divide-border divide-y">
           {displayItems.map((item) => {
             const isCached = getCompanyForDisplay(item.company_id) !== null;
 
             return (
               <div
                 key={`${item.company_id}-${item.rank}`}
-                className="flex items-center justify-between px-6 py-3 transition-colors hover:bg-gray-50"
+                className="hover:bg-muted/50 flex items-center justify-between px-6 py-3 transition-colors"
               >
                 <div className="flex min-w-0 flex-1 items-center space-x-3">
                   <div className="flex w-8 flex-shrink-0 justify-center">
@@ -113,28 +113,28 @@ export default function RankingTable({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center space-x-2">
-                      <Building2 className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                      <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
                       <button
                         onClick={() =>
                           navigateToCompany(item.company_id, item.company_name)
                         }
-                        className="truncate text-left text-sm font-medium text-gray-900 transition-colors hover:text-blue-600"
+                        className="text-foreground hover:text-primary truncate text-left text-sm font-medium transition-colors"
                       >
                         {item.company_name}
                       </button>
-                      <ExternalLink className="h-3 w-3 text-gray-400" />
+                      <ExternalLink className="text-muted-foreground h-3 w-3" />
                       {isCached && (
-                        <Database className="h-3 w-3 text-green-500" />
+                        <Database className="text-primary h-3 w-3" />
                       )}
                     </div>
 
                     <div className="mt-1 flex items-center space-x-4">
-                      <div className="flex items-center space-x-1 text-xs text-gray-500">
+                      <div className="text-muted-foreground flex items-center space-x-1 text-xs">
                         <span>CVR:</span>
                         <span className="font-mono">{item.cvr_number}</span>
                       </div>
                       {item.municipality && (
-                        <div className="flex items-center space-x-1 text-xs text-gray-500">
+                        <div className="text-muted-foreground flex items-center space-x-1 text-xs">
                           <MapPin className="h-3 w-3" />
                           <span>{item.municipality}</span>
                         </div>
@@ -144,11 +144,13 @@ export default function RankingTable({
                 </div>
 
                 <div className="flex-shrink-0 text-right">
-                  <div className="text-sm font-semibold text-gray-900">
+                  <div className="text-foreground text-sm font-semibold">
                     {item.formatted_value}
                   </div>
                   {item.year && (
-                    <div className="text-xs text-gray-500">{item.year}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {item.year}
+                    </div>
                   )}
                 </div>
               </div>

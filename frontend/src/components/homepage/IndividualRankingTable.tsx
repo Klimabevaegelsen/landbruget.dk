@@ -80,7 +80,7 @@ export default function IndividualRankingTable({
       cell: ({ row }) => {
         const rank = row.getValue('rank') as number;
         return (
-          <div className="flex h-8 w-8 items-center justify-center text-sm font-bold text-gray-900">
+          <div className="text-foreground flex h-8 w-8 items-center justify-center text-sm font-bold">
             {rank}
           </div>
         );
@@ -94,16 +94,16 @@ export default function IndividualRankingTable({
         return (
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
-              <Building2 className="h-4 w-4 flex-shrink-0 text-gray-400" />
+              <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
               <Link
                 href={`/virksomhed/${item.company_id}`}
-                className="truncate text-sm font-medium text-gray-900 transition-colors hover:text-blue-600"
+                className="text-foreground hover:text-primary truncate text-sm font-medium transition-colors"
               >
                 {item.company_name}
               </Link>
-              <ExternalLink className="h-3 w-3 text-gray-400" />
+              <ExternalLink className="text-muted-foreground h-3 w-3" />
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-muted-foreground text-xs">
               CVR: {item.cvr_number}
               {item.municipality && ` • ${item.municipality}`}
             </div>
@@ -118,11 +118,11 @@ export default function IndividualRankingTable({
         const item = row.original;
         return (
           <div className="text-right">
-            <div className="text-sm font-semibold text-gray-900">
+            <div className="text-foreground text-sm font-semibold">
               {item.formatted_value}
             </div>
             {item.year && (
-              <div className="text-xs text-gray-500">{item.year}</div>
+              <div className="text-muted-foreground text-xs">{item.year}</div>
             )}
           </div>
         );
