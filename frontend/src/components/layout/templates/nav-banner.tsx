@@ -1,5 +1,6 @@
 import { CheckBadgeIcon } from '@heroicons/react/24/outline';
 import { Container } from '../container';
+import { Tractor, Heart } from 'lucide-react';
 import Link from 'next/link';
 
 export function NavBanner() {
@@ -10,7 +11,7 @@ export function NavBanner() {
         <Container>
           <div className="flex justify-center text-center">
             <p className="text-sm font-medium text-yellow-800">
-              <span className="mr-2">🚜</span>
+              <Tractor className="mr-2 inline h-4 w-4" />
               <strong>Undskyld vi roder</strong>
               <span className="mx-2">•</span>
               Hjemmesiden er ved at blive gjort klar til lanceringen. Det
@@ -33,7 +34,7 @@ export function NavBanner() {
               >
                 Slack
               </a>{' '}
-              med kyshånd <span className="ml-1">🫶</span>
+              med kyshånd <Heart className="ml-1 inline h-4 w-4" />
             </p>
           </div>
         </Container>

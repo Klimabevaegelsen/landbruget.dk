@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { DocumentationLink } from '@/services/supabase/types';
+import { BookOpen } from 'lucide-react';
 
 interface DocumentationAccordionProps {
   documentation: DocumentationLink;
@@ -24,7 +25,8 @@ export function DocumentationAccordion({
         className="flex w-full items-center justify-between text-left text-sm font-medium text-gray-700 hover:text-gray-900 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 focus:outline-none"
       >
         <span className="flex items-center">
-          📚 Datakilder og dokumentation
+          <BookOpen className="mr-2 h-4 w-4" />
+          Datakilder og dokumentation
         </span>
         {isOpen ? (
           <ChevronUpIcon className="h-4 w-4" />

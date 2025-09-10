@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { GlobalSearch } from '../global-search';
 import { useHomepageStatsCache } from '@/hooks/useHomepageStatsCache';
+import { BarChart3 } from 'lucide-react';
 
 interface HomepageStatistics {
   total_data_points: number;
@@ -156,7 +157,7 @@ export default function Hero() {
 
           {usingCache && !loading && (
             <p className="mt-2 text-xs text-white/70">
-              📊 Data fra cache • Opdateres automatisk hver uge
+              <BarChart3 className="mr-1 inline h-3 w-3" /> Data fra cache • Opdateres automatisk hver uge
             </p>
           )}
         </div>

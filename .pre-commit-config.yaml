@@ -41,8 +41,8 @@ repos:
             package-lock\.json$|
             .*\.min\.js$|
             .*\.min\.css$|
-            .*test.*\.py$|
-            .*tests/.*\.py$|
+            .*/test_.*\.py$|
+            .*/tests/.*\.py$|
             .*\.md$|
             .*\.example$|
             .*config\.toml$|

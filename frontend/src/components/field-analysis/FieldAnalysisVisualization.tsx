@@ -89,7 +89,7 @@ export default function FieldAnalysisVisualization() {
 
     // Fallback timeout to prevent getting stuck in loading state
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('⚠️ Map loading timeout - forcing loading state to false');
+      console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
       loadingTimeoutRef.current = null;
     }, 5000); // 5 second fallback timeout
@@ -172,7 +172,7 @@ export default function FieldAnalysisVisualization() {
 
   // Handle map ready callback
   const handleMapReady = useCallback(() => {
-    console.log('✅ Map ready - clearing loading state');
+    console.log('Map ready - clearing loading state');
 
     // Clear the fallback timeout since map loaded successfully
     if (loadingTimeoutRef.current) {
