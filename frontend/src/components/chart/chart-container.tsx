@@ -51,7 +51,7 @@ const ChartContainer = React.forwardRef<
         data-chart={chartId}
         ref={ref}
         className={cn(
-          'flex min-h-[300px] w-full justify-center text-xs',
+          'bg-background flex min-h-[300px] w-full justify-center text-xs',
           // Midday-inspired chart styling with enhanced visibility
           '[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground',
           "[&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/30",

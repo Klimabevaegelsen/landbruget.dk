@@ -298,10 +298,10 @@ export function BlockBarChart({
     );
   }
 
-  // Generate chart colors based on series
+  // Generate chart colors based on series (Tailwind v4 compatible)
   const seriesNames = chart.data.series.map((s) => s.name);
   const chartConfig = generateChartConfig(seriesNames);
-  const barColors = chartColors.data;
+  const barColors = chartColors.recharts; // Uses CSS custom properties that auto-switch themes
   const displayMetric = calculateDisplayValue(chart.data, chart.unit);
 
   return (
