@@ -1112,9 +1112,17 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
         for (const orderSpec of iterOrderBy) {
           const { column, direction = 'asc' } = orderSpec;
           if (column) {
-            iterQuery = iterQuery.order(column, { ascending: direction === 'asc' });
+            iterQuery = iterQuery.order(column, {
+              ascending: direction === 'asc',
+              nullsFirst: direction === 'desc' ? false : true
+            });
           }
         }
+      }
+
+      // Special post-processing for capacity sorting to handle 0 values properly
+      if (iterOrderBy?.some((order: any) => order.column === 'capacity' && order.direction === 'desc')) {
+        // We'll handle the sorting in post-processing after fetching the data
       }
       console.log(`DEBUG: Iterator query for ${_key}: source=${iterSource}, companyId=${companyId}, columns=${iterColumns.join(',')}`);
       console.log(`DEBUG: Iterator SQL query for ${_key}:`, iterQuery.toString());
@@ -1133,6 +1141,31 @@ async function processComponent(componentConfig: any, supabase: SupabaseClient, 
             const capacityText = capacity > 0 ? ` (${capacity.toLocaleString()} dyr)` : ' (0 dyr)';
             item.site_name_with_capacity = `${item.site_name}${capacityText}`;
           }
+        }
+
+        // Post-process sorting for capacity to ensure sites with 0 animals rank lowest
+        const hasCapacityDescSort = iterOrderBy?.some((order: any) => order.column === 'capacity' && order.direction === 'desc');
+        if (hasCapacityDescSort && iterSource === 'production_sites') {
+          iteratorItems.sort((a: any, b: any) => {
+            const capacityA = a.capacity || 0;
+            const capacityB = b.capacity || 0;
+
+            // Sites with positive capacity should come first
+            if (capacityA > 0 && capacityB === 0) return -1;
+            if (capacityA === 0 && capacityB > 0) return 1;
+
+            // Among sites with positive capacity, sort by capacity descending
+            if (capacityA > 0 && capacityB > 0) {
+              return capacityB - capacityA;
+            }
+
+            // Among sites with 0 capacity, maintain original order (or sort by name)
+            if (capacityA === 0 && capacityB === 0) {
+              return (a.site_name || '').localeCompare(b.site_name || '');
+            }
+
+            return 0;
+          });
         }
       }
 
