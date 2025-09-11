@@ -41,7 +41,7 @@ const MobileMenu = React.forwardRef<HTMLDivElement, MobileMenuProps>(
           >
             <div className="flex h-full flex-col">
               {/* Content */}
-              <div className="flex-1 p-6">{children}</div>
+              <div className="flex-1 overflow-y-auto p-6">{children}</div>
             </div>
           </SheetContent>
         </Sheet>
