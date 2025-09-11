@@ -93,7 +93,6 @@ function SimpleRankingTable({
   items,
   showTop = 20,
   category,
-  year,
   onMunicipalityClick,
 }: {
   title: string;
@@ -101,7 +100,6 @@ function SimpleRankingTable({
   items: MunicipalityRanking[];
   showTop?: number;
   category: string;
-  year: string;
   onMunicipalityClick: (municipality: string, category: string) => void;
 }) {
   const displayItems = items.slice(0, showTop);
@@ -134,8 +132,10 @@ function SimpleRankingTable({
               {displayItems.map((item) => (
                 <tr
                   key={item.municipality}
-                  className="hover:bg-muted/50 cursor-pointer transition-colors group"
-                  onClick={() => onMunicipalityClick(item.municipality, category)}
+                  className="hover:bg-muted/50 group cursor-pointer transition-colors"
+                  onClick={() =>
+                    onMunicipalityClick(item.municipality, category)
+                  }
                   title={`Klik for at se virksomheder i ${item.municipality}`}
                 >
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -145,9 +145,9 @@ function SimpleRankingTable({
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="space-y-1">
-                      <div className="text-foreground text-sm font-medium flex items-center gap-2">
+                      <div className="text-foreground flex items-center gap-2 text-sm font-medium">
                         {item.municipality}
-                        <MousePointer className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                        <MousePointer className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-50" />
                       </div>
                       {item.additional_data && (
                         <div className="text-muted-foreground space-y-1 text-xs">
@@ -271,9 +271,10 @@ export default function MunicipalityRankingsPage() {
   const [selectedYear, setSelectedYear] = useState('2024');
   const [limit, setLimit] = useState(100);
   const [mounted, setMounted] = useState(false);
-  
   // Modal state
-  const [selectedMunicipality, setSelectedMunicipality] = useState<string | null>(null);
+  const [selectedMunicipality, setSelectedMunicipality] = useState<
+    string | null
+  >(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('land_use');
 
   // Handle municipality click
@@ -371,9 +372,10 @@ export default function MunicipalityRankingsPage() {
           Data baseret på markernes faktiske placering og produktionsstedernes
           lokation for præcis geografisk tilknytning
         </p>
-        <p className="text-muted-foreground mx-auto max-w-2xl text-xs mt-2 flex items-center justify-center gap-1">
+        <p className="text-muted-foreground mx-auto mt-2 flex max-w-2xl items-center justify-center gap-1 text-xs">
           <MousePointer className="h-3 w-3" />
-          Klik på en kommune for at se hvilke virksomheder der bidrager til rangeringen
+          Klik på en kommune for at se hvilke virksomheder der bidrager til
+          rangeringen
         </p>
       </div>
 
@@ -423,7 +425,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.land_use}
               showTop={20}
               category="land_use"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -436,7 +437,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.organic_farming}
               showTop={20}
               category="organic_farming"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -449,7 +449,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.production}
               showTop={20}
               category="production"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -462,7 +461,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.pesticide_burden}
               showTop={20}
               category="pesticide_burden"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -475,7 +473,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.pesticide_pfas}
               showTop={20}
               category="pesticide_pfas"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -488,7 +485,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.pesticide_glyphosate}
               showTop={20}
               category="pesticide_glyphosate"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -501,7 +497,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.antibiotic_usage}
               showTop={20}
               category="antibiotic_usage"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -514,7 +509,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.environmental}
               showTop={20}
               category="environmental"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -527,7 +521,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.worker_safety}
               showTop={20}
               category="worker_safety"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
@@ -540,7 +533,6 @@ export default function MunicipalityRankingsPage() {
               items={data.rankings.incidents}
               showTop={20}
               category="incidents"
-              year={selectedYear}
               onMunicipalityClick={handleMunicipalityClick}
             />
           )}
