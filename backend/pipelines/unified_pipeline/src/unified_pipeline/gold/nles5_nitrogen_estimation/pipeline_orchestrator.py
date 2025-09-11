@@ -193,6 +193,14 @@ class NLES5PipelineOrchestrator:
         self.log.info(f"✅ Agricultural fields loaded: {agricultural_fields_table}")
         self.log.info(f"✅ Phase 1.5 completed in {phase_time:.1f} seconds")
 
+        # Phase 1.7: Pre-join validation controls (N2023_62 §3.1–3.3)
+        self.log.info("🛡️  Phase 1.7: Running pre-join validation controls (N2023_62)...")
+        try:
+            self.processor.prejoin_validator.run_all()
+        except Exception as e:
+            self.log.error(f"❌ Pre-join validations failed: {e}")
+            raise
+
         # Phase 2: Process climate data to calculate percolation (MUST come before spatial tables)
         self.log.info("🌧️  Phase 2: Processing climate data for percolation...")
         phase_start = time.time()

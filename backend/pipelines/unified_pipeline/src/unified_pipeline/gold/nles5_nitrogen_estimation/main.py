@@ -57,6 +57,7 @@ from .climate_processor import NLES5ClimateProcessor
 from .spatial_operations import NLES5SpatialOperations
 from .nles5_calculator import NLES5Calculator
 from .validator import NLES5Validator
+from .prejoin_validations import NLES5PrejoinValidator
 from .memory_utils import NLES5MemoryUtils
 from .pipeline_orchestrator import NLES5PipelineOrchestrator
 
@@ -117,6 +118,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         self.spatial_operations = NLES5SpatialOperations(self)
         self.nles5_calculator = NLES5Calculator(self)
         self.validator = NLES5Validator(self)
+        self.prejoin_validator = NLES5PrejoinValidator(self)
         self.memory_utils = NLES5MemoryUtils(self)
         self.pipeline_orchestrator = NLES5PipelineOrchestrator(self)
 
@@ -174,6 +176,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     )
         except Exception as e:
             self.log.warning(f"Could not verify spatial extension version: {e}")
+
+        # Initial configuration complete
 
     def _cleanup_temp_files(self):
         """Delegate to memory utils if available, otherwise provide basic cleanup."""
@@ -234,6 +238,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 if hasattr(self, 'log'):
                     self.log.debug(f"Temp file cleanup error: {e}")
                 pass
+
+    
     
     def _get_available_fvm_marker_years(self) -> List[int]:
         """Delegate to data loader."""
