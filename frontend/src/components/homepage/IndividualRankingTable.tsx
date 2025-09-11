@@ -40,7 +40,7 @@ const getCategoryColor = (category: string) => {
     case 'worker':
       return 'bg-blue-100 text-blue-800 border-blue-200';
     default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-muted text-muted-foreground border-border';
   }
 };
 
@@ -184,7 +184,9 @@ export default function IndividualRankingTable({
         <CardContent>
           <div className="flex items-center justify-center py-8">
             <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-gray-400"></div>
-            <span className="ml-2 text-sm text-gray-600">Indlæser...</span>
+            <span className="text-muted-foreground ml-2 text-sm">
+              Indlæser...
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -215,7 +217,7 @@ export default function IndividualRankingTable({
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <CardTitle className="text-lg font-semibold text-gray-900">
+              <CardTitle className="text-foreground text-lg font-semibold">
                 {title}
               </CardTitle>
               {companyCount > 0 && (
@@ -232,7 +234,7 @@ export default function IndividualRankingTable({
             </Badge>
           </div>
         </div>
-        <p className="text-sm text-gray-600">{description}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
       </CardHeader>
 
       <CardContent className="p-0">

@@ -20,7 +20,7 @@ export default function PipelinePage() {
           {/* H3 PFAS Pipeline Section */}
           <section>
             <div className="mb-6">
-              <h2 className="mb-2 text-2xl font-semibold text-gray-900">
+              <h2 className="text-foreground mb-2 text-2xl font-semibold">
                 H3 PFAS Exposure Analysis
               </h2>
               <p className="text-muted-foreground">
@@ -35,7 +35,7 @@ export default function PipelinePage() {
 
           {/* Pipeline Status Section */}
           <section className="rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-4 flex items-center text-2xl font-semibold text-gray-900">
+            <h2 className="text-foreground mb-4 flex items-center text-2xl font-semibold">
               <BarChart3 className="mr-2 h-6 w-6" />
               Pipeline Status
             </h2>
@@ -61,7 +61,7 @@ export default function PipelinePage() {
 
           {/* Documentation Section */}
           <section className="rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-4 flex items-center text-2xl font-semibold text-gray-900">
+            <h2 className="text-foreground mb-4 flex items-center text-2xl font-semibold">
               <BookOpen className="mr-2 h-6 w-6" />
               Documentation
             </h2>

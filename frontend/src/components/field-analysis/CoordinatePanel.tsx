@@ -68,7 +68,7 @@ export function CoordinatePanel({
 
       {/* Header */}
       <div className="mb-4 flex items-center justify-between lg:mb-6">
-        <h2 className="text-lg font-bold text-gray-900 lg:text-xl">
+        <h2 className="text-foreground text-lg font-bold lg:text-xl">
           Koordinater
         </h2>
         <button
