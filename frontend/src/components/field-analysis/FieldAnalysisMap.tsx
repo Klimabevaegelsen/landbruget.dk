@@ -421,12 +421,12 @@ function MapTooltip({
       }}
     >
       {/* Header with better typography */}
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h3 className="text-base leading-tight font-semibold text-gray-900">
+      <div className="border-border border-b px-4 py-3">
+        <h3 className="text-foreground text-base leading-tight font-semibold">
           {layerName}
         </h3>
         {properties.site_name ? (
-          <p className="mt-1 text-sm font-medium text-gray-600">
+          <p className="text-muted-foreground mt-1 text-sm font-medium">
             {String(properties.site_name)}
           </p>
         ) : null}

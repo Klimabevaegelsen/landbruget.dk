@@ -45,7 +45,7 @@ export function LayerControlPanel({
       name: 'Lavbundsområder',
       description: '768.646 lavbundsjorder med tørvindhold',
       icon: Wind,
-      color: 'bg-gray-600',
+      color: 'bg-muted-foreground',
     },
     {
       key: 'water_projects' as const,
@@ -59,7 +59,7 @@ export function LayerControlPanel({
       name: 'Bygninger',
       description: '268.260 bygninger inden for 100m af pesticidmarker',
       icon: Home,
-      color: 'bg-gray-500',
+      color: 'bg-muted-foreground',
     },
   ];
 

@@ -385,7 +385,7 @@ export function FieldDetailsPanel({
           fieldData.pesticides_ml_detail ||
           fieldData.pesticides_tons_detail) && (
           <div className="mt-3">
-            <h4 className="mb-2 text-sm font-medium text-gray-900">
+            <h4 className="text-foreground mb-2 text-sm font-medium">
               Anvendte produkter
             </h4>
             <div className="max-h-32 space-y-2 overflow-y-auto">
@@ -394,12 +394,12 @@ export function FieldDetailsPanel({
                 (product, index) => (
                   <div
                     key={`kg-${index}`}
-                    className="flex items-center justify-between rounded bg-gray-50 p-2 text-xs"
+                    className="bg-muted flex items-center justify-between rounded p-2 text-xs"
                   >
-                    <span className="truncate font-medium text-gray-800">
+                    <span className="text-foreground truncate font-medium">
                       {product.name}
                     </span>
-                    <span className="ml-2 flex-shrink-0 text-gray-600">
+                    <span className="text-muted-foreground ml-2 flex-shrink-0">
                       {formatNumber(product.dosage, 2)} kg
                     </span>
                   </div>
@@ -614,12 +614,12 @@ export function FieldDetailsPanel({
           )}
 
           {fieldData.wetland_area_hectares > 0 && (
-            <div className="rounded-lg bg-gray-100 p-2">
+            <div className="bg-muted rounded-lg p-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-800">
+                <span className="text-foreground text-sm font-medium">
                   💨 Lavbund
                 </span>
-                <span className="text-sm font-bold text-gray-800">
+                <span className="text-foreground text-sm font-bold">
                   {formatNumber(fieldData.wetland_area_hectares)} ha
                 </span>
               </div>
@@ -628,7 +628,7 @@ export function FieldDetailsPanel({
 
           {fieldData.bnbo_area_hectares === 0 &&
             fieldData.wetland_area_hectares === 0 && (
-              <div className="p-2 text-xs text-gray-500 italic">
+              <div className="text-muted-foreground p-2 text-xs italic">
                 Ingen registrerede miljøområder
               </div>
             )}
@@ -643,7 +643,7 @@ export function FieldDetailsPanel({
         <div className="space-y-1 text-sm">
           {fieldData.residential_buildings_proximity && (
             <div className="flex justify-between">
-              <span className="flex items-center text-gray-600">
+              <span className="text-muted-foreground flex items-center">
                 <Home className="mr-1 h-4 w-4" />
                 Boliger:
               </span>
@@ -655,7 +655,7 @@ export function FieldDetailsPanel({
 
           {fieldData.educational_facilities_proximity && (
             <div className="flex justify-between">
-              <span className="flex items-center text-gray-600">
+              <span className="text-muted-foreground flex items-center">
                 <School className="mr-1 h-4 w-4" />
                 Skoler:
               </span>
@@ -677,7 +677,7 @@ export function FieldDetailsPanel({
           {!fieldData.residential_buildings_proximity &&
             !fieldData.educational_facilities_proximity &&
             !fieldData.water_distance_proximity && (
-              <div className="text-xs text-gray-500 italic">
+              <div className="text-muted-foreground text-xs italic">
                 Ingen nærhedsdata tilgængelig
               </div>
             )}
