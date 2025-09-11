@@ -315,7 +315,7 @@ export default function FieldAnalysisVisualization() {
       {/* Mobile Controls Backdrop */}
       {mobileControlsOpen && (
         <div
-          className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
+          className="bg-opacity-50 bg-background fixed inset-0 z-40 lg:hidden"
           onClick={() => setMobileControlsOpen(false)}
         />
       )}
@@ -363,7 +363,7 @@ export default function FieldAnalysisVisualization() {
 
           {/* Mobile Details Backdrop */}
           <div
-            className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
+            className="bg-opacity-50 bg-background fixed inset-0 z-40 lg:hidden"
             onClick={() => setSelectedField(null)}
           />
         </>
@@ -387,7 +387,7 @@ export default function FieldAnalysisVisualization() {
 
           {/* Mobile Coordinate Panel Backdrop */}
           <div
-            className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
+            className="bg-opacity-50 bg-background fixed inset-0 z-40 lg:hidden"
             onClick={() => setClickedCoordinates(null)}
           />
         </>
