@@ -202,7 +202,7 @@ export default function MunicipalityRankingsPage() {
       <div className="container mx-auto py-8">
         <div className="flex min-h-[400px] items-center justify-center">
           <div className="text-center">
-            <p className="font-medium text-red-600">
+            <p className="text-destructive font-medium">
               Fejl ved indlæsning af data
             </p>
             <p className="text-muted-foreground mt-2">{error}</p>

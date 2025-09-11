@@ -7,10 +7,10 @@ export function NavBanner() {
   return (
     <div className="w-full">
       {/* Maintenance Banner */}
-      <div className="w-full border-b border-yellow-200 bg-yellow-100 py-3">
+      <div className="border-conventional/20 bg-conventional/10 w-full border-b py-3">
         <Container>
           <div className="flex justify-center text-center">
-            <p className="text-sm font-medium text-yellow-800">
+            <p className="text-conventional text-sm font-medium">
               <Tractor className="mr-2 inline h-4 w-4" />
               <strong>Undskyld vi roder</strong>
               <span className="mx-2">•</span>

@@ -39,13 +39,13 @@ export function LoadingState({ message = 'Indlæser...' }: LoadingStateProps) {
 
           {/* Animated dots */}
           <div className="mt-4 flex justify-center space-x-1">
-            <div className="h-2 w-2 animate-pulse rounded-full bg-green-500"></div>
+            <div className="bg-organic h-2 w-2 animate-pulse rounded-full"></div>
             <div
-              className="h-2 w-2 animate-pulse rounded-full bg-green-500"
+              className="bg-organic h-2 w-2 animate-pulse rounded-full"
               style={{ animationDelay: '0.2s' }}
             ></div>
             <div
-              className="h-2 w-2 animate-pulse rounded-full bg-green-500"
+              className="bg-organic h-2 w-2 animate-pulse rounded-full"
               style={{ animationDelay: '0.4s' }}
             ></div>
           </div>

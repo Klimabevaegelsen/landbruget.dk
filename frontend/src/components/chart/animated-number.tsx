@@ -66,13 +66,13 @@ export function StatusIndicator({
   const colorClass = isPositive
     ? 'text-green-600 dark:text-green-500'
     : isNegative
-      ? 'text-red-600 dark:text-red-500'
+      ? 'text-destructive dark:text-destructive'
       : 'text-muted-foreground';
 
   const bgClass = isPositive
-    ? 'bg-green-50 dark:bg-green-950'
+    ? 'bg-organic/10 dark:bg-organic/5'
     : isNegative
-      ? 'bg-red-50 dark:bg-red-950'
+      ? 'bg-destructive/10 dark:bg-destructive/5'
       : 'bg-muted';
 
   return (

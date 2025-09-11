@@ -410,7 +410,7 @@ export default function KilderPage() {
                 kilders publiceringsrytme.
               </p>
 
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-6">
+              <div className="border-conventional/20 bg-conventional/10 rounded-lg border p-6">
                 <h3 className="text-primary-darker mb-3 text-xl font-bold">
                   Vigtigt at vide
                 </h3>
@@ -423,7 +423,7 @@ export default function KilderPage() {
                 </p>
               </div>
 
-              <div className="rounded-lg border border-green-200 bg-green-50 p-6">
+              <div className="border-muted bg-muted/50 rounded-lg border p-6">
                 <h3 className="text-primary-darker mb-3 text-xl font-bold">
                   Tak til vores datakilder
                 </h3>
