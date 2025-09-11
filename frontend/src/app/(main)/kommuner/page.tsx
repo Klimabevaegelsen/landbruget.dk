@@ -202,7 +202,7 @@ export default function MunicipalityRankingsPage() {
       <div className="container mx-auto py-8">
         <div className="flex min-h-[400px] items-center justify-center">
           <div className="text-center">
-            <p className="font-medium text-red-600">
+            <p className="text-destructive font-medium">
               Fejl ved indlæsning af data
             </p>
             <p className="text-muted-foreground mt-2">{error}</p>
@@ -229,7 +229,7 @@ export default function MunicipalityRankingsPage() {
       </div>
 
       {/* Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-white p-4">
+      <div className="bg-background flex flex-wrap items-center justify-between gap-4 rounded-lg border p-4">
         <div className="flex items-center gap-4">
           <Select value={selectedYear} onValueChange={setSelectedYear}>
             <SelectTrigger className="w-32">

@@ -190,7 +190,7 @@ export default function HomepageRankings() {
             variant="ghost"
             size="sm"
             onClick={handleClearCache}
-            className="flex items-center space-x-2 text-orange-600 hover:text-orange-700"
+            className="text-conventional hover:text-conventional/80 flex items-center space-x-2"
           >
             <Clock className="h-3 w-3" />
             <span>Ryd cache</span>
@@ -201,19 +201,21 @@ export default function HomepageRankings() {
       {/* Loading State */}
       {loading && (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          <span className="ml-3 text-gray-600">Indlæser ranglister...</span>
+          <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+          <span className="text-muted-foreground ml-3">
+            Indlæser ranglister...
+          </span>
         </div>
       )}
 
       {/* Error State */}
       {error && !loading && (
         <div className="py-12 text-center">
-          <div className="mx-auto max-w-md rounded-lg border border-red-200 bg-red-50 p-6">
-            <p className="font-medium text-red-700">
+          <div className="border-destructive/20 bg-destructive/10 mx-auto max-w-md rounded-lg border p-6">
+            <p className="text-destructive font-medium">
               Fejl ved indlæsning af data
             </p>
-            <p className="mt-2 text-sm text-red-600">{error}</p>
+            <p className="text-destructive/80 mt-2 text-sm">{error}</p>
             <Button
               variant="outline"
               size="sm"
@@ -248,7 +250,7 @@ export default function HomepageRankings() {
       {/* No Results */}
       {!loading && !error && filteredRankings.length === 0 && (
         <div className="py-12 text-center">
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             Ingen ranglister fundet for den valgte kategori.
           </p>
         </div>
@@ -256,8 +258,8 @@ export default function HomepageRankings() {
 
       {/* Metadata Footer */}
       {metadata && !loading && (
-        <div className="space-y-2 border-t border-gray-200 pt-8 text-center">
-          <p className="text-xs text-gray-500">
+        <div className="border-border space-y-2 border-t pt-8 text-center">
+          <p className="text-muted-foreground text-xs">
             Data opdateret:{' '}
             {new Date(metadata.generated_at).toLocaleString('da-DK')} •{' '}
             {metadata.total_tables} ranglister tilgængelige
@@ -265,8 +267,8 @@ export default function HomepageRankings() {
           <div className="flex items-center justify-center space-x-4">
             {usingCache && (
               <div className="flex items-center space-x-2">
-                <Clock className="h-3 w-3 text-orange-500" />
-                <p className="text-xs text-orange-600">
+                <Clock className="text-conventional h-3 w-3" />
+                <p className="text-conventional/80 text-xs">
                   Data fra cache • Opdateres automatisk hver uge
                 </p>
               </div>

@@ -77,6 +77,26 @@
   .sidebar-transition {
     transition: all 0.2s ease-[cubic-bezier(0.4, 0, 0.2, 1)];
   }
+
+  /* Chart visibility enhancements */
+  .recharts-wrapper {
+    min-height: 300px !important;
+  }
+
+  .recharts-surface {
+    background-color: transparent !important;
+  }
+
+  .recharts-cartesian-grid-horizontal line,
+  .recharts-cartesian-grid-vertical line {
+    opacity: 0.3 !important;
+  }
+
+  .recharts-bar,
+  .recharts-area,
+  .recharts-line {
+    filter: brightness(1.1) !important;
+  }
 }
 
 /* Unified Color System - Tailwind v4 with proper dark mode */
@@ -116,12 +136,12 @@
   --color-bnbo: oklch(75% 0.08 230);
   --color-wetland: oklch(70% 0.1 230);
 
-  /* Professional Chart Colors */
-  --color-chart-1: oklch(15% 0 0); /* Primary dark */
-  --color-chart-2: oklch(40% 0.01 106); /* Gray-700 */
-  --color-chart-3: oklch(50% 0.01 106); /* Gray-500 */
-  --color-chart-4: oklch(65% 0.01 106); /* Gray-400 */
-  --color-chart-5: oklch(80% 0.01 106); /* Gray-300 */
+  /* Professional Chart Colors - Enhanced Visibility */
+  --color-chart-1: oklch(35% 0.08 106); /* Enhanced primary */
+  --color-chart-2: oklch(45% 0.12 200); /* Enhanced blue accent */
+  --color-chart-3: oklch(50% 0.15 142); /* Enhanced green accent */
+  --color-chart-4: oklch(45% 0.12 85); /* Enhanced orange accent */
+  --color-chart-5: oklch(40% 0.1 320); /* Enhanced purple accent */
 
   /* Sidebar Colors */
   --color-sidebar: oklch(98% 0.005 106);
@@ -174,12 +194,12 @@
   --color-bnbo: oklch(80% 0.06 230);
   --color-wetland: oklch(75% 0.08 230);
 
-  /* Professional Chart Colors - Dark */
-  --color-chart-1: oklch(95% 0.01 106); /* Light primary */
-  --color-chart-2: oklch(75% 0.01 106); /* Light gray-300 */
-  --color-chart-3: oklch(65% 0.01 106); /* Light gray-400 */
-  --color-chart-4: oklch(55% 0.01 106); /* Light gray-500 */
-  --color-chart-5: oklch(45% 0.01 106); /* Light gray-600 */
+  /* Professional Chart Colors - Dark Mode Enhanced Visibility */
+  --color-chart-1: oklch(90% 0.05 106); /* Brighter primary for dark mode */
+  --color-chart-2: oklch(80% 0.12 200); /* Enhanced blue accent */
+  --color-chart-3: oklch(75% 0.15 142); /* Enhanced green accent */
+  --color-chart-4: oklch(80% 0.12 85); /* Enhanced orange accent */
+  --color-chart-5: oklch(85% 0.1 320); /* Enhanced purple accent */
 
   /* Sidebar Colors - Dark */
   --color-sidebar: oklch(10% 0.01 106);

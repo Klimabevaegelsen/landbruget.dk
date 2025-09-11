@@ -37,17 +37,17 @@ export function FieldSidebar({
   >('layers');
 
   return (
-    <Sidebar defaultExpanded={false} collapsible>
+    <Sidebar defaultExpanded={true} collapsible>
       <SidebarHeader>
         <div className="flex items-center gap-3">
-          <div className="bg-primary flex h-8 w-8 items-center justify-center rounded-lg">
-            <Layers className="text-primary-foreground h-4 w-4" />
+          <div className="bg-primary flex h-10 w-10 items-center justify-center rounded-xl shadow-sm">
+            <Layers className="text-primary-foreground h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-foreground truncate text-sm font-semibold">
+            <h2 className="text-foreground truncate text-base font-bold">
               Markanalyse
             </h2>
-            <p className="text-muted-foreground truncate text-xs">
+            <p className="text-muted-foreground truncate text-sm font-medium">
               {yearSelection.selectedYear} data
             </p>
           </div>
@@ -85,11 +85,11 @@ export function FieldSidebar({
         {/* Layer Controls */}
         {activeSection === 'layers' && (
           <SidebarGroup label="Kortlag">
-            <div className="space-y-2 px-3">
+            <div className="space-y-3 px-3 py-2">
               {Object.entries(layerVisibility).map(([key, visible]) => (
                 <label
                   key={key}
-                  className="flex cursor-pointer items-center gap-2 text-sm"
+                  className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors"
                 >
                   <input
                     type="checkbox"
@@ -97,7 +97,9 @@ export function FieldSidebar({
                     onChange={() => onLayerToggle(key as keyof LayerVisibility)}
                     className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
                   />
-                  <span className="capitalize">{key.replace('_', ' ')}</span>
+                  <span className="font-medium capitalize">
+                    {key.replace('_', ' ')}
+                  </span>
                 </label>
               ))}
             </div>
@@ -107,8 +109,8 @@ export function FieldSidebar({
         {/* Filter Controls */}
         {activeSection === 'filters' && (
           <SidebarGroup label="Filtre">
-            <div className="space-y-4 px-3">
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <div className="space-y-4 px-3 py-2">
+              <label className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors">
                 <input
                   type="checkbox"
                   checked={filterState.organicOnly}
@@ -117,7 +119,7 @@ export function FieldSidebar({
                   }
                   className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
                 />
-                <span>Kun økologiske marker</span>
+                <span className="font-medium">Kun økologiske marker</span>
               </label>
 
               <div className="space-y-2">
@@ -132,17 +134,25 @@ export function FieldSidebar({
                         .value as FilterState['visualizationMode'],
                     })
                   }
-                  className="border-border bg-background w-full rounded-md border px-3 py-2 text-sm"
+                  className="border-border bg-background hover:bg-accent/20 focus:ring-primary w-full rounded-lg border px-3 py-2.5 text-sm transition-colors focus:border-transparent focus:ring-2"
                 >
                   <option value="total_pesticide_belastning">
-                    Total belastning
+                    Total pesticidbelastning
                   </option>
-                  <option value="organic_status">Økologi status</option>
-                  <option value="risk_level">Risiko niveau</option>
+                  <option value="pfas_belastning">PFAS belastning</option>
+                  <option value="diquat_belastning">Diquat belastning</option>
+                  <option value="glyphosate_belastning">
+                    Glyphosate belastning
+                  </option>
+                  <option value="applications_count">
+                    Antal applikationer
+                  </option>
+                  <option value="organic_status">Økologisk status</option>
+                  <option value="area_size">Markareal</option>
                 </select>
               </div>
 
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <label className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors">
                 <input
                   type="checkbox"
                   checked={filterState.useDecileColoring}
@@ -151,7 +161,7 @@ export function FieldSidebar({
                   }
                   className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
                 />
-                <span>Decile farvning</span>
+                <span className="font-medium">Decile farvning</span>
               </label>
             </div>
           </SidebarGroup>
@@ -160,11 +170,11 @@ export function FieldSidebar({
         {/* Year Selection */}
         {activeSection === 'years' && (
           <SidebarGroup label="År">
-            <div className="space-y-2 px-3">
+            <div className="space-y-2 px-3 py-2">
               {yearSelection.availableYears.map((year) => (
                 <label
                   key={year}
-                  className="flex cursor-pointer items-center gap-2 text-sm"
+                  className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors"
                 >
                   <input
                     type="radio"
@@ -174,7 +184,7 @@ export function FieldSidebar({
                     onChange={() => onYearChange(year)}
                     className="text-primary border-border focus:ring-primary h-4 w-4 focus:ring-2"
                   />
-                  <span>{year}</span>
+                  <span className="font-medium">{year}</span>
                 </label>
               ))}
             </div>

@@ -34,7 +34,7 @@ export function TimelineCSVDownloadButton({
   };
 
   // Check if there's data to download
-  const hasData = timeline?.data?.events?.length > 0;
+  const hasData = timeline?.events?.length > 0;
 
   return (
     <Button

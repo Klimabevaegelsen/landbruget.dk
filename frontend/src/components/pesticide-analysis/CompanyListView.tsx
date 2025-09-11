@@ -57,7 +57,7 @@ export default function CompanyListView({
 
   const getSortIcon = (column: 'belastning' | 'applications' | 'area') => {
     if (sortBy !== column) {
-      return <ArrowUpDown className="h-4 w-4 text-gray-400" />;
+      return <ArrowUpDown className="text-muted-foreground h-4 w-4" />;
     }
     return sortOrder === 'asc' ? (
       <ArrowUp className="h-4 w-4 text-blue-600" />
@@ -184,7 +184,7 @@ export default function CompanyListView({
 
             {/* Years Active */}
             {company.years_active.length > 0 && (
-              <div className="mt-2 text-xs text-gray-500">
+              <div className="text-muted-foreground mt-2 text-xs">
                 Aktiv: {company.years_active.sort((a, b) => b - a).join(', ')}
               </div>
             )}
@@ -194,7 +194,7 @@ export default function CompanyListView({
 
       {/* Pagination */}
       <div className="flex items-center justify-between border-t pt-4">
-        <div className="text-sm text-gray-600">
+        <div className="text-muted-foreground text-sm">
           Viser {startResult}-{endResult} af {totalCount.toLocaleString()}{' '}
           virksomheder
         </div>

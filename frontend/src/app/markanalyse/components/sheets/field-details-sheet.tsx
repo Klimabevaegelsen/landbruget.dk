@@ -102,20 +102,20 @@ export function FieldDetailsSheet({
     if (belastning < 10)
       return {
         level: 'Lav',
-        color: 'text-yellow-600',
+        color: 'text-conventional',
         description: 'Lav pesticidbelastning',
         variant: 'default',
       };
     if (belastning < 50)
       return {
         level: 'Moderat',
-        color: 'text-orange-600',
+        color: 'text-conventional',
         description: 'Moderat pesticidbelastning',
         variant: 'secondary',
       };
     return {
       level: 'Høj',
-      color: 'text-red-600',
+      color: 'text-destructive',
       description: 'Høj pesticidbelastning',
       variant: 'destructive',
     };
@@ -185,14 +185,14 @@ export function FieldDetailsSheet({
                   <MapPin className="h-4 w-4" />
                   Koordinater
                 </h3>
-                <div className="rounded-lg bg-blue-50 p-3">
+                <div className="bg-primary/10 rounded-lg p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="flex items-center text-sm font-medium text-blue-800">
+                    <span className="text-primary flex items-center text-sm font-medium">
                       GPS Position
                     </span>
                     <button
                       onClick={handleCopyCoordinates}
-                      className="touch-target flex items-center rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-200 active:bg-blue-300"
+                      className="touch-target bg-primary/20 text-primary hover:bg-primary/30 active:bg-primary/40 flex items-center rounded px-2 py-1 text-xs transition-colors"
                       title="Kopier koordinater"
                     >
                       {copiedCoordinates ? (
@@ -208,7 +208,7 @@ export function FieldDetailsSheet({
                       )}
                     </button>
                   </div>
-                  <div className="mb-2 font-mono text-xs text-blue-700">
+                  <div className="text-primary/80 mb-2 font-mono text-xs">
                     {formatWgs84Coordinates(
                       field.click_coordinates.lat,
                       field.click_coordinates.lng
@@ -222,7 +222,7 @@ export function FieldDetailsSheet({
                       )}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="touch-target flex flex-1 items-center justify-center rounded bg-blue-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
+                      className="touch-target bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex flex-1 items-center justify-center rounded px-3 py-2 text-center text-xs font-medium transition-colors"
                     >
                       <Plane className="mr-1 h-3 w-3" />
                       Skråfoto
@@ -233,7 +233,7 @@ export function FieldDetailsSheet({
                         const googleMapsUrl = `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
                         window.open(googleMapsUrl, '_blank');
                       }}
-                      className="touch-target flex flex-1 items-center justify-center rounded bg-green-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-green-700 active:bg-green-800"
+                      className="touch-target bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex flex-1 items-center justify-center rounded px-3 py-2 text-center text-xs font-medium transition-colors"
                     >
                       <Map className="mr-1 h-3 w-3" />
                       Google Maps
@@ -268,22 +268,22 @@ export function FieldDetailsSheet({
               {/* Pesticide Products Summary */}
               {field.unique_pesticide_products &&
                 field.unique_pesticide_products > 0 && (
-                  <div className="mb-3 rounded-lg bg-blue-50 p-3">
+                  <div className="bg-primary/10 mb-3 rounded-lg p-3">
                     <div className="mb-1 flex items-center justify-between">
-                      <span className="text-sm font-medium text-blue-800">
+                      <span className="text-primary text-sm font-medium">
                         Produkter anvendt
                       </span>
-                      <span className="font-bold text-blue-800">
+                      <span className="text-primary font-bold">
                         {field.unique_pesticide_products}
                       </span>
                     </div>
                     {field.total_pesticide_applications &&
                       field.total_pesticide_applications > 0 && (
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-blue-600">
+                          <span className="text-primary/80 text-xs">
                             Total applikationer
                           </span>
-                          <span className="text-xs font-medium text-blue-800">
+                          <span className="text-primary text-xs font-medium">
                             {field.total_pesticide_applications}
                           </span>
                         </div>
@@ -387,12 +387,12 @@ export function FieldDetailsSheet({
                       (product, index) => (
                         <div
                           key={`l-${index}`}
-                          className="flex items-center justify-between rounded bg-blue-50 p-2 text-xs"
+                          className="bg-primary/10 flex items-center justify-between rounded p-2 text-xs"
                         >
-                          <span className="truncate font-medium text-blue-800">
+                          <span className="text-primary truncate font-medium">
                             {product.name}
                           </span>
-                          <span className="ml-2 flex-shrink-0 text-blue-600">
+                          <span className="text-primary/80 ml-2 flex-shrink-0">
                             {formatNumber(product.dosage, 1)} L
                           </span>
                         </div>
@@ -404,7 +404,7 @@ export function FieldDetailsSheet({
                       (product, index) => (
                         <div
                           key={`g-${index}`}
-                          className="flex items-center justify-between rounded bg-green-50 p-2 text-xs"
+                          className="bg-muted/50 flex items-center justify-between rounded p-2 text-xs"
                         >
                           <span className="truncate font-medium text-green-800">
                             {product.name}
@@ -421,12 +421,12 @@ export function FieldDetailsSheet({
                       (product, index) => (
                         <div
                           key={`ml-${index}`}
-                          className="flex items-center justify-between rounded bg-purple-50 p-2 text-xs"
+                          className="bg-bnbo/10 flex items-center justify-between rounded p-2 text-xs"
                         >
-                          <span className="truncate font-medium text-purple-800">
+                          <span className="text-bnbo truncate font-medium">
                             {product.name}
                           </span>
-                          <span className="ml-2 flex-shrink-0 text-purple-600">
+                          <span className="text-bnbo/80 ml-2 flex-shrink-0">
                             {formatNumber(product.dosage, 0)} ml
                           </span>
                         </div>
@@ -438,12 +438,12 @@ export function FieldDetailsSheet({
                       (product, index) => (
                         <div
                           key={`t-${index}`}
-                          className="flex items-center justify-between rounded bg-orange-50 p-2 text-xs"
+                          className="bg-conventional/10 flex items-center justify-between rounded p-2 text-xs"
                         >
-                          <span className="truncate font-medium text-orange-800">
+                          <span className="text-conventional truncate font-medium">
                             {product.name}
                           </span>
-                          <span className="ml-2 flex-shrink-0 text-orange-600">
+                          <span className="text-conventional/80 ml-2 flex-shrink-0">
                             {formatNumber(product.dosage, 3)} t
                           </span>
                         </div>
@@ -459,15 +459,15 @@ export function FieldDetailsSheet({
                 {field.pfas_applications && field.pfas_applications > 0 && (
                   <div className="rounded-lg bg-red-50 p-2">
                     <div className="mb-1 flex items-center justify-between">
-                      <span className="flex items-center text-sm font-medium text-red-800">
+                      <span className="text-destructive flex items-center text-sm font-medium">
                         <TestTube className="mr-1 h-4 w-4" />
                         PFAS
                       </span>
-                      <span className="text-sm font-bold text-red-800">
+                      <span className="text-destructive text-sm font-bold">
                         {field.pfas_applications} apps
                       </span>
                     </div>
-                    <div className="space-y-1 text-xs text-red-700">
+                    <div className="text-destructive/80 space-y-1 text-xs">
                       {field.total_pfas_active_ingredient_kg &&
                         field.total_pfas_active_ingredient_kg > 0 && (
                           <div className="flex justify-between">
@@ -496,18 +496,18 @@ export function FieldDetailsSheet({
 
                 {/* Diquat Information */}
                 {field.diquat_applications && field.diquat_applications > 0 && (
-                  <div className="rounded-lg bg-blue-50 p-2">
+                  <div className="bg-primary/10 rounded-lg p-2">
                     <div className="mb-1 flex items-center justify-between">
-                      <span className="text-sm font-medium text-blue-800">
+                      <span className="text-primary text-sm font-medium">
                         💧 Diquat
                       </span>
-                      <span className="text-sm font-bold text-blue-800">
+                      <span className="text-primary text-sm font-bold">
                         {field.diquat_applications} apps
                       </span>
                     </div>
                     {field.total_diquat_belastning &&
                       field.total_diquat_belastning > 0 && (
-                        <div className="flex justify-between text-xs text-blue-700">
+                        <div className="text-primary/80 flex justify-between text-xs">
                           <span>Belastning:</span>
                           <span className="font-medium">
                             {formatNumber(field.total_diquat_belastning)}
@@ -520,7 +520,7 @@ export function FieldDetailsSheet({
                 {/* Glyphosate Information */}
                 {field.glyphosate_applications &&
                   field.glyphosate_applications > 0 && (
-                    <div className="rounded-lg bg-green-50 p-2">
+                    <div className="bg-muted/50 rounded-lg p-2">
                       <div className="mb-1 flex items-center justify-between">
                         <span className="flex items-center text-sm font-medium text-green-800">
                           <Leaf className="mr-1 h-4 w-4" />
@@ -561,9 +561,9 @@ export function FieldDetailsSheet({
 
                 {/* Partial coverage warning */}
                 {field.is_partial_coverage && (
-                  <div className="flex items-center space-x-2 rounded-lg bg-orange-50 p-2">
-                    <AlertTriangle className="h-4 w-4 text-orange-600" />
-                    <span className="text-xs text-orange-700">
+                  <div className="bg-conventional/10 flex items-center space-x-2 rounded-lg p-2">
+                    <AlertTriangle className="text-conventional h-4 w-4" />
+                    <span className="text-conventional/80 text-xs">
                       Delvis markdækning
                     </span>
                   </div>
@@ -578,12 +578,12 @@ export function FieldDetailsSheet({
               </h3>
               <div className="space-y-2">
                 {field.bnbo_area_hectares > 0 && (
-                  <div className="rounded-lg bg-blue-50 p-2">
+                  <div className="bg-primary/10 rounded-lg p-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-blue-800">
+                      <span className="text-primary text-sm font-medium">
                         💧 BNBO
                       </span>
-                      <span className="text-sm font-bold text-blue-800">
+                      <span className="text-primary text-sm font-bold">
                         {formatNumber(field.bnbo_area_hectares)} ha
                       </span>
                     </div>
@@ -593,10 +593,10 @@ export function FieldDetailsSheet({
                 {field.wetland_area_hectares > 0 && (
                   <div className="rounded-lg bg-gray-100 p-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-800">
+                      <span className="text-foreground text-sm font-medium">
                         💨 Lavbund
                       </span>
-                      <span className="text-sm font-bold text-gray-800">
+                      <span className="text-foreground text-sm font-bold">
                         {formatNumber(field.wetland_area_hectares)} ha
                       </span>
                     </div>

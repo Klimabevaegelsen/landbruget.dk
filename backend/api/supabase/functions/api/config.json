@@ -1390,12 +1390,12 @@
               },
               {
                 "key": "rank_dk_prod",
-                "label": "Rankering p\u00e5 landsplan (Prod. \u00c6kv.)",
+                "label": "Rankering p\u00e5 landsplan (Kapacitet)",
                 "column": "rank_dk_total_animal_equivalents"
               },
               {
                 "key": "rank_mun_prod",
-                "label": "Rankering i kommunen (Prod. \u00c6kv.)",
+                "label": "Rankering i kommunen (Kapacitet)",
                 "column": "rank_municipality_total_animal_equivalents"
               },
               {
@@ -1426,13 +1426,13 @@
     {
       "_key": "animal-welfare-production-species-chart",
       "_type": "stackedBarChart",
-      "title": "Dyreproduktion pr. \u00e5r (samlet, fordelt p\u00e5 art)",
+      "title": "Dyrekapacitet pr. \u00e5r (samlet, fordelt p\u00e5 art)",
       "documentation": {
-        "title": "Dyreproduktion Fordelt p\u00e5 Arter",
-        "description": "Historisk udvikling i husdyrproduktion fordelt p\u00e5 forskellige dyrearter baseret p\u00e5 CHR-registreringer",
+        "title": "Dyrekapacitet Fordelt p\u00e5 Arter",
+        "description": "Historisk udvikling i dyrekapacitet fordelt p\u00e5 forskellige dyrearter baseret p\u00e5 CHR-registreringer",
         "sources": [
           {
-            "name": "CHR pipeline (husdyrproduktion)",
+            "name": "CHR pipeline (dyrekapacitet)",
             "url": "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
           }
         ],
@@ -1690,7 +1690,7 @@
             {
               "_key": "species-kpis-{iteratorContext.chr}-{iteratorContext.species_id}",
               "_type": "kpiGroup",
-              "title": "{iteratorContext.species_name} produktion & placering",
+              "title": "{iteratorContext.species_name} kapacitet & placering",
               "dataSource": {
                 "params": {
                   "source": "site_species_production_ranked",

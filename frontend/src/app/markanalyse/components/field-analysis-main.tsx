@@ -216,7 +216,7 @@ export default function FieldAnalysisMain() {
       {/* Main Map Area */}
       <div className="relative flex-1">
         {/* Year Slider - positioned for both mobile and desktop */}
-        <div className="pointer-events-auto absolute top-4 right-4 left-4 z-30 md:right-4 md:left-auto">
+        <div className="pointer-events-auto absolute top-4 right-4 left-4 z-30 md:top-6 md:right-6 md:left-auto md:max-w-sm lg:top-20">
           <YearSlider
             yearSelection={yearSelection}
             onYearChange={handleYearChange}

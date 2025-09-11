@@ -29,23 +29,23 @@ interface RankingTableProps {
 }
 
 const getRankIcon = (rank: number) => {
-  return <span className="text-sm font-medium text-gray-900">{rank}</span>;
+  return <span className="text-foreground text-sm font-medium">{rank}</span>;
 };
 
 const getCategoryColor = (category: string) => {
   switch (category) {
     case 'financial':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-organic/10 text-organic border-organic/20';
     case 'field':
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      return 'bg-low-risk/10 text-low-risk border-low-risk/20';
     case 'environment':
-      return 'bg-red-100 text-red-800 border-red-200';
+      return 'bg-destructive/10 text-destructive border-destructive/20';
     case 'animal':
-      return 'bg-orange-100 text-orange-800 border-orange-200';
+      return 'bg-conventional/10 text-conventional border-conventional/20';
     case 'worker':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-primary/10 text-primary border-primary/20';
     default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-muted text-muted-foreground border-border';
   }
 };
 
@@ -82,7 +82,7 @@ export default function RankingTable({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <CardTitle className="text-lg font-semibold text-gray-900">
+            <CardTitle className="text-foreground text-lg font-semibold">
               {title}
             </CardTitle>
             <Badge
@@ -160,7 +160,7 @@ export default function RankingTable({
 
         {items.length > showTop && (
           <div className="border-t bg-gray-50 px-6 py-3">
-            <p className="text-center text-xs text-gray-500">
+            <p className="text-muted-foreground text-center text-xs">
               Viser top {showTop} af {items.length} virksomheder
             </p>
           </div>
@@ -168,7 +168,7 @@ export default function RankingTable({
 
         {items.length === 0 && (
           <div className="px-6 py-8 text-center">
-            <p className="text-sm text-gray-500">
+            <p className="text-muted-foreground text-sm">
               Ingen data tilgængelig for denne kategori
             </p>
           </div>

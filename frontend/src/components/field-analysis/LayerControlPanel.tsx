@@ -45,21 +45,21 @@ export function LayerControlPanel({
       name: 'Lavbundsområder',
       description: '768.646 lavbundsjorder med tørvindhold',
       icon: Wind,
-      color: 'bg-gray-600',
+      color: 'bg-muted-foreground',
     },
     {
       key: 'water_projects' as const,
       name: 'Vandprojekter',
       description: '2.138 vandprojekter til miljøgenopretning',
       icon: Waves,
-      color: 'bg-teal-500',
+      color: 'bg-wetland',
     },
     {
       key: 'buildings' as const,
       name: 'Bygninger',
       description: '268.260 bygninger inden for 100m af pesticidmarker',
       icon: Home,
-      color: 'bg-gray-500',
+      color: 'bg-muted-foreground',
     },
   ];
 
@@ -68,10 +68,10 @@ export function LayerControlPanel({
       <div className="space-y-4 p-4 lg:space-y-6 lg:p-4">
         {/* Header */}
         <div>
-          <h2 className="mb-2 text-lg font-bold text-gray-900 lg:text-xl">
+          <h2 className="text-foreground mb-2 text-lg font-bold lg:text-xl">
             Kortlag
           </h2>
-          <p className="text-sm text-gray-600">
+          <p className="text-muted-foreground text-sm">
             Vælg hvilke data der skal vises på kortet
           </p>
         </div>
@@ -85,8 +85,8 @@ export function LayerControlPanel({
                   onClick={() => onLayerToggle(layer.key)}
                   className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded border-2 lg:h-5 lg:min-h-0 lg:w-5 lg:min-w-0 ${
                     layerVisibility[layer.key]
-                      ? 'border-blue-600 bg-blue-600'
-                      : 'border-gray-300 hover:border-gray-400 active:border-gray-500'
+                      ? 'border-primary bg-blue-600'
+                      : 'border-border hover:border-gray-400 active:border-gray-500'
                   } transition-colors`}
                 >
                   {layerVisibility[layer.key] && (
@@ -108,11 +108,11 @@ export function LayerControlPanel({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center space-x-2">
                   <layer.icon className="h-5 w-5 lg:h-4 lg:w-4" />
-                  <h3 className="text-base font-medium text-gray-900 lg:text-sm">
+                  <h3 className="text-foreground text-base font-medium lg:text-sm">
                     {layer.name}
                   </h3>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="text-muted-foreground mt-1 text-xs">
                   {layer.description}
                 </p>
               </div>
@@ -122,7 +122,7 @@ export function LayerControlPanel({
 
         {/* Filters Section */}
         <div className="border-t pt-6">
-          <h3 className="mb-4 text-lg font-semibold text-gray-900">Filtre</h3>
+          <h3 className="text-foreground mb-4 text-lg font-semibold">Filtre</h3>
           {/* Organic Filter */}
           <div className="mb-4">
             <label className="flex items-center">
@@ -132,16 +132,16 @@ export function LayerControlPanel({
                 onChange={(e) =>
                   onFilterChange({ organicOnly: e.target.checked })
                 }
-                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 lg:h-4 lg:w-4"
+                className="border-border text-primary focus:ring-primary h-5 w-5 rounded lg:h-4 lg:w-4"
               />
-              <span className="ml-3 text-base text-gray-700 lg:ml-2 lg:text-sm">
+              <span className="text-foreground ml-3 text-base lg:ml-2 lg:text-sm">
                 Kun økologiske marker
               </span>
             </label>
           </div>
           {/* Visualization Mode */}
           <div className="mb-4">
-            <label className="mb-2 block text-sm font-medium text-gray-700">
+            <label className="text-foreground mb-2 block text-sm font-medium">
               Visualiseringsmodus
             </label>
             <select
@@ -152,7 +152,7 @@ export function LayerControlPanel({
                     .value as FilterState['visualizationMode'],
                 })
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2 lg:text-sm"
+              className="border-border focus:border-primary focus:ring-primary w-full rounded-md border px-3 py-3 text-base focus:ring-2 focus:outline-none lg:py-2 lg:text-sm"
             >
               <option value="total_pesticide_belastning">
                 Total pesticidbelastning
@@ -166,7 +166,7 @@ export function LayerControlPanel({
               <option value="organic_status">Økologisk status</option>
               <option value="area_size">Markareal</option>
             </select>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="text-muted-foreground mt-1 text-xs">
               Belastning bruges til farvning for sammenlignelighed. Faktiske
               mængder (L, kg, tabletter) vises i detaljer.
             </p>
@@ -174,7 +174,7 @@ export function LayerControlPanel({
 
           {/* Color Unit */}
           <div className="mb-4">
-            <label className="mb-2 block text-sm font-medium text-gray-700">
+            <label className="text-foreground mb-2 block text-sm font-medium">
               Farveskala enhed
             </label>
             <select
@@ -184,7 +184,7 @@ export function LayerControlPanel({
                   colorUnit: e.target.value as FilterState['colorUnit'],
                 })
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2 lg:text-sm"
+              className="border-border focus:border-primary focus:ring-primary w-full rounded-md border px-3 py-3 text-base focus:ring-2 focus:outline-none lg:py-2 lg:text-sm"
             >
               <option value="total">Total mængde (kg/L)</option>
               <option value="per_hectare">Per hektar</option>
@@ -202,13 +202,13 @@ export function LayerControlPanel({
                 onChange={(e) =>
                   onFilterChange({ useDecileColoring: e.target.checked })
                 }
-                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 lg:h-4 lg:w-4"
+                className="border-border text-primary focus:ring-primary h-5 w-5 rounded lg:h-4 lg:w-4"
               />
-              <span className="ml-3 text-base text-gray-700 lg:ml-2 lg:text-sm">
+              <span className="text-foreground ml-3 text-base lg:ml-2 lg:text-sm">
                 Brug decil-baseret farvning
               </span>
             </label>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="text-muted-foreground mt-1 text-xs">
               Fordeler data i 10 lige store grupper for bedre sammenligning
             </p>
           </div>
@@ -222,7 +222,7 @@ export function LayerControlPanel({
                 useDecileColoring: true,
               })
             }
-            className="w-full rounded bg-gray-100 px-3 py-3 text-base text-gray-700 transition-colors hover:bg-gray-200 lg:py-2 lg:text-sm"
+            className="bg-muted text-foreground hover:bg-muted/80 w-full rounded px-3 py-3 text-base transition-colors lg:py-2 lg:text-sm"
           >
             Nulstil filtre
           </button>
@@ -230,17 +230,17 @@ export function LayerControlPanel({
 
         {/* Legend */}
         <div className="border-t pt-6">
-          <h3 className="mb-4 text-lg font-semibold text-gray-900">
+          <h3 className="text-foreground mb-4 text-lg font-semibold">
             Signaturforklaring
           </h3>
 
           {/* Decile Legend */}
           {filterState.useDecileColoring && (
             <div className="mb-4">
-              <h4 className="mb-2 text-sm font-medium text-gray-800">
+              <h4 className="text-foreground mb-2 text-sm font-medium">
                 Decil-baseret farvning
               </h4>
-              <div className="mb-2 text-xs text-gray-600">
+              <div className="text-muted-foreground mb-2 text-xs">
                 Baseret på faktiske data fra{' '}
                 {filterState.visualizationMode === 'pfas_belastning'
                   ? '156.025 marker med PFAS'
@@ -263,7 +263,7 @@ export function LayerControlPanel({
                   </div>
                 ))}
               </div>
-              <div className="mt-2 text-xs text-gray-500 italic">
+              <div className="text-muted-foreground mt-2 text-xs italic">
                 Belastning anbefales til sammenligning mellem forskellige
                 pesticider
               </div>
@@ -273,11 +273,11 @@ export function LayerControlPanel({
           {/* Chemical-specific legend */}
           {filterState.visualizationMode.includes('pfas') && (
             <div className="mb-4">
-              <h4 className="mb-2 flex items-center text-sm font-medium text-red-800">
+              <h4 className="text-destructive mb-2 flex items-center text-sm font-medium">
                 <TestTube className="mr-1 h-4 w-4" />
                 PFAS Pesticider
               </h4>
-              <div className="space-y-1 text-xs text-red-700">
+              <div className="text-destructive/80 space-y-1 text-xs">
                 <div>Per- og polyfluorerede alkylstoffer</div>
                 <div>Potentielt sundhedsskadelige</div>
                 <div>Bioakkumulerende og persistente</div>
@@ -287,11 +287,11 @@ export function LayerControlPanel({
 
           {filterState.visualizationMode.includes('diquat') && (
             <div className="mb-4">
-              <h4 className="mb-2 flex items-center text-sm font-medium text-blue-800">
+              <h4 className="text-primary mb-2 flex items-center text-sm font-medium">
                 <Droplets className="mr-1 h-4 w-4" />
                 Diquat Pesticider
               </h4>
-              <div className="space-y-1 text-xs text-blue-700">
+              <div className="text-primary/80 space-y-1 text-xs">
                 <div>Kontakt herbicid</div>
                 <div>Bruges til ukrudtsbekæmpelse</div>
                 <div>Kan påvirke vandmiljøet</div>
@@ -316,11 +316,11 @@ export function LayerControlPanel({
           {/* Standard legend */}
           <div className="space-y-2 text-xs">
             <div className="mb-3 space-y-1">
-              <div className="mb-1 text-sm font-medium text-gray-700">
+              <div className="text-foreground mb-1 text-sm font-medium">
                 Boringsnære beskyttelsesområder:
               </div>
               <div className="ml-2 flex items-center space-x-2">
-                <div className="h-4 w-4 rounded bg-yellow-500"></div>
+                <div className="bg-conventional h-4 w-4 rounded"></div>
                 <span>Handling påkrævet</span>
               </div>
               <div className="ml-2 flex items-center space-x-2">
@@ -337,11 +337,11 @@ export function LayerControlPanel({
               <span>Lavbundsjorder (tørvindhold)</span>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="h-4 w-4 rounded bg-teal-500"></div>
+              <div className="bg-wetland h-4 w-4 rounded"></div>
               <span>Vandprojekter</span>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="h-4 w-4 rounded bg-emerald-600"></div>
+              <div className="bg-low-risk h-4 w-4 rounded"></div>
               <span>Økologiske marker</span>
             </div>
           </div>

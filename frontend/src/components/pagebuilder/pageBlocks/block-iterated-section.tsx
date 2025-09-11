@@ -35,26 +35,24 @@ export function IteratedSectionMenu({
     })) || [];
 
   return (
-    <div className="flex gap-4 overflow-x-auto">
+    <div className="flex gap-3 overflow-x-auto">
       {navigationItems.map((item, index) => (
-        <div
+        <button
           key={`${item.name}-${index}-${level}`}
+          onClick={() => {
+            onSectionChange(item.id ?? item.href);
+            const offset = level === 0 ? 0 : 80;
+            scrollToElement(iteratedSection._key, offset);
+          }}
           className={cn(
-            'rounded-full border px-4 py-3 text-sm',
-            item.current && 'border-black'
+            'hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring flex-shrink-0 rounded-lg border px-4 py-2.5 text-sm font-medium transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none',
+            item.current
+              ? 'border-primary bg-primary/5 text-primary shadow-sm'
+              : 'border-border bg-background text-muted-foreground hover:text-foreground'
           )}
         >
-          <div
-            onClick={() => {
-              onSectionChange(item.id ?? item.href);
-              const offset = level === 0 ? 0 : 80;
-              scrollToElement(iteratedSection._key, offset);
-            }}
-            className="cursor-pointer"
-          >
-            {item.name}
-          </div>
-        </div>
+          {item.name}
+        </button>
       ))}
     </div>
   );
@@ -108,7 +106,7 @@ export function BlockIteratedSection({
       <div className={cn('relative flex w-full flex-col gap-4')}>
         <div
           className={cn(
-            'sticky w-full bg-white py-2',
+            'bg-background sticky w-full py-2',
             level === 0 &&
               'top-[calc(var(--sticky-header-height,0px)+0px)] z-30',
             level === 1 &&

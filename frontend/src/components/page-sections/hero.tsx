@@ -166,7 +166,7 @@ export default function Hero() {
         </picture>
         {/* Overlay for better text readability - adjust opacity for dark mode */}
         <div
-          className={`absolute inset-0 ${isDark ? 'bg-black/60' : 'bg-black/40'}`}
+          className={`absolute inset-0 ${isDark ? 'bg-background/60' : 'bg-background/40'}`}
         ></div>
       </div>
       <div className="mx-auto max-w-4xl py-18 sm:py-28 lg:py-40">

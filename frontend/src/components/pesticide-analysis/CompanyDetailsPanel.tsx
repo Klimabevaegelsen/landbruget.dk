@@ -147,7 +147,7 @@ export default function CompanyDetailsPanel({
   if (error) {
     return (
       <div className="py-4 text-center">
-        <div className="mb-2 text-sm text-red-600">{error}</div>
+        <div className="text-destructive mb-2 text-sm">{error}</div>
         <Button
           variant="outline"
           size="sm"

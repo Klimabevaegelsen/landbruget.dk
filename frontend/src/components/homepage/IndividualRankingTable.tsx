@@ -30,17 +30,17 @@ interface IndividualRankingTableProps {
 const getCategoryColor = (category: string) => {
   switch (category) {
     case 'financial':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-organic/10 text-organic border-organic/20';
     case 'field':
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      return 'bg-low-risk/10 text-low-risk border-low-risk/20';
     case 'environment':
-      return 'bg-red-100 text-red-800 border-red-200';
+      return 'bg-destructive/10 text-destructive border-destructive/20';
     case 'animal':
-      return 'bg-orange-100 text-orange-800 border-orange-200';
+      return 'bg-conventional/10 text-conventional border-conventional/20';
     case 'worker':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-primary/10 text-primary border-primary/20';
     default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-muted text-muted-foreground border-border';
   }
 };
 
@@ -184,7 +184,9 @@ export default function IndividualRankingTable({
         <CardContent>
           <div className="flex items-center justify-center py-8">
             <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-gray-400"></div>
-            <span className="ml-2 text-sm text-gray-600">Indlæser...</span>
+            <span className="text-muted-foreground ml-2 text-sm">
+              Indlæser...
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -199,9 +201,11 @@ export default function IndividualRankingTable({
         </CardHeader>
         <CardContent>
           <div className="py-8 text-center">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="font-medium text-red-700">Fejl ved indlæsning</p>
-              <p className="mt-1 text-sm text-red-600">{error}</p>
+            <div className="border-destructive/20 bg-destructive/10 rounded-lg border p-4">
+              <p className="text-destructive font-medium">
+                Fejl ved indlæsning
+              </p>
+              <p className="text-destructive/80 mt-1 text-sm">{error}</p>
             </div>
           </div>
         </CardContent>
@@ -215,7 +219,7 @@ export default function IndividualRankingTable({
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-3">
-              <CardTitle className="text-lg font-semibold text-gray-900">
+              <CardTitle className="text-foreground text-lg font-semibold">
                 {title}
               </CardTitle>
               {companyCount > 0 && (
@@ -232,7 +236,7 @@ export default function IndividualRankingTable({
             </Badge>
           </div>
         </div>
-        <p className="text-sm text-gray-600">{description}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
       </CardHeader>
 
       <CardContent className="p-0">
@@ -246,7 +250,7 @@ export default function IndividualRankingTable({
           </div>
         ) : (
           <div className="px-6 py-8 text-center">
-            <p className="text-sm text-gray-500">
+            <p className="text-muted-foreground text-sm">
               Ingen data tilgængelig for denne rangliste
             </p>
           </div>

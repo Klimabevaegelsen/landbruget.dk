@@ -236,7 +236,7 @@ export default function FieldAnalysisVisualization() {
       >
         <button
           onClick={() => setMobileControlsOpen(!mobileControlsOpen)}
-          className="flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg bg-white p-3 shadow-lg transition-colors hover:bg-gray-50 active:bg-gray-100"
+          className="bg-background hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg p-3 shadow-lg transition-colors"
           aria-label="Toggle controls"
         >
           <svg
@@ -257,7 +257,7 @@ export default function FieldAnalysisVisualization() {
 
       {/* Left Control Panel - Desktop: sidebar, Mobile: overlay */}
       <div
-        className={` ${mobileControlsOpen ? 'block' : 'hidden'} fixed inset-0 z-50 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:shadow-lg`}
+        className={` ${mobileControlsOpen ? 'block' : 'hidden'} bg-background fixed inset-0 z-50 h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:shadow-lg`}
         style={{
           paddingTop: mobileControlsOpen
             ? 'env(safe-area-inset-top)'
@@ -268,16 +268,16 @@ export default function FieldAnalysisVisualization() {
         }}
       >
         {/* Mobile close button */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4 lg:hidden">
+        <div className="bg-background sticky top-0 z-10 flex items-center justify-between border-b p-4 lg:hidden">
           <div>
             <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
-            <p className="text-sm text-gray-600">
+            <p className="text-muted-foreground text-sm">
               Data for {getYearRangeDisplay(yearSelection.selectedYear)}
             </p>
           </div>
           <button
             onClick={() => setMobileControlsOpen(false)}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 hover:bg-gray-100 active:bg-gray-200"
+            className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2"
             aria-label="Luk kontrolpanel"
           >
             <svg
@@ -297,9 +297,9 @@ export default function FieldAnalysisVisualization() {
         </div>
 
         {/* Desktop header */}
-        <div className="hidden border-b bg-white p-4 lg:block">
+        <div className="bg-background hidden border-b p-4 lg:block">
           <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
-          <p className="text-sm text-gray-600">
+          <p className="text-muted-foreground text-sm">
             Data for {getYearRangeDisplay(yearSelection.selectedYear)}
           </p>
         </div>
@@ -315,7 +315,7 @@ export default function FieldAnalysisVisualization() {
       {/* Mobile Controls Backdrop */}
       {mobileControlsOpen && (
         <div
-          className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
+          className="bg-opacity-50 bg-background fixed inset-0 z-40 lg:hidden"
           onClick={() => setMobileControlsOpen(false)}
         />
       )}
@@ -349,7 +349,7 @@ export default function FieldAnalysisVisualization() {
       {selectedField && (
         <>
           <div
-            className={`fixed inset-0 z-[70] h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
+            className={`bg-background fixed inset-0 z-[70] h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
@@ -363,7 +363,7 @@ export default function FieldAnalysisVisualization() {
 
           {/* Mobile Details Backdrop */}
           <div
-            className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
+            className="bg-opacity-50 bg-background fixed inset-0 z-40 lg:hidden"
             onClick={() => setSelectedField(null)}
           />
         </>
@@ -373,7 +373,7 @@ export default function FieldAnalysisVisualization() {
       {!selectedField && clickedCoordinates && (
         <>
           <div
-            className={`fixed inset-0 z-[70] h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
+            className={`bg-background fixed inset-0 z-[70] h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
@@ -387,7 +387,7 @@ export default function FieldAnalysisVisualization() {
 
           {/* Mobile Coordinate Panel Backdrop */}
           <div
-            className="bg-opacity-50 fixed inset-0 z-40 bg-black lg:hidden"
+            className="bg-opacity-50 bg-background fixed inset-0 z-40 lg:hidden"
             onClick={() => setClickedCoordinates(null)}
           />
         </>

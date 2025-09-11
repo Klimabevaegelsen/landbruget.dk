@@ -17,10 +17,10 @@ export default function PesticideAnalysisPage() {
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-emerald-50">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="mb-4 text-4xl font-bold text-gray-900">
+          <h1 className="text-foreground mb-4 text-4xl font-bold">
             Pesticidanalyse
           </h1>
-          <p className="max-w-3xl text-lg text-gray-700">
+          <p className="text-muted-foreground max-w-3xl text-lg">
             Analyser pesticidanvendelse hos danske landbrugsvirksomheder.
             Filtrer efter geografi, tidsperiode og kemikalietyper som PFAS,
             diquat og glyphosat.

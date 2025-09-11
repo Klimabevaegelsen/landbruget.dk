@@ -25,7 +25,7 @@ export default function MarkanalyseLoading() {
       </div>
 
       {/* Main Map Area Skeleton */}
-      <div className="bg-muted relative flex-1">
+      <div className="bg-background relative flex-1">
         {/* Mobile Menu Button */}
         <div className="absolute top-4 left-4 z-10 lg:hidden">
           <Skeleton className="h-12 w-12 rounded-full" />
@@ -39,7 +39,7 @@ export default function MarkanalyseLoading() {
         {/* Map Loading */}
         <div className="flex h-full items-center justify-center">
           <div className="space-y-4 text-center">
-            <div className="border-primary mx-auto h-12 w-12 animate-spin rounded-full border-b-2"></div>
+            <div className="border-primary mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-t-transparent"></div>
             <p className="text-muted-foreground">Indlæser kort...</p>
           </div>
         </div>

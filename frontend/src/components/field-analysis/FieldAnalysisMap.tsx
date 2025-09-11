@@ -7,6 +7,7 @@ import Map, {
   NavigationControl,
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useMapTheme } from '@/hooks/useMapTheme';
 import { LayerVisibility, FilterState, FieldAnalysisData } from './types';
 import { getDecileBreakpoints, getColorScheme } from './colorUtils';
 import { SearchBar } from './SearchBar';
@@ -412,7 +413,7 @@ function MapTooltip({
 
   return (
     <div
-      className="absolute z-[60] max-w-sm rounded-xl border border-gray-300 bg-white shadow-xl backdrop-blur-sm"
+      className="border-border bg-background absolute z-[60] max-w-sm rounded-xl border shadow-xl backdrop-blur-sm"
       style={{
         left: x,
         top: y,
@@ -421,12 +422,12 @@ function MapTooltip({
       }}
     >
       {/* Header with better typography */}
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h3 className="text-base leading-tight font-semibold text-gray-900">
+      <div className="border-border border-b px-4 py-3">
+        <h3 className="text-foreground text-base leading-tight font-semibold">
           {layerName}
         </h3>
         {properties.site_name ? (
-          <p className="mt-1 text-sm font-medium text-gray-600">
+          <p className="text-muted-foreground mt-1 text-sm font-medium">
             {String(properties.site_name)}
           </p>
         ) : null}
@@ -440,10 +441,10 @@ function MapTooltip({
               key={index}
               className="flex items-baseline justify-between gap-3"
             >
-              <span className="text-sm leading-tight font-medium text-gray-600">
+              <span className="text-muted-foreground text-sm leading-tight font-medium">
                 {label}:
               </span>
-              <span className="text-right text-sm leading-tight font-semibold text-gray-900">
+              <span className="text-foreground text-right text-sm leading-tight font-semibold">
                 {formatValue(value, unit)}
               </span>
             </div>
@@ -463,6 +464,7 @@ export default function FieldAnalysisMap({
   onMapClick,
   onMapReady,
 }: FieldAnalysisMapProps) {
+  const { mapStyle } = useMapTheme();
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1512,13 +1514,13 @@ export default function FieldAnalysisMap({
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center bg-red-50">
+      <div className="bg-destructive/10 flex h-full items-center justify-center">
         <div className="text-center">
-          <div className="mb-2 flex items-center justify-center text-xl text-red-600">
+          <div className="text-destructive mb-2 flex items-center justify-center text-xl">
             <AlertTriangle className="mr-2 h-6 w-6" />
             Fejl
           </div>
-          <div className="text-gray-700">{error}</div>
+          <div className="text-foreground">{error}</div>
         </div>
       </div>
     );
@@ -1528,7 +1530,7 @@ export default function FieldAnalysisMap({
     return (
       <div className="flex h-full items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="mb-2 text-lg font-medium text-gray-900">
+          <div className="text-foreground mb-2 text-lg font-medium">
             Indlæser kortdata...
           </div>
           <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
@@ -1550,7 +1552,7 @@ export default function FieldAnalysisMap({
     <div className="relative h-full w-full touch-manipulation">
       {/* Search Bar */}
       <div
-        className="pointer-events-auto absolute top-4 right-4 left-20 z-30 lg:right-auto lg:left-4 lg:w-80"
+        className="pointer-events-auto absolute top-4 right-4 left-4 z-30 md:right-auto md:left-4 md:w-80 lg:left-4 lg:w-96 xl:w-[28rem]"
         style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
       >
         <SearchBar
@@ -1568,7 +1570,7 @@ export default function FieldAnalysisMap({
           zoom: 7,
         }}
         style={{ width: '100%', height: '100%' }}
-        mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
+        mapStyle={mapStyle}
         interactiveLayerIds={interactiveLayerIds}
         onLoad={onMapLoad}
         onMouseMove={onHover}

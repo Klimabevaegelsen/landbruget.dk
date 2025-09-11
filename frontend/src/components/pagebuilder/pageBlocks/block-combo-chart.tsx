@@ -14,8 +14,7 @@ import {
   ChartData,
 } from '@/services/supabase/types';
 import { useEffect, useState } from 'react';
-import CustomLegend from '@/components/chart/custom-legend';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import { CustomLegend, DocumentationAccordion } from '@/components/chart';
 import {
   chartColors,
   chartGridStyles,
@@ -29,26 +28,159 @@ import { useCategoryDataContext } from './CategoryDataContext';
 import {
   ChartContainer,
   ChartTooltip,
-} from '@/components/chart/chart-container';
-import { AnimatedNumber } from '@/components/chart/animated-number';
-import { EnhancedTooltip } from '@/components/chart/enhanced-tooltip';
-import { CSVDownloadButton } from '@/components/chart/csv-download-button';
+  AnimatedNumber,
+  EnhancedTooltip,
+  CSVDownloadButton,
+} from '@/components/chart';
 
-// Helper function to calculate total value for large display number
-const calculateTotalValue = (chartData: ChartData) => {
-  if (!chartData.series || chartData.series.length === 0) return 0;
+// Helper function to detect if data is temporal (reused from bar chart)
+const isTemporalData = (
+  xAxisLabel?: string,
+  xAxisValues?: (string | number)[]
+) => {
+  const axisText = xAxisLabel?.toLowerCase() || '';
 
-  // Sum all values from all series
-  return chartData.series.reduce((total, series) => {
-    return (
-      total +
-      series.data.reduce(
-        (seriesSum, value) =>
-          seriesSum + (typeof value === 'number' ? value : 0),
-        0
-      )
+  const temporalIndicators = [
+    'år',
+    'year',
+    'måned',
+    'month',
+    'dag',
+    'day',
+    'kvartal',
+    'quarter',
+    'uge',
+    'week',
+  ];
+  if (temporalIndicators.some((indicator) => axisText.includes(indicator))) {
+    return true;
+  }
+
+  if (xAxisValues && xAxisValues.length > 0) {
+    const firstValue = String(xAxisValues[0]);
+    if (/^\d{4}$/.test(firstValue) || /^\d{4}-\d{2}/.test(firstValue)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// Helper function to detect if metric should be summed or averaged
+const shouldUseAverage = (unit?: string, xAxisLabel?: string) => {
+  const unitLower = unit?.toLowerCase() || '';
+  const contextText = `${unitLower} ${xAxisLabel?.toLowerCase() || ''}`;
+
+  // If it's "per" something (per year, per month, etc.), always average
+  const isPerSomething = ['per ', 'pr. ', 'pr ', '/ '].some((indicator) =>
+    contextText.includes(indicator)
+  );
+
+  if (isPerSomething) {
+    return true; // Always average rates/ratios
+  }
+
+  // Only sum for very specific cases that are explicitly cumulative AND not "per" something
+  const explicitlyCumulativeIndicators = [
+    'total',
+    'sum',
+    'accumulated',
+    'akkumuleret',
+  ];
+
+  const shouldSum = explicitlyCumulativeIndicators.some(
+    (indicator) =>
+      unitLower.includes(indicator) ||
+      (xAxisLabel?.toLowerCase() || '').includes(indicator)
+  );
+
+  // Default to average for everything else - much safer!
+  return !shouldSum;
+};
+
+// Helper function to calculate appropriate display value for combo charts
+const calculateComboDisplayValue = (chartData: ChartData, unit?: string) => {
+  if (!chartData.series || chartData.series.length === 0)
+    return {
+      value: 0,
+      label: 'Ingen data tilgængelig',
+      showMetric: false,
+    };
+
+  const barSeries = chartData.series.filter((s) => s.type === 'bar');
+  const lineSeries = chartData.series.filter((s) => s.type === 'line');
+
+  // For mixed series types, focus on bar data with temporal awareness
+  if (barSeries.length > 0 && lineSeries.length > 0) {
+    const barValues = barSeries.flatMap((series) =>
+      series.data.filter((value) => typeof value === 'number' && value > 0)
     );
-  }, 0);
+
+    if (barValues.length === 0) {
+      return { value: 0, label: 'Ingen data tilgængelig', showMetric: false };
+    }
+
+    const shouldAverage = shouldUseAverage(unit, chartData.xAxis?.label);
+    const barSeriesNames = barSeries.map((s) => s.name);
+
+    if (shouldAverage) {
+      const average =
+        barValues.reduce((sum, val) => sum + val, 0) / barValues.length;
+      const isTemporal = isTemporalData(
+        chartData.xAxis?.label,
+        chartData.xAxis?.values
+      );
+
+      return {
+        value: average,
+        label: isTemporal
+          ? `Gennemsnit for ${barSeriesNames.join(', ')} på tværs af perioder`
+          : `Gennemsnit for ${barSeriesNames.join(', ')}`,
+        showMetric: true,
+      };
+    } else {
+      const total = barValues.reduce((sum, val) => sum + val, 0);
+      return {
+        value: total,
+        label: `Total for ${barSeriesNames.join(', ')}`,
+        showMetric: true,
+      };
+    }
+  }
+
+  // For single-type charts, use same logic as bar charts
+  const shouldAverage = shouldUseAverage(unit, chartData.xAxis?.label);
+  const allValues = chartData.series.flatMap((series) =>
+    series.data.filter((value) => typeof value === 'number' && value > 0)
+  );
+
+  if (allValues.length === 0) {
+    return { value: 0, label: 'Ingen data tilgængelig', showMetric: false };
+  }
+
+  if (shouldAverage) {
+    const average =
+      allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
+    const isTemporal = isTemporalData(
+      chartData.xAxis?.label,
+      chartData.xAxis?.values
+    );
+
+    return {
+      value: average,
+      label: isTemporal
+        ? 'Gennemsnit på tværs af perioder'
+        : 'Gennemsnit på tværs af serier',
+      showMetric: true,
+    };
+  } else {
+    const total = allValues.reduce((sum, val) => sum + val, 0);
+    return {
+      value: total,
+      label: 'Total på tværs af serier',
+      showMetric: true,
+    };
+  }
 };
 
 // We can reuse the existing transformDataForRecharts function since it already handles our data structure
@@ -104,7 +236,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   // If we have no data but are in a category with data, render empty div
   if (!transformedData.length && isInCategoryWithData) {
     return (
-      <div className="py-8 text-center text-gray-500">
+      <div className="text-muted-foreground py-8 text-center">
         Ingen data tilgængelig for dette diagram
       </div>
     );
@@ -117,7 +249,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   // Generate chart colors based on series
   const seriesNames = chart.data.series.map((s) => s.name);
   const chartConfig = generateChartConfig(seriesNames);
-  const totalValue = calculateTotalValue(chart.data);
+  const displayMetric = calculateComboDisplayValue(chart.data, chart.unit);
   const barColors = chartColors.data;
 
   // Get the colors for each axis
@@ -131,15 +263,15 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-1">
           {/* Large display number - Midday style */}
-          {totalValue > 0 && (
+          {displayMetric.showMetric && (
             <div className="space-y-2">
               <AnimatedNumber
-                value={totalValue}
+                value={displayMetric.value}
                 unit={chart.unit}
                 className="text-4xl"
               />
               <div className="text-muted-foreground flex items-center space-x-2 text-sm">
-                <p>Total på tværs af alle kategorier</p>
+                <p>{displayMetric.label}</p>
               </div>
             </div>
           )}

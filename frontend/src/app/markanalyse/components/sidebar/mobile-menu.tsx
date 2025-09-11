@@ -216,29 +216,31 @@ export function MobileFieldMenu({
 
         {/* Chemical-specific stats based on visualization mode */}
         {filterState.visualizationMode === 'pfas_belastning' && (
-          <div className="space-y-1 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-            <div className="text-sm font-medium text-red-800">
+          <div className="border-destructive/20 bg-destructive/10 space-y-1 rounded-lg border px-4 py-3">
+            <div className="text-destructive text-sm font-medium">
               PFAS Pesticider
             </div>
-            <div className="text-xs text-red-700">156.025 marker med PFAS</div>
-            <div className="text-xs text-red-700">
+            <div className="text-destructive/80 text-xs">
+              156.025 marker med PFAS
+            </div>
+            <div className="text-destructive/80 text-xs">
               Potentielt sundhedsskadelige
             </div>
           </div>
         )}
 
         {filterState.visualizationMode === 'diquat_belastning' && (
-          <div className="space-y-1 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-            <div className="text-sm font-medium text-blue-800">
+          <div className="border-primary/20 bg-primary/10 space-y-1 rounded-lg border px-4 py-3">
+            <div className="text-primary text-sm font-medium">
               Diquat Pesticider
             </div>
-            <div className="text-xs text-blue-700">471 marker med diquat</div>
-            <div className="text-xs text-blue-700">Kontakt herbicid</div>
+            <div className="text-primary/80 text-xs">471 marker med diquat</div>
+            <div className="text-primary/80 text-xs">Kontakt herbicid</div>
           </div>
         )}
 
         {filterState.visualizationMode === 'glyphosate_belastning' && (
-          <div className="space-y-1 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+          <div className="border-muted bg-muted/50 space-y-1 rounded-lg border px-4 py-3">
             <div className="text-sm font-medium text-green-800">
               Glyphosate Pesticider
             </div>

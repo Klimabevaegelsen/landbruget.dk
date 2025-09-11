@@ -13,8 +13,10 @@ import { VizColors } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useCategoryDataContext } from './CategoryDataContext';
 import { NoDataPlaceholder } from './no-data-placeholder';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
-import { TimelineCSVDownloadButton } from '@/components/chart/timeline-csv-download-button';
+import {
+  DocumentationAccordion,
+  TimelineCSVDownloadButton,
+} from '@/components/chart';
 
 type TimelineEvent = {
   date: string;
@@ -164,7 +166,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
       return <NoDataPlaceholder />;
     } else {
       return (
-        <div className="py-8 text-center text-gray-500">
+        <div className="text-muted-foreground py-8 text-center">
           Ingen tidslinje data tilgængelig
         </div>
       );
@@ -187,8 +189,8 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                     onClick={() => toggleEventType(type)}
                     className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                       selectedTypes.has(type)
-                        ? 'text-white'
-                        : 'text-gray-600 hover:bg-gray-100'
+                        ? 'text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-muted/50'
                     }`}
                     style={{
                       backgroundColor: selectedTypes.has(type)
@@ -264,13 +266,13 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                 date={format(new Date(date), 'd. MMMM yyyy', {
                   locale: da,
                 })}
-                dateClassName="text-gray-600 font-medium min-[1170px]:mx-4 font-bold"
+                dateClassName="text-muted-foreground font-medium min-[1170px]:mx-4 font-bold"
                 iconStyle={iconStyle}
                 iconClassName={`!ml-2.5 !top-3 min-[1170px]:!-ml-2.5 min-[1170px]:!top-5 ${events.length > 1 ? '!-ml-3.5 min-[1170px]:!-ml-3' : ''}`}
               >
                 <div className="flex flex-col gap-2">
                   {events.length > 1 && (
-                    <div className="mb-1 inline-block rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-500">
+                    <div className="bg-muted text-muted-foreground mb-1 inline-block rounded-md px-2 py-1 text-xs font-medium">
                       {events.length} begivenheder på samme dag
                     </div>
                   )}
@@ -289,7 +291,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                         >
                           {translateEventType(event.event_type || '')}
                         </div>
-                        <div className="p-0 text-gray-700">
+                        <div className="text-foreground p-0">
                           {event.description}
                         </div>
                       </div>
