@@ -59,7 +59,7 @@ export function GlobalSearch({
             <Button
               key={suggestion}
               variant="secondary"
-              className="bg-white/75 hover:bg-white/90"
+              className="bg-background/75 hover:bg-background/90"
               onClick={() => {
                 setSearch(suggestion);
                 setOpen(true);
@@ -248,7 +248,7 @@ function SearchOverlay({
             </div>
           ))}
         </div>
-        <div className="max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg bg-white">
+        <div className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg">
           {isLoading && (
             <div className="flex items-center justify-center p-8">
               <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>

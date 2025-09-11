@@ -137,7 +137,7 @@ export function EnvironmentalComplianceOverview({
         />
       </div>
 
-      <div className="border-border rounded-lg border bg-white p-4">
+      <div className="border-border bg-background rounded-lg border p-4">
         <h4 className="text-foreground mb-3 text-sm font-medium">
           Miljøområde Fordeling
         </h4>
