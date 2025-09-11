@@ -114,15 +114,15 @@ class NLES5Validator:
                     MIN(nitrogen_washout_kg_ha) as min_washout,
                     MAX(nitrogen_washout_kg_ha) as max_washout,
                     COUNT(CASE WHEN nitrogen_washout_kg_ha < 0 THEN 1 END) as negative_count,
-                    COUNT(CASE WHEN nitrogen_washout_kg_ha > 100 THEN 1 END) as excessive_count,
-                    COUNT(CASE WHEN nitrogen_washout_kg_ha > 200 THEN 1 END) as excessive_count,
+                    COUNT(CASE WHEN nitrogen_washout_kg_ha > 100 THEN 1 END) as excessive_count_100,
+                    COUNT(CASE WHEN nitrogen_washout_kg_ha > 200 THEN 1 END) as excessive_count_200,
                     COUNT(CASE WHEN nitrogen_washout_kg_ha IS NULL THEN 1 END) as null_count,
                     AVG(area_ha) as avg_area,
                     COUNT(DISTINCT crop_type) as unique_crops
                 FROM {found_table}
             """).fetchone()
 
-            total_records, avg_washout, stddev_washout, min_washout, max_washout, negative_count, excessive_count, null_count, avg_area, unique_crops = stats
+            total_records, avg_washout, stddev_washout, min_washout, max_washout, negative_count, excessive_count_100, excessive_count_200, null_count, avg_area, unique_crops = stats
 
             # Log enhanced validation statistics
             self.log.info(f"📊 NLES5 VALIDATION RESULTS:")
@@ -133,8 +133,8 @@ class NLES5Validator:
                 self.log.info(f"   Avg Nitrogen Washout: {avg_washout:.2f} kg N/ha (σ={stddev_washout:.2f})")
                 self.log.info(f"   Range: {min_washout:.2f} to {max_washout:.2f} kg N/ha")
                 self.log.info(f"   Negative values: {negative_count:,}")
-                self.log.info(f"   Excessive values (>100): {excessive_count:,}")
-                self.log.info(f"   Excessive values (>200): {excessive_count:,}")
+                self.log.info(f"   Excessive values (>100): {excessive_count_100:,}")
+                self.log.info(f"   Excessive values (>200): {excessive_count_200:,}")
                 self.log.info(f"   Null values: {null_count:,}")
 
             # Simple validation checks
@@ -148,7 +148,7 @@ class NLES5Validator:
                 elif 8 <= stddev_washout <= 50:
                     validation_results.append(f"✅ Standard deviation {stddev_washout:.2f} kg N/ha reasonable (extended range)")
                 else:
-                    validation_results.append(f"⚠️ Standard deviation {stddev_washout:.2f} outside reference range (4-8 kg N/ha)")
+                    validation_results.append(f"⚠️ Standard deviation {stddev_washout:.2f} kg N/ha outside expected range (8-50 kg N/ha)")
 
             # Check for reasonable washout values
             if avg_washout is not None:
