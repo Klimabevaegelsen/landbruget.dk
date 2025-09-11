@@ -49,9 +49,9 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
           >
             {col.label}
             {column.getIsSorted() === 'asc' ? (
-              <ArrowUpIcon className="ml-2 size-3 text-black" />
+              <ArrowUpIcon className="text-foreground ml-2 size-3" />
             ) : column.getIsSorted() === 'desc' ? (
-              <ArrowDownIcon className="ml-2 size-3 text-black" />
+              <ArrowDownIcon className="text-foreground ml-2 size-3" />
             ) : (
               <div className="ml-2 size-3">
                 <ArrowsUpDownIcon className="hidden group-hover:block" />

@@ -148,8 +148,8 @@ function SidenavClient({
                   <div
                     className={cn(
                       isCurrent
-                        ? 'font-bold text-black'
-                        : 'text-foreground font-medium hover:font-semibold hover:text-black',
+                        ? 'text-foreground font-bold'
+                        : 'text-foreground hover:text-foreground font-medium hover:font-semibold',
                       'group flex cursor-pointer gap-x-3 p-4 pl-0'
                     )}
                     onClick={() => {
@@ -176,8 +176,8 @@ function SidenavClient({
                             <div
                               className={cn(
                                 isSubCurrent
-                                  ? 'font-bold text-black'
-                                  : 'text-foreground font-medium hover:font-semibold hover:text-black',
+                                  ? 'text-foreground font-bold'
+                                  : 'text-foreground hover:text-foreground font-medium hover:font-semibold',
                                 'group flex cursor-pointer gap-x-3 p-4 pl-0'
                               )}
                               onClick={() => {
