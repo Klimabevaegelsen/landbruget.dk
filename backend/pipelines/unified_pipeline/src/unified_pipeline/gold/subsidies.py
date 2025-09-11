@@ -50,11 +50,8 @@ class SubsidiesGoldConfig(BaseJobConfig):
     # Input datasets
     silver_dataset: str = "subsidies"
 
-    # Output datasets
-    dataset_company_summary: str = "company_subsidies_summary"
-    dataset_yearly_breakdown: str = "company_subsidies_yearly"
-    dataset_category_analysis: str = "company_subsidies_categories"
-    dataset_trends_analysis: str = "subsidy_trends_analysis"
+    # Output datasets - Single unified table
+    dataset_unified: str = "subsidies_by_cvr_year"
 
     # Analysis configuration
     analysis_start_year: int = 2018
@@ -517,125 +514,58 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
         return df
 
     async def _generate_company_analytics(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """Generate comprehensive company-level analytics."""
-        self.log.info("📈 Generating company-level analytics...")
+        """Generate unified table with one row per CVR/year combination."""
+        self.log.info("📈 Generating unified subsidies table (CVR/year format)...")
 
-        # Company summary
-        company_summary = self._calculate_company_summary(df)
-
-        # Yearly breakdown
-        yearly_breakdown = self._calculate_yearly_breakdown(df)
-
-        # Category analysis
-        category_analysis = self._calculate_category_analysis(df)
+        # Create unified table with one row per CVR/year
+        unified_table = self._create_unified_cvr_year_table(df)
 
         # Generate summary statistics
-        summary_stats = self._generate_summary_stats(
-            df, company_summary, yearly_breakdown, category_analysis
-        )
+        summary_stats = self._generate_summary_stats(df, unified_table)
 
-        # Save analytics datasets
-        await self._save_analytics_data(company_summary, yearly_breakdown, category_analysis)
+        # Save unified dataset
+        await self._save_unified_data(unified_table)
 
         return summary_stats
 
-    def _calculate_company_summary(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate company-level summary statistics."""
-        self.log.info("📊 Calculating company summary statistics...")
+    def _create_unified_cvr_year_table(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Create unified table with one row per CVR/year combination and columns for each subsidy type."""
+        self.log.info("🔄 Creating unified CVR/year table...")
 
-        # Only calculate for records that have CVR numbers
         if "cvr_number" not in df.columns:
-            self.log.warning("No CVR column found - returning empty summary")
+            self.log.error("No CVR column found - cannot create unified table")
             return pd.DataFrame()
 
-        # Filter to records with CVR for company analysis
+        # Filter to records with valid CVR numbers
         df_with_cvr = df[
             df["cvr_number"].notna() & (df["cvr_number"] != "") & (df["cvr_number"] != "nan")
-        ]
+        ].copy()
 
         if df_with_cvr.empty:
             self.log.warning("No records with valid CVR numbers found")
             return pd.DataFrame()
 
-        self.log.info(
-            f"   Analyzing {len(df_with_cvr):,} records with CVR numbers from "
-            f"{df_with_cvr['cvr_number'].nunique():,} companies"
-        )
-
-        # Determine amount and category columns
-        amount_col = "amount_dkk" if "amount_dkk" in df_with_cvr.columns else None
-        if not amount_col:
-            for col in ["beløb", "amount", "value", "kroner", "subsidies_amount", "area_ha"]:
-                if col in df_with_cvr.columns:
-                    amount_col = col
-                    break
-
-        category_col = None
-        for col in ["subsidy_category", "subsidy_measure", "subsidy_type_code"]:
-            if col in df_with_cvr.columns:
-                category_col = col
-                break
-
-        # Group by company
-        agg_dict = {
-            "year": ["min", "max", "nunique"],
-        }
-
-        if amount_col:
-            agg_dict[amount_col] = ["sum", "mean", "count"]
-
-        if category_col:
-            agg_dict[category_col] = "nunique"
-
-        summary = df_with_cvr.groupby("cvr_number").agg(agg_dict).round(2)
-
-        # Flatten column names
-        summary.columns = [
-            "_".join(col).strip() if isinstance(col, tuple) else col for col in summary.columns
-        ]
-        summary = summary.reset_index()
-
-        # Add company size classification
-        if amount_col:
-            total_amount_col = f"{amount_col}_sum"
-            if total_amount_col in summary.columns:
-                summary["company_size"] = pd.cut(
-                    summary[total_amount_col],
-                    bins=[
-                        0,
-                        self.config.small_company_threshold,
-                        self.config.medium_company_threshold,
-                        self.config.large_company_threshold,
-                        float("inf"),
-                    ],
-                    labels=["Small", "Medium", "Large", "Very Large"],
-                    include_lowest=True,
-                )
-
-        self.log.info(f"   Generated summary for {len(summary):,} companies")
-        return summary
-
-    def _calculate_yearly_breakdown(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate yearly breakdown by company."""
-        self.log.info("📅 Calculating yearly breakdown...")
-
-        # Only calculate for records that have CVR numbers
-        if "cvr_number" not in df.columns:
-            self.log.warning("No CVR column found - returning empty yearly breakdown")
+        # Ensure we have year data
+        if "year" not in df_with_cvr.columns:
+            self.log.warning("No year column found - cannot create yearly breakdown")
             return pd.DataFrame()
 
-        # Filter to records with CVR for company analysis
-        df_with_cvr = df[
-            df["cvr_number"].notna() & (df["cvr_number"] != "") & (df["cvr_number"] != "nan")
-        ]
+        # Remove records without year data
+        df_with_cvr = df_with_cvr[df_with_cvr["year"].notna()]
 
         if df_with_cvr.empty:
-            self.log.warning("No records with valid CVR numbers found for yearly breakdown")
+            self.log.warning("No records with valid year data found")
             return pd.DataFrame()
 
-        if "year" not in df_with_cvr.columns:
-            self.log.warning("No year column found for yearly breakdown")
-            return pd.DataFrame()
+        self.log.info(f"   Processing {len(df_with_cvr):,} records with CVR and year data")
+
+        # Determine subsidy category column for pivoting
+        category_col = self._determine_subsidy_category_column(df_with_cvr)
+
+        if not category_col:
+            self.log.warning("No suitable category column found for pivoting")
+            # Fallback: create a single "total_subsidies" column
+            return self._create_simple_aggregation(df_with_cvr)
 
         # Determine amount column
         amount_col = "amount_dkk" if "amount_dkk" in df_with_cvr.columns else None
@@ -646,261 +576,253 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
                     break
 
         if not amount_col:
-            self.log.warning("No amount column found for yearly breakdown")
-            return pd.DataFrame()
+            self.log.warning("No amount column found - using count of records")
+            df_with_cvr["record_count"] = 1
+            amount_col = "record_count"
 
-        # Group by company and year
-        agg_dict = {amount_col: ["sum", "count"]}
+        # Create base CVR/year combinations (all possible combinations)
+        all_cvr_numbers = df_with_cvr["cvr_number"].unique()
+        all_years = sorted(df_with_cvr["year"].unique())
+        all_categories = sorted(df_with_cvr[category_col].dropna().astype(str).unique())
 
-        # Add category info if available
-        for col in ["subsidy_category", "subsidy_measure", "subsidy_type_code"]:
-            if col in df_with_cvr.columns:
-                agg_dict[col] = "nunique"
-                break
+        self.log.info(f"   Found {len(all_cvr_numbers):,} unique CVR numbers")
+        self.log.info(f"   Found {len(all_years):,} unique years: {all_years}")
+        self.log.info(f"   Found {len(all_categories):,} unique subsidy categories")
 
-        yearly = df_with_cvr.groupby(["cvr_number", "year"]).agg(agg_dict).round(2)
-        yearly.columns = [
-            "_".join(col).strip() if isinstance(col, tuple) else col for col in yearly.columns
+        # Pivot the data to get subsidies by category
+        self.log.info("   Pivoting data by subsidy category...")
+        pivot_df = df_with_cvr.groupby(["cvr_number", "year", category_col])[amount_col].sum().reset_index()
+
+        # Create the pivot table
+        unified_df = pivot_df.pivot_table(
+            index=["cvr_number", "year"],
+            columns=category_col,
+            values=amount_col,
+            fill_value=0,
+            aggfunc="sum"
+        ).reset_index()
+
+        # Flatten column names (remove multi-level)
+        unified_df.columns.name = None
+        unified_df.columns = [
+            col if col in ["cvr_number", "year"] else f"subsidy_{str(col).lower().replace(' ', '_').replace('-', '_')}"
+            for col in unified_df.columns
         ]
-        yearly = yearly.reset_index()
 
-        # Calculate year-over-year change
-        if amount_col:
-            total_col = f"{amount_col}_sum"
-            if total_col in yearly.columns:
-                yearly = yearly.sort_values(["cvr_number", "year"])
-                yearly["yoy_change"] = yearly.groupby("cvr_number")[total_col].pct_change() * 100
-                yearly["yoy_change"] = yearly["yoy_change"].replace([np.inf, -np.inf], np.nan)
+        # Add total subsidies column
+        subsidy_columns = [col for col in unified_df.columns if col.startswith("subsidy_")]
+        unified_df["total_subsidies"] = unified_df[subsidy_columns].sum(axis=1)
 
-        self.log.info(f"   Generated yearly breakdown: {len(yearly):,} company-year records")
-        return yearly
+        # Add record counts for each category
+        record_counts = df_with_cvr.groupby(["cvr_number", "year", category_col]).size().reset_index(name="record_count")
+        record_pivot = record_counts.pivot_table(
+            index=["cvr_number", "year"],
+            columns=category_col,
+            values="record_count",
+            fill_value=0,
+            aggfunc="sum"
+        ).reset_index()
 
-    def _calculate_category_analysis(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calculate subsidy category analysis."""
-        self.log.info("📋 Calculating category analysis...")
+        # Add record count columns
+        record_pivot.columns.name = None
+        for col in record_pivot.columns:
+            if col not in ["cvr_number", "year"]:
+                count_col_name = f"records_{str(col).lower().replace(' ', '_').replace('-', '_')}"
+                if count_col_name not in unified_df.columns:
+                    unified_df = unified_df.merge(
+                        record_pivot[["cvr_number", "year", col]].rename(columns={col: count_col_name}),
+                        on=["cvr_number", "year"],
+                        how="left"
+                    )
+                    unified_df[count_col_name] = unified_df[count_col_name].fillna(0)
 
-        # Find category and amount columns
-        category_col = None
-        for col in ["subsidy_category", "subsidy_measure", "subsidy_type_code"]:
+        # Add total records count
+        record_count_columns = [col for col in unified_df.columns if col.startswith("records_")]
+        unified_df["total_records"] = unified_df[record_count_columns].sum(axis=1)
+
+        # Sort by CVR and year
+        unified_df = unified_df.sort_values(["cvr_number", "year"]).reset_index(drop=True)
+
+        self.log.info(f"   ✅ Created unified table: {len(unified_df):,} rows (CVR/year combinations)")
+        self.log.info(f"   ✅ Subsidy columns: {len(subsidy_columns)}")
+        self.log.info(f"   ✅ Record count columns: {len(record_count_columns)}")
+        self.log.info(f"   ✅ Total subsidies amount: {unified_df['total_subsidies'].sum():,.2f} DKK")
+
+        return unified_df
+
+    def _determine_subsidy_category_column(self, df: pd.DataFrame) -> Optional[str]:
+        """Determine the best column to use for subsidy categorization."""
+        # Priority order for category columns
+        category_candidates = [
+            "subsidy_measure",
+            "subsidy_type_code",
+            "subsidy_category",
+            "ordning",
+            "silver_source_dataset",
+            "subsidy_file_type"
+        ]
+
+        for col in category_candidates:
             if col in df.columns:
-                category_col = col
-                break
+                unique_count = df[col].nunique()
+                self.log.info(f"   Category option '{col}': {unique_count} unique values")
+
+                # Use if reasonable number of categories (between 2 and 50)
+                if 2 <= unique_count <= 50:
+                    self.log.info(f"   Selected category column: {col}")
+                    return col
+
+        return None
+
+    def _create_simple_aggregation(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Create simple aggregation when no suitable category column is found."""
+        self.log.info("   Creating simple aggregation (no category breakdown)")
 
         amount_col = "amount_dkk" if "amount_dkk" in df.columns else None
         if not amount_col:
-            for col in ["beløb", "amount", "value"]:
-                if col in df.columns:
-                    amount_col = col
-                    break
+            df["record_count"] = 1
+            amount_col = "record_count"
 
-        if not category_col or not amount_col:
-            self.log.warning("Missing category or amount columns for category analysis")
-            return pd.DataFrame()
+        # Simple groupby CVR and year
+        unified_df = df.groupby(["cvr_number", "year"]).agg({
+            amount_col: "sum",
+            "cvr_number": "count"  # count records
+        }).reset_index()
 
-        # Group by company and category
-        category_analysis = (
-            df.groupby(["cvr_number", category_col]).agg({amount_col: ["sum", "count"]}).round(2)
-        )
+        # Rename columns
+        unified_df.columns = ["cvr_number", "year", "total_subsidies", "total_records"]
 
-        category_analysis.columns = ["_".join(col).strip() for col in category_analysis.columns]
-        category_analysis = category_analysis.reset_index()
+        return unified_df
 
-        # Calculate category share for each company
-        total_col = f"{amount_col}_sum"
-        if total_col in category_analysis.columns:
-            company_totals = category_analysis.groupby("cvr_number")[total_col].sum()
-            category_analysis = category_analysis.merge(
-                company_totals.rename("company_total"), left_on="cvr_number", right_index=True
-            )
-
-            # Avoid division by zero
-            category_analysis["category_share"] = np.where(
-                category_analysis["company_total"] > 0,
-                (category_analysis[total_col] / category_analysis["company_total"] * 100).round(2),
-                0,
-            )
-
-        self.log.info(
-            f"   Generated category analysis: {len(category_analysis):,} company-category records"
-        )
-        return category_analysis
 
     def _generate_summary_stats(
         self,
         df: pd.DataFrame,
-        company_summary: pd.DataFrame,
-        yearly_breakdown: pd.DataFrame,
-        category_analysis: pd.DataFrame,
+        unified_table: pd.DataFrame,
     ) -> Dict[str, Any]:
         """Generate summary statistics for the processing results."""
 
-        # Calculate total subsidies amount
-        total_subsidies_amount = df["amount_dkk"].sum() if "amount_dkk" in df.columns else 0.0
+        # Calculate stats from unified table
+        total_companies = len(unified_table["cvr_number"].unique()) if not unified_table.empty else 0
+        total_cvr_year_combinations = len(unified_table) if not unified_table.empty else 0
+
+        # Calculate total subsidies amount from unified table
+        total_subsidies_amount = 0.0
+        if not unified_table.empty and "total_subsidies" in unified_table.columns:
+            total_subsidies_amount = unified_table["total_subsidies"].sum()
+        elif "amount_dkk" in df.columns:
+            total_subsidies_amount = df["amount_dkk"].sum()
 
         # Get analysis period
-        if "year" in df.columns:
+        if not unified_table.empty and "year" in unified_table.columns:
+            min_year = unified_table["year"].min()
+            max_year = unified_table["year"].max()
+            analysis_period = f"{min_year}-{max_year}" if min_year != max_year else str(min_year)
+        elif "year" in df.columns:
             min_year = df["year"].min()
             max_year = df["year"].max()
             analysis_period = f"{min_year}-{max_year}" if min_year != max_year else str(min_year)
         else:
             analysis_period = f"{self.config.analysis_start_year}-{self.config.analysis_end_year}"
 
-        # Get categories
-        subsidy_categories = self._get_subsidy_categories(df)
+        # Get subsidy columns from unified table
+        subsidy_columns = []
+        if not unified_table.empty:
+            subsidy_columns = [col for col in unified_table.columns if col.startswith("subsidy_")]
 
-        # Company size distribution
-        company_size_dist = {}
-        if "company_size" in company_summary.columns:
-            company_size_dist = company_summary["company_size"].value_counts().to_dict()
+        # Analyze subsidy types from unified table
+        subsidy_type_stats = {}
+        if subsidy_columns:
+            for col in subsidy_columns:
+                total_amount = unified_table[col].sum()
+                non_zero_companies = (unified_table[col] > 0).sum()
+                avg_amount = unified_table[unified_table[col] > 0][col].mean() if non_zero_companies > 0 else 0
 
-        # Log category breakdown
-        if subsidy_categories:
-            self.log.info(
-                f"📋 Category breakdown: {len(subsidy_categories)} unique categories found"
-            )
-            for i, category in enumerate(subsidy_categories[:10]):  # Show first 10
-                self.log.info(f"   {i+1}. {category}")
-            if len(subsidy_categories) > 10:
-                self.log.info(f"   ... and {len(subsidy_categories) - 10} more")
+                subsidy_type_stats[col] = {
+                    "total_amount": float(total_amount),
+                    "companies_receiving": int(non_zero_companies),
+                    "average_amount": float(avg_amount),
+                    "coverage_percent": float(non_zero_companies / len(unified_table) * 100) if len(unified_table) > 0 else 0
+                }
 
-        # Top subsidy types by amount
-        top_subsidy_types = self._analyze_subsidy_types_by_amount(df)
-        if top_subsidy_types:
-            self.log.info("💰 Top subsidy types by amount:")
-            for category_type, categories in top_subsidy_types.items():
-                self.log.info(f"   {category_type}:")
-                for cat_name, cat_data in list(categories.items())[:5]:  # Show top 5
-                    self.log.info(
-                        f"     • {cat_name}: {cat_data['total_amount']:,.2f} DKK "
-                        f"({cat_data['record_count']:,} records)"
-                    )
+        # Log summary
+        self.log.info("📊 Unified table summary:")
+        self.log.info(f"   Total companies: {total_companies:,}")
+        self.log.info(f"   Total CVR/year combinations: {total_cvr_year_combinations:,}")
+        self.log.info(f"   Total subsidies amount: {total_subsidies_amount:,.2f} DKK")
+        self.log.info(f"   Subsidy types: {len(subsidy_columns)}")
+        self.log.info(f"   Analysis period: {analysis_period}")
+
+        if subsidy_type_stats:
+            self.log.info("💰 Top subsidy types by total amount:")
+            sorted_types = sorted(subsidy_type_stats.items(), key=lambda x: x[1]["total_amount"], reverse=True)
+            for col, stats in sorted_types[:5]:
+                self.log.info(
+                    f"   • {col}: {stats['total_amount']:,.2f} DKK "
+                    f"({stats['companies_receiving']:,} companies, {stats['coverage_percent']:.1f}% coverage)"
+                )
 
         return {
-            "total_companies": len(company_summary),
+            "total_companies": total_companies,
+            "total_cvr_year_combinations": total_cvr_year_combinations,
             "total_subsidy_records": len(df),
             "total_subsidies_amount": total_subsidies_amount,
             "analysis_period": analysis_period,
-            "subsidy_categories": subsidy_categories,
-            "company_size_distribution": company_size_dist,
-            "yearly_records": len(yearly_breakdown),
-            "category_records": len(category_analysis),
-            "top_subsidy_types": top_subsidy_types,
+            "subsidy_types_count": len(subsidy_columns),
+            "subsidy_type_breakdown": subsidy_type_stats,
+            "unified_table_rows": len(unified_table),
+            "unified_table_columns": len(unified_table.columns) if not unified_table.empty else 0,
             "processing_timestamp": datetime.now().isoformat(),
         }
 
-    def _get_subsidy_categories(self, df: pd.DataFrame) -> List[str]:
-        """Extract subsidy categories from available category columns."""
-        categories = []
-        category_columns = [
-            "subsidy_category",
-            "subsidy_measure",
-            "subsidy_type_code",
-            "ordning",
-            "silver_source_dataset",
-        ]
 
-        for col in category_columns:
-            if col in df.columns:
-                unique_values = df[col].dropna().unique()
-                categories.extend([str(val) for val in unique_values if str(val) != "nan"])
-                break
+    async def _save_unified_data(self, unified_table: pd.DataFrame) -> None:
+        """Save unified subsidies table to GCS."""
+        self.log.info("💾 Saving unified subsidies table...")
 
-        # Also add dataset-based categories
-        if "silver_source_dataset" in df.columns:
-            datasets = df["silver_source_dataset"].dropna().unique()
-            dataset_categories = [f"Dataset: {dataset}" for dataset in datasets]
-            categories.extend(dataset_categories)
+        if unified_table.empty:
+            self.log.warning("No unified data to save")
+            return
 
-        categories = sorted(list(set(categories)))
-
-        if categories:
-            self.log.info(
-                f"Found {len(categories)} subsidy categories. Examples: {categories[:10]}"
-            )
-
-        return categories
-
-    def _analyze_subsidy_types_by_amount(self, df: pd.DataFrame) -> Dict[str, Dict]:
-        """Analyze subsidy types by total amount to show the biggest categories."""
-        if "amount_dkk" not in df.columns:
-            return {}
-
-        analysis = {}
-        category_columns = [
-            "subsidy_measure",
-            "subsidy_type_code",
-            "ordning",
-            "silver_source_dataset",
-        ]
-
-        for col in category_columns:
-            if col in df.columns:
-                category_totals = (
-                    df.groupby(col)["amount_dkk"].agg(["sum", "count", "mean"]).round(2)
-                )
-                category_totals = category_totals.sort_values("sum", ascending=False)
-
-                category_dict = {}
-                for category, data in category_totals.head(10).iterrows():
-                    category_dict[str(category)] = {
-                        "total_amount": float(data["sum"]),
-                        "record_count": int(data["count"]),
-                        "average_amount": float(data["mean"]),
-                    }
-
-                analysis[col] = category_dict
-                break
-
-        return analysis
-
-    async def _save_analytics_data(
-        self,
-        company_summary: pd.DataFrame,
-        yearly_breakdown: pd.DataFrame,
-        category_analysis: pd.DataFrame,
-    ) -> None:
-        """Save analytics datasets to GCS with reliable connection management."""
-        self.log.info("💾 Saving analytics datasets...")
-
-        datasets = [
-            (company_summary, self.config.dataset_company_summary),
-            (yearly_breakdown, self.config.dataset_yearly_breakdown),
-            (category_analysis, self.config.dataset_category_analysis),
-        ]
-
-        # FIXED: Use a fresh connection for saving to avoid connection issues
+        # Use a fresh connection for saving
         save_conn = duckdb.connect(database=":memory:")
 
         try:
             # Configure the save connection
             self._configure_fresh_connection(save_conn)
 
-            for df, dataset_name in datasets:
-                if not df.empty:
-                    try:
-                        # Create table in fresh DuckDB connection
-                        table_name = f"temp_{dataset_name}"
-                        save_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-                        save_conn.register(table_name, df)
+            # Create table in fresh DuckDB connection
+            table_name = "temp_unified_subsidies"
+            save_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+            save_conn.register(table_name, unified_table)
 
-                        # Save to GCS using direct parquet export
-                        timestamp = self.date_pattern
-                        output_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
-                        full_gcs_path = f"gs://{self.config.bucket}/{output_path}"
+            # Save to GCS using direct parquet export
+            timestamp = self.date_pattern
+            output_path = f"gold/{self.config.dataset_unified}/{timestamp}/data.parquet"
+            full_gcs_path = f"gs://{self.config.bucket}/{output_path}"
 
-                        # Export directly to GCS
-                        save_conn.execute(
-                            f"COPY {table_name} TO '{full_gcs_path}' (FORMAT PARQUET)"
-                        )
+            # Export directly to GCS
+            save_conn.execute(
+                f"COPY {table_name} TO '{full_gcs_path}' (FORMAT PARQUET)"
+            )
 
-                        self.log.info(
-                            f"   ✅ Saved {dataset_name}: {len(df):,} records to {output_path}"
-                        )
+            self.log.info(
+                f"   ✅ Saved unified subsidies table: {len(unified_table):,} rows to {output_path}"
+            )
 
-                    except Exception as e:
-                        self.log.warning(f"Could not save {dataset_name}: {e}")
-                else:
-                    self.log.warning(f"Skipping empty dataset: {dataset_name}")
+            # Log column structure for verification
+            subsidy_columns = [col for col in unified_table.columns if col.startswith("subsidy_")]
+            record_columns = [col for col in unified_table.columns if col.startswith("records_")]
+
+            self.log.info(f"   📊 Table structure:")
+            self.log.info(f"     - CVR/year columns: cvr_number, year")
+            self.log.info(f"     - Subsidy amount columns: {len(subsidy_columns)} ({', '.join(subsidy_columns[:3])}...)")
+            self.log.info(f"     - Record count columns: {len(record_columns)} ({', '.join(record_columns[:3])}...)")
+            self.log.info(f"     - Summary columns: total_subsidies, total_records")
+
+        except Exception as e:
+            self.log.error(f"Failed to save unified data: {e}")
+            raise
 
         finally:
             # Clean up the save connection
@@ -911,7 +833,7 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
 
     def _validate_results(self, results: Dict[str, Any]) -> bool:
         """Validate the processing results."""
-        required_fields = ["total_companies", "total_subsidy_records", "total_subsidies_amount"]
+        required_fields = ["total_companies", "total_cvr_year_combinations", "total_subsidies_amount"]
 
         for field in required_fields:
             if field not in results:
@@ -923,8 +845,8 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             self.log.warning("No companies found in results")
             return False
 
-        if results.get("total_subsidy_records", 0) <= 0:
-            self.log.warning("No subsidy records found in results")
+        if results.get("total_cvr_year_combinations", 0) <= 0:
+            self.log.warning("No CVR/year combinations found in results")
             return False
 
         return True
