@@ -40,7 +40,7 @@ export function YearSlider({
       {/* Mobile: Dropdown */}
       <div className="sm:hidden">
         <div className="flex items-center space-x-3">
-          <label className="text-sm font-medium whitespace-nowrap text-foreground">
+          <label className="text-foreground text-sm font-medium whitespace-nowrap">
             År:
           </label>
           <div className="relative flex-1">
@@ -60,7 +60,7 @@ export function YearSlider({
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
               <ChevronDownIcon
-                className="h-4 w-4 text-muted-foreground"
+                className="text-muted-foreground h-4 w-4"
                 aria-hidden="true"
               />
             </div>
@@ -75,7 +75,7 @@ export function YearSlider({
       <div className="hidden sm:block">
         <div className="flex items-center space-x-4">
           <div className="flex-shrink-0">
-            <label className="text-sm font-medium text-foreground">
+            <label className="text-foreground text-sm font-medium">
               År: {getYearRangeDisplay(selectedYear)}
             </label>
           </div>

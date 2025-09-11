@@ -222,7 +222,7 @@ export function SearchBar({
       {/* Search Input */}
       <div className="relative">
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-          <Search className="h-4 w-4 text-gray-400" />
+          <Search className="text-muted-foreground h-4 w-4" />
         </div>
 
         <input
@@ -231,14 +231,14 @@ export function SearchBar({
           value={query}
           onChange={handleInputChange}
           placeholder={placeholder}
-          className="border-border block w-full rounded-lg border bg-white py-3 pr-10 pl-10 text-base text-gray-900 placeholder-gray-500 transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2.5 lg:text-sm"
+          className="border-border text-foreground placeholder:text-muted-foreground block w-full rounded-lg border bg-white py-3 pr-10 pl-10 text-base transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2.5 lg:text-sm"
         />
 
         {/* Clear Button */}
         {query && (
           <button
             onClick={clearSearch}
-            className="hover:text-muted-foreground absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors"
+            className="hover:text-muted-foreground text-muted-foreground absolute inset-y-0 right-0 flex items-center pr-3 transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -271,11 +271,11 @@ export function SearchBar({
                 className={`hover:bg-muted w-full border-b border-gray-100 px-4 py-4 text-left transition-colors last:border-b-0 lg:py-3 ${
                   index === selectedIndex
                     ? 'bg-blue-50 text-blue-900'
-                    : 'text-gray-900'
+                    : 'text-foreground'
                 }`}
               >
                 <div className="flex items-center space-x-3">
-                  <MapPin className="h-5 w-5 flex-shrink-0 text-gray-400 lg:h-4 lg:w-4" />
+                  <MapPin className="text-muted-foreground h-5 w-5 flex-shrink-0 lg:h-4 lg:w-4" />
                   <span className="truncate text-base font-medium lg:text-sm">
                     {result.tekst}
                   </span>

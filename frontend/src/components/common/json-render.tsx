@@ -44,7 +44,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-gray-400 hover:text-muted-foreground"
+          className="hover:text-muted-foreground text-gray-400"
         >
           {isExpanded ? '▼' : '▶'} [
         </button>
@@ -75,7 +75,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-gray-400 hover:text-muted-foreground"
+          className="hover:text-muted-foreground text-gray-400"
         >
           {isExpanded ? '▼' : '▶'} {'{'}
         </button>

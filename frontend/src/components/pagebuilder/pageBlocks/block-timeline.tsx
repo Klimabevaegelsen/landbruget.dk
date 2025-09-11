@@ -13,7 +13,10 @@ import { VizColors } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useCategoryDataContext } from './CategoryDataContext';
 import { NoDataPlaceholder } from './no-data-placeholder';
-import { DocumentationAccordion, TimelineCSVDownloadButton } from '@/components/chart';
+import {
+  DocumentationAccordion,
+  TimelineCSVDownloadButton,
+} from '@/components/chart';
 
 type TimelineEvent = {
   date: string;

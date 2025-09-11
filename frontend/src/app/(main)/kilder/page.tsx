@@ -34,16 +34,16 @@ export default function KilderPage() {
                 Datakilder og myndigheder
               </h2>
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-300">
+                <table className="border-border w-full border-collapse border">
                   <thead>
                     <tr className="bg-primary/10">
-                      <th className="text-primary border border-gray-300 px-4 py-3 text-left font-bold">
+                      <th className="text-primary border-border border px-4 py-3 text-left font-bold">
                         Myndighed eller institution
                       </th>
-                      <th className="text-primary border border-gray-300 px-4 py-3 text-left font-bold">
+                      <th className="text-primary border-border border px-4 py-3 text-left font-bold">
                         Kilde
                       </th>
-                      <th className="text-primary border border-gray-300 px-4 py-3 text-left font-bold">
+                      <th className="text-primary border-border border px-4 py-3 text-left font-bold">
                         Data
                       </th>
                     </tr>
@@ -62,7 +62,7 @@ export default function KilderPage() {
                     </tr>
                     <tr className="hover:bg-muted/50">
                       <td
-                        className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
+                        className="border-border text-foreground border px-4 py-3 font-medium"
                         rowSpan={2}
                       >
                         Styrelsen for Dataforsyning og Infrastruktur
@@ -109,7 +109,7 @@ export default function KilderPage() {
                     </tr>
                     <tr className="hover:bg-muted/50">
                       <td
-                        className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
+                        className="border-border text-foreground border px-4 py-3 font-medium"
                         rowSpan={2}
                       >
                         Styrelsen for Grøn Arealømlægning og Vandmiljø
@@ -153,16 +153,16 @@ export default function KilderPage() {
 
               {/* Second Table */}
               <div className="mt-12 overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-300">
+                <table className="border-border w-full border-collapse border">
                   <thead>
                     <tr className="bg-primary/10">
-                      <th className="text-primary border border-gray-300 px-4 py-3 text-left font-bold">
+                      <th className="text-primary border-border border px-4 py-3 text-left font-bold">
                         Myndighed eller institution
                       </th>
-                      <th className="text-primary border border-gray-300 px-4 py-3 text-left font-bold">
+                      <th className="text-primary border-border border px-4 py-3 text-left font-bold">
                         Kilde
                       </th>
-                      <th className="text-primary border border-gray-300 px-4 py-3 text-left font-bold">
+                      <th className="text-primary border-border border px-4 py-3 text-left font-bold">
                         Data
                       </th>
                     </tr>
@@ -185,7 +185,7 @@ export default function KilderPage() {
                     </tr>
                     <tr className="hover:bg-muted/50">
                       <td
-                        className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
+                        className="border-border text-foreground border px-4 py-3 font-medium"
                         rowSpan={2}
                       >
                         Erhvervsstyrelsen
@@ -212,7 +212,7 @@ export default function KilderPage() {
                     </tr>
                     <tr className="hover:bg-muted/50">
                       <td
-                        className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
+                        className="border-border text-foreground border px-4 py-3 font-medium"
                         rowSpan={2}
                       >
                         Energistyrelsen
@@ -234,7 +234,7 @@ export default function KilderPage() {
                     </tr>
                     <tr className="hover:bg-muted/50">
                       <td
-                        className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
+                        className="border-border text-foreground border px-4 py-3 font-medium"
                         rowSpan={4}
                       >
                         Miljøstyrelsen
@@ -276,7 +276,7 @@ export default function KilderPage() {
                     </tr>
                     <tr className="hover:bg-muted/50">
                       <td
-                        className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
+                        className="border-border text-foreground border px-4 py-3 font-medium"
                         rowSpan={2}
                       >
                         Fødevarestyrelsen
@@ -402,7 +402,7 @@ export default function KilderPage() {
               <h2 className="text-primary border-primary/20 mt-16 border-b pb-4 text-3xl leading-tight font-bold">
                 Om vores dataindsamling
               </h2>
-              <p className="text-lg leading-relaxed text-gray-700">
+              <p className="text-foreground text-lg leading-relaxed">
                 Alle data på Landbruget.dk stammer fra offentligt tilgængelige
                 kilder. Vi indsamler og behandler data fra disse myndigheder og
                 institutioner for at skabe et samlet overblik over den danske
@@ -414,7 +414,7 @@ export default function KilderPage() {
                 <h3 className="text-primary-darker mb-3 text-xl font-bold">
                   Vigtigt at vide
                 </h3>
-                <p className="leading-relaxed text-gray-700">
+                <p className="text-foreground leading-relaxed">
                   <strong>Uafhængig databehandling:</strong> Landbruget.dk er et
                   uafhængigt initiativ. De ovenstående myndigheder og
                   institutioner har ikke godkendt, endorseret eller på anden
@@ -427,7 +427,7 @@ export default function KilderPage() {
                 <h3 className="text-primary-darker mb-3 text-xl font-bold">
                   Tak til vores datakilder
                 </h3>
-                <p className="leading-relaxed text-gray-700">
+                <p className="text-foreground leading-relaxed">
                   Vi vil gerne udtrykke vores dybeste taknemmelighed til alle de
                   myndigheder, institutioner og organisationer, der gør deres
                   data offentligt tilgængelige. Deres åbenhed og transparens
@@ -438,7 +438,7 @@ export default function KilderPage() {
                 </p>
               </div>
 
-              <p className="text-lg leading-relaxed text-gray-700">
+              <p className="text-foreground text-lg leading-relaxed">
                 For mere information om vores metoder og principper, se vores{' '}
                 <a
                   href="/om-os"
