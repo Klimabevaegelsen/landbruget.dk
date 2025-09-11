@@ -132,12 +132,33 @@ export function hasCategoryData(category: IteratedSection): boolean {
     return false;
   }
 
-  // Check if any section has any content with data
+  // Check if any section has any content with real data OR predefined placeholders
   return category.sections.some((section) =>
     section.content?.some((item) => {
-      // Skip items that should show predefined placeholders - they're not "no data"
+      // Consider both real data and predefined placeholders as "having content"
       if (shouldShowPlaceholder(item._key)) {
         return true;
+      }
+      return hasData(item);
+    })
+  );
+}
+
+/**
+ * Checks if a category has only real data (excluding predefined placeholders)
+ * This is used to determine if individual empty charts should be hidden
+ */
+export function hasRealDataOnly(category: IteratedSection): boolean {
+  if (!category.sections || category.sections.length === 0) {
+    return false;
+  }
+
+  // Check if any section has real data (not just predefined placeholders)
+  return category.sections.some((section) =>
+    section.content?.some((item) => {
+      // Skip predefined placeholders - we only care about real data
+      if (shouldShowPlaceholder(item._key)) {
+        return false;
       }
       return hasData(item);
     })

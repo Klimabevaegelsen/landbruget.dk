@@ -9,7 +9,7 @@ import { cn, slugify, scrollToElement } from '@/lib/utils';
 import { useHashStore } from '@/stores/hashStore';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { CategoryPlaceholder } from './category-placeholder';
-import { hasCategoryData } from './chart-utils';
+import { hasCategoryData, hasRealDataOnly } from './chart-utils';
 import { CategoryDataProvider } from './CategoryDataContext';
 
 interface ExtendedNavigationItem extends NavigationItem {
@@ -96,14 +96,20 @@ export function BlockIteratedSection({
 
   // Check if the entire category has data across all sections
   const categoryHasData = hasCategoryData(iteratedSection);
+  const categoryHasRealData = hasRealDataOnly(iteratedSection);
 
-  // If the entire category has no data, show a single placeholder for the whole category
+  // If the entire category has no data (including no predefined placeholders), show a single placeholder
   if (!categoryHasData) {
     return <CategoryPlaceholder />;
   }
 
+  // Determine the context for individual charts:
+  // - If category has real data, hide individual empty charts (render null)
+  // - If category has only predefined placeholders, show all individual placeholders
+  const shouldHideEmptyCharts = categoryHasRealData;
+
   return (
-    <CategoryDataProvider hasData={categoryHasData}>
+    <CategoryDataProvider hasData={shouldHideEmptyCharts}>
       <div className={cn('relative flex w-full flex-col gap-4')}>
         <div
           className={cn(
