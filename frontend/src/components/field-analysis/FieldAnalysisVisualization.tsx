@@ -299,7 +299,7 @@ export default function FieldAnalysisVisualization() {
         {/* Desktop header */}
         <div className="hidden border-b bg-white p-4 lg:block">
           <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
-          <p className="text-sm text-gray-600">
+          <p className="text-muted-foreground text-sm">
             Data for {getYearRangeDisplay(yearSelection.selectedYear)}
           </p>
         </div>

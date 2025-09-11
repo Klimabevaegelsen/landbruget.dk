@@ -173,7 +173,7 @@ export default function AboutPage() {
                   løbende arbejder på at forbedre disse, er det vigtigt at
                   understrege, at platformen og de data, den indeholder, stilles
                   til rådighed{' '}
-                  <strong className="font-bold text-gray-900">
+                  <strong className="text-foreground font-bold">
                     &apos;som de er og forefindes&apos;
                   </strong>
                   . Vi kan derfor ikke give garantier for, at alle informationer

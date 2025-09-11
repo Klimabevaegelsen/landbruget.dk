@@ -440,10 +440,10 @@ function MapTooltip({
               key={index}
               className="flex items-baseline justify-between gap-3"
             >
-              <span className="text-sm leading-tight font-medium text-gray-600">
+              <span className="text-muted-foreground text-sm leading-tight font-medium">
                 {label}:
               </span>
-              <span className="text-right text-sm leading-tight font-semibold text-gray-900">
+              <span className="text-foreground text-right text-sm leading-tight font-semibold">
                 {formatValue(value, unit)}
               </span>
             </div>
@@ -1518,7 +1518,7 @@ export default function FieldAnalysisMap({
             <AlertTriangle className="mr-2 h-6 w-6" />
             Fejl
           </div>
-          <div className="text-gray-700">{error}</div>
+          <div className="text-foreground">{error}</div>
         </div>
       </div>
     );
@@ -1528,7 +1528,7 @@ export default function FieldAnalysisMap({
     return (
       <div className="flex h-full items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="mb-2 text-lg font-medium text-gray-900">
+          <div className="text-foreground mb-2 text-lg font-medium">
             Indlæser kortdata...
           </div>
           <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>

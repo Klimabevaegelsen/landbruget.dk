@@ -29,7 +29,7 @@ interface RankingTableProps {
 }
 
 const getRankIcon = (rank: number) => {
-  return <span className="text-sm font-medium text-gray-900">{rank}</span>;
+  return <span className="text-foreground text-sm font-medium">{rank}</span>;
 };
 
 const getCategoryColor = (category: string) => {
@@ -45,7 +45,7 @@ const getCategoryColor = (category: string) => {
     case 'worker':
       return 'bg-blue-100 text-blue-800 border-blue-200';
     default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-muted text-muted-foreground border-border';
   }
 };
 
@@ -82,7 +82,7 @@ export default function RankingTable({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <CardTitle className="text-lg font-semibold text-gray-900">
+            <CardTitle className="text-foreground text-lg font-semibold">
               {title}
             </CardTitle>
             <Badge

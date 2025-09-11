@@ -65,7 +65,7 @@ export function EnvironmentalStatusIndicator({
       <Icon className={`h-5 w-5 ${config.color} mr-3`} />
       <div className="flex-1">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-gray-900">{label}</span>
+          <span className="text-foreground text-sm font-medium">{label}</span>
           {percentage !== undefined && (
             <span className={`text-sm font-semibold ${config.color}`}>
               {percentage.toFixed(1)}%
@@ -138,7 +138,7 @@ export function EnvironmentalComplianceOverview({
       </div>
 
       <div className="border-border rounded-lg border bg-white p-4">
-        <h4 className="mb-3 text-sm font-medium text-gray-900">
+        <h4 className="text-foreground mb-3 text-sm font-medium">
           Miljøområde Fordeling
         </h4>
 
@@ -164,8 +164,10 @@ export function EnvironmentalComplianceOverview({
           </div>
 
           <div className="flex items-center justify-between border-t pt-2 text-sm">
-            <span className="font-medium text-gray-900">Total miljøområde</span>
-            <span className="font-semibold text-gray-900">
+            <span className="text-foreground font-medium">
+              Total miljøområde
+            </span>
+            <span className="text-foreground font-semibold">
               {totalHa.toLocaleString('da-DK', { maximumFractionDigits: 1 })} ha
             </span>
           </div>
