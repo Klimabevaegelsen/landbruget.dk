@@ -57,7 +57,7 @@ export function H3PfasTrigger() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl rounded-lg bg-white p-6 shadow-lg">
+    <div className="bg-background mx-auto max-w-2xl rounded-lg p-6 shadow-lg">
       <h2 className="mb-6 flex items-center text-2xl font-bold">
         <TestTube className="mr-2 h-6 w-6" />
         H3 PFAS Pipeline Trigger

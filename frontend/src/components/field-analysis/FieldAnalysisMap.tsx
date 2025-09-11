@@ -7,6 +7,7 @@ import Map, {
   NavigationControl,
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useMapTheme } from '@/hooks/useMapTheme';
 import { LayerVisibility, FilterState, FieldAnalysisData } from './types';
 import { getDecileBreakpoints, getColorScheme } from './colorUtils';
 import { SearchBar } from './SearchBar';
@@ -412,7 +413,7 @@ function MapTooltip({
 
   return (
     <div
-      className="absolute z-[60] max-w-sm rounded-xl border border-gray-300 bg-white shadow-xl backdrop-blur-sm"
+      className="border-border bg-background absolute z-[60] max-w-sm rounded-xl border shadow-xl backdrop-blur-sm"
       style={{
         left: x,
         top: y,
@@ -463,6 +464,7 @@ export default function FieldAnalysisMap({
   onMapClick,
   onMapReady,
 }: FieldAnalysisMapProps) {
+  const { mapStyle } = useMapTheme();
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1568,7 +1570,7 @@ export default function FieldAnalysisMap({
           zoom: 7,
         }}
         style={{ width: '100%', height: '100%' }}
-        mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
+        mapStyle={mapStyle}
         interactiveLayerIds={interactiveLayerIds}
         onLoad={onMapLoad}
         onMouseMove={onHover}

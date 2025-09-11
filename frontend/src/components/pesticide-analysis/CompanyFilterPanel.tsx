@@ -106,7 +106,7 @@ export default function CompanyFilterPanel({
                   onFiltersChange({ years: [] });
                 }
               }}
-              className="h-4 w-4 rounded border-gray-300"
+              className="border-border h-4 w-4 rounded"
             />
             <Label htmlFor="all-years" className="text-sm">
               Alle år
@@ -131,7 +131,7 @@ export default function CompanyFilterPanel({
                       });
                     }
                   }}
-                  className="h-4 w-4 rounded border-gray-300"
+                  className="border-border h-4 w-4 rounded"
                 />
                 <Label htmlFor={`year-${year}`} className="text-sm">
                   {year}

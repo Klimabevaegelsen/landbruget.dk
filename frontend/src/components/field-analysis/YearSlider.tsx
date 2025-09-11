@@ -35,7 +35,7 @@ export function YearSlider({
 
   return (
     <div
-      className={`rounded-lg bg-white/95 p-3 shadow-lg backdrop-blur-sm sm:p-4 ${className}`}
+      className={`bg-background/95 rounded-lg p-3 shadow-lg backdrop-blur-sm sm:p-4 ${className}`}
     >
       {/* Mobile: Dropdown */}
       <div className="sm:hidden">
@@ -48,7 +48,7 @@ export function YearSlider({
               value={selectedYear}
               onChange={handleSelectChange}
               disabled={isLoading}
-              className={`w-full rounded-md border-gray-300 bg-white py-2 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
+              className={`border-border bg-background w-full rounded-md py-2 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
                 isLoading ? 'cursor-not-allowed opacity-50' : ''
               }`}
             >

@@ -33,7 +33,7 @@ export function YearSelector({
           value={selectedYear}
           onChange={(e) => onYearChange(parseInt(e.target.value))}
           disabled={isLoading}
-          className={`block w-full rounded-md border-gray-300 bg-white py-2 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
+          className={`border-border bg-background block w-full rounded-md py-2 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
             isLoading ? 'cursor-not-allowed opacity-50' : ''
           }`}
         >

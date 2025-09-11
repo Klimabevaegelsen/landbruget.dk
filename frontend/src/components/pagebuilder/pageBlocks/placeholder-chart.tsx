@@ -3,7 +3,7 @@
 import { ResponsiveContainer } from 'recharts';
 
 interface PlaceholderChartProps {
-  dataType: 'nitrate' | 'carbon' | 'subsidies';
+  dataType: 'nitrate' | 'carbon' | 'subsidies' | 'worker_welfare';
 }
 
 const DATA_TYPE_CONFIG = {
@@ -21,6 +21,12 @@ const DATA_TYPE_CONFIG = {
     title: 'Tilskudsdata',
     description: 'Data om landbrugstilskud og støtteordninger',
     githubUrl: 'https://github.com/Klimabevaegelsen/landbruget.dk/issues/284',
+  },
+  worker_welfare: {
+    title: 'Arbejdssikkerhed data',
+    description: 'Data om arbejdsskader og sikkerhed på arbejdspladsen',
+    githubUrl:
+      'https://github.com/Klimabevaegelsen/landbruget.dk/issues/new?title=Worker%20Welfare%20Data%20Implementation&body=Please%20implement%20worker%20safety%20and%20injury%20data%20collection',
   },
 };
 
