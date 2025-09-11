@@ -593,10 +593,10 @@ export function FieldDetailsSheet({
                 {field.wetland_area_hectares > 0 && (
                   <div className="rounded-lg bg-gray-100 p-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-800">
+                      <span className="text-sm font-medium text-foreground">
                         💨 Lavbund
                       </span>
-                      <span className="text-sm font-bold text-gray-800">
+                      <span className="text-sm font-bold text-foreground">
                         {formatNumber(field.wetland_area_hectares)} ha
                       </span>
                     </div>

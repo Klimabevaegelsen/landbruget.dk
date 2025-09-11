@@ -14,8 +14,7 @@ import {
   ChartData,
 } from '@/services/supabase/types';
 import { useEffect, useState } from 'react';
-import CustomLegend from '@/components/chart/custom-legend';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import { CustomLegend, DocumentationAccordion } from '@/components/chart';
 import {
   chartColors,
   chartGridStyles,
@@ -29,10 +28,10 @@ import { useCategoryDataContext } from './CategoryDataContext';
 import {
   ChartContainer,
   ChartTooltip,
-} from '@/components/chart/chart-container';
-import { AnimatedNumber } from '@/components/chart/animated-number';
-import { EnhancedTooltip } from '@/components/chart/enhanced-tooltip';
-import { CSVDownloadButton } from '@/components/chart/csv-download-button';
+  AnimatedNumber,
+  EnhancedTooltip,
+  CSVDownloadButton,
+} from '@/components/chart';
 
 // Helper function to calculate total value for large display number
 const calculateTotalValue = (chartData: ChartData) => {

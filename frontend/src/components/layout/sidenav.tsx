@@ -149,7 +149,7 @@ function SidenavClient({
                     className={cn(
                       isCurrent
                         ? 'font-bold text-black'
-                        : 'font-medium text-gray-700 hover:font-semibold hover:text-black',
+                        : 'font-medium text-foreground hover:font-semibold hover:text-black',
                       'group flex cursor-pointer gap-x-3 p-4 pl-0'
                     )}
                     onClick={() => {
@@ -177,7 +177,7 @@ function SidenavClient({
                               className={cn(
                                 isSubCurrent
                                   ? 'font-bold text-black'
-                                  : 'font-medium text-gray-700 hover:font-semibold hover:text-black',
+                                  : 'font-medium text-foreground hover:font-semibold hover:text-black',
                                 'group flex cursor-pointer gap-x-3 p-4 pl-0'
                               )}
                               onClick={() => {

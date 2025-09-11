@@ -12,8 +12,7 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
-import { TableCSVDownloadButton } from '@/components/chart/table-csv-download-button';
+import { DocumentationAccordion, TableCSVDownloadButton } from '@/components/chart';
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   const { isInCategoryWithData } = useCategoryDataContext();
@@ -30,7 +29,7 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
       return <NoDataPlaceholder />;
     } else {
       return (
-        <div className="text-muted-foreground py-8 text-center">
+        <div className="py-8 text-center text-gray-500">
           Ingen data tilgængelig for denne tabel
         </div>
       );

@@ -1,5 +1,5 @@
 import { InfoCard } from '@/services/supabase/types';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import { DocumentationAccordion } from '@/components/chart';
 
 export function BlockInfoCard({ infoCard }: { infoCard: InfoCard }) {
   const items = infoCard.items;

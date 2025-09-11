@@ -145,7 +145,7 @@ export function CoordinatePanel({
         </div>
       </div>
 
-      <div className="text-xs text-gray-500 italic">
+      <div className="text-xs text-muted-foreground italic">
         Klik på en landbrugsmark for at se detaljerede oplysninger.
       </div>
     </div>
