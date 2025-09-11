@@ -231,14 +231,14 @@ export function SearchBar({
           value={query}
           onChange={handleInputChange}
           placeholder={placeholder}
-          className="block w-full rounded-lg border border-gray-300 bg-white py-3 pr-10 pl-10 text-base text-gray-900 placeholder-gray-500 transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2.5 lg:text-sm"
+          className="border-border block w-full rounded-lg border bg-white py-3 pr-10 pl-10 text-base text-gray-900 placeholder-gray-500 transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2.5 lg:text-sm"
         />
 
         {/* Clear Button */}
         {query && (
           <button
             onClick={clearSearch}
-            className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors hover:text-gray-600"
+            className="hover:text-muted-foreground absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -250,15 +250,15 @@ export function SearchBar({
         <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
           {isLoading && (
             <div className="px-4 py-3 text-center">
-              <div className="inline-flex items-center space-x-2 text-gray-500">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-500"></div>
+              <div className="text-muted-foreground inline-flex items-center space-x-2">
+                <div className="border-border h-4 w-4 animate-spin rounded-full border-2 border-t-blue-500"></div>
                 <span className="text-sm">Søger...</span>
               </div>
             </div>
           )}
 
           {!isLoading && results.length === 0 && query.length >= 2 && (
-            <div className="px-4 py-3 text-center text-sm text-gray-500">
+            <div className="text-muted-foreground px-4 py-3 text-center text-sm">
               Ingen resultater fundet
             </div>
           )}
@@ -268,7 +268,7 @@ export function SearchBar({
               <button
                 key={`${result.tekst}-${index}`}
                 onClick={() => handleSelectResult(result)}
-                className={`w-full border-b border-gray-100 px-4 py-4 text-left transition-colors last:border-b-0 hover:bg-gray-50 lg:py-3 ${
+                className={`hover:bg-muted w-full border-b border-gray-100 px-4 py-4 text-left transition-colors last:border-b-0 lg:py-3 ${
                   index === selectedIndex
                     ? 'bg-blue-50 text-blue-900'
                     : 'text-gray-900'

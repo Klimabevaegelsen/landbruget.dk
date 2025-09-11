@@ -18,7 +18,7 @@ export default function AboutPage() {
               <h1 className="text-primary text-5xl leading-tight font-black tracking-tight">
                 Om os
               </h1>
-              <p className="text-xl leading-relaxed text-gray-700">
+              <p className="text-muted-foreground text-xl leading-relaxed">
                 Velkommen til Landbruget.dk. Vi er et almennyttigt,{' '}
                 <a
                   href="https://github.com/klimabevaegelsen/landbruget.dk/"
@@ -41,7 +41,7 @@ export default function AboutPage() {
               <h2 className="text-primary border-primary/20 border-b pb-4 text-3xl leading-tight font-bold">
                 Hvorfor gør vi det?
               </h2>
-              <p className="text-lg leading-relaxed text-gray-700">
+              <p className="text-muted-foreground text-lg leading-relaxed">
                 Landbruget spiller en afgørende rolle i Danmark – for vores
                 økonomi, vores landskab, vores miljø, vores sundhed og vores
                 klima. Beslutninger truffet i og omkring sektoren har
@@ -65,7 +65,7 @@ export default function AboutPage() {
                   <h3 className="text-primary-darker text-2xl leading-tight font-bold">
                     Fremme offentlig oplysning og inspirere
                   </h3>
-                  <p className="text-lg leading-relaxed text-gray-700">
+                  <p className="text-muted-foreground text-lg leading-relaxed">
                     Vi vil gøre det lettere for alle at forstå
                     landbrugssektorens komplekse sammenhænge og dens påvirkning
                     på samfundet, herunder miljø, sundhed og klima. Samtidig
@@ -79,7 +79,7 @@ export default function AboutPage() {
                   <h3 className="text-primary-darker text-2xl leading-tight font-bold">
                     Understøtte en informeret og konstruktiv demokratisk debat
                   </h3>
-                  <p className="text-lg leading-relaxed text-gray-700">
+                  <p className="text-muted-foreground text-lg leading-relaxed">
                     Ved at gøre data tilgængelige og brugervenlige ønsker vi at
                     styrke grundlaget for en dialog om landbrugets fremtid og
                     den nødvendige grønne omstilling, båret af både udfordringer
@@ -92,7 +92,7 @@ export default function AboutPage() {
                     Styrke transparens, ansvarlighed og læring af historien
                   </h3>
                   <div className="space-y-4">
-                    <p className="text-lg leading-relaxed text-gray-700">
+                    <p className="text-muted-foreground text-lg leading-relaxed">
                       Vi tror på, at åbenhed om data – herunder
                       produktionsforhold, miljøpåvirkning, økonomiske
                       støtteordninger og ledelsesforhold – er afgørende for at
@@ -101,7 +101,7 @@ export default function AboutPage() {
                       inkluderer vi også oplysninger om tidligere ledelses- og
                       ejerforhold.
                     </p>
-                    <p className="text-lg leading-relaxed text-gray-700">
+                    <p className="text-muted-foreground text-lg leading-relaxed">
                       Det handler ikke kun om at placere ansvar for beslutninger
                       med langsigtede negative konsekvenser, som f.eks.
                       pesticidanvendelse der påvirker grundvandet. Lige så
@@ -122,7 +122,7 @@ export default function AboutPage() {
                   <h3 className="text-primary-darker text-2xl leading-tight font-bold">
                     Understøtte den grønne omstilling
                   </h3>
-                  <p className="text-lg leading-relaxed text-gray-700">
+                  <p className="text-muted-foreground text-lg leading-relaxed">
                     Særligt i lyset af Den Grønne Trepartsaftale er der et stort
                     behov for et solidt datagrundlag. Landbruget.dk skal levere
                     data, der kan hjælpe med at monitorere og evaluere
@@ -141,7 +141,7 @@ export default function AboutPage() {
               </h2>
 
               <div className="space-y-6">
-                <p className="text-lg leading-relaxed text-gray-700">
+                <p className="text-muted-foreground text-lg leading-relaxed">
                   Landbruget.dk er baseret på{' '}
                   <a
                     href="https://github.com/klimabevaegelsen/landbruget.dk/"
@@ -156,7 +156,7 @@ export default function AboutPage() {
                   på.
                 </p>
 
-                <p className="text-lg leading-relaxed text-gray-700">
+                <p className="text-muted-foreground text-lg leading-relaxed">
                   Vi bestræber os på, med bedste intention og efter bedste evne,
                   at formidle data neutralt og basere vores arbejde på den
                   bedste tilgængelige videnskab. De data, vi indsamler, er
@@ -168,7 +168,7 @@ export default function AboutPage() {
                   under, af de offentlige myndigheder.
                 </p>
 
-                <p className="text-lg leading-relaxed text-gray-700">
+                <p className="text-muted-foreground text-lg leading-relaxed">
                   Selvom vi lægger stor vægt på datakvalitet og nøjagtighed, og
                   løbende arbejder på at forbedre disse, er det vigtigt at
                   understrege, at platformen og de data, den indeholder, stilles
@@ -181,7 +181,7 @@ export default function AboutPage() {
                   opdaterede, især i et felt der konstant udvikler sig.
                 </p>
 
-                <p className="text-lg leading-relaxed text-gray-700">
+                <p className="text-muted-foreground text-lg leading-relaxed">
                   For at sikre platformens integritet, stabilitet og kvalitet,
                   vil alle forslag til ændringer i koden blive gennemgået og
                   verificeret af projektets kernebidragydere fra
@@ -192,7 +192,7 @@ export default function AboutPage() {
                   alle bliver klogere over tid.
                 </p>
 
-                <p className="text-lg leading-relaxed text-gray-700">
+                <p className="text-muted-foreground text-lg leading-relaxed">
                   Da vi er en almennyttig forening drevet af ønsket om at
                   bidrage positivt til samfundet og uden kommerciel interesse i
                   dette projekt, opfordrer vi aktivt til samarbejde og modtager
@@ -203,7 +203,7 @@ export default function AboutPage() {
                   har forslag til forbedringer af eksisterende indhold.
                 </p>
 
-                <p className="text-lg leading-relaxed text-gray-700">
+                <p className="text-muted-foreground text-lg leading-relaxed">
                   Sådanne henvendelser betragter vi som værdifuld hjælp i vores
                   bestræbelser på løbende at forbedre platformens kvalitet og
                   nøjagtighed, hvilket understøtter idéen om kollektiv
@@ -216,7 +216,7 @@ export default function AboutPage() {
                   værdsætter al den feedback, vi modtager.
                 </p>
 
-                <p className="text-lg leading-relaxed text-gray-700">
+                <p className="text-muted-foreground text-lg leading-relaxed">
                   Vi håber, at Landbruget.dk kan blive et værdifuldt redskab for
                   alle med interesse i dansk landbrug og dets rolle i en
                   bæredygtig fremtid.

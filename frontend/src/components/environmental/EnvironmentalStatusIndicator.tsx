@@ -40,9 +40,9 @@ const STATUS_CONFIG = {
   },
   unknown: {
     icon: WrenchScrewdriverIcon,
-    color: 'text-gray-500',
-    bgColor: 'bg-gray-50',
-    borderColor: 'border-gray-200',
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted',
+    borderColor: 'border-border',
     label: 'Ukendt Status',
     description: 'Status ikke fastlagt',
   },
@@ -73,9 +73,11 @@ export function EnvironmentalStatusIndicator({
           )}
         </div>
         <div className="mt-1 flex items-center justify-between">
-          <span className="text-xs text-gray-500">{config.description}</span>
+          <span className="text-muted-foreground text-xs">
+            {config.description}
+          </span>
           {hectares !== undefined && (
-            <span className="text-xs text-gray-600">
+            <span className="text-muted-foreground text-xs">
               {hectares.toLocaleString('da-DK', { maximumFractionDigits: 1 })}{' '}
               ha
             </span>
@@ -135,14 +137,14 @@ export function EnvironmentalComplianceOverview({
         />
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <div className="border-border rounded-lg border bg-white p-4">
         <h4 className="mb-3 text-sm font-medium text-gray-900">
           Miljøområde Fordeling
         </h4>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Problematiske områder</span>
+            <span className="text-muted-foreground">Problematiske områder</span>
             <span className="font-medium text-amber-600">
               {data.totalProblematicHa.toLocaleString('da-DK', {
                 maximumFractionDigits: 1,
@@ -152,7 +154,7 @@ export function EnvironmentalComplianceOverview({
           </div>
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Håndterede områder</span>
+            <span className="text-muted-foreground">Håndterede områder</span>
             <span className="font-medium text-green-600">
               {data.totalDealtWithHa.toLocaleString('da-DK', {
                 maximumFractionDigits: 1,
@@ -171,7 +173,7 @@ export function EnvironmentalComplianceOverview({
 
         {/* Progress bar */}
         <div className="mt-4">
-          <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
+          <div className="text-muted-foreground mb-1 flex items-center justify-between text-xs">
             <span>Overholdelsesgrad</span>
             <span>{data.compliancePercentage.toFixed(1)}%</span>
           </div>
