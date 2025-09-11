@@ -8,6 +8,7 @@ import { BlockContainer } from './block-container';
 import { cn, slugify, scrollToElement } from '@/lib/utils';
 import { useHashStore } from '@/stores/hashStore';
 import { NoDataPlaceholder } from './no-data-placeholder';
+import { CategoryPlaceholder } from './category-placeholder';
 import { hasCategoryData } from './chart-utils';
 import { CategoryDataProvider } from './CategoryDataContext';
 
@@ -98,7 +99,7 @@ export function BlockIteratedSection({
 
   // If the entire category has no data, show a single placeholder for the whole category
   if (!categoryHasData) {
-    return <NoDataPlaceholder />;
+    return <CategoryPlaceholder />;
   }
 
   return (

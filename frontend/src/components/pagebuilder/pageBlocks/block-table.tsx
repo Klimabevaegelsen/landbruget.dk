@@ -31,11 +31,8 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
     if (!isInCategoryWithData) {
       return <NoDataPlaceholder />;
     } else {
-      return (
-        <div className="text-muted-foreground py-8 text-center">
-          Ingen data tilgængelig for denne tabel
-        </div>
-      );
+      // If we're in a category with data, render nothing instead of individual message
+      return null;
     }
   }
   const columns: ColumnDef<Record<string, string | number | boolean>>[] =

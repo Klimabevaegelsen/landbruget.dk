@@ -19,11 +19,8 @@ export function BlockKpiGroup({ kpiGroup }: { kpiGroup: KPIGroup }) {
     if (!isInCategoryWithData) {
       return <NoDataPlaceholder />;
     } else {
-      return (
-        <div className="text-muted-foreground py-8 text-center">
-          Ingen KPI data tilgængelig
-        </div>
-      );
+      // If we're in a category with data, render nothing instead of individual message
+      return null;
     }
   }
 

@@ -165,11 +165,8 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
     if (!isInCategoryWithData) {
       return <NoDataPlaceholder />;
     } else {
-      return (
-        <div className="text-muted-foreground py-8 text-center">
-          Ingen tidslinje data tilgængelig
-        </div>
-      );
+      // If we're in a category with data, render nothing instead of individual message
+      return null;
     }
   }
 
@@ -257,12 +254,14 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
                 key={`${date}-${groupIndex}`}
                 className="vertical-timeline-element"
                 contentStyle={{
-                  background: '#eef8f2',
-                  boxShadow: '0 0 0 1px #eef8f2',
+                  background: 'var(--color-card)',
+                  boxShadow: '0 0 0 1px var(--color-border)',
                   border: 'none',
                   borderRadius: '0.25rem',
                 }}
-                contentArrowStyle={{ borderRight: '7px solid #eef8f2' }}
+                contentArrowStyle={{
+                  borderRight: '7px solid var(--color-card)',
+                }}
                 date={format(new Date(date), 'd. MMMM yyyy', {
                   locale: da,
                 })}
