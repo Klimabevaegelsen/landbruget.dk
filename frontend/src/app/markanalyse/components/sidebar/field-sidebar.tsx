@@ -37,7 +37,7 @@ export function FieldSidebar({
   >('layers');
 
   return (
-    <Sidebar defaultExpanded={false} collapsible>
+    <Sidebar defaultExpanded={true} collapsible>
       <SidebarHeader>
         <div className="flex items-center gap-3">
           <div className="bg-primary flex h-8 w-8 items-center justify-center rounded-lg">

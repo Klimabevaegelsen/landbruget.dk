@@ -35,52 +35,57 @@ export function YearSlider({
 
   return (
     <div
-      className={`bg-background/95 rounded-lg p-3 shadow-lg backdrop-blur-sm sm:p-4 ${className}`}
+      className={`bg-background/95 rounded-lg p-4 shadow-lg backdrop-blur-sm sm:p-5 ${className}`}
     >
       {/* Mobile: Dropdown */}
       <div className="sm:hidden">
-        <div className="flex items-center space-x-3">
-          <label className="text-foreground text-sm font-medium whitespace-nowrap">
-            År:
-          </label>
-          <div className="relative flex-1">
-            <select
-              value={selectedYear}
-              onChange={handleSelectChange}
-              disabled={isLoading}
-              className={`border-border bg-background w-full rounded-md py-2 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
-                isLoading ? 'cursor-not-allowed opacity-50' : ''
-              }`}
-            >
-              {availableYears.map((year) => (
-                <option key={year} value={year}>
-                  {getYearRangeDisplay(year)}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-              <ChevronDownIcon
-                className="text-muted-foreground h-4 w-4"
-                aria-hidden="true"
-              />
+        <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4">
+          <label className="text-foreground text-sm font-medium">År:</label>
+          <div className="flex items-center space-x-3">
+            <div className="relative min-w-0 flex-1">
+              <select
+                value={selectedYear}
+                onChange={handleSelectChange}
+                disabled={isLoading}
+                className={`border-border bg-background min-h-[44px] w-full rounded-md py-3 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
+                  isLoading ? 'cursor-not-allowed opacity-50' : ''
+                }`}
+              >
+                {availableYears.map((year) => (
+                  <option key={year} value={year}>
+                    {getYearRangeDisplay(year)}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                <ChevronDownIcon
+                  className="text-muted-foreground h-5 w-5"
+                  aria-hidden="true"
+                />
+              </div>
             </div>
+            {isLoading && (
+              <div className="flex-shrink-0">
+                <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-blue-600"></div>
+              </div>
+            )}
           </div>
-          {isLoading && (
-            <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
-          )}
         </div>
       </div>
 
       {/* Desktop: Slider */}
       <div className="hidden sm:block">
-        <div className="flex items-center space-x-4">
-          <div className="flex-shrink-0">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
             <label className="text-foreground text-sm font-medium">
               År: {getYearRangeDisplay(selectedYear)}
             </label>
+            {isLoading && (
+              <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
+            )}
           </div>
 
-          <div className="relative flex-1">
+          <div className="relative px-1">
             <input
               type="range"
               min={0}
@@ -99,7 +104,7 @@ export function YearSlider({
             />
 
             {/* Year markers */}
-            <div className="mt-1 flex justify-between px-1">
+            <div className="mt-2 flex justify-between">
               {availableYears.map((year, index) => (
                 <div
                   key={year}
@@ -120,12 +125,6 @@ export function YearSlider({
               ))}
             </div>
           </div>
-
-          {isLoading && (
-            <div className="flex-shrink-0">
-              <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
-            </div>
-          )}
         </div>
       </div>
     </div>
