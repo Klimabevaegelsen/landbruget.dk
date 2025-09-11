@@ -26,6 +26,17 @@ interface MunicipalityRanking {
   additional_data?: {
     unique_companies?: number;
     organic_percentage?: number;
+    total_applications?: number;
+    total_treated_area_ha?: number;
+    health_burden?: number;
+    total_production_sites?: number;
+    sites_with_antibiotics?: number;
+    total_fields?: number;
+    total_area_ha?: number;
+    companies_with_incidents?: number;
+    incident_types_count?: number;
+    organic_area_ha?: number;
+    [key: string]: unknown;
   };
 }
 
@@ -33,9 +44,14 @@ interface MunicipalityRankingResponse {
   rankings: {
     land_use?: MunicipalityRanking[];
     production?: MunicipalityRanking[];
-    // Removed nonsensical categories:
-    // environmental, animal_health, worker_safety
-    // These had meaningless composite scores
+    pesticide_burden?: MunicipalityRanking[];
+    pesticide_pfas?: MunicipalityRanking[];
+    pesticide_glyphosate?: MunicipalityRanking[];
+    antibiotic_usage?: MunicipalityRanking[];
+    environmental?: MunicipalityRanking[];
+    worker_safety?: MunicipalityRanking[];
+    incidents?: MunicipalityRanking[];
+    organic_farming?: MunicipalityRanking[];
   };
   metadata: {
     year: number;
@@ -53,6 +69,17 @@ const formatValue = (value: number, metric: string): string => {
       return `${value.toLocaleString('da-DK')} dyr`;
     case 'organic_farming_percentage':
       return `${value.toFixed(1)}%`;
+    case 'total_pesticide_burden':
+    case 'pfas_pesticide_burden':
+    case 'glyphosate_pesticide_burden':
+      return value.toFixed(1);
+    case 'total_antibiotic_ddd_usage':
+      return `${value.toLocaleString('da-DK')} DDD`;
+    case 'avg_nitrogen_leaching_kg':
+      return `${value.toFixed(1)} kg/ha`;
+    case 'total_workplace_incidents':
+    case 'total_incidents':
+      return `${value.toLocaleString('da-DK')} tilfælde`;
     default:
       return value.toLocaleString('da-DK');
   }
@@ -112,11 +139,101 @@ function SimpleRankingTable({
                       <div className="text-foreground text-sm font-medium">
                         {item.municipality}
                       </div>
-                      {item.additional_data?.unique_companies && (
-                        <div className="text-muted-foreground text-xs">
-                          {item.additional_data.unique_companies} virksomheder
-                          {item.additional_data.organic_percentage &&
-                            ` • ${item.additional_data.organic_percentage.toFixed(1)}% økologisk`}
+                      {item.additional_data && (
+                        <div className="text-muted-foreground space-y-1 text-xs">
+                          {/* Common data */}
+                          {item.additional_data.unique_companies && (
+                            <div>
+                              {item.additional_data.unique_companies}{' '}
+                              virksomheder
+                            </div>
+                          )}
+
+                          {/* Land use specific */}
+                          {item.additional_data.total_fields && (
+                            <div>
+                              {item.additional_data.total_fields.toLocaleString(
+                                'da-DK'
+                              )}{' '}
+                              marker
+                            </div>
+                          )}
+                          {item.additional_data.organic_percentage && (
+                            <div>
+                              {item.additional_data.organic_percentage.toFixed(
+                                1
+                              )}
+                              % økologisk
+                            </div>
+                          )}
+
+                          {/* Pesticide specific */}
+                          {item.additional_data.total_applications && (
+                            <div>
+                              {item.additional_data.total_applications.toLocaleString(
+                                'da-DK'
+                              )}{' '}
+                              sprøjtninger
+                            </div>
+                          )}
+                          {item.additional_data.total_treated_area_ha && (
+                            <div>
+                              {item.additional_data.total_treated_area_ha.toLocaleString(
+                                'da-DK'
+                              )}{' '}
+                              ha behandlet
+                            </div>
+                          )}
+
+                          {/* Production specific */}
+                          {item.additional_data.total_production_sites && (
+                            <div>
+                              {item.additional_data.total_production_sites}{' '}
+                              produktionssteder
+                            </div>
+                          )}
+                          {item.additional_data.sites_with_antibiotics && (
+                            <div>
+                              {item.additional_data.sites_with_antibiotics}{' '}
+                              steder med antibiotika
+                            </div>
+                          )}
+
+                          {/* Environmental specific */}
+                          {item.additional_data.total_area_ha &&
+                            item.metric === 'avg_nitrogen_leaching_kg' && (
+                              <div>
+                                {item.additional_data.total_area_ha.toLocaleString(
+                                  'da-DK'
+                                )}{' '}
+                                ha total
+                              </div>
+                            )}
+
+                          {/* Incident specific */}
+                          {item.additional_data.companies_with_incidents && (
+                            <div>
+                              {item.additional_data.companies_with_incidents}{' '}
+                              virksomheder påvirket
+                            </div>
+                          )}
+                          {item.additional_data.incident_types_count && (
+                            <div>
+                              {item.additional_data.incident_types_count}{' '}
+                              forskellige typer
+                            </div>
+                          )}
+
+                          {/* Organic farming specific */}
+                          {item.additional_data.organic_area_ha &&
+                            item.metric === 'organic_farming_percentage' && (
+                              <div>
+                                {item.additional_data.organic_area_ha.toLocaleString(
+                                  'da-DK'
+                                )}{' '}
+                                ha økologisk
+                              </div>
+                            )}
                         </div>
                       )}
                     </div>
@@ -223,8 +340,12 @@ export default function MunicipalityRankingsPage() {
           Kommune Ranglister
         </h1>
         <p className="text-muted-foreground mx-auto max-w-3xl text-xl">
-          Sammenlign danske kommuner på tværs af landbrug, miljø, produktion og
-          dyrevelfærd
+          Omfattende ranglister for danske kommuner inden for landbrug, miljø,
+          dyrevelfærd og arbejdssikkerhed
+        </p>
+        <p className="text-muted-foreground mx-auto max-w-2xl text-sm">
+          Data baseret på markernes faktiske placering og produktionsstedernes
+          lokation for præcis geografisk tilknytning
         </p>
       </div>
 
@@ -263,7 +384,7 @@ export default function MunicipalityRankingsPage() {
         </Button>
       </div>
 
-      {/* Rankings Grid - Like old front page */}
+      {/* Rankings Grid - Comprehensive like main page */}
       {data && (
         <div className="grid grid-cols-1 gap-6">
           {/* Land Use Rankings */}
@@ -276,7 +397,17 @@ export default function MunicipalityRankingsPage() {
             />
           )}
 
-          {/* Animal Production Rankings - Now meaningful! */}
+          {/* Organic Farming Rankings */}
+          {data.rankings.organic_farming && (
+            <SimpleRankingTable
+              title="Højest økologisk andel"
+              description="Kommuner med den højeste andel økologisk landbrug i 2024"
+              items={data.rankings.organic_farming}
+              showTop={20}
+            />
+          )}
+
+          {/* Animal Production Rankings */}
           {data.rankings.production && (
             <SimpleRankingTable
               title="Størst dyreproduktion"
@@ -286,26 +417,72 @@ export default function MunicipalityRankingsPage() {
             />
           )}
 
-          {/* Organic Farming Rankings - Use the land_use data for organic percentage */}
-          {data.rankings.land_use && (
+          {/* Pesticide Burden Rankings */}
+          {data.rankings.pesticide_burden && (
             <SimpleRankingTable
-              title="Højest økologisk andel"
-              description="Kommuner med den højeste andel økologisk landbrug i 2024"
-              items={data.rankings.land_use
-                .filter(
-                  (item) => (item.additional_data?.organic_percentage ?? 0) > 0
-                )
-                .sort(
-                  (a, b) =>
-                    (b.additional_data?.organic_percentage || 0) -
-                    (a.additional_data?.organic_percentage || 0)
-                )
-                .map((item, index) => ({
-                  ...item,
-                  rank: index + 1,
-                  value: item.additional_data?.organic_percentage || 0,
-                  metric: 'organic_farming_percentage',
-                }))}
+              title="Højest pesticidbelastning"
+              description="Kommuner med den største samlede pesticidbelastning i 2023"
+              items={data.rankings.pesticide_burden}
+              showTop={20}
+            />
+          )}
+
+          {/* PFAS Pesticide Rankings */}
+          {data.rankings.pesticide_pfas && (
+            <SimpleRankingTable
+              title="Højest PFAS-pesticid belastning"
+              description="Kommuner med den største PFAS-pesticid belastning i 2023"
+              items={data.rankings.pesticide_pfas}
+              showTop={20}
+            />
+          )}
+
+          {/* Glyphosate Pesticide Rankings */}
+          {data.rankings.pesticide_glyphosate && (
+            <SimpleRankingTable
+              title="Højest glyfosat belastning"
+              description="Kommuner med den største glyfosat belastning i 2023"
+              items={data.rankings.pesticide_glyphosate}
+              showTop={20}
+            />
+          )}
+
+          {/* Antibiotic Usage Rankings */}
+          {data.rankings.antibiotic_usage && (
+            <SimpleRankingTable
+              title="Højest antibiotikaforbrug"
+              description="Kommuner med det største antibiotikaforbrug på produktionssteder i 2024"
+              items={data.rankings.antibiotic_usage}
+              showTop={20}
+            />
+          )}
+
+          {/* Environmental Rankings (Nitrogen Leaching) */}
+          {data.rankings.environmental && (
+            <SimpleRankingTable
+              title="Højest kvælstofudledning"
+              description="Kommuner med den højeste gennemsnitlige kvælstofudledning pr. hektar"
+              items={data.rankings.environmental}
+              showTop={20}
+            />
+          )}
+
+          {/* Worker Safety Rankings */}
+          {data.rankings.worker_safety && (
+            <SimpleRankingTable
+              title="Flest arbejdsulykker"
+              description="Kommuner med flest rapporterede arbejdsulykker i landbruget"
+              items={data.rankings.worker_safety}
+              showTop={20}
+            />
+          )}
+
+          {/* Incidents Rankings */}
+          {data.rankings.incidents && (
+            <SimpleRankingTable
+              title="Flest hændelser"
+              description="Kommuner med flest rapporterede hændelser og ulykker i landbruget"
+              items={data.rankings.incidents}
               showTop={20}
             />
           )}

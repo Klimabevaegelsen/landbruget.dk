@@ -47,7 +47,7 @@ export function YearSlider({
                 value={selectedYear}
                 onChange={handleSelectChange}
                 disabled={isLoading}
-                className={`border-border bg-background min-h-[44px] w-full rounded-md py-3 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
+                className={`border-border bg-background focus:border-primary focus:ring-primary min-h-[44px] w-full rounded-md py-3 pr-10 pl-3 text-sm shadow-sm focus:ring-1 focus:outline-none ${
                   isLoading ? 'cursor-not-allowed opacity-50' : ''
                 }`}
               >
@@ -66,7 +66,7 @@ export function YearSlider({
             </div>
             {isLoading && (
               <div className="flex-shrink-0">
-                <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-blue-600"></div>
+                <div className="border-primary h-5 w-5 animate-spin rounded-full border-b-2"></div>
               </div>
             )}
           </div>
@@ -81,7 +81,7 @@ export function YearSlider({
               År: {getYearRangeDisplay(selectedYear)}
             </label>
             {isLoading && (
-              <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
+              <div className="border-primary h-4 w-4 animate-spin rounded-full border-b-2"></div>
             )}
           </div>
 
@@ -110,7 +110,7 @@ export function YearSlider({
                   key={year}
                   className={`text-sm font-medium transition-colors ${
                     year === selectedYear
-                      ? 'text-blue-600'
+                      ? 'text-primary'
                       : 'text-muted-foreground'
                   }`}
                   style={{

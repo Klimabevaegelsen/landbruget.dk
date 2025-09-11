@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function PesticideAnalysisPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-emerald-50">
+    <div className="dark:bg-background min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-emerald-50 dark:from-green-950/20 dark:via-blue-950/20 dark:to-emerald-950/20">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-foreground mb-4 text-4xl font-bold">

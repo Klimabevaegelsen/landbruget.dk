@@ -31,21 +31,21 @@ export function LayerControlPanel({
       name: 'Landbrugsmarker',
       description: '617.774 marker med pesticidforbrug og miljødata',
       icon: Wheat,
-      color: 'bg-green-500 dark:bg-green-400',
+      color: 'bg-organic',
     },
     {
       key: 'bnbo' as const,
       name: 'BNBO Områder',
       description: '2.761 boringsnære beskyttelsesområder',
       icon: Droplets,
-      color: 'bg-blue-600 dark:bg-blue-400',
+      color: 'bg-bnbo',
     },
     {
       key: 'wetlands' as const,
       name: 'Lavbundsområder',
       description: '768.646 lavbundsjorder med tørvindhold',
       icon: Wind,
-      color: 'bg-amber-600 dark:bg-amber-400',
+      color: 'bg-conventional',
     },
     {
       key: 'water_projects' as const,
@@ -125,14 +125,14 @@ export function LayerControlPanel({
           <h3 className="text-foreground mb-4 text-lg font-semibold">Filtre</h3>
           {/* Organic Filter */}
           <div className="mb-4">
-            <label className="flex items-center cursor-pointer">
+            <label className="flex cursor-pointer items-center">
               <input
                 type="checkbox"
                 checked={filterState.organicOnly}
                 onChange={(e) =>
                   onFilterChange({ organicOnly: e.target.checked })
                 }
-                className="border-border text-primary focus:ring-primary focus:ring-2 h-5 w-5 rounded lg:h-4 lg:w-4 transition-colors"
+                className="border-border text-primary focus:ring-primary h-5 w-5 rounded transition-colors focus:ring-2 lg:h-4 lg:w-4"
               />
               <span className="text-foreground ml-3 text-base lg:ml-2 lg:text-sm">
                 Kun økologiske marker
@@ -324,11 +324,11 @@ export function LayerControlPanel({
                 <span>Handling påkrævet</span>
               </div>
               <div className="ml-2 flex items-center space-x-2">
-                <div className="h-4 w-4 rounded bg-green-500 dark:bg-green-400"></div>
+                <div className="bg-organic h-4 w-4 rounded"></div>
                 <span>Gennemført</span>
               </div>
               <div className="ml-2 flex items-center space-x-2">
-                <div className="h-4 w-4 rounded bg-blue-600 dark:bg-blue-400"></div>
+                <div className="bg-bnbo h-4 w-4 rounded"></div>
                 <span>Generelle BNBO områder</span>
               </div>
             </div>

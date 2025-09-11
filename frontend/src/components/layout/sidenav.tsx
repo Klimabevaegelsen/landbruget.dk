@@ -147,7 +147,7 @@ function SidenavClient({
             exit={{ opacity: 0 }}
             role="list"
             className={cn(
-              'space-y-1 divide-y divide-slate-300 text-sm transition-all duration-300',
+              'divide-border space-y-1 divide-y text-sm transition-all duration-300',
               isCollapsed && 'opacity-0'
             )}
           >
