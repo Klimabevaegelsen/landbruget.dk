@@ -466,11 +466,8 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
     if (!isInCategoryWithData) {
       return <NoDataPlaceholder />;
     } else {
-      return (
-        <div className="text-muted-foreground py-8 text-center">
-          Ingen kortdata tilgængelig
-        </div>
-      );
+      // If we're in a category with data, render nothing instead of individual message
+      return null;
     }
   }
 
@@ -548,7 +545,7 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
             return (
               <button
                 key={`${layer.name}-${index}`}
-                className="flex items-center gap-2 rounded-md transition-colors hover:bg-gray-50"
+                className="hover:bg-muted flex items-center gap-2 rounded-md transition-colors"
               >
                 <div
                   className="size-4 rounded-full"
