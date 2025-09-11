@@ -44,7 +44,7 @@ export class MapErrorBoundary extends React.Component<
       // Render fallback UI
       return (
         this.props.fallback || (
-          <div className="rounded-lg border-2 border-dashed border-gray-300 bg-muted p-8 text-center">
+          <div className="bg-muted rounded-lg border-2 border-dashed border-gray-300 p-8 text-center">
             <div className="text-muted-foreground mb-2">
               <svg
                 className="mx-auto mb-4 h-12 w-12 text-gray-400"

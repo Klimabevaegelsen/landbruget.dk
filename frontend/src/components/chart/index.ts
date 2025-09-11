@@ -9,10 +9,7 @@ export {
   useChart,
 } from './chart-container';
 
-export {
-  EnhancedTooltip,
-  CompactTooltip,
-} from './enhanced-tooltip';
+export { EnhancedTooltip, CompactTooltip } from './enhanced-tooltip';
 
 export { AnimatedNumber, StatusIndicator } from './animated-number';
 export { default as CustomLegend } from './custom-legend';

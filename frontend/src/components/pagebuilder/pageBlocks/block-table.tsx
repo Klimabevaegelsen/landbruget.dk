@@ -12,7 +12,10 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
-import { DocumentationAccordion, TableCSVDownloadButton } from '@/components/chart';
+import {
+  DocumentationAccordion,
+  TableCSVDownloadButton,
+} from '@/components/chart';
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   const { isInCategoryWithData } = useCategoryDataContext();

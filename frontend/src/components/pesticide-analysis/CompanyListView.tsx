@@ -184,7 +184,7 @@ export default function CompanyListView({
 
             {/* Years Active */}
             {company.years_active.length > 0 && (
-              <div className="mt-2 text-xs text-gray-500">
+              <div className="text-muted-foreground mt-2 text-xs">
                 Aktiv: {company.years_active.sort((a, b) => b - a).join(', ')}
               </div>
             )}

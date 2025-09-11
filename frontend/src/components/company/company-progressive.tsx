@@ -80,7 +80,7 @@ export function CompanyProgressive({ companyId }: CompanyProgressiveProps) {
     return (
       <Container section>
         <div className="py-12 text-center">
-          <h2 className="mb-4 text-2xl font-bold text-foreground">
+          <h2 className="text-foreground mb-4 text-2xl font-bold">
             Fejl ved indlæsning
           </h2>
           <p className="text-muted-foreground">{error}</p>

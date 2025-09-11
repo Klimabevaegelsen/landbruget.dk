@@ -160,7 +160,7 @@ export default function RankingTable({
 
         {items.length > showTop && (
           <div className="border-t bg-gray-50 px-6 py-3">
-            <p className="text-center text-xs text-gray-500">
+            <p className="text-muted-foreground text-center text-xs">
               Viser top {showTop} af {items.length} virksomheder
             </p>
           </div>
@@ -168,7 +168,7 @@ export default function RankingTable({
 
         {items.length === 0 && (
           <div className="px-6 py-8 text-center">
-            <p className="text-sm text-gray-500">
+            <p className="text-muted-foreground text-sm">
               Ingen data tilgængelig for denne kategori
             </p>
           </div>
