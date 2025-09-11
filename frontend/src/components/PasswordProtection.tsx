@@ -54,7 +54,7 @@ export default function PasswordProtection() {
         left: 0,
         width: '100%',
         height: '100%',
-        backgroundColor: 'white',
+        backgroundColor: 'var(--color-background)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -96,8 +96,8 @@ export default function PasswordProtection() {
           type="submit"
           style={{
             padding: '12px 24px',
-            backgroundColor: '#3b82f6',
-            color: 'white',
+            backgroundColor: 'var(--color-primary)',
+            color: 'var(--color-primary-foreground)',
             border: 'none',
             borderRadius: '6px',
             fontSize: '16px',

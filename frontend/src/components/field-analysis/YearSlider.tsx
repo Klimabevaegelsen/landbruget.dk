@@ -93,13 +93,13 @@ export function YearSlider({
               value={selectedIndex}
               onChange={handleSliderChange}
               disabled={isLoading}
-              className={`slider h-3 w-full cursor-pointer appearance-none rounded-lg bg-gray-200 ${
+              className={`slider bg-muted h-3 w-full cursor-pointer appearance-none rounded-lg ${
                 isLoading ? 'cursor-not-allowed opacity-50' : ''
               }`}
               style={{
-                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${
+                background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${
                   (selectedIndex / (availableYears.length - 1)) * 100
-                }%, #e5e7eb ${(selectedIndex / (availableYears.length - 1)) * 100}%, #e5e7eb 100%)`,
+                }%, var(--color-muted) ${(selectedIndex / (availableYears.length - 1)) * 100}%, var(--color-muted) 100%)`,
               }}
             />
 

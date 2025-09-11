@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { LucideIcon } from 'lucide-react';
+
 import { useHashStore } from '@/stores/hashStore';
 
 // Custom hook for media query

@@ -159,7 +159,7 @@ export default function RankingTable({
         </div>
 
         {items.length > showTop && (
-          <div className="border-t bg-gray-50 px-6 py-3">
+          <div className="bg-muted border-t px-6 py-3">
             <p className="text-muted-foreground text-center text-xs">
               Viser top {showTop} af {items.length} virksomheder
             </p>
