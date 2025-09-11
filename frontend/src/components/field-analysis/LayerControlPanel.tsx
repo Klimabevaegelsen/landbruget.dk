@@ -31,21 +31,21 @@ export function LayerControlPanel({
       name: 'Landbrugsmarker',
       description: '617.774 marker med pesticidforbrug og miljødata',
       icon: Wheat,
-      color: 'bg-green-500',
+      color: 'bg-green-500 dark:bg-green-400',
     },
     {
       key: 'bnbo' as const,
       name: 'BNBO Områder',
       description: '2.761 boringsnære beskyttelsesområder',
       icon: Droplets,
-      color: 'bg-blue-600',
+      color: 'bg-blue-600 dark:bg-blue-400',
     },
     {
       key: 'wetlands' as const,
       name: 'Lavbundsområder',
       description: '768.646 lavbundsjorder med tørvindhold',
       icon: Wind,
-      color: 'bg-muted-foreground',
+      color: 'bg-amber-600 dark:bg-amber-400',
     },
     {
       key: 'water_projects' as const,
@@ -83,15 +83,15 @@ export function LayerControlPanel({
               <div className="mt-1 flex-shrink-0">
                 <button
                   onClick={() => onLayerToggle(layer.key)}
-                  className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded border-2 lg:h-5 lg:min-h-0 lg:w-5 lg:min-w-0 ${
+                  className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border-2 lg:h-6 lg:min-h-0 lg:w-6 lg:min-w-0 ${
                     layerVisibility[layer.key]
-                      ? 'border-primary bg-blue-600'
-                      : 'border-border hover:border-gray-400 active:border-gray-500'
-                  } transition-colors`}
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border bg-background hover:border-muted-foreground hover:bg-muted/50 active:border-muted-foreground'
+                  } transition-all duration-200`}
                 >
                   {layerVisibility[layer.key] && (
                     <svg
-                      className="h-4 w-4 text-white lg:h-3 lg:w-3"
+                      className="h-4 w-4 lg:h-3 lg:w-3"
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >
@@ -125,14 +125,14 @@ export function LayerControlPanel({
           <h3 className="text-foreground mb-4 text-lg font-semibold">Filtre</h3>
           {/* Organic Filter */}
           <div className="mb-4">
-            <label className="flex items-center">
+            <label className="flex items-center cursor-pointer">
               <input
                 type="checkbox"
                 checked={filterState.organicOnly}
                 onChange={(e) =>
                   onFilterChange({ organicOnly: e.target.checked })
                 }
-                className="border-border text-primary focus:ring-primary h-5 w-5 rounded lg:h-4 lg:w-4"
+                className="border-border text-primary focus:ring-primary focus:ring-2 h-5 w-5 rounded lg:h-4 lg:w-4 transition-colors"
               />
               <span className="text-foreground ml-3 text-base lg:ml-2 lg:text-sm">
                 Kun økologiske marker
@@ -324,11 +324,11 @@ export function LayerControlPanel({
                 <span>Handling påkrævet</span>
               </div>
               <div className="ml-2 flex items-center space-x-2">
-                <div className="h-4 w-4 rounded bg-green-500"></div>
+                <div className="h-4 w-4 rounded bg-green-500 dark:bg-green-400"></div>
                 <span>Gennemført</span>
               </div>
               <div className="ml-2 flex items-center space-x-2">
-                <div className="h-4 w-4 rounded bg-blue-600"></div>
+                <div className="h-4 w-4 rounded bg-blue-600 dark:bg-blue-400"></div>
                 <span>Generelle BNBO områder</span>
               </div>
             </div>

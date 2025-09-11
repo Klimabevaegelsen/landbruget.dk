@@ -11,6 +11,7 @@ import { useMapTheme } from '@/hooks/useMapTheme';
 import { LayerVisibility, FilterState, FieldAnalysisData } from './types';
 import { getDecileBreakpoints, getColorScheme } from './colorUtils';
 import { SearchBar } from './SearchBar';
+import { ColorLegend } from './ColorLegend';
 
 // Type for MapLibre map instance
 interface MapInstance {
@@ -1533,7 +1534,7 @@ export default function FieldAnalysisMap({
           <div className="text-foreground mb-2 text-lg font-medium">
             Indlæser kortdata...
           </div>
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
         </div>
       </div>
     );
@@ -1550,14 +1551,14 @@ export default function FieldAnalysisMap({
 
   return (
     <div className="relative h-full w-full touch-manipulation">
-      {/* Search Bar */}
+      {/* Search Bar - positioned to avoid sidebar collision */}
       <div
-        className="pointer-events-auto absolute top-4 right-4 left-4 z-30 md:right-auto md:left-4 md:w-80 lg:left-4 lg:w-96 xl:w-[28rem]"
+        className="pointer-events-auto absolute top-4 left-4 right-4 z-30 md:right-auto md:left-4 md:w-80 lg:left-4 lg:w-96 xl:w-[28rem]"
         style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
       >
         <SearchBar
           onLocationSelect={handleLocationSelect}
-          placeholder="Søg adresser, byer, regioner..."
+          placeholder="Søg efter adresser, byer, regioner..."
           className="w-full"
         />
       </div>
@@ -1582,6 +1583,11 @@ export default function FieldAnalysisMap({
 
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
+
+      {/* Color Legend - positioned to avoid mobile controls */}
+      <div className="pointer-events-auto absolute bottom-4 left-4 z-30 md:bottom-6 md:left-6">
+        <ColorLegend filterState={filterState} />
+      </div>
 
       {hoverInfo && <MapTooltip {...hoverInfo} />}
     </div>

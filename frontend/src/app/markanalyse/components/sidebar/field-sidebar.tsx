@@ -14,6 +14,7 @@ import {
   FilterState,
   YearSelection,
 } from '@/components/field-analysis/types';
+import { SettingsPanel } from '@/components/field-analysis/SettingsPanel';
 
 interface FieldSidebarProps {
   layerVisibility: LayerVisibility;
@@ -86,22 +87,31 @@ export function FieldSidebar({
         {activeSection === 'layers' && (
           <SidebarGroup label="Kortlag">
             <div className="space-y-3 px-3 py-2">
-              {Object.entries(layerVisibility).map(([key, visible]) => (
-                <label
-                  key={key}
-                  className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors"
-                >
-                  <input
-                    type="checkbox"
-                    checked={visible}
-                    onChange={() => onLayerToggle(key as keyof LayerVisibility)}
-                    className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
-                  />
-                  <span className="font-medium capitalize">
-                    {key.replace('_', ' ')}
-                  </span>
-                </label>
-              ))}
+              {Object.entries(layerVisibility).map(([key, visible]) => {
+                const layerNames: Record<string, string> = {
+                  fields: 'Landbrugsmarker',
+                  bnbo: 'BNBO Områder',
+                  wetlands: 'Lavbundsområder',
+                  water_projects: 'Vandprojekter',
+                  buildings: 'Bygninger'
+                };
+                return (
+                  <label
+                    key={key}
+                    className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={visible}
+                      onChange={() => onLayerToggle(key as keyof LayerVisibility)}
+                      className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
+                    />
+                    <span className="font-medium">
+                      {layerNames[key] || key}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           </SidebarGroup>
         )}
@@ -188,6 +198,13 @@ export function FieldSidebar({
                 </label>
               ))}
             </div>
+          </SidebarGroup>
+        )}
+
+        {/* Settings Panel */}
+        {activeSection === 'settings' && (
+          <SidebarGroup>
+            <SettingsPanel />
           </SidebarGroup>
         )}
       </SidebarContent>
