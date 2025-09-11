@@ -942,7 +942,7 @@ def create_veterinary_timeline(
         loaded_tables = load_data_sources(gcs_access)
 
         # Note: now we need to use gcs_access.duckdb_conn instead of con
-        con = gcs_access.duckdb_con
+        con = gcs_access.duckdb_conn
 
         # Standardize species data across all loaded sources
         standardize_species_data(con)
