@@ -36,7 +36,7 @@ import {
 // Helper function to detect if data is temporal (reused from bar chart)
 const isTemporalData = (
   xAxisLabel?: string,
-  _xAxisValues?: (string | number)[]
+  xAxisValues?: (string | number)[]
 ) => {
   const axisText = xAxisLabel?.toLowerCase() || '';
 
@@ -69,22 +69,23 @@ const isTemporalData = (
 // Helper function to detect if metric should be summed or averaged
 const shouldUseAverage = (unit?: string, xAxisLabel?: string) => {
   const unitLower = unit?.toLowerCase() || '';
+  const contextText = `${unitLower} ${xAxisLabel?.toLowerCase() || ''}`;
 
-  // Only sum for very specific cases that are explicitly cumulative
+  // If it's "per" something (per year, per month, etc.), always average
+  const isPerSomething = ['per ', 'pr. ', 'pr ', '/ '].some((indicator) =>
+    contextText.includes(indicator)
+  );
+
+  if (isPerSomething) {
+    return true; // Always average rates/ratios
+  }
+
+  // Only sum for very specific cases that are explicitly cumulative AND not "per" something
   const explicitlyCumulativeIndicators = [
     'total',
     'sum',
     'accumulated',
     'akkumuleret',
-    // Only sum these if they're clearly meant to be totals
-    'total production',
-    'total revenue',
-    'total cost',
-    'total area',
-    'samlet produktion',
-    'samlet omsætning',
-    'samlet omkostning',
-    'samlet areal',
   ];
 
   const shouldSum = explicitlyCumulativeIndicators.some(
