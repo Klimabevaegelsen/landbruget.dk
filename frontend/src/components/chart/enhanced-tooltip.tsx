@@ -33,13 +33,9 @@ export function EnhancedTooltip({
 
   return (
     <div className="bg-background w-[240px] overflow-hidden rounded-lg border shadow-sm">
-      {/* Header section with chart type and status */}
-      <div className="flex items-center justify-between border-b px-4 py-2">
+      {/* Header section with chart type */}
+      <div className="border-b px-4 py-2">
         <p className="text-foreground text-sm font-medium">{chartType}</p>
-        <div className="flex items-center space-x-2">
-          <div className="h-2 w-2 rounded-full bg-green-500" />
-          <span className="text-muted-foreground text-xs">Live</span>
-        </div>
       </div>
 
       {/* Content section */}
