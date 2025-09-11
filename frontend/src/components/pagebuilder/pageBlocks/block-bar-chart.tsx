@@ -92,21 +92,115 @@ const translateCategoryValue = (value: string | number): string => {
     : strValue;
 };
 
-// Helper function to calculate total value for large display number
-const calculateTotalValue = (chartData: ChartData) => {
-  if (!chartData.series || chartData.series.length === 0) return 0;
+// Helper function to detect if data is temporal (per time period)
+const isTemporalData = (
+  xAxisLabel?: string,
+  xAxisValues?: (string | number)[]
+) => {
+  const axisText = xAxisLabel?.toLowerCase() || '';
 
-  // Sum all values from all series
-  return chartData.series.reduce((total, series) => {
-    return (
-      total +
-      series.data.reduce(
-        (seriesSum, value) =>
-          seriesSum + (typeof value === 'number' ? value : 0),
-        0
-      )
+  // Check axis label for temporal indicators
+  const temporalIndicators = [
+    'år',
+    'year',
+    'måned',
+    'month',
+    'dag',
+    'day',
+    'kvartal',
+    'quarter',
+    'uge',
+    'week',
+  ];
+  if (temporalIndicators.some((indicator) => axisText.includes(indicator))) {
+    return true;
+  }
+
+  // Check if x-axis values look like years/dates
+  if (xAxisValues && xAxisValues.length > 0) {
+    const firstValue = String(xAxisValues[0]);
+    // Check for year patterns (2020, 2021, etc.) or date patterns
+    if (/^\d{4}$/.test(firstValue) || /^\d{4}-\d{2}/.test(firstValue)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// Helper function to detect if metric should be summed or averaged
+const shouldUseAverage = (unit?: string, xAxisLabel?: string) => {
+  const unitLower = unit?.toLowerCase() || '';
+  const contextText = `${unitLower} ${xAxisLabel?.toLowerCase() || ''}`;
+
+  // If it's "per" something (per year, per month, etc.), always average
+  const isPerSomething = ['per ', 'pr. ', 'pr ', '/ '].some((indicator) =>
+    contextText.includes(indicator)
+  );
+
+  if (isPerSomething) {
+    return true; // Always average rates/ratios
+  }
+
+  // Only sum for very specific cases that are explicitly cumulative AND not "per" something
+  const explicitlyCumulativeIndicators = [
+    'total',
+    'sum',
+    'accumulated',
+    'akkumuleret',
+  ];
+
+  const shouldSum = explicitlyCumulativeIndicators.some(
+    (indicator) =>
+      unitLower.includes(indicator) ||
+      (xAxisLabel?.toLowerCase() || '').includes(indicator)
+  );
+
+  // Default to average for everything else - much safer!
+  return !shouldSum;
+};
+
+// Helper function to calculate appropriate display value for bar charts
+const calculateDisplayValue = (chartData: ChartData, unit?: string) => {
+  if (!chartData.series || chartData.series.length === 0)
+    return {
+      value: 0,
+      label: 'Ingen data tilgængelig',
+      showMetric: false,
+    };
+
+  const shouldAverage = shouldUseAverage(unit, chartData.xAxis?.label);
+  const allValues = chartData.series.flatMap((series) =>
+    series.data.filter((value) => typeof value === 'number' && value > 0)
+  );
+
+  if (allValues.length === 0) {
+    return { value: 0, label: 'Ingen data tilgængelig', showMetric: false };
+  }
+
+  if (shouldAverage) {
+    const average =
+      allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
+    const isTemporal = isTemporalData(
+      chartData.xAxis?.label,
+      chartData.xAxis?.values
     );
-  }, 0);
+
+    return {
+      value: average,
+      label: isTemporal
+        ? 'Gennemsnit på tværs af perioder'
+        : 'Gennemsnit på tværs af kategorier',
+      showMetric: true,
+    };
+  } else {
+    const total = allValues.reduce((sum, val) => sum + val, 0);
+    return {
+      value: total,
+      label: 'Total på tværs af kategorier',
+      showMetric: true,
+    };
+  }
 };
 
 // Helper function to transform your data into the format Recharts expects
@@ -208,7 +302,7 @@ export function BlockBarChart({
   const seriesNames = chart.data.series.map((s) => s.name);
   const chartConfig = generateChartConfig(seriesNames);
   const barColors = chartColors.data;
-  const totalValue = calculateTotalValue(chart.data);
+  const displayMetric = calculateDisplayValue(chart.data, chart.unit);
 
   return (
     <div className="space-y-6">
@@ -216,15 +310,15 @@ export function BlockBarChart({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-1">
           {/* Large display number - Midday style */}
-          {totalValue > 0 && (
+          {displayMetric.showMetric && (
             <div className="space-y-2">
               <AnimatedNumber
-                value={totalValue}
+                value={displayMetric.value}
                 unit={chart.unit}
                 className="text-4xl"
               />
               <div className="text-muted-foreground flex items-center space-x-2 text-sm">
-                <p>Total på tværs af alle kategorier</p>
+                <p>{displayMetric.label}</p>
               </div>
             </div>
           )}
