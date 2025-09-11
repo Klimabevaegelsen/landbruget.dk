@@ -12,9 +12,7 @@ It includes:
 All methods maintain the exact same functionality and validation criteria from the original implementation.
 """
 
-import json
-import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from unified_pipeline.util.timing import timed
 

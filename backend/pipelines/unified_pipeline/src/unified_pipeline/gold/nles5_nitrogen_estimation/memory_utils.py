@@ -15,9 +15,7 @@ All methods maintain the exact same functionality and cleanup strategies from th
 import gc
 import os
 import psutil
-from typing import Optional
 
-from unified_pipeline.util.timing import timed
 
 
 class NLES5MemoryUtils:

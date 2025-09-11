@@ -38,14 +38,10 @@ OUTPUT:
 """
 
 import os
-import re
 import json
-import math
-import time
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from unified_pipeline.common.base import BaseSource, GoldJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
@@ -105,13 +101,6 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         self._configure_duckdb()
         
         # Initialize specialized processors
-        from .data_loader import NLES5DataLoader
-        from .climate_processor import NLES5ClimateProcessor
-        from .spatial_operations import NLES5SpatialOperations
-        from .nles5_calculator import NLES5Calculator
-        from .validator import NLES5Validator
-        from .memory_utils import NLES5MemoryUtils
-        from .pipeline_orchestrator import NLES5PipelineOrchestrator
         
         self.data_loader = NLES5DataLoader(self)
         self.climate_processor = NLES5ClimateProcessor(self)
@@ -846,7 +835,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         # Only log preview for the first table with data
                         break
                         
-                except Exception as table_error:
+                except Exception:
                     # Table doesn't exist or can't be queried - continue to next
                     continue
             else:
