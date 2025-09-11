@@ -8,6 +8,7 @@ from .field_production import FieldProductionGold, FieldProductionGoldConfig
 from .pesticide_disaggregation import PesticideDisaggregationGold, PesticideDisaggregationGoldConfig
 from .pesticide_proximity import PesticideProximityGold, PesticideProximityGoldConfig
 from .property_cadastral_merge import PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig
+from .subsidies import SubsidiesGold, SubsidiesGoldConfig
 from .work_permits import WorkPermitsGold, WorkPermitsGoldConfig
 from .worker_safety import WorkerSafetyGold, WorkerSafetyGoldConfig
 
@@ -25,6 +26,8 @@ __all__ = [
     "PesticideDisaggregationGoldConfig",
     "PesticideProximityGold",
     "PesticideProximityGoldConfig",
+    "SubsidiesGold",
+    "SubsidiesGoldConfig",
     "WorkerSafetyGold",
     "WorkerSafetyGoldConfig",
     "WorkPermitsGold",

@@ -90,6 +90,10 @@ from unified_pipeline.gold.property_cadastral_merge import (
     PropertyCadastralMergeGold,
     PropertyCadastralMergeGoldConfig,
 )
+from unified_pipeline.gold.subsidies import (
+    SubsidiesGold,
+    SubsidiesGoldConfig,
+)
 from unified_pipeline.gold.work_permits import (
     WorkPermitsGold,
     WorkPermitsGoldConfig,
@@ -588,6 +592,13 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             cli_models.Stage.all: [
                 # Note: This requires work permits silver data from drive pipeline to be available
                 (WorkPermitsGold, WorkPermitsGoldConfig),
+            ],
+        },
+        cli_models.Source.subsidies: {
+            cli_models.Stage.gold: [(SubsidiesGold, SubsidiesGoldConfig)],
+            cli_models.Stage.all: [
+                # Note: This requires subsidies silver data to be available
+                (SubsidiesGold, SubsidiesGoldConfig),
             ],
         },
     }
