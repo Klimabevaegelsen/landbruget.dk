@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { TrendingUp, Loader2 } from 'lucide-react';
+import { TrendingUp, Loader2, MousePointer } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import MunicipalityDetailsModal from '@/components/kommuner/MunicipalityDetailsModal';
 
 interface MunicipalityRanking {
   municipality: string;
@@ -85,17 +86,23 @@ const formatValue = (value: number, metric: string): string => {
   }
 };
 
-// Simple ranking table component like the old front page
+// Simple ranking table component with click functionality
 function SimpleRankingTable({
   title,
   description,
   items,
   showTop = 20,
+  category,
+  year,
+  onMunicipalityClick,
 }: {
   title: string;
   description: string;
   items: MunicipalityRanking[];
   showTop?: number;
+  category: string;
+  year: string;
+  onMunicipalityClick: (municipality: string, category: string) => void;
 }) {
   const displayItems = items.slice(0, showTop);
 
@@ -127,7 +134,9 @@ function SimpleRankingTable({
               {displayItems.map((item) => (
                 <tr
                   key={item.municipality}
-                  className="hover:bg-muted/50 transition-colors"
+                  className="hover:bg-muted/50 cursor-pointer transition-colors group"
+                  onClick={() => onMunicipalityClick(item.municipality, category)}
+                  title={`Klik for at se virksomheder i ${item.municipality}`}
                 >
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="text-foreground flex h-8 w-8 items-center justify-center text-sm font-bold">
@@ -136,8 +145,9 @@ function SimpleRankingTable({
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="space-y-1">
-                      <div className="text-foreground text-sm font-medium">
+                      <div className="text-foreground text-sm font-medium flex items-center gap-2">
                         {item.municipality}
+                        <MousePointer className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
                       </div>
                       {item.additional_data && (
                         <div className="text-muted-foreground space-y-1 text-xs">
@@ -261,6 +271,20 @@ export default function MunicipalityRankingsPage() {
   const [selectedYear, setSelectedYear] = useState('2024');
   const [limit, setLimit] = useState(100);
   const [mounted, setMounted] = useState(false);
+  
+  // Modal state
+  const [selectedMunicipality, setSelectedMunicipality] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('land_use');
+
+  // Handle municipality click
+  const handleMunicipalityClick = (municipality: string, category: string) => {
+    setSelectedMunicipality(municipality);
+    setSelectedCategory(category);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedMunicipality(null);
+  };
 
   // Prevent hydration issues
   useEffect(() => {
@@ -347,6 +371,10 @@ export default function MunicipalityRankingsPage() {
           Data baseret på markernes faktiske placering og produktionsstedernes
           lokation for præcis geografisk tilknytning
         </p>
+        <p className="text-muted-foreground mx-auto max-w-2xl text-xs mt-2 flex items-center justify-center gap-1">
+          <MousePointer className="h-3 w-3" />
+          Klik på en kommune for at se hvilke virksomheder der bidrager til rangeringen
+        </p>
       </div>
 
       {/* Controls */}
@@ -394,6 +422,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med det største samlede landbrugsareal i 2024"
               items={data.rankings.land_use}
               showTop={20}
+              category="land_use"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -404,6 +435,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med den højeste andel økologisk landbrug i 2024"
               items={data.rankings.organic_farming}
               showTop={20}
+              category="organic_farming"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -414,6 +448,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med den største samlede dyreproduktionskapacitet i 2024"
               items={data.rankings.production}
               showTop={20}
+              category="production"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -424,6 +461,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med den største samlede pesticidbelastning i 2023"
               items={data.rankings.pesticide_burden}
               showTop={20}
+              category="pesticide_burden"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -434,6 +474,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med den største PFAS-pesticid belastning i 2023"
               items={data.rankings.pesticide_pfas}
               showTop={20}
+              category="pesticide_pfas"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -444,6 +487,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med den største glyfosat belastning i 2023"
               items={data.rankings.pesticide_glyphosate}
               showTop={20}
+              category="pesticide_glyphosate"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -454,6 +500,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med det største antibiotikaforbrug på produktionssteder i 2024"
               items={data.rankings.antibiotic_usage}
               showTop={20}
+              category="antibiotic_usage"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -464,6 +513,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med den højeste gennemsnitlige kvælstofudledning pr. hektar"
               items={data.rankings.environmental}
               showTop={20}
+              category="environmental"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -474,6 +526,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med flest rapporterede arbejdsulykker i landbruget"
               items={data.rankings.worker_safety}
               showTop={20}
+              category="worker_safety"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
 
@@ -484,6 +539,9 @@ export default function MunicipalityRankingsPage() {
               description="Kommuner med flest rapporterede hændelser og ulykker i landbruget"
               items={data.rankings.incidents}
               showTop={20}
+              category="incidents"
+              year={selectedYear}
+              onMunicipalityClick={handleMunicipalityClick}
             />
           )}
         </div>
@@ -500,6 +558,16 @@ export default function MunicipalityRankingsPage() {
           på officielle data fra 2024
         </p>
       </div>
+
+      {/* Municipality Details Modal */}
+      {selectedMunicipality && (
+        <MunicipalityDetailsModal
+          municipality={selectedMunicipality}
+          category={selectedCategory}
+          year={parseInt(selectedYear)}
+          onClose={handleCloseModal}
+        />
+      )}
     </div>
   );
 }
