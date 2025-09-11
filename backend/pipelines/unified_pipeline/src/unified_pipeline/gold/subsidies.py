@@ -221,7 +221,7 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             # Clean up the data connection
             try:
                 data_conn.close()
-            except:
+            except Exception:
                 pass
 
     def _configure_fresh_connection(self, conn: duckdb.DuckDBPyConnection):
@@ -236,7 +236,7 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             # Install spatial extension if needed
             try:
                 conn.execute("INSTALL spatial; LOAD spatial;")
-            except:
+            except Exception:
                 pass
 
             # Register gcsfs filesystem
@@ -439,7 +439,8 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
                     area_amounts = area_values * subsidy_rate
                     df["amount_dkk"] = df["amount_dkk"] + area_amounts
                     self.log.info(
-                        f"   Calculated from {area_col}: {area_amounts.sum():,.2f} DKK (rate: {subsidy_rate}/ha)"
+                        f"   Calculated from {area_col}: {area_amounts.sum():,.2f} DKK "
+                        f"(rate: {subsidy_rate}/ha)"
                     )
                 except Exception as e:
                     self.log.warning(f"   Failed to calculate from {area_col}: {e}")
@@ -453,7 +454,8 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
                 animal_amounts = animal_values * animal_rate
                 df["amount_dkk"] = df["amount_dkk"] + animal_amounts
                 self.log.info(
-                    f"   Calculated from {animal_col}: {animal_amounts.sum():,.2f} DKK (rate: {animal_rate}/animal)"
+                    f"   Calculated from {animal_col}: {animal_amounts.sum():,.2f} DKK "
+                    f"(rate: {animal_rate}/animal)"
                 )
             except Exception as e:
                 self.log.warning(f"   Failed to calculate from {animal_col}: {e}")
@@ -482,7 +484,8 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             initial_cvr_count = df["cvr_number"].notna().sum()
             initial_companies = df["cvr_number"].nunique()
             self.log.info(
-                f"   Initial: {initial_records:,} records, {initial_cvr_count:,} with CVR, {initial_companies:,} unique CVR numbers"
+                f"   Initial: {initial_records:,} records, {initial_cvr_count:,} with CVR, "
+                f"{initial_companies:,} unique CVR numbers"
             )
         else:
             self.log.warning("   No 'cvr_number' column found in data!")
@@ -497,7 +500,8 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             records_with_year = df["year"].notna().sum()
             records_without_year = df["year"].isna().sum()
             self.log.info(
-                f"   Year data: {records_with_year:,} records with year, {records_without_year:,} without year (all kept)"
+                f"   Year data: {records_with_year:,} records with year, "
+                f"{records_without_year:,} without year (all kept)"
             )
 
         # NO CVR NULL FILTERING - keep records even without CVR
@@ -554,7 +558,8 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             return pd.DataFrame()
 
         self.log.info(
-            f"   Analyzing {len(df_with_cvr):,} records with CVR numbers from {df_with_cvr['cvr_number'].nunique():,} companies"
+            f"   Analyzing {len(df_with_cvr):,} records with CVR numbers from "
+            f"{df_with_cvr['cvr_number'].nunique():,} companies"
         )
 
         # Determine amount and category columns
@@ -648,11 +653,9 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
         agg_dict = {amount_col: ["sum", "count"]}
 
         # Add category info if available
-        category_col = None
         for col in ["subsidy_category", "subsidy_measure", "subsidy_type_code"]:
             if col in df_with_cvr.columns:
                 agg_dict[col] = "nunique"
-                category_col = col
                 break
 
         yearly = df_with_cvr.groupby(["cvr_number", "year"]).agg(agg_dict).round(2)
@@ -768,7 +771,8 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
                 self.log.info(f"   {category_type}:")
                 for cat_name, cat_data in list(categories.items())[:5]:  # Show top 5
                     self.log.info(
-                        f"     • {cat_name}: {cat_data['total_amount']:,.2f} DKK ({cat_data['record_count']:,} records)"
+                        f"     • {cat_name}: {cat_data['total_amount']:,.2f} DKK "
+                        f"({cat_data['record_count']:,} records)"
                     )
 
         return {
@@ -902,7 +906,7 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             # Clean up the save connection
             try:
                 save_conn.close()
-            except:
+            except Exception:
                 pass
 
     def _validate_results(self, results: Dict[str, Any]) -> bool:
