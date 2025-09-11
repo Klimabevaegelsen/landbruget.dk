@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function KilderPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="bg-background min-h-screen">
       <Container className="py-16 lg:py-24">
         <div className="mx-auto max-w-6xl">
           <article className="space-y-8">

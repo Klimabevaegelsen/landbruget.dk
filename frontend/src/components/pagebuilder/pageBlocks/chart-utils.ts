@@ -4,7 +4,11 @@
 
 import { PageBuilderItem, IteratedSection } from '@/services/supabase/types';
 
-export type MissingDataType = 'nitrate' | 'carbon' | 'subsidies';
+export type MissingDataType =
+  | 'nitrate'
+  | 'carbon'
+  | 'subsidies'
+  | 'worker_welfare';
 
 /**
  * Determines if a chart should show a placeholder based on its _key
@@ -35,6 +39,11 @@ export function shouldShowPlaceholder(
     chartKey === 'carbon-accounting-details'
   ) {
     return 'carbon';
+  }
+
+  // Worker welfare charts
+  if (chartKey === 'worker-welfare-injuries') {
+    return 'worker_welfare';
   }
 
   return null;

@@ -108,7 +108,7 @@ export function BlockIteratedSection({
       <div className={cn('relative flex w-full flex-col gap-4')}>
         <div
           className={cn(
-            'sticky w-full bg-white py-2',
+            'bg-background sticky w-full py-2',
             level === 0 &&
               'top-[calc(var(--sticky-header-height,0px)+0px)] z-30',
             level === 1 &&

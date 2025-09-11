@@ -34,7 +34,7 @@ export default function PipelinePage() {
           </section>
 
           {/* Pipeline Status Section */}
-          <section className="rounded-lg bg-white p-6 shadow-lg">
+          <section className="bg-background rounded-lg p-6 shadow-lg">
             <h2 className="text-foreground mb-4 flex items-center text-2xl font-semibold">
               <BarChart3 className="mr-2 h-6 w-6" />
               Pipeline Status
@@ -60,7 +60,7 @@ export default function PipelinePage() {
           </section>
 
           {/* Documentation Section */}
-          <section className="rounded-lg bg-white p-6 shadow-lg">
+          <section className="bg-background rounded-lg p-6 shadow-lg">
             <h2 className="text-foreground mb-4 flex items-center text-2xl font-semibold">
               <BookOpen className="mr-2 h-6 w-6" />
               Documentation

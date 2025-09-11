@@ -28,7 +28,7 @@ export default async function PrivacyPage() {
   const content = await getPrivacyContent();
 
   return (
-    <div className="bg-white">
+    <div className="bg-background">
       <Container className="py-16 lg:py-24">
         <div className="mx-auto max-w-4xl">
           <div

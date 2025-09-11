@@ -895,10 +895,10 @@ pageBuilder:
               label: "Antal Dyr Transporteret"
               column: "total_animals_transported"
             - key: "rank_dk_prod"
-              label: "Rankering på landsplan (Prod. Ækv.)"
+              label: "Rankering på landsplan (Kapacitet)"
               column: "rank_dk_total_animal_equivalents"
             - key: "rank_mun_prod"
-              label: "Rankering i kommunen (Prod. Ækv.)"
+              label: "Rankering i kommunen (Kapacitet)"
               column: "rank_municipality_total_animal_equivalents"
             - key: "rank_dk_antibiotics"
               label: "Rankering på landsplan (Antibiotika)"
@@ -915,12 +915,12 @@ pageBuilder:
 
   - _key: animal-welfare-production-species-chart
     _type: stackedBarChart
-    title: "Dyreproduktion pr. år (samlet, fordelt på art)"
+    title: "Dyrekapacitet pr. år (samlet, fordelt på art)"
     documentation:
-      title: "Dyreproduktion Fordelt på Arter"
-      description: "Historisk udvikling i husdyrproduktion fordelt på forskellige dyrearter baseret på CHR-registreringer"
+      title: "Dyrekapacitet Fordelt på Arter"
+      description: "Historisk udvikling i dyrekapacitet fordelt på forskellige dyrearter baseret på CHR-registreringer"
       sources:
-        - name: "CHR pipeline (husdyrproduktion)"
+        - name: "CHR pipeline (dyrekapacitet)"
           url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
       dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#chr-pipeline-animal-health-and-movement-data"
     dataSource:
@@ -1088,7 +1088,7 @@ pageBuilder:
         template:
           - _key: species-kpis-{iteratorContext.chr}-{iteratorContext.species_id}
             _type: kpiGroup
-            title: "{iteratorContext.species_name} produktion & placering"
+            title: "{iteratorContext.species_name} kapacitet & placering"
             dataSource:
               params:
                 source: "site_species_production_ranked"

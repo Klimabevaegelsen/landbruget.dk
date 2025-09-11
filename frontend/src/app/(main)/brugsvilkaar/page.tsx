@@ -28,7 +28,7 @@ export default async function TermsPage() {
   const content = await getTermsContent();
 
   return (
-    <div className="bg-white">
+    <div className="bg-background">
       <Container className="py-16 lg:py-24">
         <div className="mx-auto max-w-4xl">
           <div

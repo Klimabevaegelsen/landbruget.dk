@@ -86,7 +86,7 @@ export function LayerControlPanel({
                   className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded border-2 lg:h-5 lg:min-h-0 lg:w-5 lg:min-w-0 ${
                     layerVisibility[layer.key]
                       ? 'border-blue-600 bg-blue-600'
-                      : 'border-gray-300 hover:border-gray-400 active:border-gray-500'
+                      : 'border-border hover:border-gray-400 active:border-gray-500'
                   } transition-colors`}
                 >
                   {layerVisibility[layer.key] && (
@@ -132,7 +132,7 @@ export function LayerControlPanel({
                 onChange={(e) =>
                   onFilterChange({ organicOnly: e.target.checked })
                 }
-                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 lg:h-4 lg:w-4"
+                className="border-border h-5 w-5 rounded text-blue-600 focus:ring-blue-500 lg:h-4 lg:w-4"
               />
               <span className="text-foreground ml-3 text-base lg:ml-2 lg:text-sm">
                 Kun økologiske marker
@@ -152,7 +152,7 @@ export function LayerControlPanel({
                     .value as FilterState['visualizationMode'],
                 })
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2 lg:text-sm"
+              className="border-border w-full rounded-md border px-3 py-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2 lg:text-sm"
             >
               <option value="total_pesticide_belastning">
                 Total pesticidbelastning
@@ -184,7 +184,7 @@ export function LayerControlPanel({
                   colorUnit: e.target.value as FilterState['colorUnit'],
                 })
               }
-              className="w-full rounded-md border border-gray-300 px-3 py-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2 lg:text-sm"
+              className="border-border w-full rounded-md border px-3 py-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2 lg:text-sm"
             >
               <option value="total">Total mængde (kg/L)</option>
               <option value="per_hectare">Per hektar</option>
@@ -202,7 +202,7 @@ export function LayerControlPanel({
                 onChange={(e) =>
                   onFilterChange({ useDecileColoring: e.target.checked })
                 }
-                className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 lg:h-4 lg:w-4"
+                className="border-border h-5 w-5 rounded text-blue-600 focus:ring-blue-500 lg:h-4 lg:w-4"
               />
               <span className="text-foreground ml-3 text-base lg:ml-2 lg:text-sm">
                 Brug decil-baseret farvning

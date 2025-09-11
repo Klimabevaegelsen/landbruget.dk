@@ -257,7 +257,7 @@ export default function FieldAnalysisVisualization() {
 
       {/* Left Control Panel - Desktop: sidebar, Mobile: overlay */}
       <div
-        className={` ${mobileControlsOpen ? 'block' : 'hidden'} fixed inset-0 z-50 h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:shadow-lg`}
+        className={` ${mobileControlsOpen ? 'block' : 'hidden'} bg-background fixed inset-0 z-50 h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:block lg:h-full lg:w-80 lg:shadow-lg`}
         style={{
           paddingTop: mobileControlsOpen
             ? 'env(safe-area-inset-top)'
@@ -268,7 +268,7 @@ export default function FieldAnalysisVisualization() {
         }}
       >
         {/* Mobile close button */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4 lg:hidden">
+        <div className="bg-background sticky top-0 z-10 flex items-center justify-between border-b p-4 lg:hidden">
           <div>
             <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
             <p className="text-muted-foreground text-sm">
@@ -297,7 +297,7 @@ export default function FieldAnalysisVisualization() {
         </div>
 
         {/* Desktop header */}
-        <div className="hidden border-b bg-white p-4 lg:block">
+        <div className="bg-background hidden border-b p-4 lg:block">
           <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
           <p className="text-muted-foreground text-sm">
             Data for {getYearRangeDisplay(yearSelection.selectedYear)}
@@ -349,7 +349,7 @@ export default function FieldAnalysisVisualization() {
       {selectedField && (
         <>
           <div
-            className={`fixed inset-0 z-[70] h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
+            className={`bg-background fixed inset-0 z-[70] h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
@@ -373,7 +373,7 @@ export default function FieldAnalysisVisualization() {
       {!selectedField && clickedCoordinates && (
         <>
           <div
-            className={`fixed inset-0 z-[70] h-full w-full overflow-y-auto bg-white shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
+            className={`bg-background fixed inset-0 z-[70] h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
             style={{
               paddingTop: 'env(safe-area-inset-top)',
               paddingBottom: 'env(safe-area-inset-bottom)',
