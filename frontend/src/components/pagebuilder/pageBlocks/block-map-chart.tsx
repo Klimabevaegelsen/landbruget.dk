@@ -8,6 +8,7 @@ import Map, {
   NavigationControl,
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useMapTheme } from '@/hooks/useMapTheme';
 import { MapChart, GeoJSONLayer } from '@/services/supabase/types';
 import { VizColors } from '@/lib/utils';
 import { MapErrorBoundary } from './MapErrorBoundary';
@@ -352,6 +353,7 @@ function Tooltip({ x, y, properties, layerName }: TooltipProps) {
 
 // https://geojson.io
 function BlockMapChartInner({ chart }: { chart: MapChart }) {
+  const { mapStyle } = useMapTheme();
   const { isInCategoryWithData } = useCategoryDataContext();
   const [hoverInfo, setHoverInfo] = React.useState<{
     x: number;
@@ -491,7 +493,7 @@ function BlockMapChartInner({ chart }: { chart: MapChart }) {
             zoom: chartData.zoom,
           }}
           style={{ width: '100%', height: 600 }}
-          mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
+          mapStyle={mapStyle}
           interactiveLayerIds={chartData.validLayers.map(
             (_, index) => `layer-${index}`
           )}
