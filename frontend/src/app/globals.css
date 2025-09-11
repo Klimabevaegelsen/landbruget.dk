@@ -116,12 +116,12 @@
   --color-bnbo: oklch(75% 0.08 230);
   --color-wetland: oklch(70% 0.1 230);
 
-  /* Professional Chart Colors */
-  --color-chart-1: oklch(15% 0 0); /* Primary dark */
-  --color-chart-2: oklch(40% 0.01 106); /* Gray-700 */
-  --color-chart-3: oklch(50% 0.01 106); /* Gray-500 */
-  --color-chart-4: oklch(65% 0.01 106); /* Gray-400 */
-  --color-chart-5: oklch(80% 0.01 106); /* Gray-300 */
+  /* Professional Chart Colors - Enhanced Contrast */
+  --color-chart-1: oklch(25% 0.02 106); /* Primary dark */
+  --color-chart-2: oklch(35% 0.08 200); /* Blue accent */
+  --color-chart-3: oklch(40% 0.1 142); /* Green accent */
+  --color-chart-4: oklch(35% 0.08 85); /* Orange accent */
+  --color-chart-5: oklch(30% 0.06 320); /* Purple accent */
 
   /* Sidebar Colors */
   --color-sidebar: oklch(98% 0.005 106);
@@ -174,12 +174,12 @@
   --color-bnbo: oklch(80% 0.06 230);
   --color-wetland: oklch(75% 0.08 230);
 
-  /* Professional Chart Colors - Dark */
-  --color-chart-1: oklch(95% 0.01 106); /* Light primary */
-  --color-chart-2: oklch(75% 0.01 106); /* Light gray-300 */
-  --color-chart-3: oklch(65% 0.01 106); /* Light gray-400 */
-  --color-chart-4: oklch(55% 0.01 106); /* Light gray-500 */
-  --color-chart-5: oklch(45% 0.01 106); /* Light gray-600 */
+  /* Professional Chart Colors - Dark - Enhanced Contrast */
+  --color-chart-1: oklch(85% 0.02 106); /* Bright primary for dark mode */
+  --color-chart-2: oklch(75% 0.08 200); /* Blue accent */
+  --color-chart-3: oklch(70% 0.1 142); /* Green accent */
+  --color-chart-4: oklch(75% 0.08 85); /* Orange accent */
+  --color-chart-5: oklch(80% 0.06 320); /* Purple accent */
 
   /* Sidebar Colors - Dark */
   --color-sidebar: oklch(10% 0.01 106);
