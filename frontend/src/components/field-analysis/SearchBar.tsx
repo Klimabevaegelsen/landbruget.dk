@@ -231,7 +231,7 @@ export function SearchBar({
           value={query}
           onChange={handleInputChange}
           placeholder={placeholder}
-          className="border-border text-foreground placeholder:text-muted-foreground block w-full rounded-lg border bg-white py-3 pr-10 pl-10 text-base transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2.5 lg:text-sm"
+          className="border-border text-foreground placeholder:text-muted-foreground bg-background block w-full rounded-lg border py-3 pr-10 pl-10 text-base transition-colors focus:border-transparent focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2.5 lg:text-sm"
         />
 
         {/* Clear Button */}
@@ -247,7 +247,7 @@ export function SearchBar({
 
       {/* Results Dropdown */}
       {isOpen && (
-        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        <div className="bg-background absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 shadow-lg">
           {isLoading && (
             <div className="px-4 py-3 text-center">
               <div className="text-muted-foreground inline-flex items-center space-x-2">
