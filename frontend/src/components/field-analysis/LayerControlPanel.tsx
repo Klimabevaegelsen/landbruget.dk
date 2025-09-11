@@ -52,7 +52,7 @@ export function LayerControlPanel({
       name: 'Vandprojekter',
       description: '2.138 vandprojekter til miljøgenopretning',
       icon: Waves,
-      color: 'bg-teal-500',
+      color: 'bg-wetland',
     },
     {
       key: 'buildings' as const,
@@ -85,7 +85,7 @@ export function LayerControlPanel({
                   onClick={() => onLayerToggle(layer.key)}
                   className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded border-2 lg:h-5 lg:min-h-0 lg:w-5 lg:min-w-0 ${
                     layerVisibility[layer.key]
-                      ? 'border-blue-600 bg-blue-600'
+                      ? 'border-primary bg-blue-600'
                       : 'border-border hover:border-gray-400 active:border-gray-500'
                   } transition-colors`}
                 >
@@ -132,7 +132,7 @@ export function LayerControlPanel({
                 onChange={(e) =>
                   onFilterChange({ organicOnly: e.target.checked })
                 }
-                className="border-border h-5 w-5 rounded text-blue-600 focus:ring-blue-500 lg:h-4 lg:w-4"
+                className="border-border text-primary focus:ring-primary h-5 w-5 rounded lg:h-4 lg:w-4"
               />
               <span className="text-foreground ml-3 text-base lg:ml-2 lg:text-sm">
                 Kun økologiske marker
@@ -152,7 +152,7 @@ export function LayerControlPanel({
                     .value as FilterState['visualizationMode'],
                 })
               }
-              className="border-border w-full rounded-md border px-3 py-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2 lg:text-sm"
+              className="border-border focus:border-primary focus:ring-primary w-full rounded-md border px-3 py-3 text-base focus:ring-2 focus:outline-none lg:py-2 lg:text-sm"
             >
               <option value="total_pesticide_belastning">
                 Total pesticidbelastning
@@ -184,7 +184,7 @@ export function LayerControlPanel({
                   colorUnit: e.target.value as FilterState['colorUnit'],
                 })
               }
-              className="border-border w-full rounded-md border px-3 py-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none lg:py-2 lg:text-sm"
+              className="border-border focus:border-primary focus:ring-primary w-full rounded-md border px-3 py-3 text-base focus:ring-2 focus:outline-none lg:py-2 lg:text-sm"
             >
               <option value="total">Total mængde (kg/L)</option>
               <option value="per_hectare">Per hektar</option>
@@ -202,7 +202,7 @@ export function LayerControlPanel({
                 onChange={(e) =>
                   onFilterChange({ useDecileColoring: e.target.checked })
                 }
-                className="border-border h-5 w-5 rounded text-blue-600 focus:ring-blue-500 lg:h-4 lg:w-4"
+                className="border-border text-primary focus:ring-primary h-5 w-5 rounded lg:h-4 lg:w-4"
               />
               <span className="text-foreground ml-3 text-base lg:ml-2 lg:text-sm">
                 Brug decil-baseret farvning
@@ -273,11 +273,11 @@ export function LayerControlPanel({
           {/* Chemical-specific legend */}
           {filterState.visualizationMode.includes('pfas') && (
             <div className="mb-4">
-              <h4 className="mb-2 flex items-center text-sm font-medium text-red-800">
+              <h4 className="text-destructive mb-2 flex items-center text-sm font-medium">
                 <TestTube className="mr-1 h-4 w-4" />
                 PFAS Pesticider
               </h4>
-              <div className="space-y-1 text-xs text-red-700">
+              <div className="text-destructive/80 space-y-1 text-xs">
                 <div>Per- og polyfluorerede alkylstoffer</div>
                 <div>Potentielt sundhedsskadelige</div>
                 <div>Bioakkumulerende og persistente</div>
@@ -287,11 +287,11 @@ export function LayerControlPanel({
 
           {filterState.visualizationMode.includes('diquat') && (
             <div className="mb-4">
-              <h4 className="mb-2 flex items-center text-sm font-medium text-blue-800">
+              <h4 className="text-primary mb-2 flex items-center text-sm font-medium">
                 <Droplets className="mr-1 h-4 w-4" />
                 Diquat Pesticider
               </h4>
-              <div className="space-y-1 text-xs text-blue-700">
+              <div className="text-primary/80 space-y-1 text-xs">
                 <div>Kontakt herbicid</div>
                 <div>Bruges til ukrudtsbekæmpelse</div>
                 <div>Kan påvirke vandmiljøet</div>
@@ -320,7 +320,7 @@ export function LayerControlPanel({
                 Boringsnære beskyttelsesområder:
               </div>
               <div className="ml-2 flex items-center space-x-2">
-                <div className="h-4 w-4 rounded bg-yellow-500"></div>
+                <div className="bg-conventional h-4 w-4 rounded"></div>
                 <span>Handling påkrævet</span>
               </div>
               <div className="ml-2 flex items-center space-x-2">
@@ -337,11 +337,11 @@ export function LayerControlPanel({
               <span>Lavbundsjorder (tørvindhold)</span>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="h-4 w-4 rounded bg-teal-500"></div>
+              <div className="bg-wetland h-4 w-4 rounded"></div>
               <span>Vandprojekter</span>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="h-4 w-4 rounded bg-emerald-600"></div>
+              <div className="bg-low-risk h-4 w-4 rounded"></div>
               <span>Økologiske marker</span>
             </div>
           </div>

@@ -190,7 +190,7 @@ export default function HomepageRankings() {
             variant="ghost"
             size="sm"
             onClick={handleClearCache}
-            className="flex items-center space-x-2 text-orange-600 hover:text-orange-700"
+            className="text-conventional hover:text-conventional/80 flex items-center space-x-2"
           >
             <Clock className="h-3 w-3" />
             <span>Ryd cache</span>
@@ -211,11 +211,11 @@ export default function HomepageRankings() {
       {/* Error State */}
       {error && !loading && (
         <div className="py-12 text-center">
-          <div className="mx-auto max-w-md rounded-lg border border-red-200 bg-red-50 p-6">
-            <p className="font-medium text-red-700">
+          <div className="border-destructive/20 bg-destructive/10 mx-auto max-w-md rounded-lg border p-6">
+            <p className="text-destructive font-medium">
               Fejl ved indlæsning af data
             </p>
-            <p className="mt-2 text-sm text-red-600">{error}</p>
+            <p className="text-destructive/80 mt-2 text-sm">{error}</p>
             <Button
               variant="outline"
               size="sm"
@@ -267,8 +267,8 @@ export default function HomepageRankings() {
           <div className="flex items-center justify-center space-x-4">
             {usingCache && (
               <div className="flex items-center space-x-2">
-                <Clock className="h-3 w-3 text-orange-500" />
-                <p className="text-xs text-orange-600">
+                <Clock className="text-conventional h-3 w-3" />
+                <p className="text-conventional/80 text-xs">
                   Data fra cache • Opdateres automatisk hver uge
                 </p>
               </div>

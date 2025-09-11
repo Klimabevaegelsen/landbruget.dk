@@ -260,7 +260,7 @@ function SearchOverlay({
 
           {error && (
             <div className="flex items-center justify-center p-8">
-              <div className="text-sm text-red-600">{error}</div>
+              <div className="text-destructive text-sm">{error}</div>
             </div>
           )}
 

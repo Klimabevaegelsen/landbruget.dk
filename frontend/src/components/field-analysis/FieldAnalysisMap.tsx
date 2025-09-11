@@ -1514,9 +1514,9 @@ export default function FieldAnalysisMap({
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center bg-red-50">
+      <div className="bg-destructive/10 flex h-full items-center justify-center">
         <div className="text-center">
-          <div className="mb-2 flex items-center justify-center text-xl text-red-600">
+          <div className="text-destructive mb-2 flex items-center justify-center text-xl">
             <AlertTriangle className="mr-2 h-6 w-6" />
             Fejl
           </div>

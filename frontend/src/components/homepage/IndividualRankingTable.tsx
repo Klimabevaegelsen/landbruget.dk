@@ -30,15 +30,15 @@ interface IndividualRankingTableProps {
 const getCategoryColor = (category: string) => {
   switch (category) {
     case 'financial':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-organic/10 text-organic border-organic/20';
     case 'field':
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      return 'bg-low-risk/10 text-low-risk border-low-risk/20';
     case 'environment':
-      return 'bg-red-100 text-red-800 border-red-200';
+      return 'bg-destructive/10 text-destructive border-destructive/20';
     case 'animal':
-      return 'bg-orange-100 text-orange-800 border-orange-200';
+      return 'bg-conventional/10 text-conventional border-conventional/20';
     case 'worker':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-primary/10 text-primary border-primary/20';
     default:
       return 'bg-muted text-muted-foreground border-border';
   }
@@ -201,9 +201,11 @@ export default function IndividualRankingTable({
         </CardHeader>
         <CardContent>
           <div className="py-8 text-center">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="font-medium text-red-700">Fejl ved indlæsning</p>
-              <p className="mt-1 text-sm text-red-600">{error}</p>
+            <div className="border-destructive/20 bg-destructive/10 rounded-lg border p-4">
+              <p className="text-destructive font-medium">
+                Fejl ved indlæsning
+              </p>
+              <p className="text-destructive/80 mt-1 text-sm">{error}</p>
             </div>
           </div>
         </CardContent>

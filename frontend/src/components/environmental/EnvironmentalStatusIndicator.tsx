@@ -17,16 +17,16 @@ const STATUS_CONFIG = {
   compliant: {
     icon: CheckCircleIcon,
     color: 'text-green-600',
-    bgColor: 'bg-green-50',
-    borderColor: 'border-green-200',
+    bgColor: 'bg-organic/10',
+    borderColor: 'border-organic/20',
     label: 'Gennemført',
     description: 'Miljøkrav er opfyldt',
   },
   action_required: {
     icon: ExclamationTriangleIcon,
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-200',
+    color: 'text-conventional',
+    bgColor: 'bg-conventional/10',
+    borderColor: 'border-conventional/20',
     label: 'Kræver Handling',
     description: 'Miljøtiltag påkrævet',
   },
@@ -145,7 +145,7 @@ export function EnvironmentalComplianceOverview({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Problematiske områder</span>
-            <span className="font-medium text-amber-600">
+            <span className="text-conventional font-medium">
               {data.totalProblematicHa.toLocaleString('da-DK', {
                 maximumFractionDigits: 1,
               })}{' '}
@@ -183,10 +183,10 @@ export function EnvironmentalComplianceOverview({
             <div
               className={`h-2 rounded-full ${
                 data.compliancePercentage >= 95
-                  ? 'bg-green-500'
+                  ? 'bg-organic'
                   : data.compliancePercentage >= 70
                     ? 'bg-blue-500'
-                    : 'bg-amber-500'
+                    : 'bg-conventional'
               }`}
               style={{ width: `${Math.min(data.compliancePercentage, 100)}%` }}
             />

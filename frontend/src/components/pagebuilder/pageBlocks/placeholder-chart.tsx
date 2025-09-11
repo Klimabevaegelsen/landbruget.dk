@@ -82,7 +82,7 @@ export function PlaceholderChart({ dataType }: PlaceholderChartProps) {
           </p>
           <button
             onClick={handleClick}
-            className="cursor-pointer rounded-md bg-green-600 px-6 py-3 font-medium text-white transition-colors hover:bg-green-700"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer rounded-md px-6 py-3 font-medium transition-colors"
           >
             Bidrag til{' '}
             <a
