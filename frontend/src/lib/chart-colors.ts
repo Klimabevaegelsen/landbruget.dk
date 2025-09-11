@@ -2,7 +2,7 @@
 // Uses OKLCH color space with proper dark mode support
 
 export const chartColors = {
-  // Professional palette using CSS custom properties
+  // Professional palette using CSS custom properties (for non-Recharts components)
   data: [
     'oklch(var(--color-chart-1))', // Primary - adapts to theme
     'oklch(var(--color-chart-2))', // Secondary
@@ -12,6 +12,18 @@ export const chartColors = {
     'oklch(var(--color-muted))', // System muted
     'oklch(var(--color-border))', // System border
     'oklch(var(--color-accent))', // System accent
+  ],
+
+  // Recharts-compatible colors using HSL custom properties (Tailwind v4 compatible)
+  recharts: [
+    'hsl(var(--chart-color-1-hsl))', // Theme-aware via CSS custom properties
+    'hsl(var(--chart-color-2-hsl))',
+    'hsl(var(--chart-color-3-hsl))',
+    'hsl(var(--chart-color-4-hsl))',
+    'hsl(var(--chart-color-5-hsl))',
+    'hsl(var(--chart-color-1-hsl))', // Repeat for more series
+    'hsl(var(--chart-color-2-hsl))',
+    'hsl(var(--chart-color-3-hsl))',
   ],
 
   // Theme-aware semantic colors

@@ -250,7 +250,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   const seriesNames = chart.data.series.map((s) => s.name);
   const chartConfig = generateChartConfig(seriesNames);
   const displayMetric = calculateComboDisplayValue(chart.data, chart.unit);
-  const barColors = chartColors.data;
+  const barColors = chartColors.recharts; // Tailwind v4 compatible CSS custom properties
 
   // Get the colors for each axis
   const leftAxisColor = barSeries.length > 0 ? barColors[0] : undefined;

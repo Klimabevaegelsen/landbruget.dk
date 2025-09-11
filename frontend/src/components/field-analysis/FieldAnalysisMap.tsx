@@ -1528,7 +1528,7 @@ export default function FieldAnalysisMap({
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-gray-50">
+      <div className="bg-muted flex h-full items-center justify-center">
         <div className="text-center">
           <div className="text-foreground mb-2 text-lg font-medium">
             Indlæser kortdata...

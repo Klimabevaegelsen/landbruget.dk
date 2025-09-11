@@ -136,12 +136,27 @@
   --color-bnbo: oklch(75% 0.08 230);
   --color-wetland: oklch(70% 0.1 230);
 
-  /* Professional Chart Colors - Enhanced Visibility */
-  --color-chart-1: oklch(35% 0.08 106); /* Enhanced primary */
-  --color-chart-2: oklch(45% 0.12 200); /* Enhanced blue accent */
-  --color-chart-3: oklch(50% 0.15 142); /* Enhanced green accent */
-  --color-chart-4: oklch(45% 0.12 85); /* Enhanced orange accent */
-  --color-chart-5: oklch(40% 0.1 320); /* Enhanced purple accent */
+  /* Professional Chart Colors - Light mode (for Tailwind v4 + Recharts compatibility) */
+  --color-chart-1: oklch(35% 0.08 106); /* Dark primary for light backgrounds */
+  --color-chart-2: oklch(
+    45% 0.12 200
+  ); /* Dark blue accent for light backgrounds */
+  --color-chart-3: oklch(
+    50% 0.15 142
+  ); /* Dark green accent for light backgrounds */
+  --color-chart-4: oklch(
+    45% 0.12 85
+  ); /* Dark orange accent for light backgrounds */
+  --color-chart-5: oklch(
+    40% 0.1 320
+  ); /* Dark purple accent for light backgrounds */
+
+  /* Recharts-compatible HSL versions */
+  --chart-color-1-hsl: 220 14% 35%;
+  --chart-color-2-hsl: 214 32% 45%;
+  --chart-color-3-hsl: 142 76% 36%;
+  --chart-color-4-hsl: 25 95% 53%;
+  --chart-color-5-hsl: 271 91% 65%;
 
   /* Sidebar Colors */
   --color-sidebar: oklch(98% 0.005 106);
@@ -194,12 +209,27 @@
   --color-bnbo: oklch(80% 0.06 230);
   --color-wetland: oklch(75% 0.08 230);
 
-  /* Professional Chart Colors - Dark Mode Enhanced Visibility */
-  --color-chart-1: oklch(90% 0.05 106); /* Brighter primary for dark mode */
-  --color-chart-2: oklch(80% 0.12 200); /* Enhanced blue accent */
-  --color-chart-3: oklch(75% 0.15 142); /* Enhanced green accent */
-  --color-chart-4: oklch(80% 0.12 85); /* Enhanced orange accent */
-  --color-chart-5: oklch(85% 0.1 320); /* Enhanced purple accent */
+  /* Professional Chart Colors - Dark mode (for Tailwind v4 + Recharts compatibility) */
+  --color-chart-1: oklch(90% 0.05 106); /* Light primary for dark backgrounds */
+  --color-chart-2: oklch(
+    80% 0.12 200
+  ); /* Light blue accent for dark backgrounds */
+  --color-chart-3: oklch(
+    75% 0.15 142
+  ); /* Light green accent for dark backgrounds */
+  --color-chart-4: oklch(
+    80% 0.12 85
+  ); /* Light orange accent for dark backgrounds */
+  --color-chart-5: oklch(
+    85% 0.1 320
+  ); /* Light purple accent for dark backgrounds */
+
+  /* Recharts-compatible HSL versions for dark mode */
+  --chart-color-1-hsl: 220 14% 85%;
+  --chart-color-2-hsl: 214 32% 75%;
+  --chart-color-3-hsl: 142 76% 65%;
+  --chart-color-4-hsl: 25 95% 70%;
+  --chart-color-5-hsl: 271 91% 80%;
 
   /* Sidebar Colors - Dark */
   --color-sidebar: oklch(10% 0.01 106);
