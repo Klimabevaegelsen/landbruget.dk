@@ -188,7 +188,7 @@ export function FieldDetailsSheet({
                 <div className="bg-primary/10 rounded-lg p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-primary flex items-center text-sm font-medium">
-                      GPS Position
+                      GPS Koordinater
                     </span>
                     <button
                       onClick={handleCopyCoordinates}
