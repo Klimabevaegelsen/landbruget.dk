@@ -289,13 +289,9 @@ export function BlockBarChart({
     return <NoDataPlaceholder />;
   }
 
-  // If we have no data but are in a category with data, render empty div
+  // If we have no data but are in a category with data, render nothing
   if (!transformedData.length && isInCategoryWithData) {
-    return (
-      <div className="text-muted-foreground py-8 text-center">
-        Ingen data tilgængelig for dette diagram
-      </div>
-    );
+    return null;
   }
 
   // Generate chart colors based on series (Tailwind v4 compatible)
