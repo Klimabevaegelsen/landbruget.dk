@@ -175,7 +175,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
     <div>
       <div className="mx-auto w-full max-w-6xl py-4">
         {/* Header with filters and download button */}
-        <div className="mb-8 flex items-start justify-between">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex-1">
             {/* Filter buttons - only show if we have filterColumns */}
             {timeline.config?.filterColumns?.length > 0 && (
@@ -207,7 +207,7 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
             timeline={timeline}
             chartTitle={timeline.title}
             chartKey={timeline._key}
-            className="ml-4"
+            className="self-start sm:ml-4"
           />
         </div>
 

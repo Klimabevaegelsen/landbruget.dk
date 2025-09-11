@@ -75,7 +75,7 @@ const SheetOverlay = React.forwardRef<HTMLDivElement, SheetOverlayProps>(
       <div
         ref={ref}
         className={cn(
-          'fixed inset-0 z-50 bg-black/50 backdrop-blur-sm',
+          'fixed inset-0 z-[65] bg-black/50 backdrop-blur-sm',
           'data-[state=open]:animate-in data-[state=closed]:animate-out',
           'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
           className
@@ -156,7 +156,7 @@ const SheetContent = React.forwardRef<HTMLDivElement, SheetContentProps>(
             contentRef.current = node;
           }}
           className={cn(
-            'bg-background fixed z-50 gap-4 p-6 shadow-lg transition ease-in-out',
+            'bg-background fixed z-[70] gap-4 p-6 shadow-lg transition ease-in-out',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:duration-300 data-[state=open]:duration-500',
             'sheet-transition',

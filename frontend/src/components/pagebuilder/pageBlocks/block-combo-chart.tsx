@@ -128,7 +128,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   return (
     <div className="space-y-6">
       {/* Header with download button */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex-1">
           {/* Large display number - Midday style */}
           {totalValue > 0 && (
@@ -148,7 +148,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
           chartData={chart.data}
           chartTitle={chart.title}
           chartKey={chart._key}
-          className="ml-4"
+          className="self-start sm:ml-4"
         />
       </div>
 

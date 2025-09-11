@@ -42,11 +42,12 @@ export function TableCSVDownloadButton({
       disabled={disabled || !hasData}
       variant={variant}
       size={size}
-      className={className}
+      className={`touch-manipulation ${className}`}
       title="Download tabel som CSV"
     >
       <Download className="h-4 w-4" />
-      CSV
+      <span className="hidden sm:inline">CSV</span>
+      <span className="sm:hidden">Hent</span>
     </Button>
   );
 }
