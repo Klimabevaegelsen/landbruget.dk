@@ -565,6 +565,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                 'SPF-SU Certificate: ' || COALESCE({health_col}, 'Unknown') as event_description,
                 'SPF_Certificate' as event_category,
                 'Pig' as species,
+                '15' as species_code,
                 TRY_CAST({cert_date_col} AS TIMESTAMP) as event_date,
                 NULL as end_date,
                 'spf_su_herds' as source_file
@@ -596,6 +597,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                     '{disease_name}: er smittet med eller kontrolleres fri for' as event_description,
                     '{disease_name}' as event_category,
                     'Pig' as species,
+                    '15' as species_code,
                     CAST('{pipeline_run_date}' AS TIMESTAMP) as event_date,
                     NULL as end_date,
                     'spf_su_herds' as source_file
@@ -619,6 +621,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                     '{san_name}: sanering igang' as event_description,
                     'Sanitation' as event_category,
                     'Pig' as species,
+                    '15' as species_code,
                     CAST('{pipeline_run_date}' AS TIMESTAMP) as event_date,
                     NULL as end_date,
                     'spf_su_herds' as source_file

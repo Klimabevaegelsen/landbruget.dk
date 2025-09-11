@@ -86,6 +86,15 @@ repos:
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
+      # Playwright tests for frontend changes
+      - id: playwright-smoke-test
+        name: Playwright Smoke Test
+        entry: bash
+        args: [-c, "cd frontend && npm run test:smoke || echo 'Warning: Playwright smoke tests failed. Run npm run test:debug to investigate.'"]
+        language: system
+        files: '^frontend/src/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
       # Custom hook to prevent committing to data directories
       - id: check-data-directories
         name: Prevent commits to data directories

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Building2, TrendingUp, MapPin } from 'lucide-react';
+import { X, Building2, TrendingUp } from 'lucide-react';
 import {
   Card,
   CardContent,
