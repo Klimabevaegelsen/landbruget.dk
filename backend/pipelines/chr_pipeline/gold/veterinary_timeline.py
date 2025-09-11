@@ -516,6 +516,7 @@ def create_tail_cutting_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[s
             'Tail cutting control inspection' as event_description,
             'Tail_Cutting' as event_category,
             'Pig' as species,
+            '15' as species_code,
             TRY_CAST({date_col} AS TIMESTAMP) as event_date,
             NULL as end_date,
             'pig_tail_cutting' as source_file
@@ -673,6 +674,7 @@ def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[st
             'Stable fire event (spatially matched)' as event_description,
             'Fire' as event_category,
             'Unknown' as species,
+            NULL as species_code,
             TRY_CAST({date_col} AS TIMESTAMP) as event_date,
             NULL as end_date,
             'stable_fires' as source_file
