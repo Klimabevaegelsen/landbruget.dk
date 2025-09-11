@@ -135,10 +135,18 @@ export function FieldSidebar({
                   className="border-border bg-background w-full rounded-md border px-3 py-2 text-sm"
                 >
                   <option value="total_pesticide_belastning">
-                    Total belastning
+                    Total pesticidbelastning
                   </option>
-                  <option value="organic_status">Økologi status</option>
-                  <option value="risk_level">Risiko niveau</option>
+                  <option value="pfas_belastning">PFAS belastning</option>
+                  <option value="diquat_belastning">Diquat belastning</option>
+                  <option value="glyphosate_belastning">
+                    Glyphosate belastning
+                  </option>
+                  <option value="applications_count">
+                    Antal applikationer
+                  </option>
+                  <option value="organic_status">Økologisk status</option>
+                  <option value="area_size">Markareal</option>
                 </select>
               </div>
 
