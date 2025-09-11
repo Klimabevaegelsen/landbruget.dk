@@ -236,7 +236,7 @@ export default function FieldAnalysisVisualization() {
       >
         <button
           onClick={() => setMobileControlsOpen(!mobileControlsOpen)}
-          className="flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg bg-white p-3 shadow-lg transition-colors hover:bg-gray-50 active:bg-gray-100"
+          className="bg-background hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-lg p-3 shadow-lg transition-colors"
           aria-label="Toggle controls"
         >
           <svg
@@ -271,13 +271,13 @@ export default function FieldAnalysisVisualization() {
         <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white p-4 lg:hidden">
           <div>
             <h2 className="text-lg font-semibold">Kortlag og filtre</h2>
-            <p className="text-sm text-gray-600">
+            <p className="text-muted-foreground text-sm">
               Data for {getYearRangeDisplay(yearSelection.selectedYear)}
             </p>
           </div>
           <button
             onClick={() => setMobileControlsOpen(false)}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 hover:bg-gray-100 active:bg-gray-200"
+            className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2"
             aria-label="Luk kontrolpanel"
           >
             <svg

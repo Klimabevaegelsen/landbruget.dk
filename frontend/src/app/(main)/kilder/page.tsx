@@ -18,7 +18,7 @@ export default function KilderPage() {
               <h1 className="text-primary text-5xl leading-tight font-black tracking-tight">
                 Kilder
               </h1>
-              <p className="text-xl leading-relaxed text-gray-700">
+              <p className="text-muted-foreground text-xl leading-relaxed">
                 Landbruget.dk indsamler og formidler data fra en række danske
                 myndigheder og institutioner. Herunder finder du en oversigt
                 over alle vores datakilder og de typer af data, vi modtager fra
@@ -49,83 +49,83 @@ export default function KilderPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Danmarks Meteorologiske Institut
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         API
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Vejr
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
+                    <tr className="hover:bg-muted/50">
                       <td
                         className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
                         rowSpan={2}
                       >
                         Styrelsen for Dataforsyning og Infrastruktur
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Datafordeleren (API)
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         <ul className="list-inside list-disc space-y-1">
                           <li>Administrative Geografiske Inddelinger</li>
                           <li>Matrikeloplysninger</li>
                         </ul>
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         BBR Bygninger
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Bygningsdata og -geometri
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Danmarks Statistik
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Danmarks Statistik (API)
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Landbrugsproduktion
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Naturstyrelsen
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         WFS API
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Miljø og klimaprojekter
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
+                    <tr className="hover:bg-muted/50">
                       <td
                         className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
                         rowSpan={2}
                       >
                         Styrelsen for Grøn Arealømlægning og Vandmiljø
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigt
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Gødningsregnskab
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         WFS API
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         <ul className="list-inside list-disc space-y-1">
                           <li>Lavbundsjorde</li>
                           <li>Miljø og klimaprojekter</li>
@@ -133,14 +133,14 @@ export default function KilderPage() {
                         </ul>
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Klimadatastyrelsen
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         API
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         <ul className="list-inside list-disc space-y-1">
                           <li>Skraafoto</li>
                           <li>Danmarks Højdemodel</li>
@@ -168,14 +168,14 @@ export default function KilderPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Beredskabsstyrelsen
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigter
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         <ul className="list-inside list-disc space-y-1">
                           <li>Staldbrande</li>
                           <li>Gyllelæk</li>
@@ -183,17 +183,17 @@ export default function KilderPage() {
                         </ul>
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
+                    <tr className="hover:bg-muted/50">
                       <td
                         className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
                         rowSpan={2}
                       >
                         Erhvervsstyrelsen
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         CVR-registret (API)
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         <ul className="list-inside list-disc space-y-1">
                           <li>Ledelse</li>
                           <li>Finansielle oplysninger</li>
@@ -202,71 +202,71 @@ export default function KilderPage() {
                         </ul>
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigt
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Tilskud
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
+                    <tr className="hover:bg-muted/50">
                       <td
                         className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
                         rowSpan={2}
                       >
                         Energistyrelsen
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Emoweb (API)
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Energimærker
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigt
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Biogasanlæg
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
+                    <tr className="hover:bg-muted/50">
                       <td
                         className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
                         rowSpan={4}
                       >
                         Miljøstyrelsen
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Digital Miljøadministration
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Miljøgodkendelser
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Bekæmpelsesmiddel-databasen
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Pesticidoplysninger
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigt
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Pesticidforbrug
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         WFS API
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         <ul className="list-inside list-disc space-y-1">
                           <li>Markoplysninger & markblokke</li>
                           <li>Boringsnære beskyttelsesområder</li>
@@ -274,17 +274,17 @@ export default function KilderPage() {
                         </ul>
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
+                    <tr className="hover:bg-muted/50">
                       <td
                         className="border border-gray-300 px-4 py-3 font-medium text-gray-700"
                         rowSpan={2}
                       >
                         Fødevarestyrelsen
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Det Centrale Husdyrbrugsregister (API)
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         <ul className="list-inside list-disc space-y-1">
                           <li>Antibiotikaforbrug</li>
                           <li>Dyretransporter</li>
@@ -293,102 +293,102 @@ export default function KilderPage() {
                         </ul>
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigt
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         <ul className="list-inside list-disc space-y-1">
                           <li>Internationale dyretransport</li>
                           <li>Tilskud</li>
                         </ul>
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Landbrug & Fødevarer
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         SPF-Sund hjemmeside
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Veterinær status
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aarhus Universitet, DCE
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Rapport
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Kvælstofmodellering
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Københavns Universitet, IFRO
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Rapport
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Emissionsfaktorer for klimaregnskab
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         SEGES & Økologisk Landsforening
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigt
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Klimaregnskabsmodellering
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Vejdirektoratet
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         ArcGIS (API)
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Markblokke
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Styrelsen for International Rekruttering og Integration
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigt
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Førstegangsvisumanansøgninger
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Arbejdstilsynet
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Hjemmeside
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Arbejdspladsstilsyn
                       </td>
                     </tr>
-                    <tr className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                    <tr className="hover:bg-muted/50">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Arbejdsmarkedets Erhvervssikring
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Aktindsigt
                       </td>
-                      <td className="border border-gray-300 px-4 py-3 text-gray-700">
+                      <td className="border-border text-foreground border px-4 py-3">
                         Arbejdsskader
                       </td>
                     </tr>

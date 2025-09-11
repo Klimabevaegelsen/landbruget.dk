@@ -201,8 +201,10 @@ export default function HomepageRankings() {
       {/* Loading State */}
       {loading && (
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          <span className="ml-3 text-gray-600">Indlæser ranglister...</span>
+          <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+          <span className="text-muted-foreground ml-3">
+            Indlæser ranglister...
+          </span>
         </div>
       )}
 
@@ -248,7 +250,7 @@ export default function HomepageRankings() {
       {/* No Results */}
       {!loading && !error && filteredRankings.length === 0 && (
         <div className="py-12 text-center">
-          <p className="text-gray-600">
+          <p className="text-muted-foreground">
             Ingen ranglister fundet for den valgte kategori.
           </p>
         </div>
@@ -256,8 +258,8 @@ export default function HomepageRankings() {
 
       {/* Metadata Footer */}
       {metadata && !loading && (
-        <div className="space-y-2 border-t border-gray-200 pt-8 text-center">
-          <p className="text-xs text-gray-500">
+        <div className="border-border space-y-2 border-t pt-8 text-center">
+          <p className="text-muted-foreground text-xs">
             Data opdateret:{' '}
             {new Date(metadata.generated_at).toLocaleString('da-DK')} •{' '}
             {metadata.total_tables} ranglister tilgængelige
