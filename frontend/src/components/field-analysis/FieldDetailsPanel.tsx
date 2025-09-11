@@ -138,16 +138,16 @@ export function FieldDetailsPanel({
       onTouchStart={handleTouchStart}
     >
       {/* Mobile swipe indicator */}
-      <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-gray-300 lg:hidden"></div>
+      <div className="bg-border mx-auto mb-4 h-1 w-12 rounded-full lg:hidden"></div>
 
       {/* Header */}
       <div className="mb-4 flex items-center justify-between lg:mb-6">
-        <h2 className="text-lg font-bold text-gray-900 lg:text-xl">
+        <h2 className="text-foreground text-lg font-bold lg:text-xl">
           Markdetaljer
         </h2>
         <button
           onClick={onClose}
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors hover:bg-gray-100 active:bg-gray-200"
+          className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
           aria-label="Luk panel"
         >
           <svg
@@ -168,34 +168,34 @@ export function FieldDetailsPanel({
 
       {/* Basic Information */}
       <div className="mb-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">
+        <h3 className="text-foreground mb-2 text-base font-semibold">
           Grundoplysninger
         </h3>
         <div className="space-y-1 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-600">Kommune:</span>
+            <span className="text-muted-foreground">Kommune:</span>
             <span className="font-medium">{fieldData.kommune}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">CVR:</span>
+            <span className="text-muted-foreground">CVR:</span>
             <span className="font-mono text-xs">{fieldData.cvr_number}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Areal:</span>
+            <span className="text-muted-foreground">Areal:</span>
             <span className="font-medium">
               {formatNumber(fieldData.area_hectares)} ha
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Afgrøde:</span>
+            <span className="text-muted-foreground">Afgrøde:</span>
             <span className="font-medium">
               {fieldData.crop_name || 'Ukendt'}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Økologisk:</span>
+            <span className="text-muted-foreground">Økologisk:</span>
             <span
-              className={`font-medium ${fieldData.is_organic ? 'text-green-600' : 'text-gray-500'}`}
+              className={`font-medium ${fieldData.is_organic ? 'text-accent-foreground' : 'text-muted-foreground'}`}
             >
               {fieldData.is_organic ? 'Ja' : 'Nej'}
             </span>
@@ -206,7 +206,7 @@ export function FieldDetailsPanel({
       {/* GPS Coordinates and Skråfoto */}
       {fieldData.click_coordinates && (
         <div className="mb-4">
-          <h3 className="mb-2 text-base font-semibold text-gray-900">
+          <h3 className="text-foreground mb-2 text-base font-semibold">
             Koordinater
           </h3>
           <div className="rounded-lg bg-blue-50 p-3">
@@ -270,10 +270,10 @@ export function FieldDetailsPanel({
 
       {/* Pesticide Information */}
       <div className="mb-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">
+        <h3 className="text-foreground mb-2 text-base font-semibold">
           Pesticidforbrug
         </h3>
-        <div className="mb-2 rounded-lg bg-gray-50 p-3">
+        <div className="bg-muted mb-2 rounded-lg p-3">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-sm font-medium">Samlet belastning</span>
             <span className={`font-bold ${riskLevel.color}`}>
@@ -281,7 +281,7 @@ export function FieldDetailsPanel({
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-600">Risikoniveau</span>
+            <span className="text-muted-foreground text-xs">Risikoniveau</span>
             <span className={`text-xs font-medium ${riskLevel.color}`}>
               {riskLevel.level}
             </span>
@@ -326,7 +326,9 @@ export function FieldDetailsPanel({
             {/* Show available dosage units */}
             {fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Total dosering (kg):</span>
+                <span className="text-muted-foreground">
+                  Total dosering (kg):
+                </span>
                 <span className="font-medium">
                   {formatNumber(fieldData.total_dosage_kg, 2)} kg
                 </span>
@@ -335,7 +337,9 @@ export function FieldDetailsPanel({
             {fieldData.total_dosage_liters &&
               fieldData.total_dosage_liters > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Total dosering (L):</span>
+                  <span className="text-muted-foreground">
+                    Total dosering (L):
+                  </span>
                   <span className="font-medium">
                     {formatNumber(fieldData.total_dosage_liters, 1)} L
                   </span>
@@ -344,7 +348,9 @@ export function FieldDetailsPanel({
             {fieldData.total_dosage_grams &&
               fieldData.total_dosage_grams > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Total dosering (g):</span>
+                  <span className="text-muted-foreground">
+                    Total dosering (g):
+                  </span>
                   <span className="font-medium">
                     {formatNumber(fieldData.total_dosage_grams, 0)} g
                   </span>
@@ -352,7 +358,9 @@ export function FieldDetailsPanel({
               )}
             {fieldData.total_dosage_ml && fieldData.total_dosage_ml > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Total dosering (ml):</span>
+                <span className="text-muted-foreground">
+                  Total dosering (ml):
+                </span>
                 <span className="font-medium">
                   {formatNumber(fieldData.total_dosage_ml, 0)} ml
                 </span>
@@ -361,7 +369,7 @@ export function FieldDetailsPanel({
             {fieldData.total_dosage_tablets &&
               fieldData.total_dosage_tablets > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Total dosering:</span>
+                  <span className="text-muted-foreground">Total dosering:</span>
                   <span className="font-medium">
                     {fieldData.total_dosage_tablets} tabletter
                   </span>
@@ -588,7 +596,7 @@ export function FieldDetailsPanel({
 
       {/* Environmental Areas */}
       <div className="mb-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">
+        <h3 className="text-foreground mb-2 text-base font-semibold">
           Miljøområder
         </h3>
         <div className="space-y-2">
@@ -629,7 +637,7 @@ export function FieldDetailsPanel({
 
       {/* Proximity Information */}
       <div className="mb-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">
+        <h3 className="text-foreground mb-2 text-base font-semibold">
           Nærhedsanalyse
         </h3>
         <div className="space-y-1 text-sm">
@@ -659,7 +667,7 @@ export function FieldDetailsPanel({
 
           {fieldData.water_distance_proximity && (
             <div className="flex justify-between">
-              <span className="text-gray-600">🌊 Vand:</span>
+              <span className="text-muted-foreground">🌊 Vand:</span>
               <span className="text-xs font-medium">
                 {fieldData.water_distance_proximity}
               </span>

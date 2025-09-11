@@ -104,7 +104,7 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
   // If we have no data but are in a category with data, render empty div
   if (!transformedData.length && isInCategoryWithData) {
     return (
-      <div className="py-8 text-center text-gray-500">
+      <div className="text-muted-foreground py-8 text-center">
         Ingen data tilgængelig for dette diagram
       </div>
     );
