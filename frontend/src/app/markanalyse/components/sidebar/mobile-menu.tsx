@@ -80,7 +80,7 @@ export function MobileFieldMenu({
               active={layerVisibility[layer.key]}
               onClick={() => onLayerToggle(layer.key)}
             />
-            <p className="text-xs text-muted-foreground px-4 pb-2">
+            <p className="text-muted-foreground px-4 pb-2 text-xs">
               {layer.description}
             </p>
           </div>
@@ -117,9 +117,7 @@ export function MobileFieldMenu({
             </option>
             <option value="pfas_belastning">PFAS belastning</option>
             <option value="diquat_belastning">Diquat belastning</option>
-            <option value="glyphosate_belastning">
-              Glyphosate belastning
-            </option>
+            <option value="glyphosate_belastning">Glyphosate belastning</option>
             <option value="applications_count">Antal applikationer</option>
             <option value="organic_status">Økologisk status</option>
             <option value="area_size">Markareal</option>
@@ -167,7 +165,7 @@ export function MobileFieldMenu({
                 useDecileColoring: true,
               })
             }
-            className="w-full rounded-lg bg-muted px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/80"
+            className="bg-muted text-muted-foreground hover:bg-muted/80 w-full rounded-lg px-3 py-3 text-sm transition-colors"
           >
             Nulstil filtre
           </button>
@@ -191,7 +189,9 @@ export function MobileFieldMenu({
       <MobileMenuSection title="Datastatistik">
         <div className="bg-muted space-y-2 rounded-lg px-4 py-3">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-sm">Landbrugsmarker</span>
+            <span className="text-muted-foreground text-sm">
+              Landbrugsmarker
+            </span>
             <span className="text-sm font-medium">617.774</span>
           </div>
           <div className="flex items-center justify-between">
@@ -199,7 +199,9 @@ export function MobileFieldMenu({
             <span className="text-sm font-medium">2.761</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-sm">Lavbundsjorder</span>
+            <span className="text-muted-foreground text-sm">
+              Lavbundsjorder
+            </span>
             <span className="text-sm font-medium">768.646</span>
           </div>
           <div className="flex items-center justify-between">
@@ -214,26 +216,38 @@ export function MobileFieldMenu({
 
         {/* Chemical-specific stats based on visualization mode */}
         {filterState.visualizationMode === 'pfas_belastning' && (
-          <div className="bg-red-50 border border-red-200 space-y-1 rounded-lg px-4 py-3">
-            <div className="text-red-800 text-sm font-medium">PFAS Pesticider</div>
-            <div className="text-red-700 text-xs">156.025 marker med PFAS</div>
-            <div className="text-red-700 text-xs">Potentielt sundhedsskadelige</div>
+          <div className="space-y-1 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <div className="text-sm font-medium text-red-800">
+              PFAS Pesticider
+            </div>
+            <div className="text-xs text-red-700">156.025 marker med PFAS</div>
+            <div className="text-xs text-red-700">
+              Potentielt sundhedsskadelige
+            </div>
           </div>
         )}
 
         {filterState.visualizationMode === 'diquat_belastning' && (
-          <div className="bg-blue-50 border border-blue-200 space-y-1 rounded-lg px-4 py-3">
-            <div className="text-blue-800 text-sm font-medium">Diquat Pesticider</div>
-            <div className="text-blue-700 text-xs">471 marker med diquat</div>
-            <div className="text-blue-700 text-xs">Kontakt herbicid</div>
+          <div className="space-y-1 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+            <div className="text-sm font-medium text-blue-800">
+              Diquat Pesticider
+            </div>
+            <div className="text-xs text-blue-700">471 marker med diquat</div>
+            <div className="text-xs text-blue-700">Kontakt herbicid</div>
           </div>
         )}
 
         {filterState.visualizationMode === 'glyphosate_belastning' && (
-          <div className="bg-green-50 border border-green-200 space-y-1 rounded-lg px-4 py-3">
-            <div className="text-green-800 text-sm font-medium">Glyphosate Pesticider</div>
-            <div className="text-green-700 text-xs">105.511 marker med glyphosate</div>
-            <div className="text-green-700 text-xs">Mest anvendte ukrudtsmiddel</div>
+          <div className="space-y-1 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+            <div className="text-sm font-medium text-green-800">
+              Glyphosate Pesticider
+            </div>
+            <div className="text-xs text-green-700">
+              105.511 marker med glyphosate
+            </div>
+            <div className="text-xs text-green-700">
+              Mest anvendte ukrudtsmiddel
+            </div>
           </div>
         )}
       </MobileMenuSection>
