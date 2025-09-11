@@ -35,7 +35,7 @@ export function YearSlider({
 
   return (
     <div
-      className={`bg-background/95 rounded-lg p-4 shadow-lg backdrop-blur-sm sm:p-5 ${className}`}
+      className={`bg-background/95 rounded-lg p-4 shadow-lg backdrop-blur-sm sm:p-6 ${className}`}
     >
       {/* Mobile: Dropdown */}
       <div className="sm:hidden">
@@ -75,9 +75,9 @@ export function YearSlider({
 
       {/* Desktop: Slider */}
       <div className="hidden sm:block">
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <label className="text-foreground text-sm font-medium">
+            <label className="text-foreground text-base font-medium">
               År: {getYearRangeDisplay(selectedYear)}
             </label>
             {isLoading && (
@@ -85,7 +85,7 @@ export function YearSlider({
             )}
           </div>
 
-          <div className="relative px-1">
+          <div className="relative px-2">
             <input
               type="range"
               min={0}
@@ -93,7 +93,7 @@ export function YearSlider({
               value={selectedIndex}
               onChange={handleSliderChange}
               disabled={isLoading}
-              className={`slider h-2 w-full cursor-pointer appearance-none rounded-lg bg-gray-200 ${
+              className={`slider h-3 w-full cursor-pointer appearance-none rounded-lg bg-gray-200 ${
                 isLoading ? 'cursor-not-allowed opacity-50' : ''
               }`}
               style={{
@@ -104,13 +104,13 @@ export function YearSlider({
             />
 
             {/* Year markers */}
-            <div className="mt-2 flex justify-between">
+            <div className="mt-4 flex justify-between px-1">
               {availableYears.map((year, index) => (
                 <div
                   key={year}
-                  className={`text-xs transition-colors ${
+                  className={`text-sm font-medium transition-colors ${
                     year === selectedYear
-                      ? 'font-medium text-blue-600'
+                      ? 'text-blue-600'
                       : 'text-muted-foreground'
                   }`}
                   style={{
