@@ -915,7 +915,7 @@ pageBuilder:
 
   - _key: animal-welfare-production-species-chart
     _type: stackedBarChart
-    title: "Dyrekapacitet pr. år (samlet, fordelt på art)"
+    title: "Dyreproduktionskapacitet (samlet, fordelt på art)"
     documentation:
       title: "Dyrekapacitet Fordelt på Arter"
       description: "Historisk udvikling i dyrekapacitet fordelt på forskellige dyrearter baseret på CHR-registreringer"
@@ -1110,7 +1110,7 @@ pageBuilder:
 
           - _key: species-age-chart-{iteratorContext.chr}-{iteratorContext.species_id}
             _type: stackedBarChart
-            title: "{iteratorContext.species_name} kapacitet pr. år (kategori)"
+            title: "{iteratorContext.species_name} produktionskapacitet (kategori)"
             documentation:
               title: "Dyrekapacitet Fordelt på Kategorier"
               description: "Historisk udvikling i dyrekapacitet fordelt på forskellige kategorier (alder/type) for specifik dyreart på produktionsstedet baseret på CHR-data"
