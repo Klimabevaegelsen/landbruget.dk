@@ -147,7 +147,7 @@ export function H3PfasTrigger() {
       </div>
 
       {/* Current Configuration Display */}
-      <div className="mb-6 rounded-lg bg-gray-50 p-4">
+      <div className="mb-6 rounded-lg bg-muted p-4">
         <h3 className="mb-2 font-medium">Current Configuration:</h3>
         <div className="space-y-1 text-sm">
           <div>
@@ -189,7 +189,7 @@ export function H3PfasTrigger() {
         )}
       </Button>
 
-      <div className="mt-4 text-sm text-gray-600">
+      <div className="mt-4 text-sm text-muted-foreground">
         <p>
           <strong>Note:</strong> This will trigger the optimized pipeline that
           processes all resolutions in a single job to avoid redundant data

@@ -23,7 +23,7 @@ export function YearSelector({
     <div className={`relative ${className}`}>
       <label
         htmlFor="year-selector"
-        className="mb-1 block text-sm font-medium text-gray-700"
+        className="mb-1 block text-sm font-medium text-foreground"
       >
         År
       </label>
@@ -45,7 +45,7 @@ export function YearSelector({
         </select>
         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
           <ChevronDownIcon
-            className="h-4 w-4 text-gray-400"
+            className="h-4 w-4 text-muted-foreground"
             aria-hidden="true"
           />
         </div>

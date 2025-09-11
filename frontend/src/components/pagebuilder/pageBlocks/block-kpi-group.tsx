@@ -3,7 +3,7 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { useCategoryDataContext } from './CategoryDataContext';
 import { NoDataPlaceholder } from './no-data-placeholder';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import { DocumentationAccordion } from '@/components/chart';
 
 export function BlockKpiGroup({ kpiGroup }: { kpiGroup: KPIGroup }) {
   const { isInCategoryWithData } = useCategoryDataContext();

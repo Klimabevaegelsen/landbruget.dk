@@ -44,8 +44,8 @@ export class MapErrorBoundary extends React.Component<
       // Render fallback UI
       return (
         this.props.fallback || (
-          <div className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-8 text-center">
-            <div className="mb-2 text-gray-600">
+          <div className="rounded-lg border-2 border-dashed border-gray-300 bg-muted p-8 text-center">
+            <div className="text-muted-foreground mb-2">
               <svg
                 className="mx-auto mb-4 h-12 w-12 text-gray-400"
                 fill="none"
@@ -59,10 +59,10 @@ export class MapErrorBoundary extends React.Component<
                   d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 01.553-.894L9 2l6 3 5.447-2.724A1 1 0 0121 3.382v10.764a1 1 0 01-.553.894L15 18l-6-3z"
                 />
               </svg>
-              <h3 className="mb-2 text-lg font-medium text-gray-900">
+              <h3 className="text-foreground mb-2 text-lg font-medium">
                 Kort kunne ikke indlæses
               </h3>
-              <p className="text-sm text-gray-500">
+              <p className="text-muted-foreground text-sm">
                 Der opstod en fejl under indlæsning af kortdata.
                 {this.state.error?.message.includes('missing required property')
                   ? ' Kortdata mangler eller er ikke korrekt formateret.'

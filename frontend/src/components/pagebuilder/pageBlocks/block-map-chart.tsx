@@ -11,12 +11,12 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapChart, GeoJSONLayer } from '@/services/supabase/types';
 import { VizColors } from '@/lib/utils';
 import { MapErrorBoundary } from './MapErrorBoundary';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import { DocumentationAccordion } from '@/components/chart';
 import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
-import { MapCSVDownloadButton } from '@/components/chart/map-csv-download-button';
+import { MapCSVDownloadButton } from '@/components/chart';
 
 const getLayerStyle = (style: string | undefined, index: number) => {
   // Handle specific marker types with distinct colors
