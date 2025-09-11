@@ -1,4 +1,3 @@
-import pandas as pd
 import geopandas as gpd
 from datetime import datetime, timedelta
 from typing import Optional, Tuple

@@ -7,11 +7,9 @@ against the reference nles5.py implementation to ensure accuracy and compliance.
 """
 
 import pytest
-import asyncio
 import sys
-import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 # Add backend to path
 sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent.parent / "backend"))

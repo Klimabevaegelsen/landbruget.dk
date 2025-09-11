@@ -586,7 +586,6 @@ class NLES5DataLoader:
             
             # Import and run agricultural pattern matcher
             from unified_pipeline.gold.agricultural_pattern_matcher import (
-                AgriculturalPatternMatcher, 
                 AgriculturalPatternMatcherConfig,
                 run_agricultural_pattern_matching
             )

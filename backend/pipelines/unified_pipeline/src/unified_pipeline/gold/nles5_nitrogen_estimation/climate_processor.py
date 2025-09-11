@@ -9,10 +9,8 @@ This module handles all climate data processing operations including:
 """
 
 import math
-import os
-from typing import Any, Dict, List, Optional
+from typing import List
 
-from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
 

@@ -20,7 +20,6 @@ if critical requirements are not met. Records with frasorteringskode 3-5
 are flagged for exclusion per N2023_62 specifications.
 """
 
-from typing import Any, Dict, Optional
 
 from unified_pipeline.util.timing import timed
 
