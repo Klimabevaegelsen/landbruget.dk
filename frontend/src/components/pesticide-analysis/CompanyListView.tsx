@@ -60,9 +60,9 @@ export default function CompanyListView({
       return <ArrowUpDown className="text-muted-foreground h-4 w-4" />;
     }
     return sortOrder === 'asc' ? (
-      <ArrowUp className="h-4 w-4 text-blue-600" />
+      <ArrowUp className="text-primary h-4 w-4" />
     ) : (
-      <ArrowDown className="h-4 w-4 text-blue-600" />
+      <ArrowDown className="text-primary h-4 w-4" />
     );
   };
 

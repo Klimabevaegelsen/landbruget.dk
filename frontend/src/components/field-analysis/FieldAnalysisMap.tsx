@@ -27,6 +27,7 @@ interface MapInstance {
     id: string,
     image: HTMLCanvasElement | ImageBitmap | ImageData
   ) => void;
+  setFilter: (id: string, filter: unknown) => void;
 }
 
 interface FieldAnalysisMapProps {
@@ -749,6 +750,11 @@ export default function FieldAnalysisMap({
       if (map.getSource('fields') && !map.getLayer('fields-fill')) {
         const paintProps = generateFieldsPaint();
 
+        // Create company filter if specified
+        const companyFilter: unknown = filterState.companyFilter
+          ? ['==', ['get', 'cvr_number'], parseInt(filterState.companyFilter)]
+          : null;
+
         // Main fields layer
         map.addLayer({
           id: 'fields-fill',
@@ -756,6 +762,7 @@ export default function FieldAnalysisMap({
           'source-layer': 'fields',
           type: 'fill',
           paint: paintProps,
+          filter: companyFilter,
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
@@ -772,6 +779,7 @@ export default function FieldAnalysisMap({
             'line-width': 0.5,
             'line-opacity': 0.8,
           },
+          filter: companyFilter,
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
@@ -779,12 +787,18 @@ export default function FieldAnalysisMap({
 
         // Add organic symbols layer
         if (filterState.visualizationMode === 'organic_status') {
+          // Combine organic filter with company filter if both exist
+          let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
+          if (companyFilter) {
+            organicFilter = ['all', companyFilter, organicFilter];
+          }
+
           map.addLayer({
             id: 'organic-symbols',
             source: 'fields',
             'source-layer': 'fields',
             type: 'symbol',
-            filter: ['==', ['get', 'is_organic'], true],
+            filter: organicFilter,
             paint: {
               'text-color': '#16a34a',
               'text-halo-color': '#ffffff',
@@ -801,7 +815,12 @@ export default function FieldAnalysisMap({
         }
       }
     },
-    [layerVisibility.fields, generateFieldsPaint, filterState.visualizationMode]
+    [
+      layerVisibility.fields,
+      generateFieldsPaint,
+      filterState.visualizationMode,
+      filterState.companyFilter,
+    ]
   );
 
   // Add BNBO layers with cross-hatch pattern
@@ -1399,6 +1418,33 @@ export default function FieldAnalysisMap({
     }
   }, [layerVisibility, filterState.visualizationMode]);
 
+  // Update filters when company filter changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current.getMap();
+
+    // Create company filter if specified
+    const companyFilter: unknown = filterState.companyFilter
+      ? ['==', ['get', 'cvr_number'], parseInt(filterState.companyFilter)]
+      : null;
+
+    // Update filters on existing layers
+    if (map.getLayer('fields-fill')) {
+      map.setFilter('fields-fill', companyFilter);
+    }
+    if (map.getLayer('fields-outline')) {
+      map.setFilter('fields-outline', companyFilter);
+    }
+    if (map.getLayer('organic-symbols')) {
+      let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
+      if (companyFilter) {
+        organicFilter = ['all', companyFilter, organicFilter];
+      }
+      map.setFilter('organic-symbols', organicFilter);
+    }
+  }, [filterState.companyFilter]);
+
   // Update field visualization when filterState changes
   useEffect(() => {
     if (!mapRef.current) return;
@@ -1534,7 +1580,7 @@ export default function FieldAnalysisMap({
           <div className="text-foreground mb-2 text-lg font-medium">
             Indlæser kortdata...
           </div>
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <div className="border-primary mx-auto h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
         </div>
       </div>
     );
@@ -1553,7 +1599,7 @@ export default function FieldAnalysisMap({
     <div className="relative h-full w-full touch-manipulation">
       {/* Search Bar - positioned to avoid sidebar collision */}
       <div
-        className="pointer-events-auto absolute top-4 left-4 right-4 z-30 md:right-auto md:left-4 md:w-80 lg:left-4 lg:w-96 xl:w-[28rem]"
+        className="pointer-events-auto absolute top-4 right-4 left-4 z-30 md:right-auto md:left-4 md:w-80 lg:left-4 lg:w-96 xl:w-[28rem]"
         style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
       >
         <SearchBar

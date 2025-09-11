@@ -457,7 +457,7 @@ export function FieldDetailsSheet({
               <div className="space-y-2">
                 {/* PFAS Information */}
                 {field.pfas_applications && field.pfas_applications > 0 && (
-                  <div className="rounded-lg bg-red-50 p-2">
+                  <div className="bg-destructive/10 rounded-lg p-2">
                     <div className="mb-1 flex items-center justify-between">
                       <span className="text-destructive flex items-center text-sm font-medium">
                         <TestTube className="mr-1 h-4 w-4" />

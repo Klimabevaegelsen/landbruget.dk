@@ -16,7 +16,7 @@ interface EnvironmentalStatusProps {
 const STATUS_CONFIG = {
   compliant: {
     icon: CheckCircleIcon,
-    color: 'text-green-600',
+    color: 'text-organic',
     bgColor: 'bg-organic/10',
     borderColor: 'border-organic/20',
     label: 'Gennemført',
@@ -32,9 +32,9 @@ const STATUS_CONFIG = {
   },
   water_covered: {
     icon: CheckCircleIcon,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
+    color: 'text-bnbo',
+    bgColor: 'bg-bnbo/10',
+    borderColor: 'border-bnbo/20',
     label: 'Areal til Klima- eller Miljøprojekter',
     description: 'Ansøgt, planlagt eller udtaget til projekter',
   },
@@ -185,7 +185,7 @@ export function EnvironmentalComplianceOverview({
                 data.compliancePercentage >= 95
                   ? 'bg-organic'
                   : data.compliancePercentage >= 70
-                    ? 'bg-blue-500'
+                    ? 'bg-bnbo'
                     : 'bg-conventional'
               }`}
               style={{ width: `${Math.min(data.compliancePercentage, 100)}%` }}

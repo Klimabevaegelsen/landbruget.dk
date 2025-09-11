@@ -14,15 +14,19 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
       case 'total_pesticide_belastning':
         return {
           title: 'Pesticidbelastning',
-          unit: filterState.colorUnit === 'belastning' ? 'Belastning' : 
-                filterState.colorUnit === 'per_hectare' ? 'kg/ha' : 'kg',
+          unit:
+            filterState.colorUnit === 'belastning'
+              ? 'Belastning'
+              : filterState.colorUnit === 'per_hectare'
+                ? 'kg/ha'
+                : 'kg',
           colors: [
             { color: '#22c55e', label: 'Lav', range: '0-20' },
             { color: '#84cc16', label: 'Lav-medium', range: '20-50' },
             { color: '#eab308', label: 'Medium', range: '50-100' },
             { color: '#f97316', label: 'Medium-høj', range: '100-200' },
             { color: '#ef4444', label: 'Høj', range: '200+' },
-          ]
+          ],
         };
       case 'pfas_belastning':
         return {
@@ -34,7 +38,7 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
             { color: '#f87171', label: 'Medium PFAS', range: '10-50' },
             { color: '#ef4444', label: 'Høj PFAS', range: '50-100' },
             { color: '#dc2626', label: 'Meget høj PFAS', range: '100+' },
-          ]
+          ],
         };
       case 'organic_status':
         return {
@@ -43,7 +47,7 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
           colors: [
             { color: '#22c55e', label: 'Økologisk', range: '' },
             { color: '#94a3b8', label: 'Konventionel', range: '' },
-          ]
+          ],
         };
       case 'applications_count':
         return {
@@ -55,7 +59,7 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
             { color: '#94a3b8', label: '3-5', range: '3-5' },
             { color: '#64748b', label: '6-10', range: '6-10' },
             { color: '#475569', label: '10+', range: '10+' },
-          ]
+          ],
         };
       case 'area_size':
         return {
@@ -67,7 +71,7 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
             { color: '#f59e0b', label: 'Medium', range: '5-20' },
             { color: '#d97706', label: 'Stor', range: '20-50' },
             { color: '#92400e', label: 'Meget stor', range: '50+' },
-          ]
+          ],
         };
       default:
         return {
@@ -79,7 +83,7 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
             { color: '#eab308', label: 'Medium', range: '50-100' },
             { color: '#f97316', label: 'Medium-høj', range: '100-200' },
             { color: '#ef4444', label: 'Høj', range: '200+' },
-          ]
+          ],
         };
     }
   };
@@ -87,9 +91,13 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
   const legendData = getLegendData();
 
   return (
-    <div className={`bg-background/95 border-border rounded-lg border p-3 shadow-lg backdrop-blur-sm max-w-xs ${className}`}>
+    <div
+      className={`bg-background/95 border-border max-w-xs rounded-lg border p-3 shadow-lg backdrop-blur-sm ${className}`}
+    >
       <div className="mb-2">
-        <h4 className="text-foreground text-sm font-semibold">{legendData.title}</h4>
+        <h4 className="text-foreground text-sm font-semibold">
+          {legendData.title}
+        </h4>
         {legendData.unit && (
           <p className="text-muted-foreground text-xs">{legendData.unit}</p>
         )}
@@ -98,20 +106,24 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
         {legendData.colors.map((item, index) => (
           <div key={index} className="flex items-center space-x-2">
             <div
-              className="h-3 w-3 rounded-sm border border-border flex-shrink-0"
+              className="border-border h-3 w-3 flex-shrink-0 rounded-sm border"
               style={{ backgroundColor: item.color }}
             />
-            <div className="flex flex-1 items-center justify-between min-w-0">
-              <span className="text-foreground text-xs font-medium truncate">{item.label}</span>
+            <div className="flex min-w-0 flex-1 items-center justify-between">
+              <span className="text-foreground truncate text-xs font-medium">
+                {item.label}
+              </span>
               {item.range && (
-                <span className="text-muted-foreground text-xs ml-2 flex-shrink-0">{item.range}</span>
+                <span className="text-muted-foreground ml-2 flex-shrink-0 text-xs">
+                  {item.range}
+                </span>
               )}
             </div>
           </div>
         ))}
       </div>
       {filterState.useDecileColoring && (
-        <div className="border-t pt-2 mt-2">
+        <div className="mt-2 border-t pt-2">
           <p className="text-muted-foreground text-xs">
             Decile farvning aktiveret
           </p>
