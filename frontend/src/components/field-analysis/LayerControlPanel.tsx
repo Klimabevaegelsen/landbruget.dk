@@ -333,7 +333,7 @@ export function LayerControlPanel({
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="h-4 w-4 rounded bg-gray-600"></div>
+              <div className="bg-muted-foreground h-4 w-4 rounded"></div>
               <span>Lavbundsjorder (tørvindhold)</span>
             </div>
             <div className="flex items-center space-x-2">

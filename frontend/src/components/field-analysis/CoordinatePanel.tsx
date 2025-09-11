@@ -64,7 +64,7 @@ export function CoordinatePanel({
       onTouchStart={handleTouchStart}
     >
       {/* Mobile swipe indicator */}
-      <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-gray-300 lg:hidden"></div>
+      <div className="bg-muted mx-auto mb-4 h-1 w-12 rounded-full lg:hidden"></div>
 
       {/* Header */}
       <div className="mb-4 flex items-center justify-between lg:mb-6">
@@ -73,7 +73,7 @@ export function CoordinatePanel({
         </h2>
         <button
           onClick={onClose}
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors hover:bg-gray-100 active:bg-gray-200"
+          className="hover:bg-muted active:bg-accent flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
           aria-label="Luk panel"
         >
           <svg

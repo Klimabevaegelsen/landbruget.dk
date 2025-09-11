@@ -19,7 +19,7 @@ export default function CustomLegend({
         <button
           key={`legend-item-${index}`}
           onClick={() => onLegendClick?.(entry.dataKey as string)}
-          className="flex items-center gap-2 rounded-md px-3 py-1.5 transition-colors hover:bg-gray-50"
+          className="hover:bg-muted flex items-center gap-2 rounded-md px-3 py-1.5 transition-colors"
           style={{
             opacity: entry.inactive ? 0.5 : 1,
           }}

@@ -179,7 +179,7 @@ export function EnvironmentalComplianceOverview({
             <span>Overholdelsesgrad</span>
             <span>{data.compliancePercentage.toFixed(1)}%</span>
           </div>
-          <div className="h-2 w-full rounded-full bg-gray-200">
+          <div className="bg-muted h-2 w-full rounded-full">
             <div
               className={`h-2 rounded-full ${
                 data.compliancePercentage >= 95

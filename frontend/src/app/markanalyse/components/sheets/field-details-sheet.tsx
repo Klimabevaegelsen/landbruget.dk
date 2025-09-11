@@ -591,7 +591,7 @@ export function FieldDetailsSheet({
                 )}
 
                 {field.wetland_area_hectares > 0 && (
-                  <div className="rounded-lg bg-gray-100 p-2">
+                  <div className="bg-muted rounded-lg p-2">
                     <div className="flex items-center justify-between">
                       <span className="text-foreground text-sm font-medium">
                         💨 Lavbund

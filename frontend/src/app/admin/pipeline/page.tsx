@@ -40,7 +40,7 @@ export default function PipelinePage() {
               Pipeline Status
             </h2>
             <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg bg-gray-50 p-4">
+              <div className="bg-muted flex items-center justify-between rounded-lg p-4">
                 <div>
                   <h3 className="font-medium">H3 PFAS Analysis</h3>
                   <p className="text-muted-foreground text-sm">
