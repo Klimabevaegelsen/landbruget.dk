@@ -405,13 +405,13 @@ def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List
         species_code_col = "species_code"
         species_name_col = "species_name"
 
-        # Start events
+        # Create single intervention events with start date as event_date and end date in end_date field
         if date_cols.get("start"):
             parts.append(f"""
             SELECT
                 {chr_col} as chr_number,
                 'animal_welfare' as event_source,
-                'intervention_start' as event_type,
+                'intervention' as event_type,
                 COALESCE({desc_col}, 'Animal welfare intervention') as event_description,
                 'Animal_Welfare' as event_category,
                 COALESCE({species_name_col}, 'Unknown') as species,
@@ -422,26 +422,6 @@ def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List
             FROM animal_welfare
             WHERE {chr_col} IS NOT NULL
               AND {date_cols["start"]} IS NOT NULL
-            """)
-
-        # End events (if we have end dates)
-        if date_cols.get("end"):
-            parts.append(f"""
-            SELECT
-                {chr_col} as chr_number,
-                'animal_welfare' as event_source,
-                'intervention_end' as event_type,
-                COALESCE({desc_col}, 'Animal welfare intervention end') as event_description,
-                'Animal_Welfare' as event_category,
-                COALESCE({species_col}, 'Unknown') as species,
-                TRY_CAST({date_cols["end"]} AS TIMESTAMP) as event_date,
-                NULL as end_date,
-                'animal_welfare' as source_file
-            FROM animal_welfare
-            WHERE {chr_col} IS NOT NULL
-              AND {date_cols["end"]} IS NOT NULL
-              AND TRIM({date_cols["end"]}) != ''
-              AND TRY_CAST({date_cols["end"]} AS TIMESTAMP) IS NOT NULL
             """)
 
         logger.info(f"✅ Created {len(parts)} animal welfare timeline parts")
@@ -824,86 +804,86 @@ def standardize_species_data(con: duckdb.DuckDBPyConnection) -> None:
         # Check if animal_welfare table exists and standardize species column
         tables = con.execute("SHOW TABLES").fetchall()
         table_names = [table[0] for table in tables]
-        
+
         if "animal_welfare" in table_names:
             logger.info("🔧 Standardizing species codes in animal_welfare data...")
-            
+
             # First, add standardized species code and name columns
             con.execute("""
                 CREATE OR REPLACE TABLE animal_welfare AS
-                SELECT 
+                SELECT
                     *,
-                    CASE 
+                    CASE
                         WHEN dyreart IS NULL OR TRIM(dyreart) = '' THEN NULL
-                        WHEN LOWER(dyreart) LIKE '%svin%' OR LOWER(dyreart) LIKE '%pig%' 
+                        WHEN LOWER(dyreart) LIKE '%svin%' OR LOWER(dyreart) LIKE '%pig%'
                              OR LOWER(dyreart) LIKE '%15%' THEN '15'
-                        WHEN LOWER(dyreart) LIKE '%kvæg%' OR LOWER(dyreart) LIKE '%cattle%' 
+                        WHEN LOWER(dyreart) LIKE '%kvæg%' OR LOWER(dyreart) LIKE '%cattle%'
                              OR LOWER(dyreart) LIKE '%cow%' OR LOWER(dyreart) LIKE '%12%' THEN '12'
-                        WHEN LOWER(dyreart) LIKE '%får%' OR LOWER(dyreart) LIKE '%sheep%' 
+                        WHEN LOWER(dyreart) LIKE '%får%' OR LOWER(dyreart) LIKE '%sheep%'
                              OR LOWER(dyreart) LIKE '%13%' THEN '13'
-                        WHEN LOWER(dyreart) LIKE '%ged%' OR LOWER(dyreart) LIKE '%goat%' 
+                        WHEN LOWER(dyreart) LIKE '%ged%' OR LOWER(dyreart) LIKE '%goat%'
                              OR LOWER(dyreart) LIKE '%14%' THEN '14'
-                        WHEN LOWER(dyreart) LIKE '%hest%' OR LOWER(dyreart) LIKE '%horse%' 
+                        WHEN LOWER(dyreart) LIKE '%hest%' OR LOWER(dyreart) LIKE '%horse%'
                              OR LOWER(dyreart) LIKE '%11%' THEN '11'
-                        WHEN LOWER(dyreart) LIKE '%fjerkræ%' OR LOWER(dyreart) LIKE '%poultry%' 
+                        WHEN LOWER(dyreart) LIKE '%fjerkræ%' OR LOWER(dyreart) LIKE '%poultry%'
                              OR LOWER(dyreart) LIKE '%chicken%' OR LOWER(dyreart) LIKE '%50%' THEN '50'
                         ELSE NULL
                     END as species_code,
-                    CASE 
+                    CASE
                         WHEN dyreart IS NULL OR TRIM(dyreart) = '' THEN NULL
-                        WHEN LOWER(dyreart) LIKE '%svin%' OR LOWER(dyreart) LIKE '%pig%' 
+                        WHEN LOWER(dyreart) LIKE '%svin%' OR LOWER(dyreart) LIKE '%pig%'
                              OR LOWER(dyreart) LIKE '%15%' THEN 'Svin'
-                        WHEN LOWER(dyreart) LIKE '%kvæg%' OR LOWER(dyreart) LIKE '%cattle%' 
+                        WHEN LOWER(dyreart) LIKE '%kvæg%' OR LOWER(dyreart) LIKE '%cattle%'
                              OR LOWER(dyreart) LIKE '%cow%' OR LOWER(dyreart) LIKE '%12%' THEN 'Kvæg'
-                        WHEN LOWER(dyreart) LIKE '%får%' OR LOWER(dyreart) LIKE '%sheep%' 
+                        WHEN LOWER(dyreart) LIKE '%får%' OR LOWER(dyreart) LIKE '%sheep%'
                              OR LOWER(dyreart) LIKE '%13%' THEN 'Får'
-                        WHEN LOWER(dyreart) LIKE '%ged%' OR LOWER(dyreart) LIKE '%goat%' 
+                        WHEN LOWER(dyreart) LIKE '%ged%' OR LOWER(dyreart) LIKE '%goat%'
                              OR LOWER(dyreart) LIKE '%14%' THEN 'Ged'
-                        WHEN LOWER(dyreart) LIKE '%hest%' OR LOWER(dyreart) LIKE '%horse%' 
+                        WHEN LOWER(dyreart) LIKE '%hest%' OR LOWER(dyreart) LIKE '%horse%'
                              OR LOWER(dyreart) LIKE '%11%' THEN 'Hest'
-                        WHEN LOWER(dyreart) LIKE '%fjerkræ%' OR LOWER(dyreart) LIKE '%poultry%' 
+                        WHEN LOWER(dyreart) LIKE '%fjerkræ%' OR LOWER(dyreart) LIKE '%poultry%'
                              OR LOWER(dyreart) LIKE '%chicken%' OR LOWER(dyreart) LIKE '%50%' THEN 'Fjerkræ'
                         ELSE TRIM(dyreart)
                     END as species_name
                 FROM animal_welfare
             """)
             logger.info("✅ Standardized species codes and names in animal_welfare data")
-            
+
         if "property_vet_events" in table_names:
             logger.info("🔧 Standardizing species codes in property_vet_events data...")
-            
+
             # Check if species_code column exists
             columns = con.execute("DESCRIBE property_vet_events").fetchall()
             column_names = [col[0] for col in columns]
-            
+
             if "species_code" in column_names:
                 # Update existing species_code and species_name columns
                 con.execute("""
                     CREATE OR REPLACE TABLE property_vet_events AS
-                    SELECT 
+                    SELECT
                         * EXCLUDE (species_code, species_name),
-                        CASE 
+                        CASE
                             WHEN species_code IS NOT NULL AND species_code != '' THEN CAST(species_code AS VARCHAR)
                             WHEN species_name IS NULL OR TRIM(species_name) = '' THEN NULL
                             WHEN LOWER(species_name) LIKE '%svin%' OR LOWER(species_name) LIKE '%pig%' THEN '15'
-                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%' 
+                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%'
                                  OR LOWER(species_name) LIKE '%cow%' THEN '12'
                             WHEN LOWER(species_name) LIKE '%får%' OR LOWER(species_name) LIKE '%sheep%' THEN '13'
                             WHEN LOWER(species_name) LIKE '%ged%' OR LOWER(species_name) LIKE '%goat%' THEN '14'
                             WHEN LOWER(species_name) LIKE '%hest%' OR LOWER(species_name) LIKE '%horse%' THEN '11'
-                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%' 
+                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%'
                                  OR LOWER(species_name) LIKE '%chicken%' THEN '50'
                             ELSE NULL
                         END as species_code,
-                        CASE 
+                        CASE
                             WHEN species_name IS NULL OR TRIM(species_name) = '' THEN NULL
                             WHEN LOWER(species_name) LIKE '%svin%' OR LOWER(species_name) LIKE '%pig%' THEN 'Svin'
-                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%' 
+                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%'
                                  OR LOWER(species_name) LIKE '%cow%' THEN 'Kvæg'
                             WHEN LOWER(species_name) LIKE '%får%' OR LOWER(species_name) LIKE '%sheep%' THEN 'Får'
                             WHEN LOWER(species_name) LIKE '%ged%' OR LOWER(species_name) LIKE '%goat%' THEN 'Ged'
                             WHEN LOWER(species_name) LIKE '%hest%' OR LOWER(species_name) LIKE '%horse%' THEN 'Hest'
-                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%' 
+                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%'
                                  OR LOWER(species_name) LIKE '%chicken%' THEN 'Fjerkræ'
                             ELSE TRIM(species_name)
                         END as species_name
@@ -913,25 +893,25 @@ def standardize_species_data(con: duckdb.DuckDBPyConnection) -> None:
                 # Add species_code column based on species_name
                 con.execute("""
                     CREATE OR REPLACE TABLE property_vet_events AS
-                    SELECT 
+                    SELECT
                         *,
-                        CASE 
+                        CASE
                             WHEN species_name IS NULL OR TRIM(species_name) = '' THEN NULL
                             WHEN LOWER(species_name) LIKE '%svin%' OR LOWER(species_name) LIKE '%pig%' THEN '15'
-                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%' 
+                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%'
                                  OR LOWER(species_name) LIKE '%cow%' THEN '12'
                             WHEN LOWER(species_name) LIKE '%får%' OR LOWER(species_name) LIKE '%sheep%' THEN '13'
                             WHEN LOWER(species_name) LIKE '%ged%' OR LOWER(species_name) LIKE '%goat%' THEN '14'
                             WHEN LOWER(species_name) LIKE '%hest%' OR LOWER(species_name) LIKE '%horse%' THEN '11'
-                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%' 
+                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%'
                                  OR LOWER(species_name) LIKE '%chicken%' THEN '50'
                             ELSE NULL
                         END as species_code
                     FROM property_vet_events
                 """)
-            
+
             logger.info("✅ Standardized species codes and names in property_vet_events data")
-            
+
     except Exception as e:
         logger.warning(f"⚠️ Species standardization failed: {e}")
 
@@ -963,10 +943,10 @@ def create_veterinary_timeline(
 
         # Note: now we need to use gcs_access.duckdb_conn instead of con
         con = gcs_access.duckdb_con
-        
+
         # Standardize species data across all loaded sources
         standardize_species_data(con)
-        
+
         # Check what we have to work with
         available_sources = [name for name, loaded in loaded_tables.items() if loaded]
         logger.info(f"📊 Available data sources: {available_sources}")
