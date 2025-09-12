@@ -655,6 +655,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     yield_estimation_method VARCHAR,
                     production_estimate_hkg DOUBLE,
                     production_unit VARCHAR,
+                    geometry VARCHAR,
                     created_at TIMESTAMP WITH TIME ZONE,
                     field_uuid VARCHAR,
                     primary_field_id VARCHAR
@@ -841,22 +842,23 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self._perform_batched_spatial_join(year)
             else:
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE year_fields_with_zones AS
-                    SELECT
-                        f.field_id,
-                        f.block_id,
-                        f.cvr_number,
-                        f.area_ha,
-                        f.crop_type,
-                        f.organic_farming,
-                        f.year,
-                        COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
-                        COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
-                        COALESCE(z.dst_regions, 'unknown') as dst_regions,
-                        f.field_uuid,
-                        f.primary_field_id
-                    FROM current_year_fields f
-                    LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+                CREATE OR REPLACE TABLE year_fields_with_zones AS
+                SELECT
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
+                    f.year,
+                    COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
+                    COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
+                    COALESCE(z.dst_regions, 'unknown') as dst_regions,
+                    f.field_uuid,
+                    f.primary_field_id,
+                    f.geometry
+                FROM current_year_fields f
+                LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
                 """)
 
             # Verify SPATIAL_JOIN operator usage
@@ -906,6 +908,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     'no_yield_data' as yield_estimation_method,
                     NULL::DOUBLE as production_estimate_hkg,
                     NULL::VARCHAR as production_unit,
+                    -- GEOMETRY
+                    f.geometry,
                     -- METADATA
                     current_timestamp as created_at,
                     -- FIELD UUID SUPPORT
@@ -1005,7 +1009,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 NULL::VARCHAR as landsdel_name,
                 NULL::VARCHAR as dst_regions,
                 NULL::VARCHAR as field_uuid,
-                NULL::VARCHAR as primary_field_id
+                NULL::VARCHAR as primary_field_id,
+                NULL::VARCHAR as geometry
             WHERE FALSE
         """)
 
@@ -1046,7 +1051,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
                     COALESCE(z.dst_regions, 'unknown') as dst_regions,
                     f.field_uuid,
-                    f.primary_field_id
+                    f.primary_field_id,
+                    f.geometry
                 FROM current_batch f
                 LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
             """)
