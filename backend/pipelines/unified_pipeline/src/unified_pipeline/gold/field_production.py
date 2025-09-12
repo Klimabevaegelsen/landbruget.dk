@@ -1097,9 +1097,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"assuming all fields are non-organic"
             )
 
-        # Handle geometry column - ensure consistent CRS (EPSG:25832 for Denmark)
+        # Handle geometry column
         if "geometry" in column_names:
-            geometry_select = "ST_Transform(geometry, 25832) as geometry"
+            geometry_select = "geometry"
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
@@ -1160,9 +1160,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"assuming all fields are non-organic"
             )
 
-        # Handle geometry column - ensure consistent CRS (EPSG:25832 for Denmark)
+        # Handle geometry column
         if "geometry" in column_names:
-            geometry_select = "ST_Transform(geometry, 25832) as geometry"
+            geometry_select = "geometry"
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
@@ -1227,14 +1227,14 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             # Create optimized DST zones table with spatial geometry
             # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText
-            # Ensure consistent CRS (EPSG:25832 for Denmark)
+            # Note: Skip CRS transformation for now - assume consistent CRS
             self.conn.execute("""
                 CREATE OR REPLACE TABLE dst_zones AS
                 SELECT
                     landsdel_code,
                     landsdel_name,
                     dst_regions,
-                    ST_Transform(ST_GeomFromText(geometry), 25832) as geometry
+                    ST_GeomFromText(geometry) as geometry
                 FROM dst_zones_raw
                 WHERE geometry IS NOT NULL
                 AND geometry != ''
