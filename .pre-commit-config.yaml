@@ -69,17 +69,17 @@ repos:
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
 
-      # ESLint for frontend (restored original)
-      - id: eslint
-        name: ESLint
+      # Oxlint for frontend (much faster than ESLint)
+      - id: oxlint
+        name: Oxlint (Frontend)
         entry: bash
         args: [-c, "cd frontend && npm run lint"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
-      - id: eslint-frontend-pesticide
-        name: ESLint (Frontend Pesticide)
+      - id: oxlint-frontend-pesticide
+        name: Oxlint (Frontend Pesticide)
         entry: bash
         args: [-c, "cd frontend-pesticide && npm run lint"]
         language: system

@@ -5,17 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { 
-  ToggleGroup, 
-  ToggleGroupItem 
-} from '@/components/ui/toggle-group';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { LayerVisibility, FilterState } from './types';
 import {
   Wheat,
@@ -43,7 +40,6 @@ export function LayerControlPanelEnhanced({
   onLayerToggle,
   onFilterChange,
 }: LayerControlPanelEnhancedProps) {
-  
   const layerConfigs = [
     {
       key: 'fields' as const,
@@ -88,9 +84,17 @@ export function LayerControlPanelEnhanced({
   ];
 
   const visualizationModes = [
-    { value: 'total_pesticide_belastning', label: 'Total Pesticidbelastning', icon: TestTube },
+    {
+      value: 'total_pesticide_belastning',
+      label: 'Total Pesticidbelastning',
+      icon: TestTube,
+    },
     { value: 'pfas_belastning', label: 'PFAS Belastning', icon: TestTube },
-    { value: 'glyphosate_belastning', label: 'Glyphosate Belastning', icon: TestTube },
+    {
+      value: 'glyphosate_belastning',
+      label: 'Glyphosate Belastning',
+      icon: TestTube,
+    },
     { value: 'diquat_belastning', label: 'Diquat Belastning', icon: TestTube },
   ];
 
@@ -99,7 +103,7 @@ export function LayerControlPanelEnhanced({
       {/* Layer Visibility Controls */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
             <Eye className="h-4 w-4" />
             Lag Synlighed
           </CardTitle>
@@ -108,7 +112,7 @@ export function LayerControlPanelEnhanced({
           {layerConfigs.map((layer) => {
             const Icon = layer.icon;
             const isVisible = layerVisibility[layer.key];
-            
+
             return (
               <div key={layer.key} className="flex items-start space-x-3">
                 <Switch
@@ -118,18 +122,21 @@ export function LayerControlPanelEnhanced({
                 />
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
-                    <Label 
+                    <Label
                       htmlFor={layer.key}
-                      className="flex items-center gap-2 font-medium cursor-pointer"
+                      className="flex cursor-pointer items-center gap-2 font-medium"
                     >
                       <Icon className="h-4 w-4" />
                       {layer.name}
                     </Label>
-                    <Badge variant="outline" className={`text-xs ${layer.color}`}>
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${layer.color}`}
+                    >
                       {layer.count}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-muted-foreground text-xs">
                     {layer.description}
                   </p>
                 </div>
@@ -142,7 +149,7 @@ export function LayerControlPanelEnhanced({
       {/* Visualization Controls */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
             <Palette className="h-4 w-4" />
             Visualisering
           </CardTitle>
@@ -153,7 +160,9 @@ export function LayerControlPanelEnhanced({
             <Label className="text-sm font-medium">Visualiseringsmode</Label>
             <Select
               value={filterState.visualizationMode}
-              onValueChange={(value) => onFilterChange({ visualizationMode: value })}
+              onValueChange={(value) =>
+                onFilterChange({ visualizationMode: value })
+              }
             >
               <SelectTrigger>
                 <SelectValue />
@@ -180,7 +189,9 @@ export function LayerControlPanelEnhanced({
             <ToggleGroup
               type="single"
               value={filterState.colorUnit}
-              onValueChange={(value) => value && onFilterChange({ colorUnit: value })}
+              onValueChange={(value) =>
+                value && onFilterChange({ colorUnit: value })
+              }
               className="justify-start"
             >
               <ToggleGroupItem value="belastning" aria-label="Belastning">
@@ -197,9 +208,14 @@ export function LayerControlPanelEnhanced({
             <Switch
               id="organic-only"
               checked={filterState.organicOnly}
-              onCheckedChange={(checked) => onFilterChange({ organicOnly: checked })}
+              onCheckedChange={(checked) =>
+                onFilterChange({ organicOnly: checked })
+              }
             />
-            <Label htmlFor="organic-only" className="flex items-center gap-2 cursor-pointer">
+            <Label
+              htmlFor="organic-only"
+              className="flex cursor-pointer items-center gap-2"
+            >
               <Leaf className="h-4 w-4 text-green-600" />
               Kun økologiske marker
             </Label>
@@ -210,7 +226,9 @@ export function LayerControlPanelEnhanced({
             <Switch
               id="decile-coloring"
               checked={filterState.useDecileColoring}
-              onCheckedChange={(checked) => onFilterChange({ useDecileColoring: checked })}
+              onCheckedChange={(checked) =>
+                onFilterChange({ useDecileColoring: checked })
+              }
             />
             <Label htmlFor="decile-coloring" className="cursor-pointer">
               Brug decil-farvning
@@ -222,7 +240,7 @@ export function LayerControlPanelEnhanced({
       {/* Quick Stats */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
             <Calendar className="h-4 w-4" />
             Datastatistik
           </CardTitle>
@@ -232,19 +250,21 @@ export function LayerControlPanelEnhanced({
             <div className="space-y-1">
               <div className="text-muted-foreground">Synlige lag:</div>
               <div className="font-medium">
-                {Object.values(layerVisibility).filter(Boolean).length} / {Object.keys(layerVisibility).length}
+                {Object.values(layerVisibility).filter(Boolean).length} /{' '}
+                {Object.keys(layerVisibility).length}
               </div>
             </div>
             <div className="space-y-1">
               <div className="text-muted-foreground">Aktive filtre:</div>
               <div className="font-medium">
-                {(filterState.organicOnly ? 1 : 0) + (filterState.useDecileColoring ? 0 : 1)}
+                {(filterState.organicOnly ? 1 : 0) +
+                  (filterState.useDecileColoring ? 0 : 1)}
               </div>
             </div>
           </div>
-          
+
           {filterState.organicOnly && (
-            <div className="mt-3 p-2 bg-green-50 dark:bg-green-950/20 rounded-md">
+            <div className="mt-3 rounded-md bg-green-50 p-2 dark:bg-green-950/20">
               <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-300">
                 <Leaf className="h-4 w-4" />
                 Kun økologiske marker vises

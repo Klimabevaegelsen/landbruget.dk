@@ -1,5 +1,6 @@
 import { Container } from '@/components/layout/container';
 import { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Kilder - Landbruget.dk',
@@ -440,12 +441,12 @@ export default function KilderPage() {
 
               <p className="text-foreground text-lg leading-relaxed">
                 For mere information om vores metoder og principper, se vores{' '}
-                <a
+                <Link
                   href="/om-os"
                   className="text-primary underline hover:no-underline"
                 >
                   Om os
-                </a>{' '}
+                </Link>{' '}
                 side.
               </p>
             </section>

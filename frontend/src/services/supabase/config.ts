@@ -9,9 +9,10 @@ export const apiFetch = async (
     cache?: RequestCache;
   }
 ) => {
+  const method = options?.method || 'GET';
   const response = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}${path}`, {
-    method: options?.method || 'GET',
-    body: options?.body,
+    method,
+    ...(method !== 'GET' && { body: options?.body }),
     headers: {
       ...options?.headers,
       Authorization: `Bearer ${env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
