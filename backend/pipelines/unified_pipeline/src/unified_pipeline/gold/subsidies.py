@@ -137,72 +137,180 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             return None
 
     async def _load_subsidies_from_gcs(self) -> pd.DataFrame:
-        """Load subsidies data from GCS silver layer with reliable connection management."""
-        self.log.info("🔍 Discovering silver subsidies datasets...")
+        """Load all subsidies data from GCS silver layer including FVM subsidy types."""
+        self.log.info("🔍 Discovering all subsidies datasets in GCS...")
 
         # FIXED: Use a fresh DuckDB connection to avoid conflicts between base and GCS access
-        # Create a completely independent connection for data loading
         data_conn = duckdb.connect(database=":memory:")
 
         try:
             # Configure the fresh connection
             self._configure_fresh_connection(data_conn)
 
-            # Simple, direct approach - load known subsidies directory
-            subsidies_path = "gs://landbrugsdata-raw-data/silver/subsidies/20250803_200555"
+            # Define all subsidy dataset patterns to load with subsidy rates
+            subsidy_patterns = [
+                ("general", "gs://landbrugsdata-raw-data/silver/subsidies/20250803_200555", None),  # No rate calculation needed
+                ("environmental", "gs://landbrugsdata-raw-data/silver/fvm_environmental_subsidies_2023", 1500),  # Environmental: 1500 DKK/ha estimate
+                ("grassland", "gs://landbrugsdata-raw-data/silver/fvm_grassland_subsidies_2023", 2200),  # Grassland basic payment: 2200 DKK/ha
+                ("organic_subsidies", "gs://landbrugsdata-raw-data/silver/fvm_organic_subsidies_2023", 3500),  # Organic basic subsidy: 3500 DKK/ha
+            ]
 
-            self.log.info(f"📂 Loading subsidies from: {subsidies_path}")
+            all_dataframes = []
 
-            # Get file list using gcsfs directly
-            files = self.gcs_access.fs.glob(f"{subsidies_path}/*.parquet")
+            for subsidy_type, pattern, subsidy_rate_per_ha in subsidy_patterns:
+                self.log.info(f"📂 Loading {subsidy_type} subsidies...")
+                if subsidy_rate_per_ha:
+                    self.log.info(f"   💰 Using area-based calculation: {subsidy_rate_per_ha:,} DKK/hectare")
 
-            if not files:
-                raise ValueError(f"No parquet files found in {subsidies_path}")
+                # Get all matching directories
+                if "*" in pattern:
+                    # For pattern matching, get all directories that match
+                    base_pattern = pattern.replace("*", "")
+                    try:
+                        all_dirs = self.gcs_access.fs.glob(pattern.replace("gs://", "") + "/")
+                        directories = [f"gs://{d}" for d in all_dirs]
+                    except Exception as e:
+                        self.log.warning(f"Could not list directories for {pattern}: {e}")
+                        continue
+                else:
+                    directories = [pattern]
 
-            self.log.info(f"📄 Found {len(files)} files to load")
+                for directory in directories:
+                    try:
+                        # Get latest timestamped subdirectory
+                        subdir_pattern = directory.rstrip("/") + "/*"
+                        subdirs = self.gcs_access.fs.glob(subdir_pattern.replace("gs://", ""))
 
-            # Load each file using the fresh connection
-            dataframes = []
-            for i, file_path in enumerate(files):
+                        if not subdirs:
+                            # Try direct parquet files
+                            file_pattern = directory.rstrip("/") + "/*.parquet"
+                            files = self.gcs_access.fs.glob(file_pattern.replace("gs://", ""))
+                            if files:
+                                latest_dir = directory
+                            else:
+                                continue
+                        else:
+                            # Get the latest timestamped directory
+                            latest_subdir = sorted(subdirs)[-1]
+                            latest_dir = f"gs://{latest_subdir}"
+
+                        # Load parquet files from this directory
+                        file_pattern = latest_dir.rstrip("/") + "/*.parquet"
+                        files = self.gcs_access.fs.glob(file_pattern.replace("gs://", ""))
+
+                        if not files:
+                            self.log.warning(f"   📁 {latest_dir}: No parquet files found")
+                            continue
+
+                        self.log.info(f"   📁 {latest_dir}: {len(files)} files")
+
+                        # Load each file
+                        for i, file_path in enumerate(files):
+                            try:
+                                file_name = file_path.split("/")[-1]
+
+                                # Use direct read_parquet with the fresh connection
+                                # Create safe table name (no special characters)
+                                safe_hash = str(abs(hash(directory)))[:8]  # Get positive 8-digit hash
+                                table_name = f"temp_{subsidy_type}_{safe_hash}_{i}".replace("-", "_")
+                                full_gs_path = f"gs://{file_path}" if not file_path.startswith("gs://") else file_path
+
+                                self.log.info(f"      📄 Loading {file_name} from {full_gs_path}")
+
+                                data_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                                data_conn.execute(
+                                    f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{full_gs_path}')"
+                                )
+
+                                # Get the data
+                                df = data_conn.execute(f"SELECT * FROM {table_name}").df()
+
+                                if df is not None and not df.empty:
+                                    # Add metadata to distinguish subsidy types
+                                    df["subsidy_type"] = subsidy_type
+                                    df["silver_source_dataset"] = subsidy_type
+                                    df["silver_source_file"] = file_name
+                                    df["subsidy_source_path"] = directory
+
+                                    # Extract year from directory name if not in data
+                                    year_match = None
+                                    import re
+                                    year_pattern = r'(\d{4})'
+                                    directory_years = re.findall(year_pattern, directory)
+                                    if directory_years:
+                                        year_match = int(directory_years[-1])  # Take the last year found
+                                        df["source_year"] = year_match
+
+                                    # Calculate area-based subsidies for FVM datasets
+                                    if subsidy_rate_per_ha and "area_ha" in df.columns:
+                                        # Ensure area_ha is numeric
+                                        df["area_ha"] = pd.to_numeric(df["area_ha"], errors="coerce")
+                                        # Calculate subsidy amount based on area
+                                        df["calculated_subsidy_amount"] = df["area_ha"] * subsidy_rate_per_ha
+                                        # Log the calculation
+                                        total_area = df["area_ha"].sum()
+                                        total_amount = df["calculated_subsidy_amount"].sum()
+                                        self.log.info(f"         💰 Calculated {total_amount:,.0f} DKK from {total_area:.1f} hectares")
+
+                                    all_dataframes.append(df)
+                                    self.log.info(f"      ✅ {file_name}: {len(df):,} records")
+                                else:
+                                    self.log.warning(f"      ⚠️ {file_name}: Empty dataframe")
+
+                                # Cleanup
+                                data_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+                            except Exception as e:
+                                self.log.warning(f"      ⚠️ Could not load {file_name}: {e}")
+                                continue
+
+                    except Exception as e:
+                        self.log.warning(f"   ⚠️ Could not process directory {directory}: {e}")
+                        continue
+
+            if not all_dataframes:
+                # Fall back to original approach if FVM loading fails
+                self.log.warning("⚠️ Could not load FVM data, falling back to original subsidies directory")
                 try:
-                    file_name = file_path.split("/")[-1]
-                    self.log.info(f"    Loading {file_name}...")
+                    subsidies_path = "gs://landbrugsdata-raw-data/silver/subsidies/20250803_200555"
+                    files = self.gcs_access.fs.glob(f"{subsidies_path.replace('gs://', '')}/*.parquet")
 
-                    # Use direct read_parquet with the fresh connection
-                    table_name = f"temp_subsidies_{i}"
-                    full_gs_path = (
-                        f"gs://{file_path}" if not file_path.startswith("gs://") else file_path
-                    )
+                    if files:
+                        self.log.info(f"📂 Fallback loading from: {subsidies_path}")
+                        for i, file_path in enumerate(files):
+                            try:
+                                file_name = file_path.split("/")[-1]
+                                full_gs_path = f"gs://{file_path}"
 
-                    data_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-                    data_conn.execute(
-                        f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{full_gs_path}')"
-                    )
+                                table_name = f"fallback_subsidies_{i}"
+                                data_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                                data_conn.execute(
+                                    f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{full_gs_path}')"
+                                )
 
-                    # Get the data
-                    df = data_conn.execute(f"SELECT * FROM {table_name}").df()
+                                df = data_conn.execute(f"SELECT * FROM {table_name}").df()
 
-                    if df is not None and not df.empty:
-                        # Add metadata
-                        df["silver_source_dataset"] = "subsidies"
-                        df["silver_source_file"] = file_name
-                        df["subsidy_file_type"] = file_name.replace(".parquet", "")
-                        dataframes.append(df)
-                        self.log.info(f"    ✅ {file_name}: {len(df):,} records")
+                                if df is not None and not df.empty:
+                                    df["subsidy_type"] = "general"
+                                    df["silver_source_dataset"] = "general"
+                                    df["silver_source_file"] = file_name
+                                    all_dataframes.append(df)
+                                    self.log.info(f"   ✅ Fallback loaded {file_name}: {len(df):,} records")
 
-                    # Cleanup
-                    data_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                                data_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
+                            except Exception as e:
+                                self.log.warning(f"   ⚠️ Could not load {file_name} in fallback: {e}")
+                                continue
                 except Exception as e:
-                    self.log.warning(f"    ⚠️ Could not load {file_name}: {e}")
-                    continue
+                    self.log.error(f"Fallback loading also failed: {e}")
 
-            if not dataframes:
-                raise ValueError("No subsidies data could be loaded")
+                if not all_dataframes:
+                    raise ValueError("No subsidies data could be loaded from any source")
 
             # Combine all dataframes
-            self.log.info("📊 Combining loaded datasets...")
-            combined_df = pd.concat(dataframes, ignore_index=True, sort=False)
+            self.log.info("📊 Combining all subsidies datasets...")
+            combined_df = pd.concat(all_dataframes, ignore_index=True, sort=False)
 
             # Apply data processing
             combined_df = self._extract_year_from_dates(combined_df)
@@ -211,7 +319,14 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             # Log CVR analysis of raw data
             self._analyze_cvr_data(combined_df)
 
-            self.log.info(f"✅ Loaded {len(combined_df):,} total subsidy records from silver layer")
+            # Log subsidy type distribution
+            if "subsidy_type" in combined_df.columns:
+                type_counts = combined_df["subsidy_type"].value_counts()
+                self.log.info("📋 Subsidy type distribution:")
+                for stype, count in type_counts.items():
+                    self.log.info(f"   {stype}: {count:,} records")
+
+            self.log.info(f"✅ Loaded {len(combined_df):,} total subsidy records from all sources")
             return combined_df
 
         finally:
@@ -567,16 +682,27 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
             # Fallback: create a single "total_subsidies" column
             return self._create_simple_aggregation(df_with_cvr)
 
-        # Determine amount column
-        amount_col = "amount_dkk" if "amount_dkk" in df_with_cvr.columns else None
-        if not amount_col:
+        # Determine amount column (prioritize calculated amounts for FVM data)
+        amount_col = None
+
+        # First priority: calculated subsidy amounts from area-based calculations
+        if "calculated_subsidy_amount" in df_with_cvr.columns:
+            amount_col = "calculated_subsidy_amount"
+            self.log.info("💰 Using calculated area-based subsidy amounts")
+        # Second priority: standard amount columns
+        elif "amount_dkk" in df_with_cvr.columns:
+            amount_col = "amount_dkk"
+            self.log.info("💰 Using standard amount_dkk column")
+        else:
+            # Try alternative amount column names
             for col in ["beløb", "amount", "value", "kroner"]:
                 if col in df_with_cvr.columns:
                     amount_col = col
+                    self.log.info(f"💰 Using alternative amount column: {col}")
                     break
 
         if not amount_col:
-            self.log.warning("No amount column found - using count of records")
+            self.log.warning("💰 No amount column found - using count of records")
             df_with_cvr["record_count"] = 1
             amount_col = "record_count"
 
@@ -652,8 +778,9 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
 
     def _determine_subsidy_category_column(self, df: pd.DataFrame) -> Optional[str]:
         """Determine the best column to use for subsidy categorization."""
-        # Priority order for category columns
+        # Priority order for category columns - prioritize our new subsidy_type column
         category_candidates = [
+            "subsidy_type",           # NEW: Our categorization from data sources
             "subsidy_measure",
             "subsidy_type_code",
             "subsidy_category",
@@ -678,8 +805,13 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
         """Create simple aggregation when no suitable category column is found."""
         self.log.info("   Creating simple aggregation (no category breakdown)")
 
-        amount_col = "amount_dkk" if "amount_dkk" in df.columns else None
-        if not amount_col:
+        # Determine amount column (same logic as main method)
+        amount_col = None
+        if "calculated_subsidy_amount" in df.columns:
+            amount_col = "calculated_subsidy_amount"
+        elif "amount_dkk" in df.columns:
+            amount_col = "amount_dkk"
+        else:
             df["record_count"] = 1
             amount_col = "record_count"
 
