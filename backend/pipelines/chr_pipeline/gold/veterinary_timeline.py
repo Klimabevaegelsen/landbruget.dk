@@ -477,7 +477,7 @@ def create_vet_events_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str
             END as event_description,
             'Veterinary' as event_category,
             COALESCE({species_col}, 'Unknown') as species,
-            COALESCE(species_code,
+            COALESCE(CAST(species_code AS VARCHAR),
                 CASE
                     WHEN LOWER(COALESCE({species_col}, '')) LIKE '%svin%'
                          OR LOWER(COALESCE({species_col}, '')) LIKE '%pig%' THEN '15'
