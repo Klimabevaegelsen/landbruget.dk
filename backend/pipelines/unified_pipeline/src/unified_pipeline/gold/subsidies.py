@@ -686,11 +686,14 @@ class SubsidiesGold(BaseSource[SubsidiesGoldConfig], GoldJobInterface):
         # Simple groupby CVR and year
         unified_df = df.groupby(["cvr_number", "year"]).agg({
             amount_col: "sum",
-            "cvr_number": "count"  # count records
         }).reset_index()
 
-        # Rename columns
-        unified_df.columns = ["cvr_number", "year", "total_subsidies", "total_records"]
+        # Add record count by grouping again
+        record_counts = df.groupby(["cvr_number", "year"]).size().reset_index(name="total_records")
+        unified_df = unified_df.merge(record_counts, on=["cvr_number", "year"])
+
+        # Rename amount column
+        unified_df = unified_df.rename(columns={amount_col: "total_subsidies"})
 
         return unified_df
 
