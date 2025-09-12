@@ -13,7 +13,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { LayerVisibility, FilterState } from './types';
+import {
+  LayerVisibility,
+  FilterState,
+  VisualizationMode,
+  ColorUnit,
+} from './types';
 import {
   Wheat,
   Droplets,
@@ -161,7 +166,9 @@ export function LayerControlPanelEnhanced({
             <Select
               value={filterState.visualizationMode}
               onValueChange={(value) =>
-                onFilterChange({ visualizationMode: value })
+                onFilterChange({
+                  visualizationMode: value as VisualizationMode,
+                })
               }
             >
               <SelectTrigger>
@@ -190,7 +197,7 @@ export function LayerControlPanelEnhanced({
               type="single"
               value={filterState.colorUnit}
               onValueChange={(value) =>
-                value && onFilterChange({ colorUnit: value })
+                value && onFilterChange({ colorUnit: value as ColorUnit })
               }
               className="justify-start"
             >

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { LayerControlPanel } from './LayerControlPanel';
+import { LayerControlPanelEnhanced as LayerControlPanel } from './LayerControlPanel';
 import { FieldDetailsPanel } from './FieldDetailsPanel';
 import { CoordinatePanel } from './CoordinatePanel';
 import { LoadingState } from './LoadingState';
