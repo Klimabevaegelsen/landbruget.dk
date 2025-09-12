@@ -1097,9 +1097,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"assuming all fields are non-organic"
             )
 
-        # Handle geometry column
+        # Handle geometry column - ensure consistent CRS (EPSG:25832 for Denmark)
         if "geometry" in column_names:
-            geometry_select = "geometry"
+            geometry_select = "ST_Transform(geometry, 25832) as geometry"
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
@@ -1160,9 +1160,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"assuming all fields are non-organic"
             )
 
-        # Handle geometry column
+        # Handle geometry column - ensure consistent CRS (EPSG:25832 for Denmark)
         if "geometry" in column_names:
-            geometry_select = "geometry"
+            geometry_select = "ST_Transform(geometry, 25832) as geometry"
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
@@ -1227,14 +1227,14 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             # Create optimized DST zones table with spatial geometry
             # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText
-            # for spatial indexing
+            # Ensure consistent CRS (EPSG:25832 for Denmark)
             self.conn.execute("""
                 CREATE OR REPLACE TABLE dst_zones AS
                 SELECT
                     landsdel_code,
                     landsdel_name,
                     dst_regions,
-                    ST_GeomFromText(geometry) as geometry
+                    ST_Transform(ST_GeomFromText(geometry), 25832) as geometry
                 FROM dst_zones_raw
                 WHERE geometry IS NOT NULL
                 AND geometry != ''
@@ -1395,6 +1395,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         """
         Apply DST yields using the comprehensive crop mapping table.
         This replaces the old hard-coded matching with intelligent crop mapping.
+        Also updates crop_type to show the mapped DST category.
         """
         self.log.info(f"  🎯 Applying DST yields with crop mapping for {year}...")
 
@@ -1407,6 +1408,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
         total_crops = len(crop_types)
         matched_crops = 0
+        updated_fields = 0
 
         self.log.info(f"  📊 Processing {total_crops} unique crop types...")
 
@@ -1415,27 +1417,45 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             mapping_info = get_dst_category(crop_type)
 
             if not mapping_info:
+                self.log.debug(f"  ❌ No mapping found for crop: {crop_type}")
                 continue
 
             dst_table = mapping_info["dst_table"]
             dst_category = mapping_info["dst_category"]
             match_quality = mapping_info["match_quality"]
 
-            # Apply yields based on DST table
+            # First, update the crop_type field to show the mapped DST category
+            # This ensures the output shows proper DST categories instead of raw FVM crop names
+            self.conn.execute(
+                """
+                UPDATE year_production_estimates
+                SET crop_type = ?
+                WHERE crop_type = ?
+            """,
+                [dst_category, crop_type],
+            )
+
+            fields_updated = self.conn.execute("SELECT changes()").fetchone()[0]
+            updated_fields += fields_updated
+
+            self.log.debug(f"  ✅ Mapped {crop_type} → {dst_category} ({fields_updated:,} fields)")
+
+            # Apply yields based on DST table (now using the updated dst_category as crop_type)
             if dst_table == "HST77":
-                self._apply_hst77_yields(year, crop_type, dst_category, match_quality)
+                self._apply_hst77_yields(year, dst_category, dst_category, match_quality)
             elif dst_table == "GARTN1":
-                self._apply_gartn1_yields(year, crop_type, dst_category, match_quality)
+                self._apply_gartn1_yields(year, dst_category, dst_category, match_quality)
             elif dst_table == "FRO":
-                self._apply_fro_yields(year, crop_type, dst_category, match_quality)
+                self._apply_fro_yields(year, dst_category, dst_category, match_quality)
             elif dst_table == "HALM1":
-                self._apply_halm1_yields(year, crop_type, dst_category, match_quality)
+                self._apply_halm1_yields(year, dst_category, dst_category, match_quality)
 
             matched_crops += 1
 
         self.log.info(
             f"  ✅ Successfully mapped {matched_crops}/{total_crops} crop types to DST data"
         )
+        self.log.info(f"  🌾 Updated crop_type for {updated_fields:,} fields with DST categories")
 
         # Apply fallback for unmapped crops
         self._apply_fallback_yields(year)
