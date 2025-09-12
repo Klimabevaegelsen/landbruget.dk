@@ -1009,6 +1009,24 @@ def create_veterinary_timeline(
             logger.error("❌ No timeline parts could be created")
             return False
 
+        # Debug: Test each timeline part individually before UNION
+        logger.info("🔍 Testing individual timeline parts for column consistency...")
+        for i, part in enumerate(timeline_parts):
+            try:
+                # Test each part individually
+                result = con.execute(f"DESCRIBE ({part})").fetchall()
+                col_count = len(result)
+                cols_preview = [row[0] for row in result[:3]]
+                cols_suffix = "..." if col_count > 3 else ""
+                logger.info(f"   Part {i+1}: {col_count} columns - {cols_preview}{cols_suffix}")
+
+                if col_count != 10:
+                    logger.error(f"❌ Part {i+1} has {col_count} columns, expected 10!")
+                    logger.error(f"   All columns: {[row[0] for row in result]}")
+
+            except Exception as e:
+                logger.error(f"❌ Part {i+1} failed individual test: {e}")
+
         # Combine all timeline parts
         full_query = "CREATE OR REPLACE TABLE veterinary_timeline AS\n" + "\nUNION ALL\n".join(timeline_parts)
         con.execute(full_query)
