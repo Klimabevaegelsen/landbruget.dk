@@ -33,7 +33,7 @@ const DENMARK_BOUNDS = {
   north: 57.75,
   south: 54.56,
   east: 15.16,
-  west: 8.08
+  west: 8.08,
 };
 
 export function useViewport() {
@@ -41,7 +41,9 @@ export function useViewport() {
   const [bounds, setBounds] = useState<ViewportBounds | null>(null);
   const [isMoving, setIsMoving] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [transitionStartTime, setTransitionStartTime] = useState<number | null>(null);
+  const [transitionStartTime, setTransitionStartTime] = useState<number | null>(
+    null
+  );
 
   // Calculate bounds from viewport
   const calculateBounds = useCallback((vp: ViewState): ViewportBounds => {
@@ -80,33 +82,39 @@ export function useViewport() {
   }, []);
 
   // Zoom to specific location
-  const zoomTo = useCallback((latitude: number, longitude: number, zoom: number = 12) => {
-    setViewport(prev => ({
-      ...prev,
-      latitude,
-      longitude,
-      zoom,
-    }));
-  }, []);
+  const zoomTo = useCallback(
+    (latitude: number, longitude: number, zoom: number = 12) => {
+      setViewport((prev) => ({
+        ...prev,
+        latitude,
+        longitude,
+        zoom,
+      }));
+    },
+    []
+  );
 
   // Zoom to bounds
-  const zoomToBounds = useCallback((targetBounds: ViewportBounds, padding: number = 0.1) => {
-    const centerLat = (targetBounds.north + targetBounds.south) / 2;
-    const centerLng = (targetBounds.east + targetBounds.west) / 2;
+  const zoomToBounds = useCallback(
+    (targetBounds: ViewportBounds, padding: number = 0.1) => {
+      const centerLat = (targetBounds.north + targetBounds.south) / 2;
+      const centerLng = (targetBounds.east + targetBounds.west) / 2;
 
-    // Calculate zoom level to fit bounds
-    const latRange = targetBounds.north - targetBounds.south + padding;
-    const lngRange = targetBounds.east - targetBounds.west + padding;
-    const maxRange = Math.max(latRange, lngRange);
-    const zoom = Math.max(1, Math.min(20, Math.log2(360 / maxRange)));
+      // Calculate zoom level to fit bounds
+      const latRange = targetBounds.north - targetBounds.south + padding;
+      const lngRange = targetBounds.east - targetBounds.west + padding;
+      const maxRange = Math.max(latRange, lngRange);
+      const zoom = Math.max(1, Math.min(20, Math.log2(360 / maxRange)));
 
-    setViewport(prev => ({
-      ...prev,
-      latitude: centerLat,
-      longitude: centerLng,
-      zoom,
-    }));
-  }, []);
+      setViewport((prev) => ({
+        ...prev,
+        latitude: centerLat,
+        longitude: centerLng,
+        zoom,
+      }));
+    },
+    []
+  );
 
   // Reset to default viewport
   const resetViewport = useCallback(() => {
@@ -114,16 +122,19 @@ export function useViewport() {
   }, []);
 
   // Check if a point is in current viewport
-  const isInViewport = useCallback((lat: number, lng: number, buffer: number = 0): boolean => {
-    if (!bounds) return false;
+  const isInViewport = useCallback(
+    (lat: number, lng: number, buffer: number = 0): boolean => {
+      if (!bounds) return false;
 
-    return (
-      lat >= bounds.south - buffer &&
-      lat <= bounds.north + buffer &&
-      lng >= bounds.west - buffer &&
-      lng <= bounds.east + buffer
-    );
-  }, [bounds]);
+      return (
+        lat >= bounds.south - buffer &&
+        lat <= bounds.north + buffer &&
+        lng >= bounds.west - buffer &&
+        lng <= bounds.east + buffer
+      );
+    },
+    [bounds]
+  );
 
   // Get zoom level category for performance optimization
   const zoomLevel = useMemo(() => {
@@ -147,7 +158,7 @@ export function useViewport() {
 
   // Update viewport with validation and transition handling
   const updateViewport = useCallback((newViewport: Partial<ViewState>) => {
-    setViewport(prev => {
+    setViewport((prev) => {
       const updated = { ...prev, ...newViewport };
 
       // Validate bounds (keep within reasonable limits)
@@ -171,89 +182,108 @@ export function useViewport() {
   }, []);
 
   // Fly to specific location with smooth transition
-  const flyTo = useCallback((
-    latitude: number,
-    longitude: number,
-    zoom?: number,
-    duration: number = 1000
-  ) => {
-    updateViewport({
-      latitude,
-      longitude,
-      zoom: zoom || viewport.zoom,
-      transitionDuration: duration,
-      bearing: 0,
-      pitch: 0
-    });
-  }, [viewport.zoom, updateViewport]);
+  const flyTo = useCallback(
+    (
+      latitude: number,
+      longitude: number,
+      zoom?: number,
+      duration: number = 1000
+    ) => {
+      updateViewport({
+        latitude,
+        longitude,
+        zoom: zoom || viewport.zoom,
+        transitionDuration: duration,
+        bearing: 0,
+        pitch: 0,
+      });
+    },
+    [viewport.zoom, updateViewport]
+  );
 
   // Zoom in/out by steps
-  const zoomIn = useCallback((steps: number = 1) => {
-    zoomTo(viewport.latitude, viewport.longitude, viewport.zoom + steps);
-  }, [viewport.latitude, viewport.longitude, viewport.zoom, zoomTo]);
+  const zoomIn = useCallback(
+    (steps: number = 1) => {
+      zoomTo(viewport.latitude, viewport.longitude, viewport.zoom + steps);
+    },
+    [viewport.latitude, viewport.longitude, viewport.zoom, zoomTo]
+  );
 
-  const zoomOut = useCallback((steps: number = 1) => {
-    zoomTo(viewport.latitude, viewport.longitude, viewport.zoom - steps);
-  }, [viewport.latitude, viewport.longitude, viewport.zoom, zoomTo]);
+  const zoomOut = useCallback(
+    (steps: number = 1) => {
+      zoomTo(viewport.latitude, viewport.longitude, viewport.zoom - steps);
+    },
+    [viewport.latitude, viewport.longitude, viewport.zoom, zoomTo]
+  );
 
   // Fit bounds to show specific area
-  const fitBounds = useCallback((
-    bounds: ViewportBounds,
-    padding: number = 0.1,
-    duration: number = 1000
-  ) => {
-    const { north, south, east, west } = bounds;
+  const fitBounds = useCallback(
+    (
+      bounds: ViewportBounds,
+      padding: number = 0.1,
+      duration: number = 1000
+    ) => {
+      const { north, south, east, west } = bounds;
 
-    // Calculate center
-    const centerLat = (north + south) / 2;
-    const centerLng = (east + west) / 2;
+      // Calculate center
+      const centerLat = (north + south) / 2;
+      const centerLng = (east + west) / 2;
 
-    // Calculate zoom level to fit bounds (simplified)
-    const latDiff = north - south;
-    const lngDiff = east - west;
-    const maxDiff = Math.max(latDiff, lngDiff);
+      // Calculate zoom level to fit bounds (simplified)
+      const latDiff = north - south;
+      const lngDiff = east - west;
+      const maxDiff = Math.max(latDiff, lngDiff);
 
-    // Approximate zoom calculation (would need proper implementation)
-    const zoom = Math.max(1, Math.min(18, Math.log2(360 / (maxDiff * (1 + padding)))));
+      // Approximate zoom calculation (would need proper implementation)
+      const zoom = Math.max(
+        1,
+        Math.min(18, Math.log2(360 / (maxDiff * (1 + padding))))
+      );
 
-    flyTo(centerLat, centerLng, zoom, duration);
-  }, [flyTo]);
+      flyTo(centerLat, centerLng, zoom, duration);
+    },
+    [flyTo]
+  );
 
   // Get viewport info for performance monitoring
-  const getViewportInfo = useCallback((): ViewportInfo => ({
-    viewport,
-    bounds,
-    zoomLevel: zoomLevel as 'country' | 'region' | 'city' | 'street',
-    isTransitioning,
-    center: [viewport.longitude, viewport.latitude]
-  }), [viewport, bounds, zoomLevel, isTransitioning]);
+  const getViewportInfo = useCallback(
+    (): ViewportInfo => ({
+      viewport,
+      bounds,
+      zoomLevel: zoomLevel as 'country' | 'region' | 'city' | 'street',
+      isTransitioning,
+      center: [viewport.longitude, viewport.latitude],
+    }),
+    [viewport, bounds, zoomLevel, isTransitioning]
+  );
 
   // Calculate distance between two points (Haversine formula)
-  const calculateDistance = useCallback((
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number
-  ): number => {
-    const R = 6371; // Earth's radius in kilometers
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
+  const calculateDistance = useCallback(
+    (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+      const R = 6371; // Earth's radius in kilometers
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLng = ((lng2 - lng1) * Math.PI) / 180;
 
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) *
+          Math.cos((lat2 * Math.PI) / 180) *
+          Math.sin(dLng / 2) *
+          Math.sin(dLng / 2);
 
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }, []);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    },
+    []
+  );
 
   // Performance monitoring
   useEffect(() => {
     if (transitionStartTime) {
       const checkTransition = () => {
         const elapsed = Date.now() - transitionStartTime;
-        if (elapsed > 100) { // Check every 100ms during transition
+        if (elapsed > 100) {
+          // Check every 100ms during transition
           // Could emit performance metrics here
           console.log(`Viewport transition: ${elapsed}ms elapsed`);
         }
@@ -284,6 +314,6 @@ export function useViewport() {
     zoomOut,
     fitBounds,
     DEFAULT_VIEWPORT,
-    DENMARK_BOUNDS
+    DENMARK_BOUNDS,
   };
 }

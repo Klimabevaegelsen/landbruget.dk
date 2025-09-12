@@ -14,7 +14,7 @@ export function useDataFetching() {
     isLoading,
     error,
     setLoading,
-    setError
+    setError,
   } = useDataStore();
 
   // Main data fetching function
@@ -31,22 +31,26 @@ export function useDataFetching() {
       const bbrDataPromise = fetchBBRData();
 
       // Wait for all data to load
-      await Promise.all([
-        h3DataPromise,
-        bnboDataPromise,
-        bbrDataPromise
-      ]);
+      await Promise.all([h3DataPromise, bnboDataPromise, bbrDataPromise]);
 
       // Preload adjacent years for smooth transitions
       preloadAdjacentYears();
-
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch data');
       console.error('Data fetching error:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedYear, cumulativeMode, fetchH3Data, fetchBNBOData, fetchBBRData, preloadAdjacentYears, setLoading, setError]);
+  }, [
+    selectedYear,
+    cumulativeMode,
+    fetchH3Data,
+    fetchBNBOData,
+    fetchBBRData,
+    preloadAdjacentYears,
+    setLoading,
+    setError,
+  ]);
 
   // Fetch data when dependencies change
   useEffect(() => {
@@ -62,6 +66,6 @@ export function useDataFetching() {
     isLoading,
     error,
     refreshData,
-    hasData: !isLoading && !error
+    hasData: !isLoading && !error,
   };
 }

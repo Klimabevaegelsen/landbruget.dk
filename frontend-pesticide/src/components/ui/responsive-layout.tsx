@@ -17,7 +17,9 @@ export function ResponsiveLayout({ children }: ResponsiveLayoutProps) {
   }, []);
 
   return (
-    <div className={`h-screen w-screen flex ${isMobile ? 'flex-col' : 'flex-row'}`}>
+    <div
+      className={`flex h-screen w-screen ${isMobile ? 'flex-col' : 'flex-row'}`}
+    >
       {/* Main content area */}
       <div className={`${isMobile ? 'h-full' : 'flex-1'} relative`}>
         {children}

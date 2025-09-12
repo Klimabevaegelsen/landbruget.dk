@@ -24,16 +24,16 @@ export const BNBO_STATUS_DESCRIPTIONS: Record<BNBOStatusCode, string> = {
   buffer: 'Buffer Zone',
   agricultural: 'Agricultural Buffer Zone',
   transition: 'Transition Zone',
-  unprotected: 'Unprotected Area'
+  unprotected: 'Unprotected Area',
 };
 
 // BNBO color mapping for visualization
 export const BNBO_STATUS_COLORS: Record<BNBOStatusCode, string> = {
-  protected: '#2d8659',      // Dark green - fully protected
-  buffer: '#52c878',         // Light green - buffer zone
-  agricultural: '#ffd23f',   // Yellow - agricultural buffer
-  transition: '#ff8c42',     // Orange - transition zone
-  unprotected: '#e5e5e5'     // Gray - no protection
+  protected: '#2d8659', // Dark green - fully protected
+  buffer: '#52c878', // Light green - buffer zone
+  agricultural: '#ffd23f', // Yellow - agricultural buffer
+  transition: '#ff8c42', // Orange - transition zone
+  unprotected: '#e5e5e5', // Gray - no protection
 };
 
 // Raw BNBO data from pipeline
@@ -64,11 +64,14 @@ export interface BNBODataFilter {
 export interface BNBOStatistics {
   totalAreas: number;
   totalAreaHa: number;
-  statusBreakdown: Record<BNBOStatusCode, {
-    count: number;
-    totalAreaHa: number;
-    percentage: number;
-  }>;
+  statusBreakdown: Record<
+    BNBOStatusCode,
+    {
+      count: number;
+      totalAreaHa: number;
+      percentage: number;
+    }
+  >;
   averageAreaHa: number;
   largestAreaHa: number;
   protectionCoverage: number; // Percentage of total area that is protected

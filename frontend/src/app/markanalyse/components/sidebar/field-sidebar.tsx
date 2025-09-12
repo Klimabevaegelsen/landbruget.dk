@@ -93,7 +93,7 @@ export function FieldSidebar({
                   bnbo: 'BNBO Områder',
                   wetlands: 'Lavbundsområder',
                   water_projects: 'Vandprojekter',
-                  buildings: 'Bygninger'
+                  buildings: 'Bygninger',
                 };
                 return (
                   <label
@@ -103,7 +103,9 @@ export function FieldSidebar({
                     <input
                       type="checkbox"
                       checked={visible}
-                      onChange={() => onLayerToggle(key as keyof LayerVisibility)}
+                      onChange={() =>
+                        onLayerToggle(key as keyof LayerVisibility)
+                      }
                       className="text-primary border-border focus:ring-primary h-4 w-4 rounded focus:ring-2"
                     />
                     <span className="font-medium">
