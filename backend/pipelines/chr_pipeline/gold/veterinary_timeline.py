@@ -477,6 +477,23 @@ def create_vet_events_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str
             END as event_description,
             'Veterinary' as event_category,
             COALESCE({species_col}, 'Unknown') as species,
+            COALESCE(species_code,
+                CASE
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%svin%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%pig%' THEN '15'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%kvæg%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%cattle%' THEN '12'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%får%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%sheep%' THEN '13'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%ged%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%goat%' THEN '14'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%hest%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%horse%' THEN '11'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%fjerkræ%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%poultry%' THEN '50'
+                    ELSE NULL
+                END
+            ) as species_code,
             TRY_CAST({date_col} AS TIMESTAMP) as event_date,
             NULL as end_date,
             'property_vet_events' as source_file
