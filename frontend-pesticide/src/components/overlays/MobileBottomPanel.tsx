@@ -61,7 +61,7 @@ export function MobileBottomPanel({ hoverInfo, onClose, isVisible = false }: Mob
     }
   }, [isDragging]);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+  const handleTouchEnd = useCallback((_e: React.TouchEvent) => {
     if (!isDragging) return;
 
     setIsDragging(false);

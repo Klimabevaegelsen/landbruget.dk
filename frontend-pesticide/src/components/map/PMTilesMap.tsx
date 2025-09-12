@@ -102,10 +102,10 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   const { metrics, updateMetrics } = usePerformanceMonitor();
 
   // Store state
-  const { zoom, center, bearing, pitch } = useMapViewState()
+  const { zoom, center: _center, bearing: _bearing, pitch: _pitch } = useMapViewState()
   const { selectedYear, selectedDataMode } = useDataState()
   const showBasemap = useMapStore((state) => state.showBasemap)
-  const { isLoading, error } = useLoadingState()
+  const { isLoading: _isLoading, error } = useLoadingState()
   const { isMobile, setShowMobilePanel } = useUIStore()
   const { selectedCell, setSelectedCell, clearSelectedCell } = useSelectedCellState()
 
@@ -150,13 +150,13 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
 
   // Memoize store functions to prevent unnecessary re-renders
   const memoizedSetError = useCallback(setError, [setError])
-  const memoizedClearError = useCallback(clearError, [clearError])
-  const memoizedSetMapInstance = useCallback(setMapInstance, [setMapInstance])
+  const _memoizedClearError = useCallback(clearError, [clearError])
+  const _memoizedSetMapInstance = useCallback(setMapInstance, [setMapInstance])
   const memoizedShowTooltipWithData = useCallback(showTooltipWithData, [showTooltipWithData])
   const memoizedHideTooltip = useCallback(hideTooltip, [hideTooltip])
   const memoizedSetShowMobilePanel = useCallback(setShowMobilePanel, [setShowMobilePanel])
-  const memoizedSetSelectedCell = useCallback(setSelectedCell, [setSelectedCell])
-  const memoizedClearSelectedCell = useCallback(clearSelectedCell, [clearSelectedCell])
+  const _memoizedSetSelectedCell = useCallback(setSelectedCell, [setSelectedCell])
+  const _memoizedClearSelectedCell = useCallback(clearSelectedCell, [clearSelectedCell])
 
   // Helper function to safely get available interactive layers
   const getAvailableInteractiveLayers = useCallback((): string[] => {
@@ -167,7 +167,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       if ((map.current as any).getLayer('kommune-fill')) {
         layers.push('kommune-fill')
       }
-    } catch (e) {
+    } catch {
       // Layer doesn't exist, ignore
     }
 
@@ -177,7 +177,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       if ((map.current as any).getLayer(h3LayerId)) {
         layers.push(h3LayerId)
       }
-    } catch (e) {
+    } catch {
       // Layer doesn't exist, ignore
     }
 
@@ -185,7 +185,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
       if ((map.current as any).getLayer('bnbo-fill')) {
         layers.push('bnbo-fill')
       }
-    } catch (e) {
+    } catch {
       // Layer doesn't exist, ignore
     }
 
@@ -254,7 +254,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
   );
 
   // Mobile-optimized touch handlers
-  const handleTouchStart = useCallback((e: TouchEvent) => {
+  const _handleTouchStart = useCallback((e: TouchEvent) => {
     if (!isMobile) return;
 
     // Store touch start time for tap detection
@@ -262,7 +262,7 @@ const PMTilesMapInner: React.FC<PMTilesMapProps> = ({ className = 'w-full h-full
     (e.target as any)._touchStartTime = touchStartTime;
   }, [isMobile]);
 
-  const handleTouchEnd = useCallback((e: TouchEvent) => {
+  const _handleTouchEnd = useCallback((e: TouchEvent) => {
     if (!isMobile) return;
 
     const touchEndTime = Date.now();

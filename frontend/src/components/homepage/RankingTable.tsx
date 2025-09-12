@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
+import {
   Table,
   TableBody,
   TableCell,
@@ -11,10 +11,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { 
-  Building2, 
-  MapPin, 
-  ExternalLink, 
+import {
+  Building2,
+  MapPin,
+  ExternalLink,
   Database,
   ChevronDown,
   ArrowUpDown,
@@ -67,12 +67,18 @@ const getCategoryColor = (category: string) => {
 
 const getCategoryLabel = (category: string) => {
   switch (category) {
-    case 'financial': return 'Økonomi';
-    case 'field': return 'Landbrugsareal';
-    case 'environment': return 'Miljø';
-    case 'animal': return 'Husdyr';
-    case 'worker': return 'Medarbejdere';
-    default: return category;
+    case 'financial':
+      return 'Økonomi';
+    case 'field':
+      return 'Landbrugsareal';
+    case 'environment':
+      return 'Miljø';
+    case 'animal':
+      return 'Husdyr';
+    case 'worker':
+      return 'Medarbejdere';
+    default:
+      return category;
   }
 };
 
@@ -85,7 +91,7 @@ export default function RankingTableEnhanced({
 }: RankingTableEnhancedProps) {
   const { navigateToCompany } = useCompanyNavigation();
   const { getCompanyForDisplay } = useCompanyCache();
-  
+
   const [sortField, setSortField] = useState<SortField>('rank');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showAll, setShowAll] = useState(false);
@@ -125,19 +131,25 @@ export default function RankingTableEnhanced({
     }
 
     if (typeof aValue === 'string' && typeof bValue === 'string') {
-      return sortDirection === 'asc' 
+      return sortDirection === 'asc'
         ? aValue.localeCompare(bValue)
         : bValue.localeCompare(aValue);
     }
 
-    return sortDirection === 'asc' 
+    return sortDirection === 'asc'
       ? (aValue as number) - (bValue as number)
       : (bValue as number) - (aValue as number);
   });
 
   const displayItems = showAll ? sortedItems : sortedItems.slice(0, showTop);
 
-  const SortButton = ({ field, children }: { field: SortField; children: React.ReactNode }) => (
+  const SortButton = ({
+    field,
+    children,
+  }: {
+    field: SortField;
+    children: React.ReactNode;
+  }) => (
     <Button
       variant="ghost"
       size="sm"
@@ -154,9 +166,7 @@ export default function RankingTableEnhanced({
       <CardHeader className="pb-4">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <CardTitle className="text-lg font-semibold">
-              {title}
-            </CardTitle>
+            <CardTitle className="text-lg font-semibold">{title}</CardTitle>
             <Badge
               variant="outline"
               className={`text-xs ${getCategoryColor(category)}`}
@@ -165,13 +175,13 @@ export default function RankingTableEnhanced({
             </Badge>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
       </CardHeader>
 
       <CardContent className="p-0">
         {items.length === 0 ? (
           <div className="px-6 py-8 text-center">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Ingen data tilgængelig for denne kategori
             </p>
           </div>
@@ -179,7 +189,7 @@ export default function RankingTableEnhanced({
           <>
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent border-b">
+                <TableRow className="border-b hover:bg-transparent">
                   <TableHead className="w-16">
                     <SortButton field="rank">Rang</SortButton>
                   </TableHead>
@@ -196,54 +206,57 @@ export default function RankingTableEnhanced({
               </TableHeader>
               <TableBody>
                 {displayItems.map((item) => {
-                  const isCached = getCompanyForDisplay(item.company_id) !== null;
+                  const isCached =
+                    getCompanyForDisplay(item.company_id) !== null;
 
                   return (
-                    <TableRow 
+                    <TableRow
                       key={`${item.company_id}-${item.rank}`}
                       className="hover:bg-muted/50 cursor-pointer"
-                      onClick={() => navigateToCompany(item.company_id, item.company_name)}
+                      onClick={() =>
+                        navigateToCompany(item.company_id, item.company_name)
+                      }
                     >
                       <TableCell className="font-medium">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-semibold">
+                        <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">
                           {item.rank}
                         </div>
                       </TableCell>
-                      
+
                       <TableCell>
                         <div className="space-y-1">
                           <div className="flex items-center space-x-2">
-                            <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="font-medium truncate">
+                            <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+                            <span className="truncate font-medium">
                               {item.company_name}
                             </span>
-                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                            <ExternalLink className="text-muted-foreground h-3 w-3" />
                             {isCached && (
-                              <Database className="h-3 w-3 text-primary" />
+                              <Database className="text-primary h-3 w-3" />
                             )}
                           </div>
-                          <div className="text-xs text-muted-foreground font-mono">
+                          <div className="text-muted-foreground font-mono text-xs">
                             CVR: {item.cvr_number}
                           </div>
                         </div>
                       </TableCell>
-                      
+
                       <TableCell className="hidden md:table-cell">
                         {item.municipality && (
-                          <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                          <div className="text-muted-foreground flex items-center space-x-1 text-sm">
                             <MapPin className="h-3 w-3" />
                             <span>{item.municipality}</span>
                           </div>
                         )}
                       </TableCell>
-                      
+
                       <TableCell className="text-right">
                         <div className="space-y-1">
                           <div className="font-semibold">
                             {item.formatted_value}
                           </div>
                           {item.year && (
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-muted-foreground text-xs">
                               {item.year}
                             </div>
                           )}
@@ -275,8 +288,10 @@ export default function RankingTableEnhanced({
                     </>
                   )}
                 </Button>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Viser {showAll ? items.length : Math.min(showTop, items.length)} af {items.length} virksomheder
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Viser{' '}
+                  {showAll ? items.length : Math.min(showTop, items.length)} af{' '}
+                  {items.length} virksomheder
                 </p>
               </div>
             )}

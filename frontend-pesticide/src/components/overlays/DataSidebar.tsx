@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback } from 'react';
+import React from 'react';
 import { X } from 'lucide-react';
 
 // Define HoverInfo interface
