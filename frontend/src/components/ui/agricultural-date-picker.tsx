@@ -272,7 +272,11 @@ export function AgriculturalDatePicker({
                 mode="range"
                 selected={dateRange}
                 onSelect={(range) =>
-                  onDateRangeChange(range || { from: undefined, to: undefined })
+                  onDateRangeChange(
+                    range
+                      ? { from: range.from, to: range.to }
+                      : { from: undefined, to: undefined }
+                  )
                 }
                 numberOfMonths={2}
                 locale={da}
