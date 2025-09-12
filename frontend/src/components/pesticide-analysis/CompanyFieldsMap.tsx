@@ -15,7 +15,10 @@ import {
   Loader2,
 } from 'lucide-react';
 import { CompanySummary } from './types';
-import { LayerVisibility, FilterState } from '@/components/field-analysis/types';
+import {
+  LayerVisibility,
+  FilterState,
+} from '@/components/field-analysis/types';
 
 // Dynamically import the map to avoid SSR issues
 const FieldAnalysisMap = dynamic(

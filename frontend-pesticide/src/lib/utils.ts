@@ -23,11 +23,11 @@ export const H3_RESOLUTION = 10;
 export const DEFAULT_VIEWPORT = {
   latitude: 56.26392,
   longitude: 9.501785,
-  zoom: 7
+  zoom: 7,
 };
 
 export const API_ENDPOINTS = {
   H3_DATA: '/api/h3-data',
   BNBO_DATA: '/api/bnbo-data',
-  BBR_DATA: '/api/bbr-data'
+  BBR_DATA: '/api/bbr-data',
 };

@@ -11,7 +11,7 @@ export function TimeControls() {
     setSelectedYear,
     cumulativeMode,
     setCumulativeMode,
-    availableYears
+    availableYears,
   } = useMapStore();
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -45,13 +45,15 @@ export function TimeControls() {
       <div className="time-controls">
         {/* Year Selection */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2 flex items-center justify-between">
             <label className="text-sm font-medium">
-              {cumulativeMode ? `Years 2020-${selectedYear}` : `Year ${selectedYear}`}
+              {cumulativeMode
+                ? `Years 2020-${selectedYear}`
+                : `Year ${selectedYear}`}
             </label>
             <motion.button
               onClick={() => setCumulativeMode(!cumulativeMode)}
-              className={`px-3 py-1 rounded text-xs transition-colors ${
+              className={`rounded px-3 py-1 text-xs transition-colors ${
                 cumulativeMode
                   ? 'bg-blue-100 text-blue-800'
                   : 'bg-gray-100 text-gray-800'
@@ -70,10 +72,10 @@ export function TimeControls() {
               max={Math.max(...availableYears)}
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+              className="slider h-2 w-full cursor-pointer appearance-none rounded-lg bg-gray-200"
             />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              {availableYears.map(year => (
+            <div className="mt-1 flex justify-between text-xs text-gray-500">
+              {availableYears.map((year) => (
                 <span key={year}>{year}</span>
               ))}
             </div>
@@ -84,7 +86,7 @@ export function TimeControls() {
         <div className="flex items-center justify-center space-x-4">
           <motion.button
             onClick={() => setIsPlaying(!isPlaying)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center space-x-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -94,7 +96,7 @@ export function TimeControls() {
 
           <motion.button
             onClick={resetToStart}
-            className="flex items-center space-x-2 px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            className="flex items-center space-x-2 rounded-lg bg-gray-600 px-3 py-2 text-white transition-colors hover:bg-gray-700"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -105,7 +107,7 @@ export function TimeControls() {
           <select
             value={playbackSpeed}
             onChange={(e) => setPlaybackSpeed(parseInt(e.target.value))}
-            className="px-3 py-2 border rounded-lg text-sm bg-white"
+            className="rounded-lg border bg-white px-3 py-2 text-sm"
           >
             <option value={2000}>Slow (2s/year)</option>
             <option value={1000}>Normal (1s/year)</option>
@@ -123,7 +125,7 @@ export function TimeControls() {
           background: #3b82f6;
           cursor: pointer;
           border: 2px solid white;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .slider::-moz-range-thumb {
@@ -133,7 +135,7 @@ export function TimeControls() {
           background: #3b82f6;
           cursor: pointer;
           border: 2px solid white;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
       `}</style>
     </motion.div>

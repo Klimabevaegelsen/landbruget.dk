@@ -3,18 +3,21 @@
 ## ✅ What's Been Implemented
 
 ### 🗺️ Multi-Resolution PMTiles Architecture
+
 - **H3 Resolutions 7-10**: From regional view to field-level detail
 - **Smart Aggregation**: Higher resolution cells aggregate to lower resolutions
 - **Zoom-Aware Rendering**: Different cell sizes shown at appropriate zoom levels
 - **Performance Optimized**: Vector tiles for instant pan/zoom
 
 ### 🎯 Enhanced Hover Functionality
+
 - **Real-time Hover Tooltips**: Shows key data on mouse hover
 - **Detailed Click Popups**: Comprehensive information on click
 - **Multi-Resolution Data**: Shows aggregation info when applicable
 - **Smart Positioning**: Tooltips avoid screen edges
 
 ### 📊 Data Features
+
 - **PFAS Metrics**: Total grams, intensity (g/ha), per-field averages
 - **Agricultural Data**: Pesticide load, applications, field count, coverage
 - **Spatial Info**: H3 ID, resolution level, area in hectares
@@ -25,6 +28,7 @@
 ### PMTiles Generation (`scripts/analysis/generate_h3_pmtiles.py`)
 
 #### Multi-Resolution Processing:
+
 ```python
 # Creates aggregated views for resolutions 7-10
 for target_res in range(7, 11):
@@ -34,6 +38,7 @@ for target_res in range(7, 11):
 ```
 
 #### Enhanced Data Properties:
+
 - **Core Data**: PFAS amounts, pesticide loads, field counts
 - **Calculated Metrics**: Intensities, averages, coverage ratios
 - **Hover Metadata**: Human-readable summaries, zoom classifications
@@ -42,47 +47,52 @@ for target_res in range(7, 11):
 ### Frontend Component (`frontend-pesticide/src/components/map/PMTilesMap.tsx`)
 
 #### Advanced Hover System:
+
 ```typescript
 interface HoverInfo {
-  h3_id: string
-  h3_resolution: number
-  pfas_grams: number
-  pfas_intensity: number
-  cell_count: number
-  summary: string
+  h3_id: string;
+  h3_resolution: number;
+  pfas_grams: number;
+  pfas_intensity: number;
+  cell_count: number;
+  summary: string;
   // ... more fields
 }
 ```
 
 #### Resolution-Aware Styling:
+
 - **Line Width**: Thicker borders for lower resolution cells
 - **Heatmap Radius**: Larger radius for aggregated cells
 - **Opacity**: Zoom-dependent transparency
 
 ## 📈 Resolution Hierarchy
 
-| Resolution | Description | Use Case | Zoom Levels |
-|------------|-------------|----------|-------------|
-| **7** | Regional | Country/state overview | 4-8 |
-| **8** | County | County-level analysis | 6-10 |
-| **9** | Municipal | City/municipality detail | 8-12 |
-| **10** | Field | Individual field analysis | 10-14 |
+| Resolution | Description | Use Case                  | Zoom Levels |
+| ---------- | ----------- | ------------------------- | ----------- |
+| **7**      | Regional    | Country/state overview    | 4-8         |
+| **8**      | County      | County-level analysis     | 6-10        |
+| **9**      | Municipal   | City/municipality detail  | 8-12        |
+| **10**     | Field       | Individual field analysis | 10-14       |
 
 ## 🎨 Visualization Features
 
 ### Hover Tooltip
+
 - **Compact Display**: Essential metrics at a glance
 - **Context Aware**: Shows aggregation info when relevant
 - **Position Smart**: Avoids screen edges
 - **Performance**: No API calls, instant response
 
 ### Click Popup
+
 - **Comprehensive Data**: All available metrics
 - **Organized Layout**: Grouped by data type
 - **Responsive Design**: Adapts to content
 - **Detailed Context**: Explains aggregation levels
 
 ### Legend
+
 - **Color Scale**: PFAS concentration ranges
 - **Resolution Guide**: Explains zoom levels
 - **Interactive**: Updates with visualization mode
@@ -90,12 +100,14 @@ interface HoverInfo {
 ## 🔧 Technical Architecture
 
 ### Data Flow:
+
 ```
-GCS Parquet → DuckDB Processing → Multi-Resolution Views → 
+GCS Parquet → DuckDB Processing → Multi-Resolution Views →
 GeoJSON Export → Tippecanoe → PMTiles → MapLibre GL → Frontend
 ```
 
 ### Key Technologies:
+
 - **DuckDB**: H3 extension for proper geometry generation
 - **Tippecanoe**: Vector tile generation with zoom filtering
 - **PMTiles**: Efficient tile serving protocol
@@ -105,6 +117,7 @@ GeoJSON Export → Tippecanoe → PMTiles → MapLibre GL → Frontend
 ## 🚀 Usage Instructions
 
 ### 1. Generate PMTiles
+
 ```bash
 # Generate tiles for specific year
 python scripts/analysis/generate_h3_pmtiles.py --years 2023
@@ -117,6 +130,7 @@ python scripts/analysis/generate_h3_pmtiles.py --output-dir ./my-tiles --years 2
 ```
 
 ### 2. Serve PMTiles
+
 ```bash
 # Simple HTTP server
 cd pmtiles
@@ -126,6 +140,7 @@ python -m http.server 8000
 ```
 
 ### 3. Frontend Integration
+
 ```typescript
 <PMTilesMap
   availableYears={[2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]}
@@ -137,6 +152,7 @@ python -m http.server 8000
 ## 📊 Performance Characteristics
 
 ### PMTiles Approach:
+
 - ✅ **Pan/Zoom**: Instant (cached tiles)
 - ✅ **Hover**: Instant (no API calls)
 - ✅ **Concurrent Users**: Unlimited (CDN scaling)
@@ -145,6 +161,7 @@ python -m http.server 8000
 - ⚠️ **Data Updates**: Requires tile regeneration
 
 ### File Sizes (Estimated):
+
 - **Single Year**: ~50-100MB PMTiles file
 - **All Years**: ~500MB-1GB total
 - **Compression**: ~80% reduction from raw data
@@ -152,12 +169,14 @@ python -m http.server 8000
 ## 🎯 User Experience
 
 ### Smooth Interaction:
+
 - **Instant Response**: No loading delays during exploration
 - **Rich Context**: Hover shows immediate data preview
 - **Detailed Analysis**: Click for comprehensive information
 - **Visual Hierarchy**: Different cell sizes for different zoom levels
 
 ### Data Accessibility:
+
 - **Multi-Scale**: From country overview to field detail
 - **Contextual**: Shows aggregation level and cell count
 - **Comprehensive**: All original data fields preserved
@@ -166,6 +185,7 @@ python -m http.server 8000
 ## 🔄 Future Enhancements
 
 ### Possible Improvements:
+
 1. **Temporal Animation**: Year-over-year changes
 2. **Comparison Mode**: Side-by-side year comparison
 3. **Export Features**: Download data for selected areas
@@ -173,6 +193,7 @@ python -m http.server 8000
 5. **Custom Aggregations**: User-defined resolution levels
 
 ### Hybrid Approach:
+
 - **Base Layer**: PMTiles for fast rendering
 - **Interactive Layer**: API for dynamic queries
 - **Best of Both**: Performance + flexibility
@@ -193,10 +214,11 @@ python -m http.server 8000
 ## 🎉 Ready for Production
 
 The implementation provides:
+
 - **Fast Performance**: Instant map interactions
 - **Rich Data**: All original metrics preserved
 - **User-Friendly**: Intuitive hover and click interactions
 - **Scalable**: CDN-ready for unlimited users
 - **Maintainable**: Clean, documented code
 
-The H3 PFAS visualization is now ready with proper multi-resolution support and comprehensive hover functionality! 
+The H3 PFAS visualization is now ready with proper multi-resolution support and comprehensive hover functionality!

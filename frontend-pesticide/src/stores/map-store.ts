@@ -56,9 +56,15 @@ export interface MapActions {
   setCenter: (center: [number, number]) => void;
   setBearing: (bearing: number) => void;
   setPitch: (pitch: number) => void;
-  setViewState: (viewState: Partial<Pick<MapState, 'zoom' | 'center' | 'bearing' | 'pitch'>>) => void;
+  setViewState: (
+    viewState: Partial<Pick<MapState, 'zoom' | 'center' | 'bearing' | 'pitch'>>
+  ) => void;
   setMapInstance: (mapInstance: unknown | null) => void;
-  flyToLocation: (location: { lat: number; lng: number; zoom?: number }) => void;
+  flyToLocation: (location: {
+    lat: number;
+    lng: number;
+    zoom?: number;
+  }) => void;
 
   // Data selection actions
   setSelectedYear: (year: YearSelection) => void;
@@ -89,11 +95,20 @@ export interface MapActions {
   setShowTooltip: (show: boolean) => void;
   setTooltipData: (data: Record<string, unknown> | null) => void;
   setTooltipPosition: (position: { x: number; y: number }) => void;
-  showTooltipWithData: (data: Record<string, unknown>, position: { x: number; y: number }) => void;
+  showTooltipWithData: (
+    data: Record<string, unknown>,
+    position: { x: number; y: number }
+  ) => void;
   hideTooltip: () => void;
 
   // Selected cell actions
-  setSelectedCell: (cell: { id: string; layer: string; properties: Record<string, unknown> } | null) => void;
+  setSelectedCell: (
+    cell: {
+      id: string;
+      layer: string;
+      properties: Record<string, unknown>;
+    } | null
+  ) => void;
   clearSelectedCell: () => void;
 
   // Utility actions
@@ -186,7 +201,7 @@ export const useMapStore = create<MapState & MapActions>()(
               center: [location.lng, location.lat],
               zoom: location.zoom || 12,
               essential: true,
-              duration: 2000
+              duration: 2000,
             });
           } else {
             console.warn('🗺️ Map instance does not have flyTo method');
@@ -197,13 +212,15 @@ export const useMapStore = create<MapState & MapActions>()(
       },
 
       // Data selection actions
-      setSelectedYear: (selectedYear) => set({ selectedYear, isLoadingYear: true }),
+      setSelectedYear: (selectedYear) =>
+        set({ selectedYear, isLoadingYear: true }),
       setSelectedDataMode: (selectedDataMode) => set({ selectedDataMode }),
 
       // Layer visibility actions
       setShowBNBOLayer: (showBNBOLayer) => set({ showBNBOLayer }),
       setShowBasemap: (showBasemap) => set({ showBasemap }),
-      toggleBNBOLayer: () => set((state) => ({ showBNBOLayer: !state.showBNBOLayer })),
+      toggleBNBOLayer: () =>
+        set((state) => ({ showBNBOLayer: !state.showBNBOLayer })),
 
       // Loading state actions
       setIsLoading: (isLoading) => set({ isLoading }),
@@ -218,11 +235,16 @@ export const useMapStore = create<MapState & MapActions>()(
       // Data availability actions
       setAvailableYears: (availableYears) => {
         // When years are set, also update year options to include 'total'
-        const availableYearOptions: YearSelection[] = [...availableYears, 'total'];
+        const availableYearOptions: YearSelection[] = [
+          ...availableYears,
+          'total',
+        ];
         set({ availableYears, availableYearOptions });
       },
-      setAvailableYearOptions: (availableYearOptions) => set({ availableYearOptions }),
-      setAvailableResolutions: (availableResolutions) => set({ availableResolutions }),
+      setAvailableYearOptions: (availableYearOptions) =>
+        set({ availableYearOptions }),
+      setAvailableResolutions: (availableResolutions) =>
+        set({ availableResolutions }),
 
       // UI actions
       setShowControls: (showControls) => set({ showControls }),
@@ -299,17 +321,35 @@ export const getComputedLayerVisibility = (zoom: number) => {
     shouldShowH3,
     currentH3Resolution: getH3ResolutionForZoom(zoom),
     // In overlap zone, show both resolutions with different opacities
-    shouldShowH3Res8: shouldShowH3 && (zoom < H3_RES8_FULL_FADE),
-    shouldShowH3Res10: shouldShowH3 && (zoom >= H3_RES10_START_SHOW),
+    shouldShowH3Res8: shouldShowH3 && zoom < H3_RES8_FULL_FADE,
+    shouldShowH3Res10: shouldShowH3 && zoom >= H3_RES10_START_SHOW,
     inOverlapZone,
     // Calculate opacity for smooth transitions
-    res8Opacity: inOverlapZone ? Math.max(0, (H3_RES8_FULL_FADE - zoom) / (H3_RES8_FULL_FADE - H3_RES8_START_FADE)) : (zoom < H3_RES8_START_FADE ? 1 : 0),
-    res10Opacity: inOverlapZone ? Math.min(1, (zoom - H3_RES10_START_SHOW) / (H3_RES8_FULL_FADE - H3_RES10_START_SHOW)) : (zoom >= H3_RES8_FULL_FADE ? 1 : 0),
+    res8Opacity: inOverlapZone
+      ? Math.max(
+          0,
+          (H3_RES8_FULL_FADE - zoom) / (H3_RES8_FULL_FADE - H3_RES8_START_FADE)
+        )
+      : zoom < H3_RES8_START_FADE
+        ? 1
+        : 0,
+    res10Opacity: inOverlapZone
+      ? Math.min(
+          1,
+          (zoom - H3_RES10_START_SHOW) /
+            (H3_RES8_FULL_FADE - H3_RES10_START_SHOW)
+        )
+      : zoom >= H3_RES8_FULL_FADE
+        ? 1
+        : 0,
   };
 };
 
 // Helper function to determine if layer visibility should be updated based on zoom threshold
-export const shouldUpdateLayerVisibility = (oldZoom: number, newZoom: number): boolean => {
+export const shouldUpdateLayerVisibility = (
+  oldZoom: number,
+  newZoom: number
+): boolean => {
   return Math.abs(newZoom - oldZoom) >= ZOOM_THRESHOLD;
 };
 
@@ -343,7 +383,8 @@ export const DATA_MODE_CONFIG = {
     label: 'Glyphosate Intensity',
     description: 'Glyphosate-containing pesticide intensity per hectare',
     h3Field: 'glyphosate_containing_active_ingredient_intensity_grams_per_ha',
-    kommuneField: 'glyphosate_containing_active_ingredient_intensity_grams_per_ha',
+    kommuneField:
+      'glyphosate_containing_active_ingredient_intensity_grams_per_ha',
     unit: 'g/ha',
     colorScale: 'white-red',
   },
@@ -356,12 +397,12 @@ export const BNBO_STATUS_CONFIG = {
     label: 'Action Required',
     description: 'Areas requiring immediate action',
   },
-  'Completed': {
+  Completed: {
     color: '#51cf66',
     label: 'Completed',
     description: 'Areas where action has been completed',
   },
-  'Unknown': {
+  Unknown: {
     color: '#868e96',
     label: 'Unknown',
     description: 'Areas with unknown status',
@@ -375,24 +416,33 @@ export const useBearing = () => useMapStore((state) => state.bearing);
 export const usePitch = () => useMapStore((state) => state.pitch);
 
 export const useSelectedYear = () => useMapStore((state) => state.selectedYear);
-export const useSelectedDataMode = () => useMapStore((state) => state.selectedDataMode);
-export const useAvailableYears = () => useMapStore((state) => state.availableYears);
-export const useAvailableYearOptions = () => useMapStore((state) => state.availableYearOptions);
-export const useAvailableResolutions = () => useMapStore((state) => state.availableResolutions);
+export const useSelectedDataMode = () =>
+  useMapStore((state) => state.selectedDataMode);
+export const useAvailableYears = () =>
+  useMapStore((state) => state.availableYears);
+export const useAvailableYearOptions = () =>
+  useMapStore((state) => state.availableYearOptions);
+export const useAvailableResolutions = () =>
+  useMapStore((state) => state.availableResolutions);
 
-export const useShowBNBOLayer = () => useMapStore((state) => state.showBNBOLayer);
+export const useShowBNBOLayer = () =>
+  useMapStore((state) => state.showBNBOLayer);
 export const useShowBasemap = () => useMapStore((state) => state.showBasemap);
 
 export const useIsLoading = () => useMapStore((state) => state.isLoading);
-export const useIsLoadingYear = () => useMapStore((state) => state.isLoadingYear);
-export const useIsLoadingTiles = () => useMapStore((state) => state.isLoadingTiles);
-export const useLoadingMessage = () => useMapStore((state) => state.loadingMessage);
+export const useIsLoadingYear = () =>
+  useMapStore((state) => state.isLoadingYear);
+export const useIsLoadingTiles = () =>
+  useMapStore((state) => state.isLoadingTiles);
+export const useLoadingMessage = () =>
+  useMapStore((state) => state.loadingMessage);
 export const useError = () => useMapStore((state) => state.error);
 
 export const useShowControls = () => useMapStore((state) => state.showControls);
 export const useShowTooltip = () => useMapStore((state) => state.showTooltip);
 export const useTooltipData = () => useMapStore((state) => state.tooltipData);
-export const useTooltipPosition = () => useMapStore((state) => state.tooltipPosition);
+export const useTooltipPosition = () =>
+  useMapStore((state) => state.tooltipPosition);
 
 // Stable selectors for complex state combinations
 export const useMapViewState = () => {
@@ -411,7 +461,13 @@ export const useDataState = () => {
   const availableYearOptions = useAvailableYearOptions();
   const availableResolutions = useAvailableResolutions();
 
-  return { selectedYear, selectedDataMode, availableYears, availableYearOptions, availableResolutions };
+  return {
+    selectedYear,
+    selectedDataMode,
+    availableYears,
+    availableYearOptions,
+    availableResolutions,
+  };
 };
 
 export const useLayerVisibility = () => {
@@ -455,4 +511,5 @@ export const useSelectedCellState = () => {
 };
 
 // Navigation actions
-export const useFlyToLocation = () => useMapStore((state) => state.flyToLocation);
+export const useFlyToLocation = () =>
+  useMapStore((state) => state.flyToLocation);

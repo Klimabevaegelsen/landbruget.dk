@@ -63,7 +63,7 @@ export function transformWKTToGeoJSON(wkt: string): GeoJSON.Geometry {
         const [lon, lat] = coords.split(' ').map(Number);
         return {
           type: 'Point',
-          coordinates: [lon, lat]
+          coordinates: [lon, lat],
         };
       }
     }
@@ -71,13 +71,13 @@ export function transformWKTToGeoJSON(wkt: string): GeoJSON.Geometry {
     if (wkt.startsWith('POLYGON')) {
       const coords = wkt.match(/POLYGON\(\(([^)]+)\)\)/)?.[1];
       if (coords) {
-        const points = coords.split(',').map(point => {
+        const points = coords.split(',').map((point) => {
           const [lon, lat] = point.trim().split(' ').map(Number);
           return [lon, lat];
         });
         return {
           type: 'Polygon',
-          coordinates: [points]
+          coordinates: [points],
         };
       }
     }
@@ -86,13 +86,13 @@ export function transformWKTToGeoJSON(wkt: string): GeoJSON.Geometry {
       // Simplified MULTIPOLYGON parsing - would need more robust implementation for production
       const coords = wkt.match(/MULTIPOLYGON\(\(\(([^)]+)\)\)\)/)?.[1];
       if (coords) {
-        const points = coords.split(',').map(point => {
+        const points = coords.split(',').map((point) => {
           const [lon, lat] = point.trim().split(' ').map(Number);
           return [lon, lat];
         });
         return {
           type: 'MultiPolygon',
-          coordinates: [[points]]
+          coordinates: [[points]],
         };
       }
     }

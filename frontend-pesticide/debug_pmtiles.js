@@ -38,11 +38,11 @@ async function discoverLatestTimestamp(pattern) {
 
     if (data.prefixes && data.prefixes.length > 0) {
       const timestamps = data.prefixes
-        .map(prefix => {
+        .map((prefix) => {
           const parts = prefix.split('/');
           return parts[parts.length - 2];
         })
-        .filter(ts => /^\d{8}_\d{6}$/.test(ts))
+        .filter((ts) => /^\d{8}_\d{6}$/.test(ts))
         .sort()
         .reverse();
 
@@ -70,7 +70,6 @@ async function testDynamicUrls() {
     const kommuneTimestamp = await discoverLatestTimestamp(kommunePattern);
     const kommuneUrl = `${baseUrl}/${kommunePattern}/${kommuneTimestamp}/kommune_pfas_${year}.pmtiles`;
     await testUrl(kommuneUrl, 'Kommune PMTiles');
-
   } catch (error) {
     console.error('Error testing dynamic URLs:', error);
   }
