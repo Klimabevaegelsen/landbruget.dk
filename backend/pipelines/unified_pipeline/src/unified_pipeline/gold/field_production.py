@@ -1424,7 +1424,17 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             dst_category = mapping_info["dst_category"]
             match_quality = mapping_info["match_quality"]
 
-            # First, update the crop_type field to show the mapped DST category
+            # First, count fields that will be updated
+            fields_to_update = self.conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM year_production_estimates
+                WHERE crop_type = ?
+            """,
+                [crop_type],
+            ).fetchone()[0]
+
+            # Then update the crop_type field to show the mapped DST category
             # This ensures the output shows proper DST categories instead of raw FVM crop names
             self.conn.execute(
                 """
@@ -1435,7 +1445,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 [dst_category, crop_type],
             )
 
-            fields_updated = self.conn.execute("SELECT changes()").fetchone()[0]
+            fields_updated = fields_to_update
             updated_fields += fields_updated
 
             self.log.debug(f"  ✅ Mapped {crop_type} → {dst_category} ({fields_updated:,} fields)")
