@@ -885,7 +885,9 @@ def standardize_species_data(con: duckdb.DuckDBPyConnection) -> None:
                     SELECT
                         * EXCLUDE (species_code, species_name),
                         CASE
-                            WHEN species_code IS NOT NULL AND species_code != '' THEN CAST(species_code AS VARCHAR)
+                            WHEN species_code IS NOT NULL
+                                 AND TRIM(CAST(species_code AS VARCHAR)) != ''
+                                 THEN CAST(species_code AS VARCHAR)
                             WHEN species_name IS NULL OR TRIM(species_name) = '' THEN NULL
                             WHEN LOWER(species_name) LIKE '%svin%' OR LOWER(species_name) LIKE '%pig%' THEN '15'
                             WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%'
