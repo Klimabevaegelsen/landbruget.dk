@@ -291,6 +291,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 "dst_gartn1_processed",
                 "dst_fro_processed",
                 "dst_halm1_processed",
+                # Critical tables needed during processing
+                "current_year_fields",
+                "year_fields_with_zones",
+                "year_production_estimates",
             ]
 
             for table_row in all_tables:
