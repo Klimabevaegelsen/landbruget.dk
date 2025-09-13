@@ -859,8 +859,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.geometry
                 FROM current_year_fields f
                 LEFT JOIN dst_zones z ON ST_Intersects(
-                    ST_GeomFromText(f.geometry),
-                    ST_GeomFromText(z.geometry)
+                    f.geometry,
+                    z.geometry
                 )
                 """)
 
@@ -1058,8 +1058,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.geometry
                 FROM current_batch f
                 LEFT JOIN dst_zones z ON ST_Intersects(
-                    ST_GeomFromText(f.geometry),
-                    ST_GeomFromText(z.geometry)
+                    f.geometry,
+                    z.geometry
                 )
             """)
 
