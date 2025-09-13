@@ -169,11 +169,11 @@ class NLES5Calculator:
 
             self.log.info(f"✅ Calculated detailed percolation effects for {count:,} fields")
             if perc_stats and perc_stats[0] is not None:
-                self.log.info(f"🌧️  DETAILED PERCOLATION EFFECTS STATISTICS:")
+                self.log.info("🌧️  DETAILED PERCOLATION EFFECTS STATISTICS:")
                 self.log.info(f"   Fields processed: {perc_stats[0]:,}, valid seasonal data: {perc_stats[1]:,} ({perc_stats[1]/perc_stats[0]:.1%})")
                 
                 # Input percolation values
-                self.log.info(f"   INPUT PERCOLATION VALUES:")
+                self.log.info("   INPUT PERCOLATION VALUES:")
                 self.log.info(f"     Total: min={perc_stats[2]:.1f}mm, max={perc_stats[3]:.1f}mm, avg={perc_stats[4]:.1f}mm")
                 if perc_stats[5] and perc_stats[4]:
                     cv_total = perc_stats[5] / perc_stats[4] * 100
@@ -190,7 +190,7 @@ class NLES5Calculator:
                     self.log.info(f"     Sept-Mar variation: stddev={perc_stats[13]:.1f}mm, CV={cv_sep_mar:.1f}%")
                 
                 # Calculated effects
-                self.log.info(f"   CALCULATED EFFECT VALUES:")
+                self.log.info("   CALCULATED EFFECT VALUES:")
                 self.log.info(f"     Soil effect: min={perc_stats[14]:.4f}, max={perc_stats[15]:.4f}, avg={perc_stats[16]:.4f}")
                 if perc_stats[17] and perc_stats[16]:
                     cv_soil = perc_stats[17] / perc_stats[16] * 100
@@ -207,7 +207,7 @@ class NLES5Calculator:
                     self.log.info(f"     Combined effect variation: stddev={perc_stats[25]:.4f}, CV={cv_combined:.1f}%")
                 
                 # Percolation magnitude distribution
-                self.log.info(f"   PERCOLATION MAGNITUDE DISTRIBUTION:")
+                self.log.info("   PERCOLATION MAGNITUDE DISTRIBUTION:")
                 self.log.info(f"     Very high (>1200mm): {perc_stats[26]:,} fields")
                 self.log.info(f"     High (800-1200mm): {perc_stats[27]:,} fields")
                 self.log.info(f"     Moderate (400-800mm): {perc_stats[28]:,} fields")
@@ -257,7 +257,7 @@ class NLES5Calculator:
             unknown_pct = (unknown_crops / total_fields * 100) if total_fields > 0 else 0
             known_pct = (known_crops / total_fields * 100) if total_fields > 0 else 0
             
-            self.log.info(f"📊 CROP TYPE ANALYSIS:")
+            self.log.info("📊 CROP TYPE ANALYSIS:")
             self.log.info(f"   Total fields: {total_fields:,}")
             self.log.info(f"   Known crop types: {known_crops:,} ({known_pct:.1f}%)")
             self.log.info(f"   Unknown crop types: {unknown_crops:,} ({unknown_pct:.1f}%)")
@@ -281,7 +281,7 @@ class NLES5Calculator:
                     FROM fields_with_climate_soil_crops
                 """
                 diagnostics = self.conn.execute(diagnostic_sql).fetchone()
-                self.log.info(f"🔍 NLES5 DATA AVAILABILITY DIAGNOSTICS:")
+                self.log.info("🔍 NLES5 DATA AVAILABILITY DIAGNOSTICS:")
                 self.log.info(f"   Total fields: {diagnostics[0]:,}")
                 self.log.info(f"   Has percolation (>0): {diagnostics[1]:,} ({diagnostics[1]/diagnostics[0]:.1%})")
                 self.log.info(f"   Has climate quality: {diagnostics[2]:,} ({diagnostics[2]/diagnostics[0]:.1%})")
@@ -490,7 +490,7 @@ class NLES5Calculator:
             import gc
             gc.collect()
             self.processor._cleanup_temp_files()
-        except:
+        except Exception:
             pass
 
         count = self.conn.execute("SELECT COUNT(*) FROM nles5_nitrogen_estimates").fetchone()[0]
@@ -703,7 +703,7 @@ class NLES5Calculator:
             fertilizer_size = 0
             try:
                 fertilizer_size = self.conn.execute("SELECT COUNT(*) FROM fertilizer_accounts").fetchone()[0]
-            except:
+            except Exception:
                 pass
             
             self.log.info(f"Join optimization: nitrogen_base={base_count:,}, fertilizer_accounts={fertilizer_size:,}")
@@ -1279,7 +1279,7 @@ class NLES5Calculator:
             # Check if table exists, otherwise fall back to regular method
             try:
                 total_fields = self.conn.execute(f"SELECT COUNT(*) FROM {current_table}").fetchone()[0]
-            except:
+            except Exception:
                 self.log.warning("Input table for NLES5 calculations not found, using regular processing")
                 return self._calculate_nles5_estimates()
             
@@ -1605,7 +1605,7 @@ class NLES5Calculator:
     def _calculate_percolation_effects_target_year(self, fields_complete_table: str) -> str:
         """Calculate detailed percolation effects for target year processing."""
         try:
-            self.log.info(f"🌧️  Calculating percolation effects for target year processing")
+            self.log.info("🌧️  Calculating percolation effects for target year processing")
             
             # Apply the same percolation effects calculation as the main method
             # but tailored for target year processing
@@ -1706,12 +1706,12 @@ class NLES5Calculator:
                 """).fetchone()
                 
                 if percolation_effects_stats:
-                    self.log.info(f"🌧️  PERCOLATION EFFECTS DEBUG STATISTICS:")
+                    self.log.info("🌧️  PERCOLATION EFFECTS DEBUG STATISTICS:")
                     self.log.info(f"   Fields processed: {percolation_effects_stats[0]:,}, with percolation data: {percolation_effects_stats[1]:,}")
                     self.log.info(f"   Soil types: Sand={percolation_effects_stats[25]:,}, Clay={percolation_effects_stats[26]:,}")
                     
                     # Raw percolation values at field level
-                    self.log.info(f"   RAW PERCOLATION at field level:")
+                    self.log.info("   RAW PERCOLATION at field level:")
                     self.log.info(f"     Total: min={percolation_effects_stats[2]:.1f}mm, max={percolation_effects_stats[3]:.1f}mm, avg={percolation_effects_stats[4]:.1f}mm")
                     if percolation_effects_stats[5] and percolation_effects_stats[4]:
                         cv_total = percolation_effects_stats[5] / percolation_effects_stats[4] * 100
@@ -1728,7 +1728,7 @@ class NLES5Calculator:
                         self.log.info(f"     Sept-Mar variation: stddev={percolation_effects_stats[13]:.1f}mm, CV={cv_sep_mar:.1f}%")
                     
                     # Calculated effects
-                    self.log.info(f"   CALCULATED EFFECTS:")
+                    self.log.info("   CALCULATED EFFECTS:")
                     self.log.info(f"     Soil effect: min={percolation_effects_stats[14]:.4f}, max={percolation_effects_stats[15]:.4f}, avg={percolation_effects_stats[16]:.4f}")
                     if percolation_effects_stats[17] and percolation_effects_stats[16]:
                         cv_soil = percolation_effects_stats[17] / percolation_effects_stats[16] * 100

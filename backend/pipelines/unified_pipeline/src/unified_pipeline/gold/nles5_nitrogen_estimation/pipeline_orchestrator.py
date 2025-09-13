@@ -17,7 +17,6 @@ import time
 from typing import Any, Dict, List, Optional
 
 
-
 class NLES5PipelineOrchestrator:
     """Pipeline orchestrator for NLES5 nitrogen estimation processing."""
     
@@ -77,7 +76,7 @@ class NLES5PipelineOrchestrator:
         # Split into batches
         target_year_batches = self._create_target_year_batches(all_target_years)
         
-        self.log.info(f"🎯 PIPELINE BATCHING STRATEGY:")
+        self.log.info("🎯 PIPELINE BATCHING STRATEGY:")
         self.log.info(f"   Total target years: {len(all_target_years)} → {all_target_years}")
         self.log.info(f"   Batch size: {self.config.target_year_batch_size} years per batch")
         self.log.info(f"   Number of batches: {len(target_year_batches)}")
@@ -118,7 +117,7 @@ class NLES5PipelineOrchestrator:
         for batch_num, batch_years in enumerate(target_year_batches, 1):
             batch_start_time = time.time()
             
-            self.log.info(f"")
+            self.log.info("")
             self.log.info(f"🔄 ========== PIPELINE BATCH {batch_num}/{len(target_year_batches)} ==========")
             self.log.info(f"📅 Processing target years: {batch_years}")
             self.log.info(f"💾 Memory before batch: {self.processor._get_memory_usage():.1f}GB")
@@ -153,8 +152,8 @@ class NLES5PipelineOrchestrator:
             self.processor._ensure_final_batched_table_exists()
             final_count = 0
             
-        self.log.info(f"")
-        self.log.info(f"🎯 PIPELINE BATCHING SUMMARY:")
+        self.log.info("")
+        self.log.info("🎯 PIPELINE BATCHING SUMMARY:")
         self.log.info(f"   Batches processed: {len(target_year_batches)}")
         self.log.info(f"   Total fields: {final_count:,}")
         self.log.info(f"   Average per batch: {final_count // len(target_year_batches):,} fields")
@@ -206,7 +205,7 @@ class NLES5PipelineOrchestrator:
         # Phase 2: Process climate data to calculate percolation (MUST come before spatial tables)
         self.log.info("🌧️  Phase 2: Processing climate data for percolation...")
         phase_start = time.time()
-        climate_table = self.processor._process_climate_data()
+        self.processor._process_climate_data()
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Phase 2 completed in {phase_time:.1f} seconds")
 
@@ -230,7 +229,7 @@ class NLES5PipelineOrchestrator:
         # Phase 5: Process NLES5 by target year
         self.log.info("🎯 Phase 5: NLES5 target-year-by-target-year processing...")
         phase_start = time.time()
-        estimates_table = self.processor._process_nles5_target_year_by_target_year(loaded_tables)
+        self.processor._process_nles5_target_year_by_target_year(loaded_tables)
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Phase 5 completed in {phase_time:.1f} seconds")
         self.processor._monitor_memory_usage("nles5_estimates")
@@ -249,7 +248,7 @@ class NLES5PipelineOrchestrator:
         # Phase 7: Calculate uncertainty estimates
         self.log.info("📊 Phase 7: Calculating uncertainty estimates...")
         phase_start = time.time()
-        uncertainty_table = self.processor._calculate_uncertainty_estimates()
+        self.processor._calculate_uncertainty_estimates()
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Phase 7 completed in {phase_time:.1f} seconds")
 
@@ -330,14 +329,14 @@ class NLES5PipelineOrchestrator:
                 return 0
 
             # Phase 2: Process climate data for this batch
-            self.log.info(f"🌧️  Batch Phase 2: Processing climate data...")
+            self.log.info("🌧️  Batch Phase 2: Processing climate data...")
             phase_start = time.time()
-            climate_table = self.processor._process_climate_data()
+            self.processor._process_climate_data()
             phase_time = time.time() - phase_start
             self.log.info(f"✅ Batch Phase 2 completed in {phase_time:.1f} seconds")
 
             # Phase 3: Create spatial tables and parameters for this batch
-            self.log.info(f"⚡ Batch Phase 3: Creating spatial tables...")
+            self.log.info("⚡ Batch Phase 3: Creating spatial tables...")
             phase_start = time.time()
             self.processor._create_spatial_tables()
             self.processor._create_nles5_parameter_tables()
@@ -456,7 +455,6 @@ class NLES5PipelineOrchestrator:
             self.log.info(f"   🔄 Loading agricultural fields for 3-year window: {sorted(required_years)}")
             
             # Step 1: Load ONLY the agricultural fields data for required years
-            table_name = f"target_year_{target_year}_estimates"
             self.processor._load_agricultural_fields_for_years(required_years, f"fields_target_{target_year}")
             
             # Step 2: Load climate data for required years
@@ -504,7 +502,7 @@ class NLES5PipelineOrchestrator:
                 self.log.info(f"     Fields joined: {result_count:,}, with climate data: {climate_matched:,} ({climate_matched/result_count:.1%})")
                 
                 if spatial_join_stats and spatial_join_stats[0] > 0:
-                    self.log.info(f"   💧 PERCOLATION VALUES AFTER SPATIAL JOIN:")
+                    self.log.info("   💧 PERCOLATION VALUES AFTER SPATIAL JOIN:")
                     self.log.info(f"     Fields with percolation: {spatial_join_stats[1]:,}, positive values: {spatial_join_stats[2]:,}")
                     self.log.info(f"     Total percolation: min={spatial_join_stats[3]:.1f}mm, max={spatial_join_stats[4]:.1f}mm, avg={spatial_join_stats[5]:.1f}mm")
                     if spatial_join_stats[6] and spatial_join_stats[5]:

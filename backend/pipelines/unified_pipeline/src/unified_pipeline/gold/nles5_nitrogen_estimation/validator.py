@@ -64,7 +64,7 @@ class NLES5Validator:
                         found_table = table_name
                         self.log.info(f"✅ Found NLES5 data in table: {table_name} ({total_count:,} records)")
                         break
-                except:
+                except Exception:
                     continue
             
             if not found_table or total_count == 0:
@@ -85,7 +85,7 @@ class NLES5Validator:
             total_fields, crop_data_count, area_data_count, nitrogen_data_count = data_quality_check
             
             # Log validation results with data preview
-            self.log.info(f"📊 NLES5 Validation Results:")
+            self.log.info("📊 NLES5 Validation Results:")
             self.log.info(f"   Total fields: {total_fields:,}")
             self.log.info(f"   Fields with crop data: {crop_data_count:,} ({crop_data_count/total_fields*100:.1f}%)")
             self.log.info(f"   Fields with area data: {area_data_count:,} ({area_data_count/total_fields*100:.1f}%)")
@@ -123,7 +123,7 @@ class NLES5Validator:
             total_records, avg_washout, stddev_washout, min_washout, max_washout, negative_count, excessive_count_100, excessive_count_200, null_count, avg_area, unique_crops = stats
 
             # Log enhanced validation statistics
-            self.log.info(f"📊 NLES5 VALIDATION RESULTS:")
+            self.log.info("📊 NLES5 VALIDATION RESULTS:")
             self.log.info(f"   Records: {total_records:,}")
             self.log.info(f"   Average field size: {avg_area:.2f} ha")
             self.log.info(f"   Unique crop types: {unique_crops:,}")
@@ -718,7 +718,7 @@ class NLES5Validator:
                 perco_coverage = (with_perco / total) * 100 if total > 0 else 0
                 dist_coverage = (with_dist / total) * 100 if total > 0 else 0
                 
-                self.log.info(f"🌡️  Climate data quality:")
+                self.log.info("🌡️  Climate data quality:")
                 self.log.info(f"   Percolation coverage: {with_perco:,}/{total:,} ({perco_coverage:.1f}%)")
                 self.log.info(f"   Average percolation: {avg_perco:.1f} mm/year" if avg_perco else "   Average percolation: N/A")
                 self.log.info(f"   Distance coverage: {with_dist:,}/{total:,} ({dist_coverage:.1f}%)")
@@ -756,7 +756,7 @@ class NLES5Validator:
                 crop_coverage = (with_crop / total) * 100 if total > 0 else 0
                 geom_coverage = (with_geom / total) * 100 if total > 0 else 0
                 
-                self.log.info(f"🚜 Field data quality:")
+                self.log.info("🚜 Field data quality:")
                 self.log.info(f"   Area coverage: {with_area:,}/{total:,} ({area_coverage:.1f}%)")
                 self.log.info(f"   Average area: {avg_area:.2f} ha" if avg_area else "   Average area: N/A")
                 self.log.info(f"   Crop coverage: {with_crop:,}/{total:,} ({crop_coverage:.1f}%)")
@@ -795,7 +795,7 @@ class NLES5Validator:
                 soil_type_coverage = (with_soil_type / total) * 100 if total > 0 else 0
                 clay_coverage = (with_clay / total) * 100 if total > 0 else 0
                 
-                self.log.info(f"🏔️  Soil data quality:")
+                self.log.info("🏔️  Soil data quality:")
                 self.log.info(f"   Soil type coverage: {with_soil_type:,}/{total:,} ({soil_type_coverage:.1f}%)")
                 self.log.info(f"   Clay content coverage: {with_clay:,}/{total:,} ({clay_coverage:.1f}%)")
                 self.log.info(f"   Average clay content: {avg_clay:.1f}%" if avg_clay else "   Average clay content: N/A")
@@ -854,10 +854,8 @@ class NLES5Validator:
     def _calculate_data_quality_score(self, validation_results: Dict[str, Any]) -> None:
         """Calculate data quality score based on validation results."""
         score = 0.0
-        total_possible_score = 100.0
         
         # Score based on existing tables (40 points possible)
-        tables_expected = 3  # agricultural_fields, nles5_nitrogen_estimates, fields_with_climate_soil_crops
         tables_found = 0
         
         for table_name, stats in validation_results.items():

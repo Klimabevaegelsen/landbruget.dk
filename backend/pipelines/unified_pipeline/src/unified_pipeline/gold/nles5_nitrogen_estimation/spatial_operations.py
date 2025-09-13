@@ -11,6 +11,7 @@ This module handles all spatial operations including:
 import time
 
 from unified_pipeline.util.timing import timed
+
 from .fertilizer_distributor import NLES5FertilizerDistributor
 
 
@@ -154,14 +155,14 @@ class NLES5SpatialOperations:
             
             if spatial_join_debug:
                 unique_perc, unique_points, avg_perc, min_perc, max_perc = spatial_join_debug
-                self.log.info(f"🗺️ SPATIAL JOIN DEBUG:")
+                self.log.info("🗺️ SPATIAL JOIN DEBUG:")
                 self.log.info(f"   Unique percolation values: {unique_perc}")
                 self.log.info(f"   Unique climate points: {unique_points}")
                 self.log.info(f"   Percolation range: {min_perc:.1f} - {max_perc:.1f}mm (avg: {avg_perc:.1f}mm)")
                 
                 if unique_perc <= 5:
                     self.log.error(f"🚨 SPATIAL JOIN FAILURE: Only {unique_perc} unique percolation values!")
-                    self.log.error(f"   This indicates spatial join is mapping all fields to same climate data")
+                    self.log.error("   This indicates spatial join is mapping all fields to same climate data")
                     
                     # Show which percolation values are being used
                     common_values = self.conn.execute("""
@@ -260,7 +261,7 @@ class NLES5SpatialOperations:
                 raise ValueError("No fields produced from soil join - input table may be empty")
             
             self.log.info(f"✅ Soil join completed: {total:,} fields processed")
-            self.log.info(f"📊 Soil join quality:")
+            self.log.info("📊 Soil join quality:")
             self.log.info(f"   Fields with soil data: {with_soil:,} ({with_soil/total:.1%})")
             self.log.info(f"   Unique soil codes: {unique_codes:,}")
             self.log.info(f"   Clay content variation: {unique_clay:,} unique values")
@@ -431,7 +432,7 @@ class NLES5SpatialOperations:
                             enhanced_mappings_available = enhanced_count > 0
                             if enhanced_mappings_available:
                                 self.log.info(f"Using {enhanced_count:,} enhanced GKEA-FVM mappings from {enhanced_mappings_table}")
-                    except:
+                    except Exception:
                         enhanced_mappings_available = False
                     
                     if enhanced_mappings_available:
@@ -533,7 +534,7 @@ class NLES5SpatialOperations:
             """).fetchone()
             
             total, with_total_n, with_mineral_n, with_organic_n, avg_total_n = nitrogen_stats
-            self.log.info(f"✅ Nitrogen data integration completed:")
+            self.log.info("✅ Nitrogen data integration completed:")
             self.log.info(f"   Total fields: {total:,}")
             self.log.info(f"   With total N: {with_total_n:,} ({with_total_n/total:.1%})")
             self.log.info(f"   With mineral N: {with_mineral_n:,} ({with_mineral_n/total:.1%})")
@@ -984,11 +985,11 @@ class NLES5SpatialOperations:
                 """).fetchone()
                 
                 self.log.info(f"✅ Created agricultural_fields_spatial: {spatial_count:,} records with valid geometries")
-                self.log.warning(f"📍 COORDINATE FIX RESULTS:")
+                self.log.warning("📍 COORDINATE FIX RESULTS:")
                 self.log.warning(f"   Total fields: {coordinate_fix_stats[0]:,}")
                 self.log.warning(f"   Fields with swapped coordinates (fixed): {coordinate_fix_stats[1]:,}")
                 self.log.warning(f"   Fields with correct WGS84 coordinates: {coordinate_fix_stats[2]:,}")
-                self.log.warning(f"   Final coordinate ranges:")
+                self.log.warning("   Final coordinate ranges:")
                 self.log.warning(f"     Longitude: {coordinate_fix_stats[3]:.3f}° to {coordinate_fix_stats[4]:.3f}°")
                 self.log.warning(f"     Latitude: {coordinate_fix_stats[5]:.3f}° to {coordinate_fix_stats[6]:.3f}°")
                 
@@ -1130,12 +1131,12 @@ class NLES5SpatialOperations:
                 """).fetchone()
                 
                 self.log.info(f"✅ Created soil_types_prepared: {soil_prepared_count:,} records with valid geometries")
-                self.log.info(f"🌍 REAL DATA USAGE CONFIRMED:")
+                self.log.info("🌍 REAL DATA USAGE CONFIRMED:")
                 self.log.info(f"   Total records: {real_data_stats[0]:,}")
                 self.log.info(f"   Clay soils (Lerjord): {real_data_stats[1]:,}")
                 self.log.info(f"   Sandy soils: {real_data_stats[2]:,}")
                 self.log.info(f"   Unique descriptions: {real_data_stats[3]:,}")
-                self.log.info(f"📊 Clay content mapping from REAL Danish soil data:")
+                self.log.info("📊 Clay content mapping from REAL Danish soil data:")
                 self.log.info(f"   Unique soil codes: {clay_stats[0]:,}")
                 self.log.info(f"   Clay value classes: {clay_stats[1]:,} (from government soil descriptions)")
                 self.log.info(f"   Clay content range: {clay_stats[2]:.1f}% - {clay_stats[3]:.1f}% (avg: {clay_stats[4]:.1f}%)")

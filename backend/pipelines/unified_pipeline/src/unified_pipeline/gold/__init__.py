@@ -5,10 +5,13 @@
 # from .field_area_analysis_redesigned import FieldAreaAnalysisGold, FieldAreaAnalysisGoldConfig
 from .cvr_geometry_datasets import CVRGeometryDatasets, CVRGeometryDatasetsConfig
 from .field_production import FieldProductionGold, FieldProductionGoldConfig
+from .nles5_nitrogen_estimation import (
+    NLES5NitrogenEstimationGold,
+    NLES5NitrogenEstimationGoldConfig,
+)
 from .pesticide_disaggregation import PesticideDisaggregationGold, PesticideDisaggregationGoldConfig
 from .pesticide_proximity import PesticideProximityGold, PesticideProximityGoldConfig
 from .property_cadastral_merge import PropertyCadastralMergeGold, PropertyCadastralMergeGoldConfig
-from .nles5_nitrogen_estimation import NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig
 from .work_permits import WorkPermitsGold, WorkPermitsGoldConfig
 from .worker_safety import WorkerSafetyGold, WorkerSafetyGoldConfig
 

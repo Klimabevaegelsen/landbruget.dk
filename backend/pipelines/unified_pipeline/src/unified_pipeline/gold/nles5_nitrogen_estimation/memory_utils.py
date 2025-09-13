@@ -14,8 +14,8 @@ All methods maintain the exact same functionality and cleanup strategies from th
 
 import gc
 import os
-import psutil
 
+import psutil
 
 
 class NLES5MemoryUtils:
@@ -284,7 +284,7 @@ class NLES5MemoryUtils:
             final_memory = self._get_memory_usage()
             memory_freed = initial_memory - final_memory
             
-            self.log.info(f"🧹 Aggressive pipeline cleanup completed")
+            self.log.info("🧹 Aggressive pipeline cleanup completed")
             if memory_freed > 0.1:
                 self.log.info(f"💾 Memory freed: {memory_freed:.2f} GB (from {initial_memory:.2f} to {final_memory:.2f} GB)")
             else:

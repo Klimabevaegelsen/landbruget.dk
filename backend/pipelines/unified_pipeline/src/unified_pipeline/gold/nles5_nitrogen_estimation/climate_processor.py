@@ -49,7 +49,7 @@ class NLES5ClimateProcessor:
                 # DEBUG: Check specifically for bbox_geometry column
                 has_bbox_geometry = 'bbox_geometry' in column_names
                 has_centroid_geometry = 'centroid_geometry' in column_names
-                self.log.info(f"📦 GEOMETRY COLUMN ANALYSIS:")
+                self.log.info("📦 GEOMETRY COLUMN ANALYSIS:")
                 self.log.info(f"   bbox_geometry found: {has_bbox_geometry}")
                 self.log.info(f"   centroid_geometry found: {has_centroid_geometry}")
                 
@@ -59,13 +59,15 @@ class NLES5ClimateProcessor:
                         SELECT 
                             COUNT(*) as total_records,
                             COUNT(CASE WHEN bbox_geometry IS NOT NULL THEN 1 END) as with_bbox,
-                            COUNT(CASE WHEN centroid_geometry IS NOT NULL THEN 1 END) as with_centroid,
+                            COUNT(CASE WHEN centroid_geometry IS NOT NULL THEN 1 END) 
+                                as with_centroid,
                             COUNT(DISTINCT bbox_geometry) as unique_bbox_geoms,
                             COUNT(DISTINCT centroid_geometry) as unique_centroid_geoms
                         FROM dmi_data
                     """).fetchone()
                     
-                    # DIAGNOSTIC: Check raw parameter value distribution to detect if problem is in source data
+                    # DIAGNOSTIC: Check raw parameter value distribution to detect 
+                    # if problem is in source data
                     param_value_dist = self.conn.execute("""
                         SELECT 
                             parameter_id,
@@ -80,26 +82,35 @@ class NLES5ClimateProcessor:
                         GROUP BY parameter_id
                     """).fetchall()
                     
-                    self.log.warning(f"🔍 RAW DMI PARAMETER ANALYSIS:")
+                    self.log.warning("🔍 RAW DMI PARAMETER ANALYSIS:")
                     for param_row in param_value_dist:
                         param_id, total, unique_vals, min_val, max_val, unique_locs = param_row
-                        self.log.warning(f"   {param_id}: {total:,} records, {unique_vals:,} unique values, {unique_locs:,} unique locations")
+                        self.log.warning(f"   {param_id}: {total:,} records, "
+                                         f"{unique_vals:,} unique values, "
+                                         f"{unique_locs:,} unique locations")
                         self.log.warning(f"      Value range: {min_val:.3f} to {max_val:.3f}")
                         
                         # Check if there's only one location for a parameter
                         if unique_locs <= 1:
-                            self.log.error(f"🚨 ROOT CAUSE FOUND: {param_id} has only {unique_locs} unique location(s)!")
-                            self.log.error(f"   This means all climate data comes from a single weather station")
-                            self.log.error(f"   Problem is in the silver layer data loading, not coordinate transformation")
+                            self.log.error(f"🚨 ROOT CAUSE FOUND: {param_id} has only "
+                                           f"{unique_locs} unique location(s)!")
+                            self.log.error("   This means all climate data comes from a "
+                                           "single weather station")
+                            self.log.error("   Problem is in the silver layer data loading, "
+                                           "not coordinate transformation")
                         elif unique_locs < 10:
-                            self.log.warning(f"⚠️  POTENTIAL ISSUE: {param_id} has only {unique_locs} unique locations")
-                            self.log.warning(f"   Expected hundreds of weather stations across Denmark")
+                            self.log.warning(f"⚠️  POTENTIAL ISSUE: {param_id} has only "
+                                             f"{unique_locs} unique locations")
+                            self.log.warning("   Expected hundreds of weather stations "
+                                             "across Denmark")
                     
                     if bbox_stats:
-                        self.log.info(f"📊 GEOMETRY STATISTICS:")
+                        self.log.info("📊 GEOMETRY STATISTICS:")
                         self.log.info(f"   Total records: {bbox_stats[0]:,}")
-                        self.log.info(f"   With bbox_geometry: {bbox_stats[1]:,} ({bbox_stats[1]/bbox_stats[0]:.1%})")
-                        self.log.info(f"   With centroid_geometry: {bbox_stats[2]:,} ({bbox_stats[2]/bbox_stats[0]:.1%})")
+                        self.log.info(f"   With bbox_geometry: {bbox_stats[1]:,} "
+                                      f"({bbox_stats[1]/bbox_stats[0]:.1%})")
+                        self.log.info(f"   With centroid_geometry: {bbox_stats[2]:,} "
+                                      f"({bbox_stats[2]/bbox_stats[0]:.1%})")
                         self.log.info(f"   Unique bbox geometries: {bbox_stats[3]:,}")
                         self.log.info(f"   Unique centroid geometries: {bbox_stats[4]:,}")
                         
@@ -296,7 +307,7 @@ class NLES5ClimateProcessor:
                 """).fetchone()
                 
                 if coord_validation:
-                    self.log.info(f"🗺️  COORDINATE VALIDATION RESULTS:")
+                    self.log.info("🗺️  COORDINATE VALIDATION RESULTS:")
                     self.log.info(f"   Climate points with geometry: {coord_validation[1]:,}/{coord_validation[0]:,}")
                     self.log.info(f"   X range: {coord_validation[2]:.1f} to {coord_validation[3]:.1f}")
                     self.log.info(f"   Y range: {coord_validation[4]:.1f} to {coord_validation[5]:.1f}")
@@ -366,7 +377,7 @@ class NLES5ClimateProcessor:
                 """).fetchall()
                 
                 if percolation_stats:
-                    self.log.info(f"💧 PERCOLATION VALUE STATISTICS:")
+                    self.log.info("💧 PERCOLATION VALUE STATISTICS:")
                     self.log.info(f"   Total records: {percolation_stats[0]:,}, with positive percolation: {percolation_stats[1]:,}")
                     self.log.info(f"   Unique climate points: {percolation_stats[19]:,}, processed points: {percolation_stats[20]:,}, years: {percolation_stats[21]:,}")
                     self.log.info(f"   TOTAL PERCOLATION: min={percolation_stats[2]:.1f}mm, max={percolation_stats[3]:.1f}mm, avg={percolation_stats[4]:.1f}mm, median={percolation_stats[6]:.1f}mm")
@@ -384,7 +395,7 @@ class NLES5ClimateProcessor:
                 
                 # Log variation analysis results
                 if no_variation_check:
-                    self.log.info(f"🔍 VARIATION ANALYSIS:")
+                    self.log.info("🔍 VARIATION ANALYSIS:")
                     for check in no_variation_check:
                         metric, total_vals, unique_vals, status = check
                         self.log.info(f"   {metric}: {unique_vals:,}/{total_vals:,} unique values - {status}")
@@ -396,8 +407,8 @@ class NLES5ClimateProcessor:
                     if (8.0 <= coord_validation[2] <= 15.0 and 54.0 <= coord_validation[4] <= 58.0):
                         self.log.info("   ✅ Coordinates are in expected Danish WGS84 range (longitude/latitude)")
                     else:
-                        self.log.warning(f"   ⚠️  Coordinates may still be invalid for WGS84")
-                        self.log.warning(f"      Expected: longitude[8.0-15.0], latitude[54.0-58.0] for Danish WGS84")
+                        self.log.warning("   ⚠️  Coordinates may still be invalid for WGS84")
+                        self.log.warning("      Expected: longitude[8.0-15.0], latitude[54.0-58.0] for Danish WGS84")
                         
                         # ENHANCED DIAGNOSTIC: Check coordinate transformation success rate and identify specific issues
                         transformation_check = self.conn.execute("""
@@ -448,13 +459,13 @@ class NLES5ClimateProcessor:
                         
                         if transformation_check:
                             success_rate = transformation_check[1] / transformation_check[0] if transformation_check[0] > 0 else 0
-                            self.log.warning(f"🗺️  COORDINATE TRANSFORMATION DEBUG:")
+                            self.log.warning("🗺️  COORDINATE TRANSFORMATION DEBUG:")
                             self.log.warning(f"   Transformation success rate: {success_rate:.1%} ({transformation_check[1]:,}/{transformation_check[0]:,})")
                             self.log.warning(f"   Unique X coordinates: {transformation_check[2]:,}")
                             self.log.warning(f"   Unique Y coordinates: {transformation_check[3]:,}")
                             
                             if coord_path_analysis:
-                                self.log.warning(f"🔍 COORDINATE PATH ANALYSIS (sample of 100):")
+                                self.log.warning("🔍 COORDINATE PATH ANALYSIS (sample of 100):")
                                 self.log.warning(f"   Raw coordinate ranges: X[{coord_path_analysis[4]:.6f}, {coord_path_analysis[5]:.6f}], Y[{coord_path_analysis[6]:.6f}, {coord_path_analysis[7]:.6f}]")
                                 self.log.warning(f"   Normalized range (DMI): {coord_path_analysis[1]}/100 coordinates")
                                 self.log.warning(f"   WGS84 range: {coord_path_analysis[2]}/100 coordinates") 
@@ -462,18 +473,18 @@ class NLES5ClimateProcessor:
                                 
                                 # If most coordinates fall into normalized range, this explains the problem
                                 if coord_path_analysis[1] > 50:  # More than 50% in normalized range
-                                    self.log.error(f"🚨 LIKELY ROOT CAUSE: Most coordinates in normalized range!")
-                                    self.log.error(f"   Hardcoded transformation bounds may be incorrect or too narrow")
-                                    self.log.error(f"   Bounds used: X[0.0004925007, 0.0005203204], Y[4.5113287175, 4.5113925120]")
+                                    self.log.error("🚨 LIKELY ROOT CAUSE: Most coordinates in normalized range!")
+                                    self.log.error("   Hardcoded transformation bounds may be incorrect or too narrow")
+                                    self.log.error("   Bounds used: X[0.0004925007, 0.0005203204], Y[4.5113287175, 4.5113925120]")
                             
-                            self.log.warning(f"📊 SAMPLE TRANSFORMATIONS:")
+                            self.log.warning("📊 SAMPLE TRANSFORMATIONS:")
                             for i, row in enumerate(sample_transformations[:10]):
                                 self.log.warning(f"   {i+1}: Raw({row[1]:.6f},{row[2]:.6f}) → Trans({row[3]:.1f},{row[4]:.1f}) Year:{row[5]} Perco:{row[6]:.1f}")
                             
                             if transformation_check[2] <= 5 or transformation_check[3] <= 5:
-                                self.log.error(f"🚨 CRITICAL: Very few unique coordinates - transformation creating duplicates!")
-                                self.log.error(f"   This would cause all fields to get same climate data → constant percolation values")
-                                self.log.error(f"   Problem is likely in coordinate transformation logic (lines 155-197)")
+                                self.log.error("🚨 CRITICAL: Very few unique coordinates - transformation creating duplicates!")
+                                self.log.error("   This would cause all fields to get same climate data → constant percolation values")
+                                self.log.error("   Problem is likely in coordinate transformation logic (lines 155-197)")
                                 
                                 # Show the actual coordinate distribution 
                                 coord_distribution = self.conn.execute("""
@@ -488,15 +499,15 @@ class NLES5ClimateProcessor:
                                     LIMIT 10
                                 """).fetchall()
                                 
-                                self.log.error(f"🚨 COORDINATE DISTRIBUTION (top 10 locations):")
+                                self.log.error("🚨 COORDINATE DISTRIBUTION (top 10 locations):")
                                 for coord in coord_distribution:
                                     self.log.error(f"   ({coord[0]:.1f}, {coord[1]:.1f}): {coord[2]} climate records")
                                     
                                 # Check if all coordinates map to same location
                                 if len(coord_distribution) == 1:
-                                    self.log.error(f"🚨 SMOKING GUN: ALL CLIMATE DATA MAPS TO SINGLE COORDINATE!")
+                                    self.log.error("🚨 SMOKING GUN: ALL CLIMATE DATA MAPS TO SINGLE COORDINATE!")
                                     self.log.error(f"   Single point: ({coord_distribution[0][0]:.1f}, {coord_distribution[0][1]:.1f})")
-                                    self.log.error(f"   This explains why percolation is constant across Denmark")
+                                    self.log.error("   This explains why percolation is constant across Denmark")
             
             # Log actual year distribution from real data
             if count > 0:
@@ -666,7 +677,7 @@ class NLES5ClimateProcessor:
             """).fetchone()
             
             if tess_spatial_check:
-                self.log.warning(f"🔍 TESSELLATION SPATIAL DIAGNOSTIC:")
+                self.log.warning("🔍 TESSELLATION SPATIAL DIAGNOSTIC:")
                 self.log.warning(f"   Total tessellation cells: {tess_spatial_check[0]:,}")
                 self.log.warning(f"   Unique X coordinates: {tess_spatial_check[1]:,}")
                 self.log.warning(f"   Unique Y coordinates: {tess_spatial_check[2]:,}")
@@ -676,9 +687,9 @@ class NLES5ClimateProcessor:
                 
                 # Check if tessellation has collapsed to single location
                 if tess_spatial_check[1] <= 1 or tess_spatial_check[2] <= 1:
-                    self.log.error(f"🚨 TESSELLATION PROBLEM: Tessellation collapsed to single location!")
-                    self.log.error(f"   All climate tessellation cells have same coordinates")
-                    self.log.error(f"   This will cause all fields to get same climate data")
+                    self.log.error("🚨 TESSELLATION PROBLEM: Tessellation collapsed to single location!")
+                    self.log.error("   All climate tessellation cells have same coordinates")
+                    self.log.error("   This will cause all fields to get same climate data")
                     
                     # Show sample tessellation data
                     sample_tess = self.conn.execute("""
@@ -694,14 +705,14 @@ class NLES5ClimateProcessor:
                         LIMIT 10
                     """).fetchall()
                     
-                    self.log.error(f"🚨 TESSELLATION COORDINATE DISTRIBUTION:")
+                    self.log.error("🚨 TESSELLATION COORDINATE DISTRIBUTION:")
                     for row in sample_tess:
                         self.log.error(f"   ({row[0]:.1f}, {row[1]:.1f}) Year:{row[3]} Perco:{row[2]:.1f}mm Count:{row[4]:,}")
                 
                 elif tess_spatial_check[3] <= 1:
-                    self.log.error(f"🚨 TESSELLATION PROBLEM: All tessellation cells have same percolation value!")
+                    self.log.error("🚨 TESSELLATION PROBLEM: All tessellation cells have same percolation value!")
                     self.log.error(f"   Only {tess_spatial_check[3]} unique percolation value(s) in tessellation")
-                    self.log.error(f"   Problem likely in climate_percolation data processing")
+                    self.log.error("   Problem likely in climate_percolation data processing")
 
             tess_count = self.conn.execute("SELECT COUNT(*) FROM climate_tessellation").fetchone()[0]
             self.log.info(f"✅ Created {tess_count:,} climate tessellation squares (10×10 km)")
@@ -770,7 +781,7 @@ class NLES5ClimateProcessor:
                 """).fetchone()
                 
                 if field_climate_diagnostic:
-                    self.log.warning(f"🔍 FIELD-CLIMATE JOIN DIAGNOSTIC:")
+                    self.log.warning("🔍 FIELD-CLIMATE JOIN DIAGNOSTIC:")
                     self.log.warning(f"   Total joined fields: {field_climate_diagnostic[0]:,}")
                     self.log.warning(f"   Unique percolation values in join: {field_climate_diagnostic[1]:,}")
                     self.log.warning(f"   Unique climate X coordinates: {field_climate_diagnostic[2]:,}")
@@ -780,11 +791,11 @@ class NLES5ClimateProcessor:
                     
                     # Check if spatial join collapsed to single climate point
                     if field_climate_diagnostic[1] <= 1:
-                        self.log.error(f"🚨 SPATIAL JOIN PROBLEM: All fields got same percolation value!")
+                        self.log.error("🚨 SPATIAL JOIN PROBLEM: All fields got same percolation value!")
                         self.log.error(f"   Only {field_climate_diagnostic[1]} unique percolation value(s) in joined result")
                     
                     if field_climate_diagnostic[2] <= 1 or field_climate_diagnostic[3] <= 1:
-                        self.log.error(f"🚨 SPATIAL JOIN PROBLEM: All fields assigned to same climate location!")
+                        self.log.error("🚨 SPATIAL JOIN PROBLEM: All fields assigned to same climate location!")
                         self.log.error(f"   Climate coordinates: X={field_climate_diagnostic[2]} unique, Y={field_climate_diagnostic[3]} unique")
                         
                         # Show which climate point all fields are getting
@@ -801,7 +812,7 @@ class NLES5ClimateProcessor:
                             LIMIT 5
                         """).fetchall()
                         
-                        self.log.error(f"🚨 DOMINANT CLIMATE ASSIGNMENTS:")
+                        self.log.error("🚨 DOMINANT CLIMATE ASSIGNMENTS:")
                         for row in dominant_climate:
                             self.log.error(f"   Climate ({row[0]:.1f}, {row[1]:.1f}) Year:{row[3]} Perco:{row[2]:.1f}mm → {row[4]:,} fields")
             
@@ -952,8 +963,8 @@ class NLES5ClimateProcessor:
                 # Check if climate data has collapsed to single location/value
                 if climate_variation[1] <= 1 or climate_variation[2] <= 1:
                     self.log.error(f"🚨 ROOT CAUSE FOUND: Climate data has only 1 unique location for year {year}!")
-                    self.log.error(f"   This explains why all fields get identical percolation values")
-                    self.log.error(f"   Problem is in climate data loading/filtering for specific years")
+                    self.log.error("   This explains why all fields get identical percolation values")
+                    self.log.error("   Problem is in climate data loading/filtering for specific years")
                 elif climate_variation[3] <= 1:
                     self.log.error(f"🚨 ROOT CAUSE FOUND: Climate data has only 1 unique percolation value for year {year}!")
                     self.log.error(f"   Value: {climate_variation[4]:.1f}mm (constant across all locations)")
@@ -1009,7 +1020,7 @@ class NLES5ClimateProcessor:
                 WHERE year = {year} AND geometry IS NOT NULL
             """).fetchone()
             
-            self.log.warning(f"🗺️  GEOGRAPHIC DISTRIBUTION ANALYSIS:")
+            self.log.warning("🗺️  GEOGRAPHIC DISTRIBUTION ANALYSIS:")
             self.log.warning(f"   📍 FIELDS DISTRIBUTION ({field_distribution[4]:,} fields):")
             self.log.warning(f"      X range: {field_distribution[0]:.3f} to {field_distribution[1]:.3f} (span: {field_distribution[1]-field_distribution[0]:.3f}°)")
             self.log.warning(f"      Y range: {field_distribution[2]:.3f} to {field_distribution[3]:.3f} (span: {field_distribution[3]-field_distribution[2]:.3f}°)")
@@ -1023,19 +1034,19 @@ class NLES5ClimateProcessor:
             field_span_x = field_distribution[1] - field_distribution[0]
             field_span_y = field_distribution[3] - field_distribution[2]
             
-            self.log.warning(f"   🎯 GEOGRAPHIC ANALYSIS:")
+            self.log.warning("   🎯 GEOGRAPHIC ANALYSIS:")
             self.log.warning(f"      Overlap: X={x_overlap:.3f}°, Y={y_overlap:.3f}°")
             self.log.warning(f"      Field coverage: X={field_span_x:.3f}°, Y={field_span_y:.3f}°")
             
             if field_span_x < 0.1 and field_span_y < 0.1:  # Less than ~10km span
-                self.log.error(f"🚨 ROOT CAUSE: FIELDS ARE GEOGRAPHICALLY CLUSTERED!")
+                self.log.error("🚨 ROOT CAUSE: FIELDS ARE GEOGRAPHICALLY CLUSTERED!")
                 self.log.error(f"   All {field_distribution[4]:,} fields are clustered in tiny area ({field_span_x:.3f}° x {field_span_y:.3f}°)")
-                self.log.error(f"   With 10km x 10km grid, only 1 grid cell covers this cluster")
-                self.log.error(f"   This explains why all fields get same climate data!")
-                self.log.error(f"   🔧 SOLUTION: This is actually CORRECT behavior for clustered fields")
+                self.log.error("   With 10km x 10km grid, only 1 grid cell covers this cluster")
+                self.log.error("   This explains why all fields get same climate data!")
+                self.log.error("   🔧 SOLUTION: This is actually CORRECT behavior for clustered fields")
             elif x_overlap < 1.0 or y_overlap < 1.0:
-                self.log.error(f"🚨 GEOGRAPHIC MISMATCH: Limited overlap between fields and climate grid!")
-                self.log.error(f"   Fields might be outside main climate grid coverage area")
+                self.log.error("🚨 GEOGRAPHIC MISMATCH: Limited overlap between fields and climate grid!")
+                self.log.error("   Fields might be outside main climate grid coverage area")
             
             if batch_diagnostic[4] == 0:
                 self.log.error("🚨 SPATIAL JOIN WILL FAIL: No intersections found in test sample")
@@ -1055,7 +1066,7 @@ class NLES5ClimateProcessor:
                         (SELECT MAX(ST_Y(geometry)) FROM climate_percolation WHERE year = {year}) as climate_max_y
                 """).fetchone()
                 
-                self.log.error(f"📍 COORDINATE ANALYSIS:")
+                self.log.error("📍 COORDINATE ANALYSIS:")
                 self.log.error(f"   Fields X: {coord_ranges[0]:.1f} to {coord_ranges[1]:.1f} (range: {coord_ranges[1] - coord_ranges[0]:.1f})")
                 self.log.error(f"   Fields Y: {coord_ranges[2]:.1f} to {coord_ranges[3]:.1f} (range: {coord_ranges[3] - coord_ranges[2]:.1f})")
                 self.log.error(f"   Climate X: {coord_ranges[4]:.1f} to {coord_ranges[5]:.1f} (range: {coord_ranges[5] - coord_ranges[4]:.1f})")
@@ -1264,22 +1275,22 @@ class NLES5ClimateProcessor:
             
             if distribution_analysis and usage_distribution:
                 self.log.warning(f"🔍 ENHANCED SPATIAL DISTRIBUTION ANALYSIS FOR YEAR {year}:")
-                self.log.warning(f"   📍 SPATIAL COVERAGE:")
+                self.log.warning("   📍 SPATIAL COVERAGE:")
                 self.log.warning(f"      Fields assigned to {distribution_analysis[0]} unique X coords, {distribution_analysis[1]} unique Y coords")
                 self.log.warning(f"      Climate points used: {usage_distribution[0]} out of {climate_variation[0]} available")
-                self.log.warning(f"   📊 PERCOLATION VARIATION:")
+                self.log.warning("   📊 PERCOLATION VARIATION:")
                 self.log.warning(f"      Unique assigned values: {distribution_analysis[2]}")
                 self.log.warning(f"      Range: {distribution_analysis[3]:.1f} to {distribution_analysis[4]:.1f}mm")
                 self.log.warning(f"      Standard deviation: {distribution_analysis[8]:.1f}mm")
                 self.log.warning(f"      Median: {distribution_analysis[9]:.1f}mm")
-                self.log.warning(f"   🎯 ASSIGNMENT DISTRIBUTION:")
+                self.log.warning("   🎯 ASSIGNMENT DISTRIBUTION:")
                 self.log.warning(f"      Distance range: {distribution_analysis[5]:.0f}m to {distribution_analysis[6]:.0f}m (avg: {distribution_analysis[7]:.0f}m)")
                 self.log.warning(f"      Fields per climate point: {usage_distribution[1]} to {usage_distribution[2]} (avg: {usage_distribution[3]:.1f})")
                 self.log.warning(f"      Points with 1 field: {usage_distribution[4]}, Points with >100 fields: {usage_distribution[5]}")
                 
                 # ROOT CAUSE ANALYSIS
                 if distribution_analysis[0] <= 1 and distribution_analysis[1] <= 1:
-                    self.log.error(f"🚨 ROOT CAUSE: ALL FIELDS ASSIGNED TO SINGLE CLIMATE POINT!")
+                    self.log.error("🚨 ROOT CAUSE: ALL FIELDS ASSIGNED TO SINGLE CLIMATE POINT!")
                     self.log.error(f"   Despite {climate_variation[0]} available points, only 1 point used")
                     
                     # Identify which specific climate point is being used
@@ -1296,18 +1307,18 @@ class NLES5ClimateProcessor:
                     self.log.error(f"   📍 Single climate point used: ({single_point_info[0]:.3f}, {single_point_info[1]:.3f})")
                     self.log.error(f"   📊 Percolation value: {single_point_info[2]:.1f}mm")
                     self.log.error(f"   🔢 Fields assigned to this point: {single_point_info[3]:,}")
-                    self.log.error(f"   🔧 FIX: Check if fields are geographically clustered or increase buffer size")
+                    self.log.error("   🔧 FIX: Check if fields are geographically clustered or increase buffer size")
                 elif distribution_analysis[2] <= 1:
-                    self.log.error(f"🚨 ROOT CAUSE: ALL ASSIGNED CLIMATE POINTS HAVE IDENTICAL PERCOLATION!")
-                    self.log.error(f"   Spatial distribution works but variation lost in climate data")
-                    self.log.error(f"   🔧 FIX: Check climate data temporal/spatial aggregation")
+                    self.log.error("🚨 ROOT CAUSE: ALL ASSIGNED CLIMATE POINTS HAVE IDENTICAL PERCOLATION!")
+                    self.log.error("   Spatial distribution works but variation lost in climate data")
+                    self.log.error("   🔧 FIX: Check climate data temporal/spatial aggregation")
                 elif usage_distribution[2] > joined_count * 0.8:  # >80% of fields assigned to one point
-                    self.log.error(f"🚨 ROOT CAUSE: SEVERE CLUSTERING - Most fields assigned to few climate points!")
+                    self.log.error("🚨 ROOT CAUSE: SEVERE CLUSTERING - Most fields assigned to few climate points!")
                     self.log.error(f"   Max {usage_distribution[2]} fields per point (>80% of total)")
-                    self.log.error(f"   🔧 FIX: Reduce buffer size from 5km or improve spatial distribution")
+                    self.log.error("   🔧 FIX: Reduce buffer size from 5km or improve spatial distribution")
                 elif distribution_analysis[8] < 50:  # Low standard deviation
                     self.log.warning(f"⚠️  LOW VARIATION: Standard deviation {distribution_analysis[8]:.1f}mm indicates limited climate diversity")
-                    self.log.warning(f"   🔧 INVESTIGATE: Check if climate points cover sufficient geographic/climatic diversity")
+                    self.log.warning("   🔧 INVESTIGATE: Check if climate points cover sufficient geographic/climatic diversity")
                 else:
                     self.log.info(f"✅ EXCELLENT GRID-BASED DISTRIBUTION: {usage_distribution[0]} climate grid cells used")
                     self.log.info(f"   📐 Grid efficiency: {usage_distribution[0]/climate_variation[0]*100:.1f}% of available 10km grid cells utilized")
