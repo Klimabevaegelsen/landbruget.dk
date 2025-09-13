@@ -65,7 +65,9 @@ class FieldProductionGoldConfig(BaseJobConfig):
     enable_aggressive_cleanup: bool = False  # Temporarily disabled to test spatial join
     checkpoint_threshold_mb: int = 256  # REDUCED: More frequent checkpoints (was 512MB)
     emergency_memory_threshold: float = (
-        0.75  # REDUCED: Trigger emergency cleanup at 75% memory usage
+        0.85  # INCREASED: 75% was too aggressive for SPATIAL_JOIN operator efficiency
+        # According to DuckDB Spatial PR #545, SPATIAL_JOIN creates efficient spatial index
+        # on build side (DST zones ~10MB) which should easily fit in memory
     )
 
     # NEW: Resource monitoring and fallback configuration
@@ -73,9 +75,10 @@ class FieldProductionGoldConfig(BaseJobConfig):
     max_memory_retries: int = 3
     fallback_batch_reduction_factor: float = 0.5  # Reduce batch size by 50% on memory issues
 
-    # NEW: Spatial join batching configuration for GitHub Actions
+    # NEW: Spatial join batching configuration for GitHub Actions  
     spatial_join_batch_size: int = (
-        50000  # REDUCED: Process spatial joins in smaller batches for memory control
+        100000  # INCREASED: SPATIAL_JOIN operator (PR #545) is much more efficient than old blockwise-nl-join
+        # With spatial indexing, can handle larger batches without memory explosion
     )
     enable_batched_spatial_joins: bool = True  # Enable batched spatial processing
 
@@ -1124,7 +1127,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
         # Handle geometry column
         if "geometry" in column_names:
-            geometry_select = "geometry"
+            # CRITICAL FIX: Field geometries have X=latitude, Y=longitude (swapped)
+            # DST zones expect X=longitude, Y=latitude (correct WGS84 order)
+            # Use ST_FlipCoordinates to swap X/Y without expensive centroid calculations
+            geometry_select = "ST_FlipCoordinates(geometry) as geometry"
+            self.log.info(f"🔄 Applying coordinate swap fix for year {year} - using ST_FlipCoordinates for efficient X/Y swap")
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
@@ -1187,7 +1194,11 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
         # Handle geometry column
         if "geometry" in column_names:
-            geometry_select = "geometry"
+            # CRITICAL FIX: Field geometries have X=latitude, Y=longitude (swapped)
+            # DST zones expect X=longitude, Y=latitude (correct WGS84 order)
+            # Use ST_FlipCoordinates to swap X/Y without expensive centroid calculations
+            geometry_select = "ST_FlipCoordinates(geometry) as geometry"
+            self.log.info(f"🔄 Applying coordinate swap fix for year {year} - using ST_FlipCoordinates for efficient X/Y swap")
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
