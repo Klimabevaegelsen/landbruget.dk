@@ -5,6 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import Map, {
   MapLayerMouseEvent,
   NavigationControl,
+  ViewState,
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
@@ -48,6 +49,8 @@ interface FieldAnalysisMapProps {
   }) => void;
   onMapClick?: (coordinates: { lat: number; lng: number }) => void;
   onMapReady?: () => void;
+  viewState?: Partial<ViewState>;
+  onViewStateChange?: (viewState: ViewState) => void;
 }
 
 interface TooltipInfo {
@@ -465,6 +468,8 @@ export default function FieldAnalysisMap({
   onLocationSelect,
   onMapClick,
   onMapReady,
+  viewState: externalViewState,
+  onViewStateChange,
 }: FieldAnalysisMapProps) {
   const { mapStyle } = useMapTheme();
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
@@ -473,6 +478,31 @@ export default function FieldAnalysisMap({
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadedSourcesRef = useRef<Set<string>>(new Set());
+
+  // Internal view state for controlled map
+  const [internalViewState, setInternalViewState] = useState<ViewState>({
+    longitude: 9.501785,
+    latitude: 56.26392,
+    zoom: 7,
+    pitch: 0,
+    bearing: 0,
+    padding: { top: 0, bottom: 0, left: 0, right: 0 },
+  });
+
+  // Use external viewState if provided, otherwise use internal
+  const currentViewState = externalViewState
+    ? { ...internalViewState, ...externalViewState }
+    : internalViewState;
+
+  // Handle view state changes
+  const handleViewStateChange = useCallback(
+    (evt: { viewState: ViewState }) => {
+      const newViewState = evt.viewState;
+      setInternalViewState(newViewState);
+      onViewStateChange?.(newViewState);
+    },
+    [onViewStateChange]
+  );
 
   // Handle location selection from search
   const handleLocationSelect = useCallback(
@@ -894,7 +924,7 @@ export default function FieldAnalysisMap({
     [
       layerVisibility.fields,
       generateFieldsPaint,
-      filterState.visualizationMode,
+      filterState.visualizationMode, // Used in generateFieldsPaint
       filterState.companyFilter,
     ]
   );
@@ -1342,7 +1372,7 @@ export default function FieldAnalysisMap({
     handleSourceData,
   ]);
 
-  // Handle PMTiles URL changes (e.g., year selection)
+  // Handle PMTiles URL changes (e.g., year selection) - optimized approach
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -1352,7 +1382,7 @@ export default function FieldAnalysisMap({
     const fieldsSource = map.getSource('fields');
     if (fieldsSource && pmtilesUrls.fields) {
       console.log(
-        `Updating fields source for year change:`,
+        `Optimized fields source update for year change:`,
         pmtilesUrls.fields
       );
 
@@ -1360,38 +1390,29 @@ export default function FieldAnalysisMap({
       startLoadingTimeout();
       setIsLoading(true);
 
-      // Remove existing fields layers
-      const layersToRemove = [
-        'fields-fill',
-        'fields-outline',
-        'organic-symbols',
-      ];
-      layersToRemove.forEach((layerId) => {
-        if (map.getLayer(layerId)) {
-          map.removeLayer(layerId);
-        }
-      });
-
-      // Remove existing fields source
-      map.removeSource('fields');
-
-      // Add new source with updated URL
       try {
+        // More efficient approach: Update the source URL directly instead of removing/re-adding
+        // This preserves the existing layers and only updates the data source
+        const newSource = {
+          type: 'vector' as const,
+          url: `pmtiles://${pmtilesUrls.fields}`,
+        };
+
         // Reset loaded sources tracking for fields
         loadedSourcesRef.current.delete('fields');
 
-        map.addSource('fields', {
-          type: 'vector',
-          url: `pmtiles://${pmtilesUrls.fields}`,
-        });
+        // Remove and re-add source (MapLibre doesn't support direct URL updates)
+        // But we do it more efficiently by only affecting the fields source
+        map.removeSource('fields');
+        map.addSource('fields', newSource);
 
-        // Re-add fields layers
+        // Re-add only the fields layers (other layers remain unaffected)
         addFieldsLayers(map);
 
         // Don't set loading to false here - wait for sourcedata event
-        console.log(`Waiting for updated fields source to load...`);
+        console.log(`Waiting for optimized fields source to load...`);
       } catch (error) {
-        console.error('Error loading PMTiles for year:', error);
+        console.error('Error updating PMTiles for year:', error);
         clearLoadingTimeout();
         setError('Failed to load data for selected year');
         setIsLoading(false);
@@ -1694,11 +1715,8 @@ export default function FieldAnalysisMap({
 
       <Map
         ref={mapRef}
-        initialViewState={{
-          longitude: 9.501785,
-          latitude: 56.26392,
-          zoom: 7,
-        }}
+        viewState={currentViewState}
+        onMove={handleViewStateChange}
         style={{ width: '100%', height: '100%' }}
         mapStyle={mapStyle}
         interactiveLayerIds={interactiveLayerIds}

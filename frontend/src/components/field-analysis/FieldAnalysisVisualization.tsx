@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { ViewState } from 'react-map-gl/maplibre';
 import { LayerControlPanelEnhanced as LayerControlPanel } from './LayerControlPanel';
 import { FieldDetailsPanel } from './FieldDetailsPanel';
 import { CoordinatePanel } from './CoordinatePanel';
@@ -55,6 +56,13 @@ export default function FieldAnalysisVisualization() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
+
+  // Map viewport state - preserve zoom and center when changing years
+  const [mapViewState, setMapViewState] = useState<Partial<ViewState>>({
+    longitude: 9.501785,
+    latitude: 56.26392,
+    zoom: 7,
+  });
 
   // Generate PMTiles URLs dynamically based on selected year
   const pmtilesUrls = {
@@ -160,13 +168,22 @@ export default function FieldAnalysisVisualization() {
     [selectedField]
   );
 
-  // Handle year selection changes
+  // Handle map view state changes
+  const handleMapViewStateChange = useCallback((viewState: ViewState) => {
+    setMapViewState({
+      longitude: viewState.longitude,
+      latitude: viewState.latitude,
+      zoom: viewState.zoom,
+      pitch: viewState.pitch,
+      bearing: viewState.bearing,
+    });
+  }, []);
+
+  // Handle year selection changes - now preserves viewport and selected field
   const handleYearChange = useCallback((year: number) => {
     setYearSelection((prev) => ({ ...prev, selectedYear: year }));
-    // Reset selected field and coordinates when year changes
-    setSelectedField(null);
-    setClickedCoordinates(null);
-    // Set loading state while new PMTiles load
+    // Keep selected field and coordinates when year changes to maintain context
+    // Only set loading state while new PMTiles load
     setIsLoading(true);
   }, []);
 
@@ -341,6 +358,8 @@ export default function FieldAnalysisVisualization() {
             onFieldSelect={handleFieldSelect}
             onMapClick={handleMapClick}
             onMapReady={handleMapReady}
+            viewState={mapViewState}
+            onViewStateChange={handleMapViewStateChange}
           />
         )}
       </div>
