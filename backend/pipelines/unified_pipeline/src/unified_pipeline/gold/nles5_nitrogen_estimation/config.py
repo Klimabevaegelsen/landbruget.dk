@@ -34,6 +34,14 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Field plans and catch crops are in fertiliser directory as GKEA and Efterafgrøder files
     field_plan_dataset: str = "field_plan"  # GKEA field plan data (in fertiliser directory)
     catch_crops_dataset: str = "catch_crops"  # Efterafgrøder data (in fertiliser directory)
+    
+    # Farm-level gødningsregnskab data integration (NEW)
+    farm_data_source: str = "local"  # Source for farm data: "local" (files) or "gcs" (future parquet)
+    # TODO: Load gødningsregnskab from GCS instead of local disk
+    farm_data_path: str = "data/In-depth"  # Local path to extracted gødningsregnskab data
+    enable_farm_data_integration: bool = True  # Enable farm data integration for enhanced accuracy
+    farm_data_years: Optional[List[int]] = [2018, 2019, 2020, 2021, 2022]  # Available farm data years
+    farm_data_cache_table: str = "farm_data_cache"  # DuckDB table name for cached farm data
 
     # Processing configuration - CHUNKED FOR STABILITY
     batch_size: int = 50000  # Reduced batch size for memory-intensive operations
