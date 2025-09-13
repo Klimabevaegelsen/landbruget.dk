@@ -57,6 +57,7 @@ from .pipeline_orchestrator import NLES5PipelineOrchestrator
 from .prejoin_validations import NLES5PrejoinValidator
 from .spatial_operations import NLES5SpatialOperations
 from .validator import NLES5Validator
+from .field_id_validator import FieldIDValidator
 
 
 class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig], GoldJobInterface):
@@ -111,6 +112,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         self.prejoin_validator = NLES5PrejoinValidator(self)
         self.memory_utils = NLES5MemoryUtils(self)
         self.pipeline_orchestrator = NLES5PipelineOrchestrator(self)
+        self.field_id_validator = FieldIDValidator(self)
 
     def _configure_duckdb(self):
         """Configure DuckDB for optimal production spatial operations."""
@@ -304,6 +306,21 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
         """Delegate to data loader."""
         return self.data_loader._load_agricultural_fields_data(silver_data)
+    
+    @timed(name="Validating field IDs before processing")
+    def _validate_field_ids_before_processing(self) -> None:
+        """Collect and validate field IDs before processing begins."""
+        return self.field_id_validator.collect_field_ids_before_processing()
+    
+    @timed(name="Validating field IDs after processing")
+    def _validate_field_ids_after_processing(self) -> None:
+        """Collect and validate field IDs after processing completes."""
+        return self.field_id_validator.collect_field_ids_after_processing()
+    
+    @timed(name="Running comprehensive field ID validation")
+    def _run_field_id_validation(self) -> Dict[str, Any]:
+        """Run comprehensive field ID validation for the entire pipeline."""
+        return self.field_id_validator.run_comprehensive_validation()
 
     def _get_fertilizer_data_path(self, target_year: int = None) -> str:
         """Get path to fertilizer data for the specified year, prioritizing GKEA files over Gødningsregnskaber."""
@@ -1562,4 +1579,28 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     def _combine_yearly_fvm_data(self, yearly_tables: Dict[int, str]) -> str:
         """Delegate to data loader."""
         return self.data_loader._combine_yearly_fvm_data(yearly_tables)
+    
+    def _load_farm_data(self) -> Optional[str]:
+        """Load farm-level gødningsregnskab data for enhanced NLES5 calculations."""
+        # Determine years needed for farm data
+        if self.config.target_years:
+            target_years = self.config.target_years
+        else:
+            # Auto-discover from available data
+            available_years = self.data_loader._get_available_fvm_marker_years()
+            if self.config.max_years_to_process:
+                target_years = sorted(available_years)[-self.config.max_years_to_process:]
+            else:
+                target_years = available_years
+        
+        # Delegate to data loader with required years
+        return self.data_loader._load_farm_data(target_years)
+    
+    def _load_required_silver_datasets(self, silver_data: Optional[Dict[str, Any]]) -> Dict[str, str]:
+        """Delegate to data loader."""
+        return self.data_loader._load_required_silver_datasets(silver_data)
+    
+    def _load_agricultural_fields_data(self, silver_data: Optional[Dict[str, Any]]) -> str:
+        """Delegate to data loader."""
+        return self.data_loader._load_agricultural_fields_data(silver_data)
 

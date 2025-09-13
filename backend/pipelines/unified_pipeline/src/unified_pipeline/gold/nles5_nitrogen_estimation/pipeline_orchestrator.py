@@ -167,6 +167,27 @@ class NLES5PipelineOrchestrator:
             
         # Save final batched results
         self.processor._save_batched_results_to_gold()
+        
+        # Run comprehensive field ID validation for batched pipeline
+        self.log.info("🔍 Running comprehensive field ID validation for batched pipeline...")
+        try:
+            field_id_validation_results = self.processor._run_field_id_validation()
+            
+            # Log field ID validation results
+            if field_id_validation_results.get('passed', False):
+                self.log.info("✅ Batched pipeline field ID validation passed")
+            else:
+                self.log.warning("⚠️ Batched pipeline field ID validation failed")
+                issues = field_id_validation_results.get('issues', [])
+                for issue in issues:
+                    self.log.warning(f"   - {issue}")
+            
+            # Log field ID validation summary
+            validation_summary = self.processor.field_id_validator.get_validation_summary()
+            self.log.info(f"📊 Batched Pipeline Field ID Validation Summary:\n{validation_summary}")
+            
+        except Exception as e:
+            self.log.warning(f"⚠️ Batched pipeline field ID validation encountered issues: {e}")
 
     async def _run_pipeline_single(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         """Run single pipeline execution for all target years (original approach)."""
@@ -193,6 +214,25 @@ class NLES5PipelineOrchestrator:
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Agricultural fields loaded: {agricultural_fields_table}")
         self.log.info(f"✅ Phase 1.5 completed in {phase_time:.1f} seconds")
+        
+        # Phase 1.5.1: Validate field IDs before processing
+        self.log.info("🔍 Phase 1.5.1: Validating field IDs before processing...")
+        phase_start = time.time()
+        self.processor._validate_field_ids_before_processing()
+        phase_time = time.time() - phase_start
+        self.log.info(f"✅ Phase 1.5.1 completed in {phase_time:.1f} seconds")
+
+        # Phase 1.6: Load farm-level gødningsregnskab data for enhanced accuracy
+        self.log.info("🚜 Loading farm data for enhanced organic nitrogen calculations...")
+        phase_start = time.time()
+        farm_data_table = self.processor._load_farm_data()
+        phase_time = time.time() - phase_start
+        if farm_data_table:
+            self.log.info(f"✅ Farm data loaded: {farm_data_table}")
+            loaded_tables['farm_data'] = farm_data_table
+        else:
+            self.log.info("⚠️  Farm data not available - using estimated values")
+        self.log.info(f"✅ Phase 1.6 completed in {phase_time:.1f} seconds")
 
         # Phase 1.7: Pre-join validation controls (N2023_62 §3.1–3.3)
         self.log.info("🛡️  Phase 1.7: Running pre-join validation controls (N2023_62)...")
@@ -267,6 +307,13 @@ class NLES5PipelineOrchestrator:
         
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Phase 8 completed in {phase_time:.1f} seconds")
+        
+        # Phase 8.1: Validate field IDs after processing
+        self.log.info("🔍 Phase 8.1: Validating field IDs after processing...")
+        phase_start = time.time()
+        self.processor._validate_field_ids_after_processing()
+        phase_time = time.time() - phase_start
+        self.log.info(f"✅ Phase 8.1 completed in {phase_time:.1f} seconds")
 
         # Phase 9: Final validation (now that all processing is complete)
         self.log.info("🔍 Phase 9: Final validation of completed pipeline...")
@@ -294,6 +341,35 @@ class NLES5PipelineOrchestrator:
         
         phase_time = time.time() - phase_start
         self.log.info(f"✅ Phase 9 validation completed in {phase_time:.1f} seconds")
+        
+        # Phase 9.1: Comprehensive field ID validation
+        self.log.info("🔍 Phase 9.1: Running comprehensive field ID validation...")
+        phase_start = time.time()
+        try:
+            field_id_validation_results = self.processor._run_field_id_validation()
+            
+            # Log field ID validation results
+            if field_id_validation_results.get('passed', False):
+                self.log.info("✅ Field ID validation passed")
+            else:
+                self.log.warning("⚠️ Field ID validation failed")
+                issues = field_id_validation_results.get('issues', [])
+                for issue in issues:
+                    self.log.warning(f"   - {issue}")
+            
+            # Log field ID validation summary
+            validation_summary = self.processor.field_id_validator.get_validation_summary()
+            self.log.info(f"📊 Field ID Validation Summary:\n{validation_summary}")
+            
+            # Store field ID validation results
+            self.processor._field_id_validation_results = field_id_validation_results
+            
+        except Exception as e:
+            self.log.warning(f"⚠️ Field ID validation encountered issues: {e}")
+            self.processor._field_id_validation_results = {'error': str(e)}
+        
+        phase_time = time.time() - phase_start
+        self.log.info(f"✅ Phase 9.1 field ID validation completed in {phase_time:.1f} seconds")
 
         # Final memory cleanup
         self.processor._aggressive_memory_cleanup()
@@ -318,6 +394,10 @@ class NLES5PipelineOrchestrator:
             if agricultural_fields_table:
                 loaded_tables['agricultural_fields'] = agricultural_fields_table
                 self.log.info(f"✅ Agricultural fields loaded: {agricultural_fields_table}")
+                
+                # Validate field IDs before batch processing
+                self.log.info(f"🔍 Validating field IDs before batch processing for years {batch_years}...")
+                self.processor._validate_field_ids_before_processing()
             else:
                 self.log.error(f"❌ Failed to load agricultural fields for batch {batch_years}")
             
@@ -416,6 +496,11 @@ class NLES5PipelineOrchestrator:
                     
                     batch_time = time.time() - batch_start
                     self.log.info(f"✅ Batch {batch_years} results appended: {result_count:,} estimates in {batch_time:.1f}s")
+                    
+                    # Validate field IDs after batch processing
+                    self.log.info(f"🔍 Validating field IDs after batch processing for years {batch_years}...")
+                    self.processor._validate_field_ids_after_processing()
+                    
                     return result_count
                 else:
                     self.log.warning(f"⚠️ Batch {batch_years} produced empty results table")
