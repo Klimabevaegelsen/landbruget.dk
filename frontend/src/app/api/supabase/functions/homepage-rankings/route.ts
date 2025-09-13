@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getWeeklyCacheHeaders } from '@/lib/cache-utils';
 import { getCachedHomepageRankings } from '@/lib/server-cache';
 
 // Revalidate this route every 7 days (server-side caching)
 // Data updates weekly on Tuesdays - use POST /api/revalidate-cache after data updates
 export const revalidate = 604800; // 7 days in seconds
+
+// Static cache headers for 7-day caching strategy
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, max-age=604800, stale-while-revalidate=604800',
+  'CDN-Cache-Control': 'public, max-age=604800',
+  'Vercel-CDN-Cache-Control': 'public, max-age=604800',
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,11 +19,11 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category') || 'all';
     const limit = searchParams.get('limit') || '20';
 
-    // Use server-side cached data (revalidates automatically on Tuesday)
+    // Use server-side cached data (revalidates automatically every 7 days)
     const data = await getCachedHomepageRankings(category, limit);
 
     return NextResponse.json(data, {
-      headers: getWeeklyCacheHeaders(),
+      headers: CACHE_HEADERS,
     });
   } catch (error) {
     console.error('Error in homepage-rankings proxy:', error);
