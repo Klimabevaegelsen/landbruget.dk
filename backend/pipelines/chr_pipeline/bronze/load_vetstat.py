@@ -496,6 +496,12 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
         # 7. Send Request via requests library
         headers = {"Content-Type": "text/xml;charset=UTF-8", "SOAPAction": SOAP_ACTION}
         logger.debug(f"Sending request to {VETSTAT_ENDPOINT}")
+
+        # Add small delay to prevent overwhelming the API (similar to SPF-SU pattern)
+        import time
+
+        time.sleep(0.1)  # 100ms delay between requests
+
         response = requests.post(VETSTAT_ENDPOINT, data=signed_xml_string, headers=headers)
 
         # 8. Handle Response
@@ -558,7 +564,7 @@ def load_vetstat_antibiotics(chr_number: int, species_code: int, period_from: da
 
                     logger.info(f"Parsed {len(json_data)} antibiotic usage records from XML response")
                 else:
-                    logger.warning(f"No antibiotic usage data found in XML response for CHR {chr_number}")
+                    logger.debug(f"No antibiotic usage data found in XML response for CHR {chr_number}")
                     # Save just the raw XML immediately
                     save_raw_data(
                         raw_response=raw_xml_response,

@@ -376,8 +376,11 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
             )
 
             # Track start time for performance monitoring
-            time.time()
+            start_time = time.time()
             running_tasks = {}  # future -> start_time
+            last_log_time = start_time
+            success_count = 0
+            error_count = 0
 
             try:
                 for future in concurrent.futures.as_completed(futures):
@@ -394,6 +397,7 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
                     try:
                         result = future.result()
                         results.append(result)
+                        success_count += 1
 
                         # Log slow tasks for debugging
                         if task_duration > 60:  # Log tasks taking more than 1 minute
@@ -404,6 +408,7 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
                                 logger.info(f"Task {task_idx} completed in {task_duration:.1f}s")
 
                     except Exception as e:
+                        error_count += 1
                         logger.error(f"Task {task_idx} failed: {e}")
                         if len(task_info) >= 3:  # If task has herd number
                             herd_number = task_info[2]
@@ -415,6 +420,22 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
 
                     completed_count += 1
                     pbar.update(1)
+
+                    # Log performance stats every 1000 tasks or every 5 minutes
+                    current_time = time.time()
+                    if (completed_count % 1000 == 0) or (current_time - last_log_time > 300):
+                        elapsed = current_time - start_time
+                        rate = completed_count / elapsed if elapsed > 0 else 0
+                        remaining_tasks = len(futures) - completed_count
+                        eta_seconds = remaining_tasks / rate if rate > 0 else 0
+                        logger.info(
+                            f"Progress: {completed_count}/{len(futures)} tasks completed "
+                            f"({completed_count/len(futures)*100:.1f}%) - "
+                            f"Rate: {rate:.2f} tasks/sec - "
+                            f"Success: {success_count}, Errors: {error_count} - "
+                            f"ETA: {eta_seconds/3600:.1f}h"
+                        )
+                        last_log_time = current_time
 
             finally:
                 pbar.close()
@@ -737,8 +758,14 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             )
 
         try:
+            # Use VetStat-specific worker count if available, otherwise fall back to general workers
+            vetstat_workers = int(os.getenv("VETSTAT_MAX_WORKERS", context["args"]["workers"]))
+            logging.info(
+                f"Using {vetstat_workers} workers for VetStat processing "
+                f"(vs {context['args']['workers']} general workers)"
+            )
             results = process_parallel(
-                load_vetstat_antibiotics, vetstat_tasks, context["args"]["workers"], "Processing VetStat tasks"
+                load_vetstat_antibiotics, vetstat_tasks, vetstat_workers, "Processing VetStat tasks"
             )
             # Results are stored in the buffer by the load function
             if context["args"]["progress"]:
