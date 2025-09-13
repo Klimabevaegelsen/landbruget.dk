@@ -41,9 +41,7 @@ class FieldProductionGoldConfig(BaseJobConfig):
     # Input silver datasets
     agricultural_fields_dataset: str = "fvm_marker"
     dst_zone_mapping_dataset: str = "dst_zone_mapping"
-    kommune_boundaries_dataset: str = (
-        "dagi_kommuner"  # NEW: Municipality boundaries for spatial assignment
-    )
+    # NOTE: Municipality boundaries no longer needed - handled by FVM silver pipeline
     dst_yield_datasets: List[str] = [
         "hst77_processed",
         "gartn1_processed",
@@ -646,17 +644,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.error("DST zone mapping is required for production estimation")
                 return
 
-            # Load kommune boundaries for municipality assignment
-            if not self._load_silver_data_to_table(
-                self.config.kommune_boundaries_dataset, "kommune_boundaries_raw", silver_data
-            ):
-                self.log.warning(
-                    "Kommune boundaries not available - municipality assignment will be skipped"
-                )
-
-            # Setup spatial processing with DST zones and kommune boundaries
+            # Setup spatial processing with DST zones only
+            # NOTE: Municipality assignment now handled by FVM silver pipeline
             self._setup_spatial_processing_with_dst_zones()
-            self._setup_spatial_processing_with_kommune_boundaries()
 
             # Load DST yield data into DuckDB tables (relatively small, can stay in memory)
             dst_tables_loaded = self._load_dst_yield_data(silver_data)
@@ -894,171 +884,76 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 )
                 """)
 
-                # Add municipality assignment and handle unassigned fields
-                # (like recreate_original_csv_structure.py)
-                kommune_available = False
+                # Check if municipality is pre-assigned in FVM marker data
+                municipality_preassigned = False
                 try:
-                    kommune_count = self.conn.execute(
-                        "SELECT COUNT(*) FROM kommune_boundaries"
-                    ).fetchone()[0]
-                    kommune_available = kommune_count > 0
-                except Exception:
-                    kommune_available = False
+                    # Check if municipality column exists and has data
+                    columns_info = self.conn.execute("DESCRIBE current_year_fields").fetchall()
+                    column_names = [col[0] for col in columns_info]
 
-                if kommune_available:
-                    self.log.info("  🏛️ Step 1: Municipality assignment via spatial intersection...")
+                    if "municipality" in column_names:
+                        assigned_count = self.conn.execute("""
+                            SELECT COUNT(*) FROM current_year_fields
+                            WHERE municipality IS NOT NULL
+                        """).fetchone()[0]
+                        total_count = self.conn.execute(
+                            "SELECT COUNT(*) FROM current_year_fields"
+                        ).fetchone()[0]
 
-                    # First, try spatial intersection
+                        if assigned_count > 0:
+                            municipality_preassigned = True
+                            percentage = assigned_count / total_count * 100
+                            self.log.info(
+                                f"  ✅ Municipality pre-assigned in FVM data: "
+                                f"{assigned_count}/{total_count} fields ({percentage:.1f}%)"
+                            )
+                        else:
+                            self.log.warning(
+                                "  ⚠️ Municipality column exists but no assignments found - "
+                                "FVM silver pipeline may need to be rerun"
+                            )
+                    else:
+                        self.log.warning(
+                            "  ⚠️ No municipality column in FVM data - "
+                            "FVM silver pipeline needs to be updated"
+                        )
+                except Exception as e:
+                    self.log.warning(f"Error checking municipality pre-assignment: {e}")
+                    municipality_preassigned = False
+
+                if municipality_preassigned:
+                    # Use pre-assigned municipality data from FVM silver pipeline
                     self.conn.execute("""
                     CREATE OR REPLACE TABLE year_fields_with_zones_and_kommune AS
                     SELECT
                         f.*,
-                        k.kommune_name
+                        f.municipality as kommune_name
                     FROM year_fields_with_zones f
-                    LEFT JOIN kommune_boundaries k ON ST_Intersects(f.geometry, k.geometry)
                     """)
 
-                    # Check how many fields got municipality assignment
-                    assigned_count = self.conn.execute("""
-                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
-                        WHERE kommune_name IS NOT NULL
-                    """).fetchone()[0]
-                    total_count = self.conn.execute(
-                        "SELECT COUNT(*) FROM year_fields_with_zones_and_kommune"
-                    ).fetchone()[0]
-                    unassigned_count = total_count - assigned_count
-
                     self.log.info(
-                        f"  📊 Spatial intersection: {assigned_count}/{total_count} fields "
-                        f"({assigned_count/total_count*100:.1f}%)"
+                        "  🏛️ Using pre-assigned municipality data from FVM silver pipeline"
                     )
-
-                    # Step 2: Assign remaining fields to closest municipality
-                    # (like recreate_original_csv_structure.py)
-                    if unassigned_count > 0:
-                        self.log.info(
-                            f"  🎯 Step 2: Closest distance assignment for {unassigned_count} "
-                            f"unassigned fields..."
-                        )
-
-                        # Create temporary table for unassigned fields
-                        self.conn.execute("""
-                        CREATE OR REPLACE TABLE unassigned_fields AS
-                        SELECT *, ST_Centroid(ST_GeomFromText(geometry)) as centroid
-                        FROM year_fields_with_zones_and_kommune
-                        WHERE kommune_name IS NULL
-                        """)
-
-                        # Assign to closest municipality using cross join
-                        # (like recreate_original_csv_structure.py)
-                        # This ensures EVERY unassigned field gets a municipality assignment
-                        self.conn.execute("""
-                        CREATE OR REPLACE TABLE closest_assignments AS
-                        SELECT DISTINCT ON (f.field_uuid)
-                            f.field_uuid,
-                            k.kommune_name
-                        FROM unassigned_fields f
-                        CROSS JOIN kommune_boundaries k
-                        ORDER BY f.field_uuid, ST_Distance(f.centroid, ST_Centroid(k.geometry))
-                        """)
-
-                        # Update the main table with closest assignments
-                        self.conn.execute("""
-                        UPDATE year_fields_with_zones_and_kommune
-                        SET kommune_name = c.kommune_name
-                        FROM closest_assignments c
-                        WHERE year_fields_with_zones_and_kommune.field_uuid = c.field_uuid
-                        AND year_fields_with_zones_and_kommune.kommune_name IS NULL
-                        """)
-
-                        # Clean up temporary tables
-                        self.conn.execute("DROP TABLE IF EXISTS unassigned_fields")
-                        self.conn.execute("DROP TABLE IF EXISTS closest_assignments")
-
-                        # Log final assignment stats
-                        final_assigned = self.conn.execute("""
-                            SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
-                            WHERE kommune_name IS NOT NULL
-                        """).fetchone()[0]
-                        self.log.info(
-                            f"  ✅ Final municipality assignment: {final_assigned}/{total_count} "
-                            f"fields ({final_assigned/total_count*100:.1f}%)"
-                        )
-
-                    # Final safety check: ensure NO fields remain unassigned
-                    remaining_unassigned = self.conn.execute("""
-                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
-                        WHERE kommune_name IS NULL
-                    """).fetchone()[0]
-
-                    if remaining_unassigned > 0:
-                        self.log.warning(
-                            f"  🚨 {remaining_unassigned} fields still unassigned - "
-                            f"applying emergency closest assignment"
-                        )
-
-                        # Emergency assignment: assign ALL remaining unassigned fields
-                        # to closest municipality
-                        self.conn.execute("""
-                        CREATE OR REPLACE TABLE emergency_unassigned AS
-                        SELECT *, ST_Centroid(ST_GeomFromText(geometry)) as centroid
-                        FROM year_fields_with_zones_and_kommune
-                        WHERE kommune_name IS NULL
-                        """)
-
-                        self.conn.execute("""
-                        CREATE OR REPLACE TABLE emergency_assignments AS
-                        SELECT DISTINCT ON (f.field_uuid)
-                            f.field_uuid,
-                            k.kommune_name
-                        FROM emergency_unassigned f
-                        CROSS JOIN kommune_boundaries k
-                        ORDER BY f.field_uuid, ST_Distance(f.centroid, ST_Centroid(k.geometry))
-                        """)
-
-                        self.conn.execute("""
-                        UPDATE year_fields_with_zones_and_kommune
-                        SET kommune_name = e.kommune_name
-                        FROM emergency_assignments e
-                        WHERE year_fields_with_zones_and_kommune.field_uuid = e.field_uuid
-                        AND year_fields_with_zones_and_kommune.kommune_name IS NULL
-                        """)
-
-                        # Clean up emergency tables
-                        self.conn.execute("DROP TABLE IF EXISTS emergency_unassigned")
-                        self.conn.execute("DROP TABLE IF EXISTS emergency_assignments")
-
-                        final_unassigned = self.conn.execute("""
-                            SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
-                            WHERE kommune_name IS NULL
-                        """).fetchone()[0]
-                        self.log.info(
-                            f"  ✅ Emergency assignment complete: {final_unassigned} "
-                            f"fields still unassigned"
-                        )
-                    else:
-                        self.log.info("  ✅ All fields successfully assigned to municipalities")
-
-                    # Replace the original table
-                    self.conn.execute("DROP TABLE year_fields_with_zones")
-                    self.conn.execute(
-                        "ALTER TABLE year_fields_with_zones_and_kommune "
-                        "RENAME TO year_fields_with_zones"
-                    )
-
                 else:
-                    self.log.warning(
-                        "  ⚠️ Kommune boundaries not available - adding 'Unknown' municipality"
+                    # No fallback - municipality assignment should be handled by FVM silver pipeline
+                    self.log.error("  ❌ Municipality data not available from FVM silver pipeline")
+                    self.log.error(
+                        "  💡 Please ensure FVM silver pipeline includes municipality assignment"
                     )
+
+                    # Create table without municipality for now (will have NULL values)
                     self.conn.execute("""
-                    ALTER TABLE year_fields_with_zones
-                    ADD COLUMN kommune_name VARCHAR DEFAULT 'Unknown'
+                    CREATE OR REPLACE TABLE year_fields_with_zones_and_kommune AS
+                    SELECT
+                        f.*,
+                        CAST(NULL AS VARCHAR) as kommune_name
+                    FROM year_fields_with_zones f
                     """)
 
                 # Step 3: Handle unassigned landsdel/dst_regions (similar approach)
                 self.log.info("  🗺️ Checking for unassigned landsdel/dst_regions...")
                 unassigned_regions = self.conn.execute("""
-                    SELECT COUNT(*) FROM year_fields_with_zones
+                    SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
                     WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
                 """).fetchone()[0]
 
@@ -1071,7 +966,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     self.conn.execute("""
                     CREATE OR REPLACE TABLE unassigned_region_fields AS
                     SELECT *, ST_Centroid(ST_GeomFromText(geometry)) as centroid
-                    FROM year_fields_with_zones
+                    FROM year_fields_with_zones_and_kommune
                     WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
                     """)
 
@@ -1092,15 +987,15 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
                     # Update the main table with closest DST assignments
                     self.conn.execute("""
-                    UPDATE year_fields_with_zones
+                    UPDATE year_fields_with_zones_and_kommune
                     SET
                         landsdel_code = c.landsdel_code,
                         landsdel_name = c.landsdel_name,
                         dst_regions = c.dst_regions
                     FROM closest_dst_assignments c
-                    WHERE year_fields_with_zones.field_uuid = c.field_uuid
-                    AND (year_fields_with_zones.landsdel_code = 'unknown'
-                         OR year_fields_with_zones.dst_regions = 'unknown')
+                    WHERE year_fields_with_zones_and_kommune.field_uuid = c.field_uuid
+                    AND (year_fields_with_zones_and_kommune.landsdel_code = 'unknown'
+                         OR year_fields_with_zones_and_kommune.dst_regions = 'unknown')
                     """)
 
                     # Clean up temporary tables
@@ -1108,7 +1003,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     self.conn.execute("DROP TABLE IF EXISTS closest_dst_assignments")
 
                     final_unassigned = self.conn.execute("""
-                        SELECT COUNT(*) FROM year_fields_with_zones
+                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
                         WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
                     """).fetchone()[0]
                     self.log.info(
@@ -1128,7 +1023,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         self.conn.execute("""
                         CREATE OR REPLACE TABLE emergency_region_unassigned AS
                         SELECT *, ST_Centroid(ST_GeomFromText(geometry)) as centroid
-                        FROM year_fields_with_zones
+                        FROM year_fields_with_zones_and_kommune
                         WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
                         """)
 
@@ -1145,15 +1040,15 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         """)
 
                         self.conn.execute("""
-                        UPDATE year_fields_with_zones
+                        UPDATE year_fields_with_zones_and_kommune
                         SET
                             landsdel_code = e.landsdel_code,
                             landsdel_name = e.landsdel_name,
                             dst_regions = e.dst_regions
                         FROM emergency_region_assignments e
-                        WHERE year_fields_with_zones.field_uuid = e.field_uuid
-                        AND (year_fields_with_zones.landsdel_code = 'unknown'
-                             OR year_fields_with_zones.dst_regions = 'unknown')
+                        WHERE year_fields_with_zones_and_kommune.field_uuid = e.field_uuid
+                        AND (year_fields_with_zones_and_kommune.landsdel_code = 'unknown'
+                             OR year_fields_with_zones_and_kommune.dst_regions = 'unknown')
                         """)
 
                         # Clean up emergency tables
@@ -1161,7 +1056,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         self.conn.execute("DROP TABLE IF EXISTS emergency_region_assignments")
 
                         final_check = self.conn.execute("""
-                            SELECT COUNT(*) FROM year_fields_with_zones
+                            SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
                             WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
                         """).fetchone()[0]
                         self.log.info(
@@ -1170,6 +1065,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         )
                     else:
                         self.log.info("  ✅ All fields successfully assigned to regions")
+
+                # Rename table for downstream processing
+                self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
+                self.conn.execute("""
+                    ALTER TABLE year_fields_with_zones_and_kommune
+                    RENAME TO year_fields_with_zones
+                """)
 
             # Verify SPATIAL_JOIN operator usage
             self._verify_spatial_join_optimization("DST zones spatial join")
@@ -1372,17 +1274,60 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Clean table-to-table join structure as per PR #545 requirements
             # Include municipality assignment in the same join for efficiency
 
-            # Check if kommune boundaries are available
-            kommune_available = False
+            # NEW: Check if municipality is pre-assigned in current batch
+            municipality_preassigned = False
             try:
-                kommune_count = self.conn.execute(
-                    "SELECT COUNT(*) FROM kommune_boundaries"
-                ).fetchone()[0]
-                kommune_available = kommune_count > 0
-            except Exception:
-                kommune_available = False
+                columns_info = self.conn.execute("DESCRIBE current_batch").fetchall()
+                column_names = [col[0] for col in columns_info]
 
-            if kommune_available:
+                if "municipality" in column_names:
+                    assigned_count = self.conn.execute("""
+                        SELECT COUNT(*) FROM current_batch
+                        WHERE municipality IS NOT NULL
+                    """).fetchone()[0]
+
+                    if assigned_count > 0:
+                        municipality_preassigned = True
+                        self.log.info(
+                            f"  ✅ Municipality pre-assigned in batch: {assigned_count} fields"
+                        )
+            except Exception:
+                municipality_preassigned = False
+
+            if municipality_preassigned:
+                # Use pre-assigned municipality data
+                self.conn.execute("""
+                    INSERT INTO year_fields_with_zones
+                    SELECT
+                        f.field_id,
+                        f.block_id,
+                        f.cvr_number,
+                        f.area_ha,
+                        f.crop_type,
+                        f.organic_farming,
+                        f.year,
+                        COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
+                        COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
+                        COALESCE(z.dst_regions, 'unknown') as dst_regions,
+                        f.municipality as kommune_name,
+                        f.field_uuid,
+                        f.primary_field_id,
+                        f.geometry
+                    FROM current_batch f
+                    LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+                """)
+            else:
+                # Fallback to original municipality assignment logic
+                kommune_available = False
+                try:
+                    kommune_count = self.conn.execute(
+                        "SELECT COUNT(*) FROM kommune_boundaries"
+                    ).fetchone()[0]
+                    kommune_available = kommune_count > 0
+                except Exception:
+                    kommune_available = False
+
+            if not municipality_preassigned and kommune_available:
                 # Perform dual spatial join: DST zones + municipality in one operation
                 # Leave NULL values for unassigned fields so emergency assignment
                 # can handle them
@@ -1642,72 +1587,6 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         except Exception as e:
             self.log.error(f"Error setting up DST zones: {e}")
             raise
-
-    def _setup_spatial_processing_with_kommune_boundaries(self) -> None:
-        """Setup spatial processing with kommune boundaries in DuckDB."""
-        try:
-            self.log.info("Setting up spatial processing with kommune boundaries")
-
-            # Check if kommune boundaries were loaded
-            try:
-                total_count = self.conn.execute(
-                    "SELECT COUNT(*) FROM kommune_boundaries_raw"
-                ).fetchone()[0]
-                if total_count == 0:
-                    self.log.warning(
-                        "No kommune boundaries available - skipping municipality assignment"
-                    )
-                    return
-            except Exception:
-                self.log.warning(
-                    "Kommune boundaries table not found - skipping municipality assignment"
-                )
-                return
-
-            # Debug: Check the structure and sample data of kommune_boundaries_raw table
-            try:
-                columns = self.conn.execute("DESCRIBE kommune_boundaries_raw").fetchall()
-                self.log.info(f"kommune_boundaries_raw table structure: {columns}")
-
-                # Check for NULL geometries
-                null_count = self.conn.execute(
-                    "SELECT COUNT(*) FROM kommune_boundaries_raw WHERE geometry IS NULL"
-                ).fetchone()[0]
-                empty_count = self.conn.execute(
-                    "SELECT COUNT(*) FROM kommune_boundaries_raw WHERE geometry = ''"
-                ).fetchone()[0]
-                self.log.info(
-                    f"Kommune geometry data: {total_count} total, {null_count} NULL, "
-                    f"{empty_count} empty"
-                )
-
-            except Exception as debug_e:
-                self.log.warning(f"Kommune debug info failed: {debug_e}")
-
-            # Create optimized kommune boundaries table with spatial geometry
-            # Use the same approach as DST zones - simple geometry conversion
-            self.conn.execute("""
-                CREATE OR REPLACE TABLE kommune_boundaries AS
-                SELECT
-                    name AS kommune_name,
-                    geometry
-                FROM kommune_boundaries_raw
-                WHERE geometry IS NOT NULL
-                AND name IS NOT NULL
-            """)
-
-            # Get count of processed kommune boundaries
-            kommune_count = self.conn.execute("SELECT COUNT(*) FROM kommune_boundaries").fetchone()[
-                0
-            ]
-            self.log.info(
-                f"✅ Created kommune_boundaries table with {kommune_count} municipalities"
-            )
-
-        except Exception as e:
-            self.log.error(f"Error setting up kommune boundaries: {e}")
-            # Don't raise - municipality assignment is optional
-            self.log.warning("Municipality assignment will be skipped due to setup error")
 
     def _apply_emergency_assignments_batched(self, year: int) -> None:
         """Apply emergency closest-distance assignments for unassigned fields (batched version)."""
