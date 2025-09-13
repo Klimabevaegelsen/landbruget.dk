@@ -119,24 +119,100 @@ class NLES5Calculator:
 
             count = self.conn.execute("SELECT COUNT(*) FROM detailed_percolation_effects").fetchone()[0]
 
-            # Log percolation statistics
+            # Log comprehensive percolation statistics
             perc_stats = self.conn.execute("""
                 SELECT
+                    COUNT(*) as total_fields,
+                    COUNT(CASE WHEN percolation_data_quality = 'valid_seasonal_data' THEN 1 END) as valid_data_count,
+                    
+                    -- Input percolation values
+                    MIN(total_percolation) as min_total_perco,
+                    MAX(total_percolation) as max_total_perco,
+                    AVG(total_percolation) as avg_total_perco,
+                    STDDEV(total_percolation) as stddev_total_perco,
+                    
+                    MIN(perco_apr_aug_current) as min_apr_aug,
+                    MAX(perco_apr_aug_current) as max_apr_aug,
+                    AVG(perco_apr_aug_current) as avg_apr_aug,
+                    STDDEV(perco_apr_aug_current) as stddev_apr_aug,
+                    
+                    MIN(perco_sep_mar_current) as min_sep_mar,
+                    MAX(perco_sep_mar_current) as max_sep_mar,
+                    AVG(perco_sep_mar_current) as avg_sep_mar,
+                    STDDEV(perco_sep_mar_current) as stddev_sep_mar,
+                    
+                    -- Calculated effects
+                    MIN(reference_soil_effect) as min_soil_effect,
+                    MAX(reference_soil_effect) as max_soil_effect,
                     AVG(reference_soil_effect) as avg_soil_effect,
+                    STDDEV(reference_soil_effect) as stddev_soil_effect,
+                    
+                    MIN(reference_drainage_effect) as min_drainage_effect,
+                    MAX(reference_drainage_effect) as max_drainage_effect,
                     AVG(reference_drainage_effect) as avg_drainage_effect,
+                    STDDEV(reference_drainage_effect) as stddev_drainage_effect,
+                    
+                    MIN(reference_perco_soil_effect) as min_combined_effect,
+                    MAX(reference_perco_soil_effect) as max_combined_effect,
                     AVG(reference_perco_soil_effect) as avg_combined_effect,
-                    COUNT(CASE WHEN percolation_data_quality = 'valid_seasonal_data' THEN 1 END) as valid_data_count
+                    STDDEV(reference_perco_soil_effect) as stddev_combined_effect,
+                    
+                    -- Percolation magnitude distribution
+                    COUNT(CASE WHEN percolation_magnitude = 'very_high_percolation' THEN 1 END) as very_high_perco,
+                    COUNT(CASE WHEN percolation_magnitude = 'high_percolation' THEN 1 END) as high_perco,
+                    COUNT(CASE WHEN percolation_magnitude = 'moderate_percolation' THEN 1 END) as moderate_perco,
+                    COUNT(CASE WHEN percolation_magnitude = 'low_percolation' THEN 1 END) as low_perco,
+                    COUNT(CASE WHEN percolation_magnitude = 'very_low_percolation' THEN 1 END) as very_low_perco
                 FROM detailed_percolation_effects
+                WHERE total_percolation IS NOT NULL
             """).fetchone()
 
             self.log.info(f"✅ Calculated detailed percolation effects for {count:,} fields")
             if perc_stats and perc_stats[0] is not None:
-                # Handle None values in statistics safely
-                soil_effect = f"{perc_stats[0]:.3f}" if perc_stats[0] is not None else "N/A"
-                drainage_effect = f"{perc_stats[1]:.3f}" if perc_stats[1] is not None else "N/A"
-                combined_effect = f"{perc_stats[2]:.3f}" if perc_stats[2] is not None else "N/A"
-                self.log.info(f"📊 Avg soil effect: {soil_effect}, drainage effect: {drainage_effect}, combined: {combined_effect}")
-                self.log.info(f"🌧️  Valid seasonal data: {perc_stats[3]:,}/{count:,} fields ({perc_stats[3]/count:.1%})")
+                self.log.info(f"🌧️  DETAILED PERCOLATION EFFECTS STATISTICS:")
+                self.log.info(f"   Fields processed: {perc_stats[0]:,}, valid seasonal data: {perc_stats[1]:,} ({perc_stats[1]/perc_stats[0]:.1%})")
+                
+                # Input percolation values
+                self.log.info(f"   INPUT PERCOLATION VALUES:")
+                self.log.info(f"     Total: min={perc_stats[2]:.1f}mm, max={perc_stats[3]:.1f}mm, avg={perc_stats[4]:.1f}mm")
+                if perc_stats[5] and perc_stats[4]:
+                    cv_total = perc_stats[5] / perc_stats[4] * 100
+                    self.log.info(f"     Total variation: stddev={perc_stats[5]:.1f}mm, CV={cv_total:.1f}%")
+                
+                self.log.info(f"     April-Aug: min={perc_stats[6]:.1f}mm, max={perc_stats[7]:.1f}mm, avg={perc_stats[8]:.1f}mm")
+                if perc_stats[9] and perc_stats[8]:
+                    cv_apr_aug = perc_stats[9] / perc_stats[8] * 100
+                    self.log.info(f"     April-Aug variation: stddev={perc_stats[9]:.1f}mm, CV={cv_apr_aug:.1f}%")
+                
+                self.log.info(f"     Sept-Mar: min={perc_stats[10]:.1f}mm, max={perc_stats[11]:.1f}mm, avg={perc_stats[12]:.1f}mm")
+                if perc_stats[13] and perc_stats[12]:
+                    cv_sep_mar = perc_stats[13] / perc_stats[12] * 100
+                    self.log.info(f"     Sept-Mar variation: stddev={perc_stats[13]:.1f}mm, CV={cv_sep_mar:.1f}%")
+                
+                # Calculated effects
+                self.log.info(f"   CALCULATED EFFECT VALUES:")
+                self.log.info(f"     Soil effect: min={perc_stats[14]:.4f}, max={perc_stats[15]:.4f}, avg={perc_stats[16]:.4f}")
+                if perc_stats[17] and perc_stats[16]:
+                    cv_soil = perc_stats[17] / perc_stats[16] * 100
+                    self.log.info(f"     Soil effect variation: stddev={perc_stats[17]:.4f}, CV={cv_soil:.1f}%")
+                
+                self.log.info(f"     Drainage effect: min={perc_stats[18]:.4f}, max={perc_stats[19]:.4f}, avg={perc_stats[20]:.4f}")
+                if perc_stats[21] and perc_stats[20]:
+                    cv_drainage = perc_stats[21] / perc_stats[20] * 100
+                    self.log.info(f"     Drainage effect variation: stddev={perc_stats[21]:.4f}, CV={cv_drainage:.1f}%")
+                
+                self.log.info(f"     Combined effect: min={perc_stats[22]:.4f}, max={perc_stats[23]:.4f}, avg={perc_stats[24]:.4f}")
+                if perc_stats[25] and perc_stats[24]:
+                    cv_combined = perc_stats[25] / perc_stats[24] * 100
+                    self.log.info(f"     Combined effect variation: stddev={perc_stats[25]:.4f}, CV={cv_combined:.1f}%")
+                
+                # Percolation magnitude distribution
+                self.log.info(f"   PERCOLATION MAGNITUDE DISTRIBUTION:")
+                self.log.info(f"     Very high (>1200mm): {perc_stats[26]:,} fields")
+                self.log.info(f"     High (800-1200mm): {perc_stats[27]:,} fields")
+                self.log.info(f"     Moderate (400-800mm): {perc_stats[28]:,} fields")
+                self.log.info(f"     Low (100-400mm): {perc_stats[29]:,} fields")
+                self.log.info(f"     Very low (<100mm): {perc_stats[30]:,} fields")
             else:
                 self.log.info(f"📊 Percolation effects calculated for {count:,} fields (statistics unavailable)")
 
@@ -1387,6 +1463,10 @@ class NLES5Calculator:
                 f.soil_effect,
                 f.drainage_effect,
                 f.perco_soil_effect,
+                -- FIXED: Include soil data in fertilizer table
+                COALESCE(f.soil_code, 'unknown') as soil_code,
+                COALESCE(f.soil_description, 'unknown') as soil_description,
+                COALESCE(f.clay_content, 15.0) as clay_content,
                 -- Join fertilizer data by CVR (company) for the target year
                 COALESCE(fh.mineral_n_foraar, 0.0) as mineral_n_foraar,
                 COALESCE(fh.mineral_n_eft, 0.0) as mineral_n_eft,
@@ -1421,6 +1501,13 @@ class NLES5Calculator:
                     organic_n_hus,
                     perco_soil_effect,
                     perco_apr_aug_current,
+                    perco_sep_mar_current,
+                    perco_apr_aug_previous,
+                    perco_sep_mar_previous,
+                    total_percolation,
+                    soil_code,
+                    soil_description,
+                    clay_content,
                     geom
                 FROM fields_with_fertilizer
                 WHERE perco_apr_aug_current IS NOT NULL 
@@ -1442,9 +1529,10 @@ class NLES5Calculator:
                 {target_year} as year,
                 CAST(f.area_ha AS DECIMAL(10,4)) as area_ha,  -- FIXED: Explicit cast to prevent DECIMAL(2,1) error
                 f.crop_name as crop_type,
-                'unknown' as soil_code,  -- soil_code not available in target year processing
-                'unknown' as soil_description,  -- soil_description not available
-                0.0 as clay_content,  -- clay_content not available
+                -- FIXED: Use real soil data instead of hardcoded unknown values
+                COALESCE(f.soil_code, 'unknown') as soil_code,
+                COALESCE(f.soil_description, 'unknown') as soil_description,
+                COALESCE(f.clay_content, 15.0) as clay_content,
                 
                 -- Calculate NLES5 nitrogen washout using correct NLES5 formula: Y5 = Trend + V^1.5 * Perco_Soil_effect
                 GREATEST(0, 
@@ -1465,7 +1553,13 @@ class NLES5Calculator:
                     ) * 1.085  -- Apply scaling factor to final result
                 ) as nitrogen_washout_kg_ha,
                 
-                COALESCE(f.perco_apr_aug_current, 0.0) as percolation_mm,
+                -- FIXED: Use total percolation for temporal variation instead of single April-August period
+                COALESCE(f.total_percolation, 0.0) as percolation_mm,
+                -- Add seasonal breakdown for analysis
+                COALESCE(f.perco_apr_aug_current, 0.0) as percolation_april_august,
+                COALESCE(f.perco_sep_mar_current, 0.0) as percolation_sept_march,
+                COALESCE(f.perco_apr_aug_previous, 0.0) as percolation_april_august_prev,
+                COALESCE(f.perco_sep_mar_previous, 0.0) as percolation_sept_march_prev,
                 
                 -- Calculate uncertainty based on NLES5 model coefficient of variation (~10%)
                 -- From DCA Report 163: Model uncertainty is approximately 10% (coefficient of variation)
@@ -1564,6 +1658,91 @@ class NLES5Calculator:
             
             count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
             self.log.info(f"✅ Calculated percolation effects for {count:,} fields (target year processing)")
+            
+            # DEBUG LOGGING: Percolation values and calculated effects statistics
+            if count > 0:
+                percolation_effects_stats = self.conn.execute(f"""
+                    SELECT 
+                        COUNT(*) as total_fields,
+                        COUNT(CASE WHEN total_percolation > 0 THEN 1 END) as fields_with_percolation,
+                        
+                        -- Raw percolation values after field spatial joins
+                        MIN(total_percolation) as min_total_perco,
+                        MAX(total_percolation) as max_total_perco,
+                        AVG(total_percolation) as avg_total_perco,
+                        STDDEV(total_percolation) as stddev_total_perco,
+                        
+                        MIN(perco_apr_aug_current) as min_apr_aug,
+                        MAX(perco_apr_aug_current) as max_apr_aug,
+                        AVG(perco_apr_aug_current) as avg_apr_aug,
+                        STDDEV(perco_apr_aug_current) as stddev_apr_aug,
+                        
+                        MIN(perco_sep_mar_current) as min_sep_mar,
+                        MAX(perco_sep_mar_current) as max_sep_mar,
+                        AVG(perco_sep_mar_current) as avg_sep_mar,
+                        STDDEV(perco_sep_mar_current) as stddev_sep_mar,
+                        
+                        -- Calculated effects
+                        MIN(soil_effect) as min_soil_effect,
+                        MAX(soil_effect) as max_soil_effect,
+                        AVG(soil_effect) as avg_soil_effect,
+                        STDDEV(soil_effect) as stddev_soil_effect,
+                        
+                        MIN(drainage_effect) as min_drainage_effect,
+                        MAX(drainage_effect) as max_drainage_effect,
+                        AVG(drainage_effect) as avg_drainage_effect,
+                        STDDEV(drainage_effect) as stddev_drainage_effect,
+                        
+                        MIN(perco_soil_effect) as min_perco_soil_effect,
+                        MAX(perco_soil_effect) as max_perco_soil_effect,
+                        AVG(perco_soil_effect) as avg_perco_soil_effect,
+                        STDDEV(perco_soil_effect) as stddev_perco_soil_effect,
+                        
+                        -- Soil type distribution
+                        COUNT(CASE WHEN soil_code IN ('1', '2', '3') OR soil_description ILIKE '%sand%' THEN 1 END) as sand_fields,
+                        COUNT(CASE WHEN NOT (soil_code IN ('1', '2', '3') OR soil_description ILIKE '%sand%') THEN 1 END) as clay_fields
+                    FROM {result_table}
+                    WHERE total_percolation IS NOT NULL
+                """).fetchone()
+                
+                if percolation_effects_stats:
+                    self.log.info(f"🌧️  PERCOLATION EFFECTS DEBUG STATISTICS:")
+                    self.log.info(f"   Fields processed: {percolation_effects_stats[0]:,}, with percolation data: {percolation_effects_stats[1]:,}")
+                    self.log.info(f"   Soil types: Sand={percolation_effects_stats[25]:,}, Clay={percolation_effects_stats[26]:,}")
+                    
+                    # Raw percolation values at field level
+                    self.log.info(f"   RAW PERCOLATION at field level:")
+                    self.log.info(f"     Total: min={percolation_effects_stats[2]:.1f}mm, max={percolation_effects_stats[3]:.1f}mm, avg={percolation_effects_stats[4]:.1f}mm")
+                    if percolation_effects_stats[5] and percolation_effects_stats[4]:
+                        cv_total = percolation_effects_stats[5] / percolation_effects_stats[4] * 100
+                        self.log.info(f"     Total variation: stddev={percolation_effects_stats[5]:.1f}mm, CV={cv_total:.1f}%")
+                    
+                    self.log.info(f"     April-Aug: min={percolation_effects_stats[6]:.1f}mm, max={percolation_effects_stats[7]:.1f}mm, avg={percolation_effects_stats[8]:.1f}mm")
+                    if percolation_effects_stats[9] and percolation_effects_stats[8]:
+                        cv_apr_aug = percolation_effects_stats[9] / percolation_effects_stats[8] * 100
+                        self.log.info(f"     April-Aug variation: stddev={percolation_effects_stats[9]:.1f}mm, CV={cv_apr_aug:.1f}%")
+                    
+                    self.log.info(f"     Sept-Mar: min={percolation_effects_stats[10]:.1f}mm, max={percolation_effects_stats[11]:.1f}mm, avg={percolation_effects_stats[12]:.1f}mm")
+                    if percolation_effects_stats[13] and percolation_effects_stats[12]:
+                        cv_sep_mar = percolation_effects_stats[13] / percolation_effects_stats[12] * 100
+                        self.log.info(f"     Sept-Mar variation: stddev={percolation_effects_stats[13]:.1f}mm, CV={cv_sep_mar:.1f}%")
+                    
+                    # Calculated effects
+                    self.log.info(f"   CALCULATED EFFECTS:")
+                    self.log.info(f"     Soil effect: min={percolation_effects_stats[14]:.4f}, max={percolation_effects_stats[15]:.4f}, avg={percolation_effects_stats[16]:.4f}")
+                    if percolation_effects_stats[17] and percolation_effects_stats[16]:
+                        cv_soil = percolation_effects_stats[17] / percolation_effects_stats[16] * 100
+                        self.log.info(f"     Soil effect variation: stddev={percolation_effects_stats[17]:.4f}, CV={cv_soil:.1f}%")
+                    
+                    self.log.info(f"     Drainage effect: min={percolation_effects_stats[18]:.4f}, max={percolation_effects_stats[19]:.4f}, avg={percolation_effects_stats[20]:.4f}")
+                    if percolation_effects_stats[21] and percolation_effects_stats[20]:
+                        cv_drainage = percolation_effects_stats[21] / percolation_effects_stats[20] * 100
+                        self.log.info(f"     Drainage effect variation: stddev={percolation_effects_stats[21]:.4f}, CV={cv_drainage:.1f}%")
+                    
+                    self.log.info(f"     Combined perco-soil effect: min={percolation_effects_stats[22]:.4f}, max={percolation_effects_stats[23]:.4f}, avg={percolation_effects_stats[24]:.4f}")
+                    if percolation_effects_stats[25] and percolation_effects_stats[24]:
+                        cv_combined = percolation_effects_stats[25] / percolation_effects_stats[24] * 100
+                        self.log.info(f"     Combined effect variation: stddev={percolation_effects_stats[25]:.4f}, CV={cv_combined:.1f}%")
             
             return result_table
             

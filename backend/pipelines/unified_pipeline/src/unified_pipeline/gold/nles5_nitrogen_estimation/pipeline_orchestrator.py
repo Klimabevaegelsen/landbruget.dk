@@ -101,6 +101,10 @@ class NLES5PipelineOrchestrator:
                 clay_content DOUBLE,
                 nitrogen_washout_kg_ha DOUBLE,
                 percolation_mm DOUBLE,
+                percolation_april_august DOUBLE,
+                percolation_sept_march DOUBLE, 
+                percolation_april_august_prev DOUBLE,
+                percolation_sept_march_prev DOUBLE,
                 uncertainty_pct DOUBLE,
                 data_quality_score DOUBLE,
                 geometry_wkt VARCHAR,
@@ -399,6 +403,10 @@ class NLES5PipelineOrchestrator:
                             clay_content,
                             nitrogen_washout_kg_ha,
                             percolation_mm,
+                            percolation_april_august,
+                            percolation_sept_march, 
+                            percolation_april_august_prev,
+                            percolation_sept_march_prev,
                             uncertainty_pct,
                             data_quality_score,
                             geometry_wkt,
@@ -458,13 +466,62 @@ class NLES5PipelineOrchestrator:
             # Step 3: Process climate joining for target year (tessellation-based SPATIAL_JOIN)
             self.log.info(f"   🗺️ Climate-field joining for target year {target_year}...")
             fields_climate_table = self.processor._spatial_join_year_climate(target_year, climate_table)
-            # Log join stats
+            # Enhanced join stats with percolation value analysis
             try:
                 result_count = self.conn.execute(f"SELECT COUNT(*) FROM {fields_climate_table}").fetchone()[0]
                 climate_matched = self.conn.execute(f"SELECT COUNT(*) FROM {fields_climate_table} WHERE total_percolation IS NOT NULL").fetchone()[0]
+                
+                # DEBUG LOGGING: Detailed spatial join percolation statistics
+                spatial_join_stats = self.conn.execute(f"""
+                    SELECT 
+                        COUNT(*) as total_joined_fields,
+                        COUNT(CASE WHEN total_percolation IS NOT NULL THEN 1 END) as fields_with_percolation,
+                        COUNT(CASE WHEN total_percolation > 0 THEN 1 END) as fields_with_positive_percolation,
+                        
+                        MIN(total_percolation) as min_percolation,
+                        MAX(total_percolation) as max_percolation,
+                        AVG(total_percolation) as avg_percolation,
+                        STDDEV(total_percolation) as stddev_percolation,
+                        
+                        MIN(perco_apr_aug_current) as min_apr_aug,
+                        MAX(perco_apr_aug_current) as max_apr_aug,
+                        AVG(perco_apr_aug_current) as avg_apr_aug,
+                        
+                        MIN(perco_sep_mar_current) as min_sep_mar,
+                        MAX(perco_sep_mar_current) as max_sep_mar,
+                        AVG(perco_sep_mar_current) as avg_sep_mar,
+                        
+                        AVG(distance_to_climate) as avg_climate_distance,
+                        MIN(distance_to_climate) as min_climate_distance,
+                        MAX(distance_to_climate) as max_climate_distance,
+                        
+                        COUNT(CASE WHEN sufficient_climate_data = true THEN 1 END) as sufficient_climate_fields
+                    FROM {fields_climate_table}
+                    WHERE total_percolation IS NOT NULL
+                """).fetchone()
+                
+                self.log.info(f"   🗺️ TARGET YEAR {target_year} SPATIAL JOIN RESULTS:")
+                self.log.info(f"     Fields joined: {result_count:,}, with climate data: {climate_matched:,} ({climate_matched/result_count:.1%})")
+                
+                if spatial_join_stats and spatial_join_stats[0] > 0:
+                    self.log.info(f"   💧 PERCOLATION VALUES AFTER SPATIAL JOIN:")
+                    self.log.info(f"     Fields with percolation: {spatial_join_stats[1]:,}, positive values: {spatial_join_stats[2]:,}")
+                    self.log.info(f"     Total percolation: min={spatial_join_stats[3]:.1f}mm, max={spatial_join_stats[4]:.1f}mm, avg={spatial_join_stats[5]:.1f}mm")
+                    if spatial_join_stats[6] and spatial_join_stats[5]:
+                        cv_perco = spatial_join_stats[6] / spatial_join_stats[5] * 100
+                        self.log.info(f"     Total percolation variation: stddev={spatial_join_stats[6]:.1f}mm, CV={cv_perco:.1f}%")
+                    
+                    self.log.info(f"     April-Aug: min={spatial_join_stats[7]:.1f}mm, max={spatial_join_stats[8]:.1f}mm, avg={spatial_join_stats[9]:.1f}mm")
+                    self.log.info(f"     Sept-Mar: min={spatial_join_stats[10]:.1f}mm, max={spatial_join_stats[11]:.1f}mm, avg={spatial_join_stats[12]:.1f}mm")
+                    self.log.info(f"     Climate distance: avg={spatial_join_stats[13]:.0f}m, min={spatial_join_stats[14]:.0f}m, max={spatial_join_stats[15]:.0f}m")
+                    self.log.info(f"     Sufficient climate quality: {spatial_join_stats[16]:,}/{spatial_join_stats[0]:,} fields ({spatial_join_stats[16]/spatial_join_stats[0]:.1%})")
+                    
+                else:
+                    self.log.warning(f"   ⚠️ No percolation data found after spatial join for target year {target_year}")
+                    
+            except Exception as e:
+                self.log.warning(f"   ⚠️ Could not analyze spatial join stats: {e}")
                 self.log.info(f"   Year {target_year} spatial join: {result_count:,} fields, {climate_matched:,} with climate data")
-            except Exception:
-                pass
             
             # Step 4: Join with soil data  
             self.log.info(f"   🌱 Soil data joining for target year {target_year}...")
@@ -546,6 +603,10 @@ class NLES5PipelineOrchestrator:
                     clay_content DOUBLE,
                     nitrogen_washout_kg_ha DOUBLE,
                     percolation_mm DOUBLE,
+                    percolation_april_august DOUBLE,
+                    percolation_sept_march DOUBLE, 
+                    percolation_april_august_prev DOUBLE,
+                    percolation_sept_march_prev DOUBLE,
                     uncertainty_pct DOUBLE,
                     data_quality_score DOUBLE,
                     geometry_wkt VARCHAR,

@@ -968,6 +968,50 @@ class NLES5DataLoader:
             self.log.info(f"Precipitation columns: {[col[0] for col in precip_columns[:5]]}")
             self.log.info(f"Evaporation columns: {[col[0] for col in evap_columns[:5]]}")
             
+            # DIAGNOSTIC: Check variation in raw silver data BEFORE combining
+            precip_variation = self.db.execute("""
+                SELECT 
+                    COUNT(*) as total_records,
+                    COUNT(DISTINCT avg_value) as unique_values,
+                    MIN(avg_value) as min_value,
+                    MAX(avg_value) as max_value,
+                    AVG(avg_value) as avg_value
+                FROM dmi_precipitation 
+                WHERE avg_value IS NOT NULL
+            """).fetchone()
+            
+            self.log.warning(f"🔍 RAW SILVER PRECIPITATION DATA VARIATION:")
+            self.log.warning(f"   Records: {precip_variation[0]:,}, Unique values: {precip_variation[1]:,}")
+            self.log.warning(f"   Range: {precip_variation[2]:.3f} to {precip_variation[3]:.3f}, Avg: {precip_variation[4]:.3f}")
+            
+            if precip_variation[1] <= 1:
+                self.log.error(f"🚨 SILVER LAYER PROBLEM: Only {precip_variation[1]} unique precipitation value(s) in silver data!")
+                self.log.error(f"   This explains uniform percolation values in gold layer")
+                self.log.error(f"   🔍 INVESTIGATE: Check DMI silver layer pipeline processing and bronze layer source data")
+            
+            # Also check evaporation data variation
+            try:
+                evap_variation = self.db.execute("""
+                    SELECT 
+                        COUNT(*) as total_records,
+                        COUNT(DISTINCT avg_value) as unique_values,
+                        MIN(avg_value) as min_value,
+                        MAX(avg_value) as max_value,
+                        AVG(avg_value) as avg_value
+                    FROM dmi_evaporation 
+                    WHERE avg_value IS NOT NULL
+                """).fetchone()
+                
+                self.log.warning(f"🔍 RAW SILVER EVAPORATION DATA VARIATION:")
+                self.log.warning(f"   Records: {evap_variation[0]:,}, Unique values: {evap_variation[1]:,}")
+                self.log.warning(f"   Range: {evap_variation[2]:.3f} to {evap_variation[3]:.3f}, Avg: {evap_variation[4]:.3f}")
+                
+                if evap_variation[1] <= 1:
+                    self.log.error(f"🚨 EVAPORATION DATA ALSO UNIFORM: Only {evap_variation[1]} unique value(s)!")
+                
+            except Exception as e:
+                self.log.warning(f"Could not check evaporation variation: {e}")
+            
             # Create combined table with both datasets
             # Since both tables have the same structure, just use precipitation data for now
             # TODO: Implement proper spatial joining once we understand the spatial column structure

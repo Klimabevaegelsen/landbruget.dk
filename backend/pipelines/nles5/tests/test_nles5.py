@@ -1,5 +1,4 @@
 import pytest
-import geopandas as gpd
 import os
 from backend.pipelines.nles5.nles5 import NLES5Calculator
 from src.sources.parsers.agricultural_fields import AgriculturalFields
