@@ -69,10 +69,10 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
 
     # OPTIMIZED YEAR SELECTION: Only loads years actually needed for NLES5 calculations
     # Specify target calculation years - pipeline automatically loads required supporting years (current + 2 previous)
-    # Example: target_years = [2021, 2022] → loads [2019, 2020, 2021, 2022] (4 years instead of 18 years)
+    # Example: target_years = [2021, 2022, 2023] → loads [2019, 2020, 2021, 2022, 2023] (5 years instead of 18 years)
     # target_years: Optional[List[int]] = None  
-    # NOTE: 2023 agricultural fields data is not available in GCS, max year is 2022
-    target_years: Optional[List[int]] = [2021, 2022]
+    # NOTE: Updated analysis shows 2023 agricultural fields data IS available in GCS (fvm_marker_2023)
+    target_years: Optional[List[int]] = [2021, 2022, 2023]
 
     # MEMORY OPTIMIZATION: Limits target calculation years (auto-discovery with memory management)
     # NLES5 requires 3-year windows: current + previous + year before previous
