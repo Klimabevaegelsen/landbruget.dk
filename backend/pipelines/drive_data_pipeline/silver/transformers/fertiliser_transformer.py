@@ -94,11 +94,93 @@ class FertiliserTransformer(BaseTransformer):
         try:
             logger.info(f"Transforming fertiliser file: {file_path.name}")
 
-            # Read the parquet file
-            df = self.conn.execute(f"SELECT * FROM read_parquet('{file_path}')").df()
+            # Read the file based on its extension
+            file_suffix = file_path.suffix.lower()
+
+            if file_suffix == ".xlsx" or file_suffix == ".xls":
+                # Read Excel file - try all sheets and combine if multiple
+                try:
+                    excel_file = pd.ExcelFile(file_path)
+                    all_sheets_data = []
+
+                    logger.info(
+                        f"Found {len(excel_file.sheet_names)} sheets in {file_path.name}: "
+                        f"{excel_file.sheet_names}"
+                    )
+
+                    for sheet_name in excel_file.sheet_names:
+                        try:
+                            sheet_df = pd.read_excel(
+                                excel_file,
+                                sheet_name=sheet_name,
+                                dtype=str,  # Read as strings to avoid type inference issues
+                                na_filter=False,  # Don't convert empty strings to NaN
+                            )
+
+                            if not sheet_df.empty:
+                                # Add sheet name as a column for tracking
+                                sheet_df["source_sheet"] = sheet_name
+                                all_sheets_data.append(sheet_df)
+                                logger.debug(f"Read sheet '{sheet_name}' with {len(sheet_df)} rows")
+                            else:
+                                logger.debug(f"Skipping empty sheet: {sheet_name}")
+
+                        except Exception as sheet_e:
+                            logger.warning(
+                                f"Failed to read sheet '{sheet_name}' from {file_path.name}: "
+                                f"{str(sheet_e)}"
+                            )
+                            continue
+
+                    if not all_sheets_data:
+                        return TransformResult(
+                            success=False, error="No readable sheets found in Excel file"
+                        )
+
+                    # Combine all sheets into one DataFrame
+                    if len(all_sheets_data) == 1:
+                        df = all_sheets_data[0]
+                    else:
+                        # Try to combine sheets - find common columns
+                        common_cols = set(all_sheets_data[0].columns)
+                        for sheet_df in all_sheets_data[1:]:
+                            common_cols &= set(sheet_df.columns)
+
+                        if common_cols:
+                            # Combine using common columns
+                            combined_sheets = []
+                            for sheet_df in all_sheets_data:
+                                combined_sheets.append(sheet_df[list(common_cols)])
+                            df = pd.concat(combined_sheets, ignore_index=True)
+                            logger.info(
+                                f"Combined {len(all_sheets_data)} sheets using "
+                                f"{len(common_cols)} common columns"
+                            )
+                        else:
+                            # No common columns, just use the first sheet
+                            df = all_sheets_data[0]
+                            logger.warning(
+                                f"No common columns found, using only first sheet from "
+                                f"{file_path.name}"
+                            )
+
+                except Exception as excel_e:
+                    logger.error(f"Failed to read Excel file {file_path.name}: {str(excel_e)}")
+                    return TransformResult(
+                        success=False, error=f"Failed to read Excel file: {str(excel_e)}"
+                    )
+
+            elif file_suffix == ".parquet":
+                # Read parquet file
+                df = self.conn.execute(f"SELECT * FROM read_parquet('{file_path}')").df()
+            else:
+                return TransformResult(
+                    success=False,
+                    error=f"Unsupported file type for fertiliser transformer: {file_suffix}",
+                )
 
             if df.empty:
-                return TransformResult(success=False, error="Empty parquet file")
+                return TransformResult(success=False, error="Empty data file")
 
             # Determine the type of fertiliser file
             filename = file_path.name
@@ -113,7 +195,10 @@ class FertiliserTransformer(BaseTransformer):
             # Save harmonized data
             harmonized_df.to_parquet(output_path, index=False)
 
-            logger.info(f"Successfully transformed fertiliser data to: {output_path}")
+            logger.info(
+                f"Successfully transformed fertiliser data to: {output_path} "
+                f"({len(harmonized_df)} rows)"
+            )
 
             return TransformResult(
                 success=True,
@@ -148,29 +233,122 @@ class FertiliserTransformer(BaseTransformer):
         try:
             import os
             import tempfile
+            from pathlib import Path
 
-            # Create temporary file
-            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp:
+            # Get the original file extension
+            file_suffix = Path(filename).suffix.lower()
+
+            # Create temporary file with correct extension
+            with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as tmp:
                 tmp.write(content)
                 tmp.flush()
 
                 try:
-                    # Read the parquet file
-                    df = self.conn.execute(f"SELECT * FROM read_parquet('{tmp.name}')").df()
+                    # Read the file based on its extension
+                    if file_suffix == ".xlsx" or file_suffix == ".xls":
+                        # Read Excel file - try all sheets and combine if multiple
+                        try:
+                            excel_file = pd.ExcelFile(tmp.name)
+                            all_sheets_data = []
+
+                            logger.info(
+                                f"Found {len(excel_file.sheet_names)} sheets in {filename}: "
+                                f"{excel_file.sheet_names}"
+                            )
+
+                            for sheet_name in excel_file.sheet_names:
+                                try:
+                                    sheet_df = pd.read_excel(
+                                        excel_file,
+                                        sheet_name=sheet_name,
+                                        dtype=str,  # Read as strings to avoid type inference issues
+                                        na_filter=False,  # Don't convert empty strings to NaN
+                                    )
+
+                                    if not sheet_df.empty:
+                                        # Add sheet name as a column for tracking
+                                        sheet_df["source_sheet"] = sheet_name
+                                        all_sheets_data.append(sheet_df)
+                                        logger.debug(
+                                            f"Read sheet '{sheet_name}' with {len(sheet_df)} rows"
+                                        )
+                                    else:
+                                        logger.debug(f"Skipping empty sheet: {sheet_name}")
+
+                                except Exception as sheet_e:
+                                    logger.warning(
+                                        f"Failed to read sheet '{sheet_name}' from {filename}: "
+                                        f"{str(sheet_e)}"
+                                    )
+                                    continue
+
+                            if not all_sheets_data:
+                                logger.warning(
+                                    f"No readable sheets found in Excel file: {filename}"
+                                )
+                                return None
+
+                            # Combine all sheets into one DataFrame
+                            if len(all_sheets_data) == 1:
+                                df = all_sheets_data[0]
+                            else:
+                                # Try to combine sheets - find common columns
+                                common_cols = set(all_sheets_data[0].columns)
+                                for sheet_df in all_sheets_data[1:]:
+                                    common_cols &= set(sheet_df.columns)
+
+                                if common_cols:
+                                    # Combine using common columns
+                                    combined_sheets = []
+                                    for sheet_df in all_sheets_data:
+                                        combined_sheets.append(sheet_df[list(common_cols)])
+                                    df = pd.concat(combined_sheets, ignore_index=True)
+                                    logger.info(
+                                        f"Combined {len(all_sheets_data)} sheets using "
+                                        f"{len(common_cols)} common columns"
+                                    )
+                                else:
+                                    # No common columns, just use the first sheet
+                                    df = all_sheets_data[0]
+                                    logger.warning(
+                                        f"No common columns found, using only first sheet from "
+                                        f"{filename}"
+                                    )
+
+                        except Exception as excel_e:
+                            logger.error(f"Failed to read Excel file {filename}: {str(excel_e)}")
+                            return None
+
+                    elif file_suffix == ".parquet":
+                        # Read parquet file
+                        df = self.conn.execute(f"SELECT * FROM read_parquet('{tmp.name}')").df()
+                    else:
+                        logger.error(
+                            f"Unsupported file type for fertiliser transformer: {file_suffix}"
+                        )
+                        return None
 
                     if df.empty:
-                        logger.warning(f"Empty parquet file: {filename}")
+                        logger.warning(f"Empty data file: {filename}")
                         return None
 
                     # Harmonize the data
                     harmonized_df = self._harmonize_fertiliser_data(df, filename)
 
-                    logger.info(f"Successfully harmonized fertiliser data from: {filename}")
+                    if harmonized_df is not None and not harmonized_df.empty:
+                        logger.info(
+                            f"Successfully harmonized fertiliser data from: {filename} "
+                            f"({len(harmonized_df)} rows)"
+                        )
+                    else:
+                        logger.warning(f"No data after harmonization for: {filename}")
+
                     return harmonized_df
 
                 finally:
                     # Clean up temporary file
-                    os.unlink(tmp.name)
+                    if os.path.exists(tmp.name):
+                        os.unlink(tmp.name)
 
         except Exception as e:
             logger.error(f"Failed to transform fertiliser content from {filename}: {str(e)}")
