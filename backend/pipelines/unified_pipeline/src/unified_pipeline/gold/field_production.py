@@ -75,9 +75,9 @@ class FieldProductionGoldConfig(BaseJobConfig):
     max_memory_retries: int = 3
     fallback_batch_reduction_factor: float = 0.5  # Reduce batch size by 50% on memory issues
 
-    # NEW: Spatial join batching configuration for GitHub Actions  
+    # NEW: Spatial join batching configuration for GitHub Actions
     spatial_join_batch_size: int = (
-        100000  # INCREASED: SPATIAL_JOIN operator (PR #545) is much more efficient than old blockwise-nl-join
+        100000  # INCREASED: SPATIAL_JOIN operator (PR #545) is much more efficient
         # With spatial indexing, can handle larger batches without memory explosion
     )
     enable_batched_spatial_joins: bool = True  # Enable batched spatial processing
@@ -1131,7 +1131,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # DST zones expect X=longitude, Y=latitude (correct WGS84 order)
             # Use ST_FlipCoordinates to swap X/Y without expensive centroid calculations
             geometry_select = "ST_FlipCoordinates(geometry) as geometry"
-            self.log.info(f"🔄 Applying coordinate swap fix for year {year} - using ST_FlipCoordinates for efficient X/Y swap")
+            self.log.info(
+                f"🔄 Applying coordinate swap fix for year {year} - using ST_FlipCoordinates"
+            )
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
@@ -1198,7 +1200,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # DST zones expect X=longitude, Y=latitude (correct WGS84 order)
             # Use ST_FlipCoordinates to swap X/Y without expensive centroid calculations
             geometry_select = "ST_FlipCoordinates(geometry) as geometry"
-            self.log.info(f"🔄 Applying coordinate swap fix for year {year} - using ST_FlipCoordinates for efficient X/Y swap")
+            self.log.info(
+                f"🔄 Applying coordinate swap fix for year {year} - using ST_FlipCoordinates"
+            )
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
