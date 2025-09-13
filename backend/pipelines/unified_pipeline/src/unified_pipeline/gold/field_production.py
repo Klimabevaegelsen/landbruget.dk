@@ -62,7 +62,7 @@ class FieldProductionGoldConfig(BaseJobConfig):
     # CRITICAL: Aggressive memory management for resource-constrained environment
     enable_memory_optimizations: bool = True
     enable_spatial_join_verification: bool = True
-    enable_aggressive_cleanup: bool = True  # NEW: Enable aggressive resource cleanup
+    enable_aggressive_cleanup: bool = False  # Temporarily disabled to test spatial join
     checkpoint_threshold_mb: int = 256  # REDUCED: More frequent checkpoints (was 512MB)
     emergency_memory_threshold: float = (
         0.75  # REDUCED: Trigger emergency cleanup at 75% memory usage
