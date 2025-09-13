@@ -62,6 +62,7 @@ from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import (
     PNumberFetching,
     PNumberFetchingConfig,
 )
+
 # CVR Geometry Datasets module not yet implemented
 # from unified_pipeline.gold.cvr_geometry_datasets import (
 #     CVRGeometryDatasets,
@@ -74,6 +75,10 @@ from unified_pipeline.gold.field_area_analysis import (
 from unified_pipeline.gold.field_production import (
     FieldProductionGold,
     FieldProductionGoldConfig,
+)
+from unified_pipeline.gold.nles5_nitrogen_estimation import (
+    NLES5NitrogenEstimationGold,
+    NLES5NitrogenEstimationGoldConfig,
 )
 from unified_pipeline.gold.pesticide_compliance import (
     PesticideComplianceGold,
@@ -98,10 +103,6 @@ from unified_pipeline.gold.work_permits import (
 from unified_pipeline.gold.worker_safety import (
     WorkerSafetyGold,
     WorkerSafetyGoldConfig,
-)
-from unified_pipeline.gold.nles5_nitrogen_estimation import (
-    NLES5NitrogenEstimationGold,
-    NLES5NitrogenEstimationGoldConfig,
 )
 from unified_pipeline.model import cli as cli_models
 from unified_pipeline.model.scheduling import (

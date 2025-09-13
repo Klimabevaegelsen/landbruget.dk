@@ -6,17 +6,18 @@ Comprehensive test suite that validates the unified NLES5 pipeline implementatio
 against the reference nles5.py implementation to ensure accuracy and compliance.
 """
 
-import pytest
 import sys
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 # Add backend to path
 sys.path.append(str(Path(__file__).parent.parent.parent.parent.parent.parent / "backend"))
 
 from pipelines.unified_pipeline.src.unified_pipeline.gold.nles5_nitrogen_estimation import (
     NLES5NitrogenEstimationGold,
-    NLES5NitrogenEstimationGoldConfig
+    NLES5NitrogenEstimationGoldConfig,
 )
 
 
@@ -223,7 +224,7 @@ class TestNLES5ReferenceValidation:
         # Reference trend effect: -0.1108 * (2017 - 1991) = -2.8808
         expected_trend = -0.1108 * (2017 - 1991)
 
-        nles5_pipeline.conn.execute(f"""
+        nles5_pipeline.conn.execute("""
             CREATE TABLE test_trend_data AS
             SELECT
                 -0.1108 * (2017 - 1991) as calculated_trend_effect

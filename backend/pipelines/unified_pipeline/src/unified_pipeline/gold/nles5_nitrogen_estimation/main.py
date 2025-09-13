@@ -37,8 +37,8 @@ OUTPUT:
 - Full audit trail of all model components and data sources
 """
 
-import os
 import json
+import os
 from typing import Any, Dict, List, Optional
 
 from unified_pipeline.common.base import BaseSource, GoldJobInterface
@@ -46,16 +46,17 @@ from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
+from .climate_processor import NLES5ClimateProcessor
+
 # Import configuration and modules from the new modular structure
 from .config import NLES5NitrogenEstimationGoldConfig
 from .data_loader import NLES5DataLoader
-from .climate_processor import NLES5ClimateProcessor
-from .spatial_operations import NLES5SpatialOperations
-from .nles5_calculator import NLES5Calculator
-from .validator import NLES5Validator
-from .prejoin_validations import NLES5PrejoinValidator
 from .memory_utils import NLES5MemoryUtils
+from .nles5_calculator import NLES5Calculator
 from .pipeline_orchestrator import NLES5PipelineOrchestrator
+from .prejoin_validations import NLES5PrejoinValidator
+from .spatial_operations import NLES5SpatialOperations
+from .validator import NLES5Validator
 
 
 class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig], GoldJobInterface):
@@ -175,9 +176,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         else:
             # Basic cleanup implementation
             try:
+                import glob
                 import os
                 import shutil
-                import glob
 
                 # Force DuckDB to flush any pending writes
                 try:
@@ -701,11 +702,11 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             base_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}_*/{timestamp}/"
             unified_path = f"gs://{self.config.bucket}/gold/{self.config.dataset}_unified_results/{timestamp}/data.parquet"
             
-            self.log.info(f"✅ NLES5 results saved using shared GCS interface")
+            self.log.info("✅ NLES5 results saved using shared GCS interface")
             self.log.info(f"🎯 PRIMARY TABLE: {unified_path}")
             self.log.info(f"📁 Base path structure: {base_path}")
             self.log.info(f"📊 Saved {len(tables_to_save) - failed_uploads}/{len(tables_to_save)} tables successfully")
-            self.log.info(f"💡 Use 'nles5_unified_results' table for comprehensive analysis with uncertainty data")
+            self.log.info("💡 Use 'nles5_unified_results' table for comprehensive analysis with uncertainty data")
 
         except Exception as e:
             self.log.error(f"Error saving results: {e}")
@@ -876,7 +877,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             ).fetchone()
             if version_result:
                 self.log.info(f"🦆 DuckDB Spatial version: {version_result[1]}")
-        except:
+        except Exception:
             pass
 
         self.log.info("🌍 PRODUCTION-READY DENMARK-WIDE NLES5 PROCESSING COMPLETE")
@@ -1125,7 +1126,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 self.log.warning(f"     - {warning}")
         
         if validation_results['recommendations']:
-            self.log.info(f"   Recommendations:")
+            self.log.info("   Recommendations:")
             for rec in validation_results['recommendations'][:3]:  # Show first 3 recommendations
                 self.log.info(f"     - {rec}")
 
@@ -1178,7 +1179,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             required_years = set()
             available_years_set = set(available_years)
             
-            self.log.info(f"🔍 Calculating required data years for NLES5 3-year windows...")
+            self.log.info("🔍 Calculating required data years for NLES5 3-year windows...")
             
             for target_year in target_calculation_years:
                 # Add the target year itself
@@ -1214,7 +1215,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             years_eliminated = total_available - total_required
             percent_reduction = (years_eliminated / total_available) * 100 if total_available > 0 else 0
             
-            self.log.info(f"📊 NLES5 Year Optimization Results:")
+            self.log.info("📊 NLES5 Year Optimization Results:")
             self.log.info(f"   Available years: {total_available} ({min(available_years)}-{max(available_years)})")
             self.log.info(f"   Required years: {total_required} → {final_years}")
             self.log.info(f"   Years eliminated: {years_eliminated} ({percent_reduction:.1f}% reduction)")
@@ -1317,7 +1318,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 self.log.error("💡 Check: 1) Climate data availability, 2) Spatial join performance, 3) Memory limits")
                 raise ValueError("fields_climate_table cannot be None - climate joining must have failed")
                 
-            result_table = f"fields_complete_target"
+            result_table = "fields_complete_target"
             
             # Simplified soil joining using existing soil_types_prepared table
             self.conn.execute(f"""
@@ -1341,7 +1342,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
     def _add_default_soil_data_target_year(self, fields_climate_table: str) -> str:
         """Add default soil data when soil dataset not available."""
         try:
-            result_table = f"fields_complete_target"
+            result_table = "fields_complete_target"
             
             self.conn.execute(f"""
                 CREATE OR REPLACE TEMPORARY TABLE {result_table} AS
@@ -1459,7 +1460,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         try:
             # Check if table exists
             self.conn.execute("SELECT COUNT(*) FROM nles5_estimates_final_batched")
-        except:
+        except Exception:
             # Table doesn't exist, create it with proper schema
             self.log.info("Creating nles5_estimates_final_batched table...")
             self.conn.execute("""

@@ -1035,8 +1035,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             
             # Import the agricultural pattern matcher
             from unified_pipeline.gold.agricultural_pattern_matcher import (
+                AgriculturalPatternMatcherConfig,
                 run_agricultural_pattern_matching,
-                AgriculturalPatternMatcherConfig
             )
             
             # Configure for fertilizer disaggregation use (conservative settings for production)
@@ -1046,7 +1046,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 max_operations_to_process=1000  # Reasonable limit for performance
             )
             
-            self.log.info(f"   Running agricultural pattern matching with marker table")
+            self.log.info("   Running agricultural pattern matching with marker table")
             self.log.info(f"   Pattern score threshold: {config.min_pattern_score}")
             self.log.info(f"   Field score threshold: {config.min_field_score}")
             

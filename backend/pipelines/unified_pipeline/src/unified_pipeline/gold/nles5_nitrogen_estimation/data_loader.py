@@ -501,9 +501,12 @@ class NLES5DataLoader:
             # Ensure we have the essential columns
             if not all([cvr_column, marknummer_column, areal_column]):
                 missing = []
-                if not cvr_column: missing.append("CVR")
-                if not marknummer_column: missing.append("Marknummer") 
-                if not areal_column: missing.append("Areal")
+                if not cvr_column:
+                    missing.append("CVR")
+                if not marknummer_column:
+                    missing.append("Marknummer") 
+                if not areal_column:
+                    missing.append("Areal")
                 raise ValueError(f"Missing essential columns in GKEA data: {missing}")
             
             self.db.execute(f"""
@@ -577,7 +580,7 @@ class NLES5DataLoader:
             try:
                 marker_count = self.db.execute("SELECT COUNT(*) FROM marker").fetchone()[0]
                 marker_exists = marker_count > 0
-            except:
+            except Exception:
                 marker_exists = False
                 
             if not marker_exists:
@@ -587,7 +590,7 @@ class NLES5DataLoader:
             # Import and run agricultural pattern matcher
             from unified_pipeline.gold.agricultural_pattern_matcher import (
                 AgriculturalPatternMatcherConfig,
-                run_agricultural_pattern_matching
+                run_agricultural_pattern_matching,
             )
             
             # Configure for high-quality matches
@@ -699,10 +702,10 @@ class NLES5DataLoader:
                             success = self._load_and_combine_dmi_data()
                             if success:
                                 loaded_tables[dataset_name] = table_name
-                                self.log.info(f"✅ Successfully loaded DMI climate data")
+                                self.log.info("✅ Successfully loaded DMI climate data")
                                 continue
                             else:
-                                self.log.error(f"❌ Failed to load DMI climate data")
+                                self.log.error("❌ Failed to load DMI climate data")
                                 continue
                         except Exception as e:
                             self.log.error(f"❌ CRITICAL: Failed to load required DMI climate data: {e}")
@@ -980,14 +983,14 @@ class NLES5DataLoader:
                 WHERE avg_value IS NOT NULL
             """).fetchone()
             
-            self.log.warning(f"🔍 RAW SILVER PRECIPITATION DATA VARIATION:")
+            self.log.warning("🔍 RAW SILVER PRECIPITATION DATA VARIATION:")
             self.log.warning(f"   Records: {precip_variation[0]:,}, Unique values: {precip_variation[1]:,}")
             self.log.warning(f"   Range: {precip_variation[2]:.3f} to {precip_variation[3]:.3f}, Avg: {precip_variation[4]:.3f}")
             
             if precip_variation[1] <= 1:
                 self.log.error(f"🚨 SILVER LAYER PROBLEM: Only {precip_variation[1]} unique precipitation value(s) in silver data!")
-                self.log.error(f"   This explains uniform percolation values in gold layer")
-                self.log.error(f"   🔍 INVESTIGATE: Check DMI silver layer pipeline processing and bronze layer source data")
+                self.log.error("   This explains uniform percolation values in gold layer")
+                self.log.error("   🔍 INVESTIGATE: Check DMI silver layer pipeline processing and bronze layer source data")
             
             # Also check evaporation data variation
             try:
@@ -1002,7 +1005,7 @@ class NLES5DataLoader:
                     WHERE avg_value IS NOT NULL
                 """).fetchone()
                 
-                self.log.warning(f"🔍 RAW SILVER EVAPORATION DATA VARIATION:")
+                self.log.warning("🔍 RAW SILVER EVAPORATION DATA VARIATION:")
                 self.log.warning(f"   Records: {evap_variation[0]:,}, Unique values: {evap_variation[1]:,}")
                 self.log.warning(f"   Range: {evap_variation[2]:.3f} to {evap_variation[3]:.3f}, Avg: {evap_variation[4]:.3f}")
                 
@@ -1333,7 +1336,7 @@ class NLES5DataLoader:
             self.log.info(f"🔍 Available tables before year addition: {[t[0] for t in self.processor.conn.execute('SHOW TABLES').fetchall()]}")
             
             # Verify the table exists
-            table_count = self.processor.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            self.processor.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             self.log.info(f"✅ Table {table_name} found successfully")
             
             # Add year column to the existing table
@@ -1357,7 +1360,7 @@ class NLES5DataLoader:
             try:
                 tables = self.processor.conn.execute("SHOW TABLES").fetchall()
                 self.log.error(f"Available tables: {[t[0] for t in tables]}")
-            except:
+            except Exception:
                 self.log.error("Could not list available tables")
 
     def _transform_raw_fertilizer_data(self, table_name: str) -> None:
@@ -1368,7 +1371,7 @@ class NLES5DataLoader:
             table_name: Name of the fertilizer table to transform
         """
         try:
-            self.log.info(f"🔧 Transforming raw fertilizer data to expected schema...")
+            self.log.info("🔧 Transforming raw fertilizer data to expected schema...")
             
             # Check current columns
             columns = self.processor.conn.execute(f"DESCRIBE {table_name}").fetchall()
@@ -1421,4 +1424,4 @@ class NLES5DataLoader:
             """)
             self.processor.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
             self.processor.conn.execute(f"ALTER TABLE {table_name}_defaults RENAME TO {table_name}")
-            self.log.info(f"✅ Created default fertilizer schema")
+            self.log.info("✅ Created default fertilizer schema")
