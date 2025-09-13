@@ -755,6 +755,44 @@ export default function FieldAnalysisMap({
           ? ['==', ['get', 'cvr_number'], parseInt(filterState.companyFilter)]
           : null;
 
+        // Create partial coverage pattern - will be updated dynamically
+        const createPartialCoveragePattern = async (
+          color: string = '#374151'
+        ) => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 32;
+            canvas.height = 32;
+
+            if (ctx) {
+              // Transparent background
+              ctx.clearRect(0, 0, 32, 32);
+
+              // Dynamic color diagonal hash pattern
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 2;
+              ctx.globalAlpha = 0.9;
+              ctx.beginPath();
+
+              // Diagonal lines going top-left to bottom-right
+              for (let i = -32; i <= 64; i += 6) {
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i + 32, 32);
+              }
+              ctx.stroke();
+
+              const bitmap = await createImageBitmap(canvas);
+              map.addImage('partial-coverage-pattern', bitmap);
+            }
+          } catch (error) {
+            console.warn('Failed to create partial coverage pattern:', error);
+          }
+        };
+
+        // Create initial pattern with default color
+        createPartialCoveragePattern();
+
         // Main fields layer
         map.addLayer({
           id: 'fields-fill',
@@ -763,6 +801,50 @@ export default function FieldAnalysisMap({
           type: 'fill',
           paint: paintProps,
           filter: companyFilter,
+          layout: {
+            visibility: layerVisibility.fields ? 'visible' : 'none',
+          },
+        });
+
+        // Partial coverage overlay layer - uses same colors as main layer but with hash pattern
+        const partialCoveragePaint = { ...paintProps };
+
+        // Add hash pattern overlay for partial coverage fields
+        map.addLayer({
+          id: 'fields-partial-coverage-base',
+          source: 'fields',
+          'source-layer': 'fields',
+          type: 'fill',
+          paint: partialCoveragePaint,
+          filter: companyFilter
+            ? [
+                'all',
+                companyFilter,
+                ['==', ['get', 'is_partial_coverage'], true],
+              ]
+            : ['==', ['get', 'is_partial_coverage'], true],
+          layout: {
+            visibility: layerVisibility.fields ? 'visible' : 'none',
+          },
+        });
+
+        // Add diagonal hash pattern on top for partial coverage indication
+        map.addLayer({
+          id: 'fields-partial-coverage-pattern',
+          source: 'fields',
+          'source-layer': 'fields',
+          type: 'fill',
+          paint: {
+            'fill-pattern': 'partial-coverage-pattern',
+            'fill-opacity': 0.7,
+          },
+          filter: companyFilter
+            ? [
+                'all',
+                companyFilter,
+                ['==', ['get', 'is_partial_coverage'], true],
+              ]
+            : ['==', ['get', 'is_partial_coverage'], true],
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
@@ -785,34 +867,28 @@ export default function FieldAnalysisMap({
           },
         });
 
-        // Add organic symbols layer
-        if (filterState.visualizationMode === 'organic_status') {
-          // Combine organic filter with company filter if both exist
-          let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
-          if (companyFilter) {
-            organicFilter = ['all', companyFilter, organicFilter];
-          }
-
-          map.addLayer({
-            id: 'organic-symbols',
-            source: 'fields',
-            'source-layer': 'fields',
-            type: 'symbol',
-            filter: organicFilter,
-            paint: {
-              'text-color': '#16a34a',
-              'text-halo-color': '#ffffff',
-              'text-halo-width': 1,
-            },
-            layout: {
-              'text-field': 'ØKO',
-              'text-size': 16,
-              'text-allow-overlap': false,
-              'text-ignore-placement': false,
-              visibility: layerVisibility.fields ? 'visible' : 'none',
-            },
-          });
+        // Add organic borders layer - dashed green borders for organic fields
+        let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
+        if (companyFilter) {
+          organicFilter = ['all', companyFilter, organicFilter];
         }
+
+        map.addLayer({
+          id: 'organic-borders',
+          source: 'fields',
+          'source-layer': 'fields',
+          type: 'line',
+          filter: organicFilter,
+          paint: {
+            'line-color': '#16a34a', // Green-600
+            'line-width': 3,
+            'line-opacity': 0.9,
+            'line-dasharray': [2, 2], // Dashed line pattern
+          },
+          layout: {
+            visibility: layerVisibility.fields ? 'visible' : 'none',
+          },
+        });
       }
     },
     [
@@ -1436,12 +1512,19 @@ export default function FieldAnalysisMap({
     if (map.getLayer('fields-outline')) {
       map.setFilter('fields-outline', companyFilter);
     }
-    if (map.getLayer('organic-symbols')) {
+    if (map.getLayer('fields-partial-coverage-base')) {
+      const partialFilter = companyFilter
+        ? ['all', companyFilter, ['==', ['get', 'is_partial_coverage'], true]]
+        : ['==', ['get', 'is_partial_coverage'], true];
+      map.setFilter('fields-partial-coverage-base', partialFilter);
+      map.setFilter('fields-partial-coverage-pattern', partialFilter);
+    }
+    if (map.getLayer('organic-borders')) {
       let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
       if (companyFilter) {
         organicFilter = ['all', companyFilter, organicFilter];
       }
-      map.setFilter('organic-symbols', organicFilter);
+      map.setFilter('organic-borders', organicFilter);
     }
   }, [filterState.companyFilter]);
 
@@ -1466,41 +1549,41 @@ export default function FieldAnalysisMap({
         paintProps['fill-opacity']
       );
 
-      // Handle organic symbols layer
-      if (filterState.visualizationMode === 'organic_status') {
-        // Add organic symbols if not exists
-        if (!map.getLayer('organic-symbols')) {
-          map.addLayer({
-            id: 'organic-symbols',
-            source: 'fields',
-            'source-layer': 'fields',
-            type: 'symbol',
-            filter: ['==', ['get', 'is_organic'], true],
-            paint: {
-              'text-color': '#16a34a',
-              'text-halo-color': '#ffffff',
-              'text-halo-width': 1,
-            },
-            layout: {
-              'text-field': 'ØKO',
-              'text-size': 16,
-              'text-allow-overlap': false,
-              'text-ignore-placement': false,
-              visibility: layerVisibility.fields ? 'visible' : 'none',
-            },
-          });
-        } else {
-          map.setLayoutProperty(
-            'organic-symbols',
-            'visibility',
-            layerVisibility.fields ? 'visible' : 'none'
-          );
-        }
-      } else {
-        // Hide organic symbols for other modes
-        if (map.getLayer('organic-symbols')) {
-          map.setLayoutProperty('organic-symbols', 'visibility', 'none');
-        }
+      // Update partial coverage base layer to match main field colors
+      if (map.getLayer('fields-partial-coverage-base')) {
+        map.setPaintProperty(
+          'fields-partial-coverage-base',
+          'fill-color',
+          paintProps['fill-color']
+        );
+        map.setPaintProperty(
+          'fields-partial-coverage-base',
+          'fill-opacity',
+          paintProps['fill-opacity']
+        );
+      }
+
+      // Handle organic borders layer visibility
+      if (map.getLayer('organic-borders')) {
+        map.setLayoutProperty(
+          'organic-borders',
+          'visibility',
+          layerVisibility.fields ? 'visible' : 'none'
+        );
+      }
+
+      // Handle partial coverage layers visibility
+      if (map.getLayer('fields-partial-coverage-base')) {
+        map.setLayoutProperty(
+          'fields-partial-coverage-base',
+          'visibility',
+          layerVisibility.fields ? 'visible' : 'none'
+        );
+        map.setLayoutProperty(
+          'fields-partial-coverage-pattern',
+          'visibility',
+          layerVisibility.fields ? 'visible' : 'none'
+        );
       }
     }
   }, [filterState, layerVisibility.fields, generateFieldsPaint]);
