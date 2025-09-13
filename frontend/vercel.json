@@ -3,5 +3,57 @@
   "outputDirectory": ".next",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "ignoreCommand": "bash ignore-build.sh"
+  "ignoreCommand": "bash ignore-build.sh",
+  "headers": [
+    {
+      "source": "/api/homepage-statistics",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=7200"
+        }
+      ]
+    },
+    {
+      "source": "/api/supabase/functions/homepage-rankings",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=7200, stale-while-revalidate=86400"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=7200"
+        }
+      ]
+    },
+    {
+      "source": "/api/supabase/functions/kommuner",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=7200, stale-while-revalidate=86400"
+        },
+        {
+          "key": "CDN-Cache-Control",
+          "value": "public, max-age=7200"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "app/api/homepage-statistics/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/supabase/functions/homepage-rankings/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/supabase/functions/kommuner/route.ts": {
+      "maxDuration": 30
+    }
+  }
 }

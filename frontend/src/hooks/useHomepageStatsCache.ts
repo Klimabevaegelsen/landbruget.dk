@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import {
+  getNextTuesdayExpiration,
+  isCacheValidUntilTuesday,
+} from '@/lib/cache-utils';
 
 interface HomepageStatistics {
   total_data_points: number;
@@ -16,10 +20,10 @@ interface HomepageStatistics {
 interface CachedStats {
   data: HomepageStatistics;
   timestamp: number;
+  expiresAt: number; // Tuesday-based expiration
 }
 
 const CACHE_KEY = 'homepage_statistics';
-const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week in milliseconds
 
 export function useHomepageStatsCache() {
   const [cache, setCache] = useState<CachedStats | null>(null);
@@ -32,8 +36,8 @@ export function useHomepageStatsCache() {
         if (cachedItem) {
           const parsed: CachedStats = JSON.parse(cachedItem);
 
-          // Check if cache is still valid
-          if (Date.now() - parsed.timestamp < CACHE_DURATION) {
+          // Check if cache is still valid (Tuesday-based expiration)
+          if (parsed.expiresAt && isCacheValidUntilTuesday(parsed.expiresAt)) {
             setCache(parsed);
           } else {
             // Remove expired cache
@@ -55,8 +59,8 @@ export function useHomepageStatsCache() {
       return null;
     }
 
-    // Check if cache is still valid
-    if (Date.now() - cache.timestamp >= CACHE_DURATION) {
+    // Check if cache is still valid (Tuesday-based expiration)
+    if (!cache.expiresAt || !isCacheValidUntilTuesday(cache.expiresAt)) {
       // Remove expired cache
       setCache(null);
       localStorage.removeItem(CACHE_KEY);
@@ -70,6 +74,7 @@ export function useHomepageStatsCache() {
     const cachedItem: CachedStats = {
       data,
       timestamp: Date.now(),
+      expiresAt: getNextTuesdayExpiration(),
     };
 
     // Update in-memory cache
@@ -92,7 +97,9 @@ export function useHomepageStatsCache() {
   }, []);
 
   const isCacheValid = useCallback((): boolean => {
-    return cache ? Date.now() - cache.timestamp < CACHE_DURATION : false;
+    return cache && cache.expiresAt
+      ? isCacheValidUntilTuesday(cache.expiresAt)
+      : false;
   }, [cache]);
 
   const getCacheAge = useCallback((): number | null => {

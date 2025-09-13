@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import {
+  getNextTuesdayExpiration,
+  isCacheValidUntilTuesday,
+} from '@/lib/cache-utils';
 
 interface RankingItem {
   company_id: string;
@@ -35,11 +39,11 @@ interface HomepageRankingsResponse {
 interface CachedData {
   data: HomepageRankingsResponse;
   timestamp: number;
+  expiresAt: number; // Tuesday-based expiration
   category: string;
 }
 
 const CACHE_KEY_PREFIX = 'homepage_rankings_';
-const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week in milliseconds
 
 export function useRankingsCache() {
   const [cache, setCache] = useState<Map<string, CachedData>>(new Map());
@@ -57,8 +61,11 @@ export function useRankingsCache() {
             const cachedItem = JSON.parse(localStorage.getItem(key) || '');
             const category = key.replace(CACHE_KEY_PREFIX, '');
 
-            // Check if cache is still valid
-            if (Date.now() - cachedItem.timestamp < CACHE_DURATION) {
+            // Check if cache is still valid (Tuesday-based expiration)
+            if (
+              cachedItem.expiresAt &&
+              isCacheValidUntilTuesday(cachedItem.expiresAt)
+            ) {
               newCache.set(category, cachedItem);
             } else {
               // Remove expired cache
@@ -86,8 +93,8 @@ export function useRankingsCache() {
         return null;
       }
 
-      // Check if cache is still valid
-      if (Date.now() - cached.timestamp >= CACHE_DURATION) {
+      // Check if cache is still valid (Tuesday-based expiration)
+      if (!cached.expiresAt || !isCacheValidUntilTuesday(cached.expiresAt)) {
         // Remove expired cache
         const newCache = new Map(cache);
         newCache.delete(category);
@@ -106,6 +113,7 @@ export function useRankingsCache() {
       const cachedItem: CachedData = {
         data,
         timestamp: Date.now(),
+        expiresAt: getNextTuesdayExpiration(),
         category,
       };
 
@@ -157,7 +165,9 @@ export function useRankingsCache() {
   const isCacheValid = useCallback(
     (category: string): boolean => {
       const cached = cache.get(category);
-      return cached ? Date.now() - cached.timestamp < CACHE_DURATION : false;
+      return cached && cached.expiresAt
+        ? isCacheValidUntilTuesday(cached.expiresAt)
+        : false;
     },
     [cache]
   );

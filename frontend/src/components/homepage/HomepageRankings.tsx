@@ -269,7 +269,7 @@ export default function HomepageRankings() {
               <div className="flex items-center space-x-2">
                 <Clock className="text-conventional h-3 w-3" />
                 <p className="text-conventional/80 text-xs">
-                  Data fra cache • Opdateres automatisk hver uge
+                  Data fra cache • Opdateres hver tirsdag
                 </p>
               </div>
             )}

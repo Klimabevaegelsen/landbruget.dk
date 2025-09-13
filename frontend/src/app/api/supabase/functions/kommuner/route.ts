@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  getWeeklyCacheHeaders,
+  getMillisecondsUntilNextTuesday,
+} from '@/lib/cache-utils';
+
+// Revalidate this route every Tuesday (server-side caching)
+export const revalidate = Math.floor(getMillisecondsUntilNextTuesday() / 1000);
 
 export async function GET(request: NextRequest) {
   try {
@@ -66,7 +73,7 @@ export async function GET(request: NextRequest) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Cache-Control': 'public, max-age=300', // Cache for 5 minutes
+        ...getWeeklyCacheHeaders(),
       },
     });
   } catch (error) {
