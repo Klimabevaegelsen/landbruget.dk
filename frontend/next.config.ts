@@ -10,6 +10,22 @@ const nextConfig: NextConfig = {
     },
   },
 
+  // Configure URL redirects
+  async redirects() {
+    return [
+      {
+        source: '/gødning',
+        destination: '/goedning',
+        permanent: true,
+      },
+      {
+        source: '/g%C3%B8dning', // URL-encoded version
+        destination: '/goedning',
+        permanent: true,
+      },
+    ];
+  },
+
   // Configure caching headers for static assets
   async headers() {
     return [

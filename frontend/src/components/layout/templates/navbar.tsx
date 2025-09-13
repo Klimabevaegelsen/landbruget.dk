@@ -27,6 +27,7 @@ import { SimpleThemeToggle } from '@/components/theme/theme-toggle';
 const analyserLinks = [
   { href: '/markanalyse', label: 'Markanalyse' },
   { href: '/pesticidanalyse', label: 'Pesticidanalyse' },
+  { href: '/goedning', label: 'Gødning & Næringsstoffer' },
 ];
 
 function DesktopNav() {
