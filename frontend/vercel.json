@@ -3,7 +3,6 @@
   "outputDirectory": ".next",
   "installCommand": "npm install",
   "framework": "nextjs",
-  "ignoreCommand": "bash ignore-build.sh",
   "headers": [
     {
       "source": "/api/homepage-statistics",
