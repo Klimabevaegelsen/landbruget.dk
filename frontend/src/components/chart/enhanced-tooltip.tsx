@@ -40,12 +40,9 @@ export function EnhancedTooltip({
 
       {/* Content section */}
       <div className="p-4">
-        {/* Label with timestamp */}
-        <div className="mb-3 flex items-center justify-between">
+        {/* Label */}
+        <div className="mb-3">
           <p className="text-foreground text-sm font-medium">{label}</p>
-          <span className="text-muted-foreground text-xs">
-            {new Date().toLocaleDateString('da-DK')}
-          </span>
         </div>
 
         {/* Data entries */}
@@ -77,8 +74,12 @@ export function EnhancedTooltip({
                     {typeof value === 'number'
                       ? value.toLocaleString('da-DK')
                       : value}
-                    {unit && ` ${unit}`}
                   </span>
+                  {unit && (
+                    <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs font-medium">
+                      {unit}
+                    </span>
+                  )}
 
                   {showComparison && change !== null && (
                     <StatusIndicator value={change / 100} showArrow={true} />
@@ -97,15 +98,21 @@ export function EnhancedTooltip({
                 <span className="text-foreground text-sm font-medium">
                   Total
                 </span>
-                <span className="text-foreground font-mono text-sm font-medium">
-                  {payload
-                    .reduce((sum, entry) => {
-                      const value = entry.value as number;
-                      return sum + (typeof value === 'number' ? value : 0);
-                    }, 0)
-                    .toLocaleString('da-DK')}
-                  {unit && ` ${unit}`}
-                </span>
+                <div className="flex items-center space-x-2">
+                  <span className="text-foreground font-mono text-sm font-medium">
+                    {payload
+                      .reduce((sum, entry) => {
+                        const value = entry.value as number;
+                        return sum + (typeof value === 'number' ? value : 0);
+                      }, 0)
+                      .toLocaleString('da-DK')}
+                  </span>
+                  {unit && (
+                    <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs font-medium">
+                      {unit}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </>
@@ -144,12 +151,18 @@ export function CompactTooltip({
                 {entry.name}
               </span>
             </div>
-            <span className="text-foreground font-mono text-xs font-medium">
-              {typeof entry.value === 'number'
-                ? entry.value.toLocaleString('da-DK')
-                : entry.value}
-              {unit && ` ${unit}`}
-            </span>
+            <div className="flex items-center space-x-1">
+              <span className="text-foreground font-mono text-xs font-medium">
+                {typeof entry.value === 'number'
+                  ? entry.value.toLocaleString('da-DK')
+                  : entry.value}
+              </span>
+              {unit && (
+                <span className="text-muted-foreground bg-muted rounded px-1 py-0.5 text-[10px] font-medium">
+                  {unit}
+                </span>
+              )}
+            </div>
           </div>
         ))}
       </div>

@@ -349,6 +349,17 @@ export function BlockBarChart({
                   ? `${formattedTick} ${chart.unit}`
                   : formattedTick;
               }}
+              label={{
+                value: chart.unit || '',
+                position: 'bottom',
+                offset: -5,
+                style: {
+                  textAnchor: 'middle',
+                  fill: 'oklch(var(--color-muted-foreground))',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                },
+              }}
               {...xAxisDefaultProps}
             />
           ) : (
@@ -368,6 +379,17 @@ export function BlockBarChart({
                 return chart.unit
                   ? `${formattedTick} ${chart.unit}`
                   : formattedTick;
+              }}
+              label={{
+                value: chart.unit || '',
+                angle: -90,
+                position: 'insideLeft',
+                style: {
+                  textAnchor: 'middle',
+                  fill: 'oklch(var(--color-muted-foreground))',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                },
               }}
               {...yAxisDefaultProps}
               width={yWidth}

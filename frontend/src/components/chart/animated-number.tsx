@@ -31,7 +31,9 @@ export function AnimatedNumber({
   };
 
   return (
-    <div className={`font-mono font-medium tabular-nums ${className}`}>
+    <div
+      className={`font-mono font-medium tabular-nums ${className} flex items-baseline gap-3`}
+    >
       <NumberFlow
         value={value}
         format={formatOptions}
@@ -39,7 +41,9 @@ export function AnimatedNumber({
         willChange
       />
       {unit && !currency && (
-        <span className="text-muted-foreground ml-2">{unit}</span>
+        <span className="text-muted-foreground bg-muted rounded-md px-2 py-1 text-sm font-medium">
+          {unit}
+        </span>
       )}
     </div>
   );

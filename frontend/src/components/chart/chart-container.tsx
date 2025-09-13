@@ -258,12 +258,18 @@ const ChartTooltipContent = React.forwardRef<
                         </span>
                       </div>
                       {item.value && (
-                        <span className="text-foreground font-mono font-medium tabular-nums">
-                          {typeof item.value === 'number'
-                            ? item.value.toLocaleString('da-DK')
-                            : item.value}
-                          {unit && ` ${unit}`}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-foreground font-mono font-medium tabular-nums">
+                            {typeof item.value === 'number'
+                              ? item.value.toLocaleString('da-DK')
+                              : item.value}
+                          </span>
+                          {unit && (
+                            <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs font-medium">
+                              {unit}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </>
