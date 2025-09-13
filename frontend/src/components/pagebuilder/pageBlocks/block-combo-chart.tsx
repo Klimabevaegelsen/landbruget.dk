@@ -25,6 +25,7 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
+import { translateDestinationType } from '@/lib/translations/animal-transportation';
 import {
   ChartContainer,
   ChartTooltip,
@@ -183,6 +184,52 @@ const calculateComboDisplayValue = (chartData: ChartData, unit?: string) => {
   }
 };
 
+// Helper function to check if a value looks like a destination type
+const isDestinationType = (value: string): boolean => {
+  const destinationTypes = [
+    'Slaughterhouse',
+    'Rendering Plant',
+    'Collection Center',
+    'Collection Point',
+    'Cooling Facility',
+    'Production Farm',
+    'Breeding Farm',
+    'Piglet Farm',
+    'Free-range Pig Farm',
+    'Organic Pig Farm',
+    'Dairy Farm',
+    'Beef Farm',
+    'Heifer Hotel',
+    'Veal Farm',
+    'Quarantine Facility',
+    'Research Facility',
+    'AI Station',
+    'Market/Trading',
+    'Hobby Farm',
+    'Boarding/Riding School',
+    'Stud Farm',
+    'Racing/Training',
+    'Other Livestock',
+    'Livestock Farm',
+    'Seasonal Grazing',
+    'Nature Management',
+    'Livestock Show',
+    'Zoo',
+    'International Export',
+    'Other Commercial',
+    'Unknown',
+  ];
+  return destinationTypes.includes(value);
+};
+
+// Helper function to translate category values if they are destination types
+const translateCategoryValue = (value: string | number): string => {
+  const strValue = String(value);
+  return isDestinationType(strValue)
+    ? translateDestinationType(strValue)
+    : strValue;
+};
+
 // We can reuse the existing transformDataForRecharts function since it already handles our data structure
 const transformDataForRecharts = (chartData: ChartData) => {
   const { xAxis, series } = chartData;
@@ -190,10 +237,12 @@ const transformDataForRecharts = (chartData: ChartData) => {
 
   return xAxis.values.map((value, index) => {
     const dataPoint: { [key: string]: string | number } = {
-      name: String(value),
+      name: translateCategoryValue(value), // Translate destination types
     };
     series.forEach((s) => {
-      dataPoint[s.name] = s.data[index];
+      // Use translated series name as key for consistent legend display
+      const translatedSeriesName = translateCategoryValue(s.name);
+      dataPoint[translatedSeriesName] = s.data[index];
     });
     return dataPoint;
   });
@@ -353,36 +402,46 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
           <Legend content={<CustomLegend />} />
 
           {/* Render bar series */}
-          {barSeries.map((s, index) => (
-            <Bar
-              key={s.name}
-              dataKey={s.name}
-              fill={barColors[index % barColors.length]}
-              yAxisId="left"
-              radius={[2, 2, 0, 0]}
-            />
-          ))}
+          {barSeries.map((s, index) => {
+            const translatedSeriesName = translateCategoryValue(s.name);
+            return (
+              <Bar
+                key={s.name}
+                dataKey={translatedSeriesName}
+                fill={barColors[index % barColors.length]}
+                yAxisId="left"
+                radius={[2, 2, 0, 0]}
+              />
+            );
+          })}
 
           {/* Render line series */}
-          {lineSeries.map((s, index) => (
-            <Line
-              key={s.name}
-              type="monotone"
-              dataKey={s.name}
-              stroke={barColors[(barSeries.length + index) % barColors.length]}
-              yAxisId="right"
-              strokeWidth={2}
-              dot={{
-                fill: barColors[(barSeries.length + index) % barColors.length],
-                strokeWidth: 2,
-                r: 4,
-              }}
-              activeDot={{
-                r: 6,
-                strokeWidth: 2,
-              }}
-            />
-          ))}
+          {lineSeries.map((s, index) => {
+            const translatedSeriesName = translateCategoryValue(s.name);
+            return (
+              <Line
+                key={s.name}
+                type="monotone"
+                dataKey={translatedSeriesName}
+                stroke={
+                  barColors[(barSeries.length + index) % barColors.length]
+                }
+                yAxisId="right"
+                strokeWidth={2}
+                dot={{
+                  fill: barColors[
+                    (barSeries.length + index) % barColors.length
+                  ],
+                  strokeWidth: 2,
+                  r: 4,
+                }}
+                activeDot={{
+                  r: 6,
+                  strokeWidth: 2,
+                }}
+              />
+            );
+          })}
         </ComposedChart>
       </ChartContainer>
 
