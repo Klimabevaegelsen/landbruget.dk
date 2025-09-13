@@ -275,13 +275,228 @@
     }
   }
 
-  /* Improve touch targets for mobile */
+  /* CRITICAL: Prevent horizontal scroll on mobile devices - NUCLEAR OPTION */
+  @media (max-width: 375px) {
+    /* AGGRESSIVE: Force everything to respect viewport */
+    * {
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+      hyphens: auto;
+    }
+
+    /* NUCLEAR: Force body and html to never overflow */
+    html,
+    body {
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    /* Force all layout containers */
+    .container,
+    main,
+    section,
+    div,
+    nav,
+    header,
+    footer,
+    article,
+    aside {
+      max-width: 100% !important;
+      min-width: unset !important;
+      width: auto !important;
+      overflow-x: hidden !important;
+    }
+
+    /* Specific component overrides */
+    .hero-section,
+    .nav-banner,
+    .navbar,
+    .footer,
+    .global-search,
+    .search-container {
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+    }
+
+    /* Fix common culprits - form elements */
+    input,
+    select,
+    textarea,
+    button {
+      max-width: calc(100% - 8px) !important;
+      min-width: unset !important;
+    }
+
+    /* Fix flexbox containers that might expand */
+    .flex,
+    [class*='flex'] {
+      flex-wrap: wrap !important;
+      max-width: 100% !important;
+    }
+
+    /* Fix grid containers */
+    .grid,
+    [class*='grid'] {
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+
+    /* Fix any absolute/fixed positioned elements */
+    [class*='absolute'],
+    [class*='fixed'] {
+      max-width: 100vw !important;
+      left: 0 !important;
+      right: 0 !important;
+    }
+
+    /* Fix text concatenation issues by forcing proper spacing */
+    a + a,
+    span + span,
+    div + div {
+      margin-left: 0.5rem;
+    }
+
+    /* Ensure navigation elements wrap properly */
+    nav,
+    .nav-menu,
+    .footer-links {
+      flex-wrap: wrap !important;
+      gap: 0.5rem !important;
+    }
+
+    /* Force images to be responsive and maintain aspect ratios */
+    img {
+      max-width: 100% !important;
+      height: auto !important;
+      object-fit: cover;
+    }
+
+    /* Specific fixes for hero and other layout images */
+    .hero-section img {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      object-position: center !important;
+    }
+
+    /* Prevent image distortion in picture elements */
+    picture {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    picture img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Fix form elements that might be too wide */
+    input,
+    select,
+    textarea {
+      max-width: 100% !important;
+      min-width: unset !important;
+    }
+
+    /* Prevent tables from causing overflow */
+    table {
+      width: 100% !important;
+      table-layout: fixed;
+      word-wrap: break-word;
+    }
+
+    /* Fix button groups that might be too wide */
+    .button-group,
+    .btn-group {
+      flex-wrap: wrap !important;
+      gap: 0.5rem !important;
+    }
+  }
+
+  /* Improve touch targets for mobile - WCAG 2.1 AA Compliance */
   @media (max-width: 1024px) {
     button,
     input,
     select,
-    textarea {
+    textarea,
+    a,
+    input[type='button'],
+    input[type='submit'],
+    [role='button'],
+    [tabindex='0'] {
       min-height: 44px;
+    }
+
+    /* Ensure interactive elements have adequate touch area */
+    button:not(.touch-target),
+    a:not(.touch-target) {
+      min-width: 44px;
+      padding: 12px;
+    }
+
+    /* Radio buttons and checkboxes */
+    input[type='radio'] + label,
+    input[type='checkbox'] + label,
+    .radio-button,
+    .checkbox-button {
+      min-height: 44px;
+      min-width: 44px;
+      padding: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* CRITICAL: Fix element overlap issues */
+    .nav-banner {
+      z-index: 50;
+      position: relative;
+    }
+
+    .main-nav {
+      z-index: 40;
+      position: relative;
+    }
+
+    .hero-section {
+      z-index: 30;
+      position: relative;
+    }
+
+    footer {
+      z-index: 20;
+      position: relative;
+    }
+
+    /* Ensure proper section spacing to prevent overlaps */
+    section + section,
+    .section + .section {
+      margin-top: 2rem;
+    }
+
+    /* Fix text concatenation in navigation and footer */
+    nav a,
+    .nav-links a,
+    .footer-links a {
+      display: inline-block;
+      margin-right: 1rem;
+      word-break: keep-all;
+      white-space: nowrap;
+    }
+
+    /* Fix dropdown/select concatenation issues */
+    select option,
+    .dropdown-item {
+      padding: 0.5rem;
+      display: block;
+      white-space: normal;
     }
   }
 

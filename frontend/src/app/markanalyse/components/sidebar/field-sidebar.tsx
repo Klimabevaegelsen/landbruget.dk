@@ -182,11 +182,11 @@ export function FieldSidebar({
         {/* Year Selection */}
         {activeSection === 'years' && (
           <SidebarGroup label="År">
-            <div className="space-y-2 px-3 py-2">
+            <div className="space-y-3 px-3 py-2">
               {yearSelection.availableYears.map((year) => (
                 <label
                   key={year}
-                  className="hover:bg-accent/50 flex cursor-pointer items-center gap-3 rounded p-2 text-sm transition-colors"
+                  className="hover:bg-accent/50 border-border/10 flex cursor-pointer items-center gap-4 rounded border-b p-3 text-sm transition-colors"
                 >
                   <input
                     type="radio"
@@ -194,9 +194,11 @@ export function FieldSidebar({
                     value={year}
                     checked={yearSelection.selectedYear === year}
                     onChange={() => onYearChange(year)}
-                    className="text-primary border-border focus:ring-primary h-4 w-4 focus:ring-2"
+                    className="text-primary border-border focus:ring-primary mr-2 h-4 w-4 focus:ring-2"
                   />
-                  <span className="font-medium">{year}</span>
+                  <span className="inline-block min-w-[3rem] font-medium">
+                    {year}
+                  </span>
                 </label>
               ))}
             </div>

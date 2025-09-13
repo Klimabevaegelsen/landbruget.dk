@@ -115,7 +115,7 @@ export default function CompanyFilterPanel({
           {availableYears
             .sort((a, b) => b - a)
             .map((year) => (
-              <div key={year} className="flex items-center space-x-2">
+              <div key={year} className="mb-2 flex items-center space-x-2 p-1">
                 <input
                   type="checkbox"
                   id={`year-${year}`}
@@ -131,9 +131,12 @@ export default function CompanyFilterPanel({
                       });
                     }
                   }}
-                  className="border-border h-4 w-4 rounded"
+                  className="border-border mr-2 h-4 w-4 rounded"
                 />
-                <Label htmlFor={`year-${year}`} className="text-sm">
+                <Label
+                  htmlFor={`year-${year}`}
+                  className="inline-block min-w-[3rem] text-sm"
+                >
                   {year}
                 </Label>
               </div>
