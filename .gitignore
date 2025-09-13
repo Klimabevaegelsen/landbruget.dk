@@ -156,25 +156,21 @@ devenv.nix
 devenv.yaml
 devenv.lock
 .direnv
+
 # PMTiles (generated files, should be stored in GCS)
 pmtiles/
 *.pmtiles
 
-<<<<<<< HEAD
 # Caching
 .pytest_cache/
 .ruff_cache/
 data_cache/
 
-# Devenv
 .devenv*
 devenv.local.nix
 
 # direnv
 .direnv
-
-# pre-commit
-.pre-commit-config.yaml
 
 # Data samples directory (contains large analysis files)
 data_samples/
