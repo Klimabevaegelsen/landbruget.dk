@@ -12,13 +12,13 @@ if [[ "$VERCEL_GIT_COMMIT_REF" == "main" ]] || [[ "$VERCEL_GIT_COMMIT_REF" == "m
   # Check if there are changes in the frontend-pesticide directory
   if git diff HEAD^ HEAD --quiet -- .; then
     echo "🛑 No changes detected in frontend-pesticide/ - Build cancelled"
-    exit 0
+    exit 1
   else
     echo "✅ Frontend-pesticide changes detected - Build proceeding"
-    exit 1
+    exit 0
   fi
 fi
 
 # For feature branches, always build (for preview deployments)
 echo "🌿 Feature branch deployment - Build proceeding"
-exit 1
+exit 0
