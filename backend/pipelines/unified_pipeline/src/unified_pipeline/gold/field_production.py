@@ -216,10 +216,19 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         try:
             # 1. Drop all temporary tables aggressively
             all_tables = self.conn.execute("SHOW TABLES").fetchall()
-            temp_patterns = ["temp_", "intermediate_", "_raw", "_chunk", "batch_", "year_"]
+            temp_patterns = ["temp_", "intermediate_", "_raw", "_chunk", "batch_"]
+            # Exclude critical tables that are needed for processing
+            exclude_patterns = [
+                "current_year_fields",
+                "year_fields_with_zones",
+                "year_production_estimates",
+            ]
 
             for table_row in all_tables:
                 table_name = table_row[0]
+                # Skip critical tables that are needed for processing
+                if any(exclude in table_name.lower() for exclude in exclude_patterns):
+                    continue
                 if any(pattern in table_name.lower() for pattern in temp_patterns):
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
