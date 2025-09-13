@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getWeeklyCacheHeaders } from '@/lib/cache-utils';
 import { getCachedHomepageRankings } from '@/lib/server-cache';
 
-// Revalidate this route every 4 hours (server-side caching)
-// This ensures fresh data while being conservative enough to catch Tuesday updates
-export const revalidate = 14400; // 4 hours in seconds
+// Revalidate this route every 7 days (server-side caching)
+// Data updates weekly on Tuesdays - use POST /api/revalidate-cache after data updates
+export const revalidate = 604800; // 7 days in seconds
 
 export async function GET(request: NextRequest) {
   try {

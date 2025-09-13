@@ -53,7 +53,7 @@ export const getCachedHomepageStatistics = unstable_cache(
   },
   ['homepage-statistics'], // Cache key
   {
-    revalidate: 14400, // 4 hours - ensures fresh data while catching Tuesday updates
+    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
     tags: ['homepage-stats'], // Cache tags for manual invalidation
   }
 );
@@ -104,7 +104,7 @@ export const getCachedHomepageRankings = unstable_cache(
   },
   ['homepage-rankings'], // Cache key
   {
-    revalidate: 14400, // 4 hours - ensures fresh data while catching Tuesday updates
+    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
     tags: ['homepage-rankings'], // Cache tags for manual invalidation
   }
 );
@@ -159,7 +159,7 @@ export const getCachedMunicipalityRankings = unstable_cache(
   },
   ['municipality-rankings'], // Cache key
   {
-    revalidate: 14400, // 4 hours - ensures fresh data while catching Tuesday updates
+    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
     tags: ['municipality-rankings'], // Cache tags for manual invalidation
   }
 );
