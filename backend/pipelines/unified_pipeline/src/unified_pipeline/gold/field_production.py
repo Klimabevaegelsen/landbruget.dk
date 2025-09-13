@@ -894,7 +894,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 )
                 """)
 
-                # Add municipality assignment and handle unassigned fields (like recreate_original_csv_structure.py)
+                # Add municipality assignment and handle unassigned fields
+                # (like recreate_original_csv_structure.py)
                 kommune_available = False
                 try:
                     kommune_count = self.conn.execute(
@@ -919,7 +920,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
                     # Check how many fields got municipality assignment
                     assigned_count = self.conn.execute("""
-                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune WHERE kommune_name IS NOT NULL
+                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
+                        WHERE kommune_name IS NOT NULL
                     """).fetchone()[0]
                     total_count = self.conn.execute(
                         "SELECT COUNT(*) FROM year_fields_with_zones_and_kommune"
@@ -927,13 +929,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     unassigned_count = total_count - assigned_count
 
                     self.log.info(
-                        f"  📊 Spatial intersection: {assigned_count}/{total_count} fields ({assigned_count/total_count*100:.1f}%)"
+                        f"  📊 Spatial intersection: {assigned_count}/{total_count} fields "
+                        f"({assigned_count/total_count*100:.1f}%)"
                     )
 
-                    # Step 2: Assign remaining fields to closest municipality (like recreate_original_csv_structure.py)
+                    # Step 2: Assign remaining fields to closest municipality
+                    # (like recreate_original_csv_structure.py)
                     if unassigned_count > 0:
                         self.log.info(
-                            f"  🎯 Step 2: Closest distance assignment for {unassigned_count} unassigned fields..."
+                            f"  🎯 Step 2: Closest distance assignment for {unassigned_count} "
+                            f"unassigned fields..."
                         )
 
                         # Create temporary table for unassigned fields
@@ -944,7 +949,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         WHERE kommune_name IS NULL
                         """)
 
-                        # Assign to closest municipality using cross join (like recreate_original_csv_structure.py)
+                        # Assign to closest municipality using cross join
+                        # (like recreate_original_csv_structure.py)
                         # This ensures EVERY unassigned field gets a municipality assignment
                         self.conn.execute("""
                         CREATE OR REPLACE TABLE closest_assignments AS
@@ -971,23 +977,28 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
                         # Log final assignment stats
                         final_assigned = self.conn.execute("""
-                            SELECT COUNT(*) FROM year_fields_with_zones_and_kommune WHERE kommune_name IS NOT NULL
+                            SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
+                            WHERE kommune_name IS NOT NULL
                         """).fetchone()[0]
                         self.log.info(
-                            f"  ✅ Final municipality assignment: {final_assigned}/{total_count} fields ({final_assigned/total_count*100:.1f}%)"
+                            f"  ✅ Final municipality assignment: {final_assigned}/{total_count} "
+                            f"fields ({final_assigned/total_count*100:.1f}%)"
                         )
 
                     # Final safety check: ensure NO fields remain unassigned
                     remaining_unassigned = self.conn.execute("""
-                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune WHERE kommune_name IS NULL
+                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
+                        WHERE kommune_name IS NULL
                     """).fetchone()[0]
 
                     if remaining_unassigned > 0:
                         self.log.warning(
-                            f"  🚨 {remaining_unassigned} fields still unassigned - applying emergency closest assignment"
+                            f"  🚨 {remaining_unassigned} fields still unassigned - "
+                            f"applying emergency closest assignment"
                         )
 
-                        # Emergency assignment: assign ALL remaining unassigned fields to closest municipality
+                        # Emergency assignment: assign ALL remaining unassigned fields
+                        # to closest municipality
                         self.conn.execute("""
                         CREATE OR REPLACE TABLE emergency_unassigned AS
                         SELECT *, ST_Centroid(ST_GeomFromText(geometry)) as centroid
@@ -1018,10 +1029,12 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         self.conn.execute("DROP TABLE IF EXISTS emergency_assignments")
 
                         final_unassigned = self.conn.execute("""
-                            SELECT COUNT(*) FROM year_fields_with_zones_and_kommune WHERE kommune_name IS NULL
+                            SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
+                            WHERE kommune_name IS NULL
                         """).fetchone()[0]
                         self.log.info(
-                            f"  ✅ Emergency assignment complete: {final_unassigned} fields still unassigned"
+                            f"  ✅ Emergency assignment complete: {final_unassigned} "
+                            f"fields still unassigned"
                         )
                     else:
                         self.log.info("  ✅ All fields successfully assigned to municipalities")
@@ -1029,7 +1042,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     # Replace the original table
                     self.conn.execute("DROP TABLE year_fields_with_zones")
                     self.conn.execute(
-                        "ALTER TABLE year_fields_with_zones_and_kommune RENAME TO year_fields_with_zones"
+                        "ALTER TABLE year_fields_with_zones_and_kommune "
+                        "RENAME TO year_fields_with_zones"
                     )
 
                 else:
@@ -1037,7 +1051,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         "  ⚠️ Kommune boundaries not available - adding 'Unknown' municipality"
                     )
                     self.conn.execute("""
-                    ALTER TABLE year_fields_with_zones ADD COLUMN kommune_name VARCHAR DEFAULT 'Unknown'
+                    ALTER TABLE year_fields_with_zones
+                    ADD COLUMN kommune_name VARCHAR DEFAULT 'Unknown'
                     """)
 
                 # Step 3: Handle unassigned landsdel/dst_regions (similar approach)
@@ -1060,7 +1075,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
                     """)
 
-                    # Assign to closest DST zone using cross join (like recreate_original_csv_structure.py)
+                    # Assign to closest DST zone using cross join
+                    # (like recreate_original_csv_structure.py)
                     # This ensures EVERY unassigned field gets landsdel/dst_regions assignment
                     self.conn.execute("""
                     CREATE OR REPLACE TABLE closest_dst_assignments AS
@@ -1083,7 +1099,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         dst_regions = c.dst_regions
                     FROM closest_dst_assignments c
                     WHERE year_fields_with_zones.field_uuid = c.field_uuid
-                    AND (year_fields_with_zones.landsdel_code = 'unknown' OR year_fields_with_zones.dst_regions = 'unknown')
+                    AND (year_fields_with_zones.landsdel_code = 'unknown'
+                         OR year_fields_with_zones.dst_regions = 'unknown')
                     """)
 
                     # Clean up temporary tables
@@ -1095,13 +1112,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
                     """).fetchone()[0]
                     self.log.info(
-                        f"  ✅ Final region assignment: {total_count - final_unassigned}/{total_count} fields assigned"
+                        f"  ✅ Final region assignment: {total_count - final_unassigned}/"
+                        f"{total_count} fields assigned"
                     )
 
-                    # Final safety check for landsdel/dst_regions: ensure NO fields remain with 'unknown'
+                    # Final safety check for landsdel/dst_regions:
+                    # ensure NO fields remain with 'unknown'
                     if final_unassigned > 0:
                         self.log.warning(
-                            f"  🚨 {final_unassigned} fields still have unknown regions - applying emergency closest assignment"
+                            f"  🚨 {final_unassigned} fields still have unknown regions - "
+                            f"applying emergency closest assignment"
                         )
 
                         # Emergency assignment for remaining unknown regions
@@ -1132,7 +1152,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             dst_regions = e.dst_regions
                         FROM emergency_region_assignments e
                         WHERE year_fields_with_zones.field_uuid = e.field_uuid
-                        AND (year_fields_with_zones.landsdel_code = 'unknown' OR year_fields_with_zones.dst_regions = 'unknown')
+                        AND (year_fields_with_zones.landsdel_code = 'unknown'
+                             OR year_fields_with_zones.dst_regions = 'unknown')
                         """)
 
                         # Clean up emergency tables
@@ -1144,7 +1165,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
                         """).fetchone()[0]
                         self.log.info(
-                            f"  ✅ Emergency region assignment complete: {final_check} fields still unknown"
+                            f"  ✅ Emergency region assignment complete: {final_check} "
+                            f"fields still unknown"
                         )
                     else:
                         self.log.info("  ✅ All fields successfully assigned to regions")
@@ -1360,30 +1382,31 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             except Exception:
                 kommune_available = False
 
-                if kommune_available:
-                    # Perform dual spatial join: DST zones + municipality in one operation
-                    # Leave NULL values for unassigned fields so emergency assignment can handle them
-                    self.conn.execute("""
-                        INSERT INTO year_fields_with_zones
-                        SELECT
-                            f.field_id,
-                            f.block_id,
-                            f.cvr_number,
-                            f.area_ha,
-                            f.crop_type,
-                            f.organic_farming,
-                            f.year,
-                            z.landsdel_code,
-                            z.landsdel_name,
-                            z.dst_regions,
-                            k.kommune_name,
-                            f.field_uuid,
-                            f.primary_field_id,
-                            f.geometry
-                        FROM current_batch f
-                        LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
-                        LEFT JOIN kommune_boundaries k ON ST_Intersects(f.geometry, k.geometry)
-                    """)
+            if kommune_available:
+                # Perform dual spatial join: DST zones + municipality in one operation
+                # Leave NULL values for unassigned fields so emergency assignment
+                # can handle them
+                self.conn.execute("""
+                    INSERT INTO year_fields_with_zones
+                    SELECT
+                        f.field_id,
+                        f.block_id,
+                        f.cvr_number,
+                        f.area_ha,
+                        f.crop_type,
+                        f.organic_farming,
+                        f.year,
+                        z.landsdel_code,
+                        z.landsdel_name,
+                        z.dst_regions,
+                        k.kommune_name,
+                        f.field_uuid,
+                        f.primary_field_id,
+                        f.geometry
+                    FROM current_batch f
+                    LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+                    LEFT JOIN kommune_boundaries k ON ST_Intersects(f.geometry, k.geometry)
+                """)
             else:
                 # DST zones only (leave NULL values for emergency assignment)
                 self.conn.execute("""
@@ -1405,7 +1428,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         f.geometry
                     FROM current_batch f
                     LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
-                """)
+            """)
 
             # Clean up batch table immediately
             self.conn.execute("DROP TABLE IF EXISTS current_batch")
@@ -1654,7 +1677,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     "SELECT COUNT(*) FROM kommune_boundaries_raw WHERE geometry = ''"
                 ).fetchone()[0]
                 self.log.info(
-                    f"Kommune geometry data: {total_count} total, {null_count} NULL, {empty_count} empty"
+                    f"Kommune geometry data: {total_count} total, {null_count} NULL, "
+                    f"{empty_count} empty"
                 )
 
             except Exception as debug_e:
@@ -1695,7 +1719,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             if unassigned_municipality > 0:
                 self.log.info(
-                    f"  🚨 Emergency municipality assignment for {unassigned_municipality} unassigned fields..."
+                    f"  🚨 Emergency municipality assignment for {unassigned_municipality} "
+                    f"unassigned fields..."
                 )
 
                 # Check if kommune boundaries are available
@@ -1704,7 +1729,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                         "SELECT COUNT(*) FROM kommune_boundaries"
                     ).fetchone()[0]
                     if kommune_count > 0:
-                        # Apply closest distance assignment (like recreate_original_csv_structure.py)
+                        # Apply closest distance assignment
+                        # (like recreate_original_csv_structure.py)
                         self.conn.execute("""
                         CREATE OR REPLACE TABLE emergency_municipality_assignments AS
                         SELECT DISTINCT ON (f.field_uuid)
@@ -1735,12 +1761,14 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             SELECT COUNT(*) FROM year_fields_with_zones WHERE kommune_name IS NULL
                         """).fetchone()[0]
                         self.log.info(
-                            f"  ✅ Emergency municipality assignment: {final_unassigned} fields still unassigned"
+                            f"  ✅ Emergency municipality assignment: {final_unassigned} "
+                            f"fields still unassigned"
                         )
                     else:
                         # No kommune boundaries available, set to 'Unknown'
                         self.conn.execute("""
-                        UPDATE year_fields_with_zones SET kommune_name = 'Unknown' WHERE kommune_name IS NULL
+                        UPDATE year_fields_with_zones SET kommune_name = 'Unknown'
+                        WHERE kommune_name IS NULL
                         """)
                         self.log.warning(
                             "  ⚠️ No kommune boundaries - set unassigned fields to 'Unknown'"
@@ -1748,7 +1776,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 except Exception as e:
                     self.log.warning(f"Emergency municipality assignment failed: {e}")
                     self.conn.execute("""
-                    UPDATE year_fields_with_zones SET kommune_name = 'Unknown' WHERE kommune_name IS NULL
+                    UPDATE year_fields_with_zones SET kommune_name = 'Unknown'
+                    WHERE kommune_name IS NULL
                     """)
 
             # Check for unassigned landsdel/dst_regions
@@ -1759,7 +1788,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             if unassigned_regions > 0:
                 self.log.info(
-                    f"  🚨 Emergency region assignment for {unassigned_regions} unassigned fields..."
+                    f"  🚨 Emergency region assignment for {unassigned_regions} "
+                    f"unassigned fields..."
                 )
 
                 # Check if dst_zones are available
@@ -1792,7 +1822,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             dst_regions = e.dst_regions
                         FROM emergency_region_assignments e
                         WHERE year_fields_with_zones.field_uuid = e.field_uuid
-                        AND (year_fields_with_zones.landsdel_code IS NULL OR year_fields_with_zones.dst_regions IS NULL)
+                        AND (year_fields_with_zones.landsdel_code IS NULL
+                             OR year_fields_with_zones.dst_regions IS NULL)
                         """)
 
                         # Clean up
@@ -1803,13 +1834,15 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             WHERE landsdel_code IS NULL OR dst_regions IS NULL
                         """).fetchone()[0]
                         self.log.info(
-                            f"  ✅ Emergency region assignment: {final_unassigned} fields still unassigned"
+                            f"  ✅ Emergency region assignment: {final_unassigned} "
+                            f"fields still unassigned"
                         )
                     else:
                         # No dst_zones available, set to 'unknown'
                         self.conn.execute("""
                         UPDATE year_fields_with_zones
-                        SET landsdel_code = 'unknown', landsdel_name = 'unknown', dst_regions = 'unknown'
+                        SET landsdel_code = 'unknown', landsdel_name = 'unknown',
+                            dst_regions = 'unknown'
                         WHERE landsdel_code IS NULL OR dst_regions IS NULL
                         """)
                         self.log.warning("  ⚠️ No DST zones - set unassigned fields to 'unknown'")
@@ -1817,7 +1850,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     self.log.warning(f"Emergency region assignment failed: {e}")
                     self.conn.execute("""
                     UPDATE year_fields_with_zones
-                    SET landsdel_code = 'unknown', landsdel_name = 'unknown', dst_regions = 'unknown'
+                    SET landsdel_code = 'unknown', landsdel_name = 'unknown',
+                        dst_regions = 'unknown'
                     WHERE landsdel_code IS NULL OR dst_regions IS NULL
                     """)
 
