@@ -313,6 +313,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 coordinate_quality VARCHAR,
                 coordinate_source VARCHAR,
                 dawa_enriched BOOLEAN,
+                primary_industry_code VARCHAR,
+                primary_industry_description VARCHAR,
+                is_agricultural_company BOOLEAN,
                 company_data_json VARCHAR,
                 processing_timestamp VARCHAR
             )
