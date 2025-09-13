@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
-import {
-  getWeeklyCacheHeaders,
-  getMillisecondsUntilNextTuesday,
-} from '@/lib/cache-utils';
+import { getWeeklyCacheHeaders } from '@/lib/cache-utils';
 import { getCachedHomepageStatistics } from '@/lib/server-cache';
 
-// Revalidate this route every Tuesday (server-side caching)
-export const revalidate = Math.floor(getMillisecondsUntilNextTuesday() / 1000);
+// Revalidate this route every 4 hours (server-side caching)
+// This ensures fresh data while being conservative enough to catch Tuesday updates
+export const revalidate = 14400; // 4 hours in seconds
 
 export async function GET() {
   try {
