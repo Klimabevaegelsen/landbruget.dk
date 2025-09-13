@@ -104,7 +104,7 @@ export default function Hero() {
       : '46.000+'; // Fallback based on our query results
 
   return (
-    <div className="relative isolate overflow-hidden px-6 pt-14 lg:px-8">
+    <div className="hero-section relative isolate overflow-hidden px-6 pt-14 lg:px-8">
       {/* Background Image */}
       <div className="absolute inset-0 -z-10">
         <picture>
@@ -159,7 +159,8 @@ export default function Hero() {
                 : '/images/hero/hero-mobile.jpg'
             }
             alt="Danish agricultural landscape"
-            className="h-full w-full object-cover object-center"
+            className="h-full w-full max-w-full object-cover object-center"
+            style={{ aspectRatio: '16 / 9' }}
             loading="eager"
             decoding="async"
           />

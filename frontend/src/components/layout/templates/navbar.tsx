@@ -135,7 +135,7 @@ export function Navbar({ banner }: { banner?: React.ReactNode }) {
   return (
     <div className="relative">
       {banner && <div className="relative flex items-center">{banner}</div>}
-      <Container className="relative">
+      <Container variant="nav" className="relative">
         <Disclosure as="header" className={cn(!banner && 'pt-12 sm:pt-10')}>
           <div className="relative flex justify-between gap-8 py-2 lg:px-10">
             <MobileNavButton />
