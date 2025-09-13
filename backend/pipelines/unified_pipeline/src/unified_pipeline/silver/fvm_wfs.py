@@ -2335,13 +2335,13 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         try:
             self.log.info("Loading municipality boundaries for spatial assignment")
 
-            # Load kommune boundaries from silver storage
+            # Load kommune boundaries from silver storage using GCSDataAccess
             try:
                 gcs_path = self._get_latest_silver_path(self.config.kommune_boundaries_dataset)
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE kommune_boundaries_raw AS
-                    SELECT * FROM read_parquet('{gcs_path}')
-                """)
+                self.log.info(f"Loading municipality boundaries from: {gcs_path}")
+
+                # Use GCSDataAccess instead of direct DuckDB read_parquet for proper authentication
+                self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", "kommune_boundaries_raw")
             except Exception as e:
                 self.log.warning(f"Could not load municipality boundaries: {e}")
                 return
