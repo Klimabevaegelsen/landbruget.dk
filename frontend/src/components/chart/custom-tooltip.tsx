@@ -29,7 +29,14 @@ export default function CustomTooltip({
           }}
           className="mt-1 text-sm font-medium"
         >
-          {`${entry.name}: ${entry.value?.toLocaleString('da-DK')}${unit ? ` ${unit}` : ''}`}
+          <span>
+            {entry.name}: {entry.value?.toLocaleString('da-DK')}
+            {unit && (
+              <span className="text-muted-foreground bg-muted ml-2 rounded px-1 py-0.5 text-xs font-medium">
+                {unit}
+              </span>
+            )}
+          </span>
         </p>
       ))}
     </div>

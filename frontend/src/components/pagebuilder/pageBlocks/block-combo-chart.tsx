@@ -299,6 +299,17 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
                 ? `${formattedTick} ${chart.unit}`
                 : formattedTick;
             }}
+            label={{
+              value: chart.unit || '',
+              angle: -90,
+              position: 'insideLeft',
+              style: {
+                textAnchor: 'middle',
+                fill: leftAxisColor || 'oklch(var(--color-muted-foreground))',
+                fontSize: '12px',
+                fontWeight: '500',
+              },
+            }}
             width={yWidth}
           />
 
@@ -314,6 +325,17 @@ export function BlockComboChart({ chart }: { chart: ComboChartType }) {
               return chart.unit
                 ? `${formattedTick} ${chart.unit}`
                 : formattedTick;
+            }}
+            label={{
+              value: chart.unit || '',
+              angle: 90,
+              position: 'insideRight',
+              style: {
+                textAnchor: 'middle',
+                fill: rightAxisColor || 'oklch(var(--color-muted-foreground))',
+                fontSize: '12px',
+                fontWeight: '500',
+              },
             }}
             width={yWidth}
           />
