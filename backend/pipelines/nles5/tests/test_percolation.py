@@ -1,13 +1,10 @@
 import pytest
-import pandas as pd
 import geopandas as gpd
-from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+from datetime import datetime
+from unittest.mock import MagicMock
 from shapely.geometry import box
 from backend.pipelines.nles5.percolation import PercolationCalculator
 from src.sources.parsers.dmi import DMIParser
-import os
-import json
 
 @pytest.fixture
 def dmi_parser():
