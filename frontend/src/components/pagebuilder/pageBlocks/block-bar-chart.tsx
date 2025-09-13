@@ -215,7 +215,9 @@ const transformDataForRecharts = (chartData: ChartData, chartType: string) => {
         category: translateCategoryValue(category), // Translate destination types
       };
       series.forEach((s) => {
-        dataPoint[s.name] = s.data[index];
+        // Use translated series name as key for consistent legend display
+        const translatedSeriesName = translateCategoryValue(s.name);
+        dataPoint[translatedSeriesName] = s.data[index];
       });
       return dataPoint;
     });
@@ -230,7 +232,9 @@ const transformDataForRecharts = (chartData: ChartData, chartType: string) => {
       name: translateCategoryValue(value), // Translate destination types
     };
     series.forEach((s) => {
-      dataPoint[s.name] = s.data[index];
+      // Use translated series name as key for consistent legend display
+      const translatedSeriesName = translateCategoryValue(s.name);
+      dataPoint[translatedSeriesName] = s.data[index];
     });
     return dataPoint;
   });
@@ -406,15 +410,20 @@ export function BlockBarChart({
             cursor={{ fill: 'hsl(var(--muted))', opacity: 0.1 }}
           />
           <Legend content={<CustomLegend />} />
-          {chart.data.series.map((s, index) => (
-            <Bar
-              key={s.name}
-              dataKey={s.name}
-              fill={barColors[index % barColors.length]}
-              stackId={chart._type === 'stackedBarChart' ? 'stack' : undefined}
-              radius={[2, 2, 0, 0]}
-            />
-          ))}
+          {chart.data.series.map((s, index) => {
+            const translatedSeriesName = translateCategoryValue(s.name);
+            return (
+              <Bar
+                key={s.name}
+                dataKey={translatedSeriesName}
+                fill={barColors[index % barColors.length]}
+                stackId={
+                  chart._type === 'stackedBarChart' ? 'stack' : undefined
+                }
+                radius={[2, 2, 0, 0]}
+              />
+            );
+          })}
         </RechartsBarChart>
       </ChartContainer>
 
