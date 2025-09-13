@@ -220,25 +220,21 @@ class BronzeProcessor:
                     continue
             files_to_process.append(file)
 
-        # Process files in parallel if we have multiple files
-        if len(files_to_process) > 1 and self.settings.max_workers > 1:
-            logger.info(
-                f"Processing {len(files_to_process)} files in parallel with "
-                f"{self.settings.max_workers} workers"
-            )
-            processed_count += self._process_files_parallel(
-                files_to_process, folder.path, folder.name, in_memory_data
-            )
-        else:
-            # Process files sequentially for single files or when max_workers = 1
-            for file in files_to_process:
-                success = self._process_file(file, folder.path, folder.name, in_memory_data)
-                processed_count += 1 if success else 0
+        # TEMPORARILY DISABLE parallel processing due to Google Drive API SSL issues
+        # Process files sequentially to ensure stability
+        logger.info(
+            f"Processing {len(files_to_process)} files sequentially "
+            f"(parallel disabled for API stability)"
+        )
 
-                # Update progress
-                if self.progress_callback:
-                    file_size = int(file.size) if hasattr(file, "size") and file.size else 0
-                    self.progress_callback(1, success, file_size)
+        for file in files_to_process:
+            success = self._process_file(file, folder.path, folder.name, in_memory_data)
+            processed_count += 1 if success else 0
+
+            # Update progress
+            if self.progress_callback:
+                file_size = int(file.size) if hasattr(file, "size") and file.size else 0
+                self.progress_callback(1, success, file_size)
 
         # Process subfolders
         if specific_subfolders:
@@ -279,7 +275,14 @@ class BronzeProcessor:
 
         def process_single_file(file: DriveFile) -> tuple[bool, int]:
             """Process a single file and return success status and file size."""
+            import random
+            import time
+
             try:
+                # Add small random delay to stagger API calls and reduce SSL connection pressure
+                delay = random.uniform(0.5, 2.0)  # 0.5-2 second delay
+                time.sleep(delay)
+
                 success = self._process_file(file, folder_path, folder_name, in_memory_data)
                 file_size = int(file.size) if hasattr(file, "size") and file.size else 0
                 return success, file_size

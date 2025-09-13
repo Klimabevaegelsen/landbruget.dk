@@ -183,10 +183,10 @@ class GoogleDriveFetcher:
         return mime_type in SUPPORTED_MIME_TYPES
 
     @retry_with_exponential_backoff(
-        max_attempts=5,
+        max_attempts=3,  # Reduce retries to avoid prolonged SSL issues
         retry_exceptions=(FileDownloadError, ssl.SSLError, TimeoutError, ConnectionError),
-        min_wait_seconds=2,
-        max_wait_seconds=120,
+        min_wait_seconds=5,  # Increase wait time between retries
+        max_wait_seconds=60,  # Reduce max wait to avoid timeouts
     )
     def download_file(self, file_id: str) -> tuple[bytes, dict[str, Any]]:
         """Download a file from Google Drive.
@@ -202,6 +202,11 @@ class GoogleDriveFetcher:
         """
         set_context(file_id=file_id)
         logger.info(f"Downloading file: {file_id}")
+
+        # Add small delay to reduce API pressure and SSL connection issues
+        import time
+
+        time.sleep(1.0)  # 1 second delay between downloads
 
         try:
             # Get file metadata
