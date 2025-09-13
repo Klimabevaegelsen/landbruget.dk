@@ -8,6 +8,7 @@ import { FieldDetailsPanel } from './FieldDetailsPanel';
 import { CoordinatePanel } from './CoordinatePanel';
 import { LoadingState } from './LoadingState';
 import { YearSlider } from './YearSlider';
+import { pmtilesCacheService } from '@/services/pmtiles-cache-service';
 import {
   FieldAnalysisData,
   LayerVisibility,
@@ -64,30 +65,60 @@ export default function FieldAnalysisVisualization() {
     zoom: 7,
   });
 
-  // Generate PMTiles URLs dynamically based on selected year
-  const pmtilesUrls = {
-    fields: `https://data.pesticidkortet.dk/pmtiles/field_analysis_${yearSelection.selectedYear}.pmtiles`,
-    bnbo:
-      process.env.NEXT_PUBLIC_BNBO_PMTILES_URL ||
-      'https://data.pesticidkortet.dk/pmtiles/bnbo_areas.pmtiles',
-    wetlands:
-      process.env.NEXT_PUBLIC_WETLANDS_PMTILES_URL ||
-      'https://data.pesticidkortet.dk/pmtiles/wetlands_all_2024.pmtiles',
-    water_projects:
-      process.env.NEXT_PUBLIC_WATER_PROJECTS_PMTILES_URL ||
-      'https://data.pesticidkortet.dk/pmtiles/water_projects_2024.pmtiles',
-    buildings:
-      process.env.NEXT_PUBLIC_BUILDINGS_PMTILES_URL ||
-      'https://data.pesticidkortet.dk/pmtiles/buildings_proximity_2024.pmtiles',
-  };
+  // Generate PMTiles URLs with caching optimization
+  const [pmtilesUrls, setPmtilesUrls] = useState<{
+    fields: string;
+    bnbo: string;
+    wetlands: string;
+    water_projects: string;
+    buildings: string;
+  }>({
+    fields: '',
+    bnbo: '',
+    wetlands: '',
+    water_projects: '',
+    buildings: '',
+  });
 
   // Ensure client-side only rendering
   useEffect(() => {
     setIsClient(true);
   }, []);
 
+  // Load PMTiles URLs with caching
+  useEffect(() => {
+    const loadPMTilesUrls = async () => {
+      console.log(
+        `🗺️ Loading PMTiles URLs for year ${yearSelection.selectedYear}`
+      );
+
+      try {
+        const urls = await pmtilesCacheService.getFieldAnalysisUrls(
+          yearSelection.selectedYear
+        );
+        setPmtilesUrls(urls);
+
+        // Preload adjacent years for smooth year switching
+        await pmtilesCacheService.preloadAdjacentYears(
+          yearSelection.selectedYear,
+          yearSelection.availableYears
+        );
+
+        console.log('✅ PMTiles URLs loaded and adjacent years preloaded');
+      } catch (error) {
+        console.error('❌ Failed to load PMTiles URLs:', error);
+      }
+    };
+
+    if (isClient) {
+      loadPMTilesUrls();
+    }
+  }, [yearSelection.selectedYear, yearSelection.availableYears, isClient]);
+
   // Handle loading state when PMTiles URLs change
   useEffect(() => {
+    if (!pmtilesUrls.fields) return; // Skip if URLs not loaded yet
+
     setIsLoading(true);
 
     // Clear any existing timeout

@@ -40,6 +40,35 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: '/api/pmtiles/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable', // 1 year cache for immutable PMTiles
+          },
+          {
+            key: 'CDN-Cache-Control',
+            value: 'public, max-age=31536000',
+          },
+          {
+            key: 'Vercel-CDN-Cache-Control',
+            value: 'public, max-age=31536000',
+          },
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*',
+          },
+          {
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET, HEAD, OPTIONS',
+          },
+          {
+            key: 'Access-Control-Allow-Headers',
+            value: 'Range, Cache-Control',
+          },
+        ],
+      },
     ];
   },
 };
