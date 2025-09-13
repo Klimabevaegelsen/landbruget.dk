@@ -69,6 +69,12 @@ class FVMWFSSilverConfig(BaseJobConfig):
         smaabiotoper_years (List[int]): Years to process for Smaabiotoper (2023-2025)
         organic_areas_years (List[int]): Years to process for Organic Areas (2012-2024)
         column_mapping (Dict): Dictionary mapping raw field names to standardized names
+        kommune_boundaries_dataset (str): Name of municipality boundaries dataset
+            for spatial assignment
+        include_municipality_assignment (bool): Whether to perform municipality assignment
+            on marker data
+        municipality_assignment_method (str): Method for municipality assignment
+            ('spatial_with_fallback' or 'spatial_only')
     """
 
     name: str = "Danish FVM WFS Agricultural Data - Silver"
@@ -98,6 +104,11 @@ class FVMWFSSilverConfig(BaseJobConfig):
     # UUID generation configuration
     generate_field_uuid: bool = True
     uuid_namespace: str = "fvm-field-geometry"
+
+    # NEW: Municipality assignment configuration
+    kommune_boundaries_dataset: str = "dagi_kommuner"
+    include_municipality_assignment: bool = True
+    municipality_assignment_method: str = "spatial_with_fallback"  # or "spatial_only"
 
     # Year ranges based on FVM WFS capabilities
     markblokke_years: List[int] = list(range(2005, 2027))  # 2005-2026 (22 years)
@@ -355,7 +366,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     2. Extracting GeoJSON features from each payload and converting to Geos
     3. Validating and transforming geometries
     4. Standardizing column names using the mapping from config
-    5. Saving processed data to GCS for each year
+    5. NEW: Municipality assignment for marker data
+       (spatial intersection + closest distance fallback)
+    6. Saving processed data to GCS for each year
     """
 
     def __init__(self, config: FVMWFSSilverConfig):
@@ -365,6 +378,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         Args:
             config: Configuration for the silver processing job"""
         super().__init__(config)
+        self._kommune_boundaries_loaded = False
 
     async def extract_geojson_from_wfs_payload(
         self, payload_json: str, column_mapping: Dict[str, str], table_suffix: str = ""
@@ -1069,6 +1083,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Add field UUID generation for marker data
             if layer_type == "Marker" and self.config.generate_field_uuid:
                 self._add_field_uuid_to_table(final_table_name, year)
+
+            # NEW: Add municipality assignment for marker data
+            if layer_type == "Marker":
+                await self._assign_municipalities_to_fields(final_table_name, year)
 
             # Clean up any remaining temporary tables to prevent accumulation
             for table in valid_relations:
@@ -2305,6 +2323,231 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         except Exception as e:
             self.log.error(f"❌ Error extracting CVR numbers from FVM marker data: {e}")
             # Don't fail the entire pipeline if CVR extraction fails
+            pass
+
+    async def _load_kommune_boundaries(self) -> None:
+        """
+        Load municipality boundaries for spatial assignment.
+
+        This method loads the dagi_kommuner dataset and prepares it for spatial
+        operations with field geometries.
+        """
+        try:
+            self.log.info("Loading municipality boundaries for spatial assignment")
+
+            # Load kommune boundaries from silver storage
+            try:
+                gcs_path = self._get_latest_silver_path(self.config.kommune_boundaries_dataset)
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE kommune_boundaries_raw AS
+                    SELECT * FROM read_parquet('{gcs_path}')
+                """)
+            except Exception as e:
+                self.log.warning(f"Could not load municipality boundaries: {e}")
+                return
+
+            # Setup spatial processing with kommune boundaries
+            self.conn.execute("INSTALL spatial")
+            self.conn.execute("LOAD spatial")
+
+            # Create processed kommune boundaries table
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE kommune_boundaries AS
+                SELECT
+                    name as kommune_name,
+                    geometry,
+                    ST_Centroid(geometry) as centroid
+                FROM kommune_boundaries_raw
+                WHERE name IS NOT NULL
+                  AND geometry IS NOT NULL
+            """)
+
+            # Validate data was loaded
+            count = self.conn.execute("SELECT COUNT(*) FROM kommune_boundaries").fetchone()[0]
+            if count == 0:
+                self.log.warning("No valid municipality boundaries loaded")
+                return
+
+            self.log.info(f"Loaded {count} municipality boundaries for spatial assignment")
+            self._kommune_boundaries_loaded = True
+
+        except Exception as e:
+            self.log.error(f"Error loading municipality boundaries: {e}")
+            self._kommune_boundaries_loaded = False
+
+    async def _assign_municipalities_to_fields(self, table_name: str, year: int) -> None:
+        """
+        Assign municipalities to fields using spatial intersection + closest distance fallback.
+
+        This logic is extracted from field_production.py to be reusable across all
+        FVM-consuming pipelines.
+
+        Args:
+            table_name: Name of the table containing field data
+            year: Year of the data being processed
+        """
+        if not self.config.include_municipality_assignment:
+            self.log.info("Municipality assignment disabled in configuration")
+            return
+
+        if not self._kommune_boundaries_loaded:
+            await self._load_kommune_boundaries()
+
+        if not self._kommune_boundaries_loaded:
+            self.log.warning("Municipality boundaries not available - skipping assignment")
+            return
+
+        try:
+            self.log.info(f"Assigning municipalities to fields for year {year}")
+
+            # Check if table has geometry column
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            column_names = [col[0] for col in columns_info]
+
+            if "geometry" not in column_names:
+                self.log.warning(
+                    f"No geometry column found in {table_name} - skipping municipality assignment"
+                )
+                return
+
+            # Get initial field count
+            total_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            self.log.info(f"Processing {total_count:,} fields for municipality assignment")
+
+            # Step 1: Spatial intersection assignment
+            self.log.info("  🏛️ Step 1: Municipality assignment via spatial intersection...")
+
+            # Add municipality columns to the table
+            self.conn.execute(f"""
+                ALTER TABLE {table_name}
+                ADD COLUMN IF NOT EXISTS municipality VARCHAR
+            """)
+            self.conn.execute(f"""
+                ALTER TABLE {table_name}
+                ADD COLUMN IF NOT EXISTS municipality_assignment_method VARCHAR
+            """)
+
+            # SPATIAL_JOIN COMPLIANCE (PR #545): Use clean table-to-table join structure
+            # Step 1: Create intersection assignments using SPATIAL_JOIN operator
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE municipality_intersections AS
+                SELECT DISTINCT ON (f.field_uuid)
+                    f.field_uuid,
+                    k.kommune_name,
+                    'intersection' as assignment_method
+                FROM {table_name} f
+                JOIN kommune_boundaries k ON ST_Intersects(f.geometry, k.geometry)
+                    ORDER BY f.field_uuid,
+                             ST_Distance(ST_Centroid(f.geometry), k.centroid)
+            """)
+
+            # Step 2: Update main table with intersection results
+            self.conn.execute(f"""
+                UPDATE {table_name} SET
+                    municipality = i.kommune_name,
+                    municipality_assignment_method = i.assignment_method
+                FROM municipality_intersections i
+                WHERE {table_name}.field_uuid = i.field_uuid
+                AND {table_name}.municipality IS NULL
+            """)
+
+            # Check intersection results
+            assigned_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE municipality IS NOT NULL
+            """).fetchone()[0]
+
+            unassigned_count = total_count - assigned_count
+
+            self.log.info(
+                f"  📊 Spatial intersection: {assigned_count}/{total_count} fields "
+                f"({assigned_count/total_count*100:.1f}%)"
+            )
+
+            # Step 2: Closest distance assignment for remaining fields
+            if (
+                unassigned_count > 0
+                and self.config.municipality_assignment_method == "spatial_with_fallback"
+            ):
+                self.log.info(
+                    f"  🎯 Step 2: Closest distance assignment for {unassigned_count} "
+                    f"unassigned fields..."
+                )
+
+                # SPATIAL_JOIN COMPLIANCE (PR #545):
+                # Use clean table-to-table structure for closest assignment
+                # Step 1: Create unassigned fields table for efficient processing
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE unassigned_fields AS
+                    SELECT field_uuid, geometry
+                    FROM {table_name}
+                    WHERE municipality IS NULL
+                """)
+
+                # Step 2: Find closest municipality for each unassigned field
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE closest_assignments AS
+                    SELECT DISTINCT ON (f.field_uuid)
+                        f.field_uuid,
+                        k.kommune_name,
+                        'closest_distance' as assignment_method
+                    FROM unassigned_fields f
+                    CROSS JOIN kommune_boundaries k
+                    ORDER BY f.field_uuid,
+                             ST_Distance(ST_Centroid(f.geometry), k.centroid)
+                """)
+
+                # Step 3: Update main table with closest assignments
+                self.conn.execute(f"""
+                    UPDATE {table_name} SET
+                        municipality = c.kommune_name,
+                        municipality_assignment_method = c.assignment_method
+                    FROM closest_assignments c
+                    WHERE {table_name}.field_uuid = c.field_uuid
+                    AND {table_name}.municipality IS NULL
+                """)
+
+                # Log final assignment stats
+                final_assigned = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {table_name}
+                    WHERE municipality IS NOT NULL
+                """).fetchone()[0]
+
+                self.log.info(
+                    f"  ✅ Final municipality assignment: {final_assigned}/{total_count} "
+                    f"fields ({final_assigned/total_count*100:.1f}%)"
+                )
+            else:
+                self.log.info(
+                    f"Municipality assignment complete: {assigned_count} by intersection only"
+                )
+
+            # Final validation
+            remaining_unassigned = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE municipality IS NULL
+            """).fetchone()[0]
+
+            if remaining_unassigned > 0:
+                self.log.warning(f"  🚨 {remaining_unassigned} fields remain unassigned")
+            else:
+                self.log.info("  ✅ All fields successfully assigned to municipalities")
+
+            # Clean up temporary tables for memory management
+            self.conn.execute("DROP TABLE IF EXISTS municipality_intersections")
+            self.conn.execute("DROP TABLE IF EXISTS unassigned_fields")
+            self.conn.execute("DROP TABLE IF EXISTS closest_assignments")
+
+        except Exception as e:
+            self.log.error(f"Error assigning municipalities to fields: {e}")
+            # Clean up temporary tables even on error
+            try:
+                self.conn.execute("DROP TABLE IF EXISTS municipality_intersections")
+                self.conn.execute("DROP TABLE IF EXISTS unassigned_fields")
+                self.conn.execute("DROP TABLE IF EXISTS closest_assignments")
+            except Exception:
+                pass
+            # Don't fail the entire pipeline, just log the error
             pass
 
     async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:
