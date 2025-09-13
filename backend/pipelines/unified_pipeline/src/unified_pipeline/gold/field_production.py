@@ -858,7 +858,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.primary_field_id,
                     f.geometry
                 FROM current_year_fields f
-                LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+                LEFT JOIN dst_zones z ON ST_Intersects(
+                    ST_GeomFromText(f.geometry),
+                    ST_GeomFromText(z.geometry)
+                )
                 """)
 
             # Verify SPATIAL_JOIN operator usage
@@ -1054,7 +1057,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.primary_field_id,
                     f.geometry
                 FROM current_batch f
-                LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+                LEFT JOIN dst_zones z ON ST_Intersects(
+                    ST_GeomFromText(f.geometry),
+                    ST_GeomFromText(z.geometry)
+                )
             """)
 
             # Clean up batch table immediately
