@@ -164,30 +164,21 @@
                 "name": "Produktionssteder",
                 "source": "production_sites",
                 "geometryColumn": "location_geom",
-                "properties": [
-                  "site_name",
-                  "chr",
-                  "capacity"
-                ],
+                "properties": ["site_name", "chr", "capacity"],
                 "style": "production_site_marker"
               },
               {
                 "name": "Marker",
                 "source": "field_boundaries",
                 "geometryColumn": "geom",
-                "properties": [
-                  "field_identifier",
-                  "area_ha"
-                ],
+                "properties": ["field_identifier", "area_ha"],
                 "style": "field"
               },
               {
                 "name": "Virksomhedens adresse",
                 "source": "companies",
                 "geometryColumn": "address_geom",
-                "properties": [
-                  "address"
-                ],
+                "properties": ["address"],
                 "style": "hq_marker"
               }
             ]
@@ -450,10 +441,10 @@
     {
       "_key": "land-use-crop-distribution",
       "_type": "horizontalStackedBarChart",
-      "title": "Afgr\u00f8defordeling (seneste \u00e5r, \u00f8ko/konv)",
+      "title": "Afgr\u00f8defordeling - alle afgr\u00f8der for 2024",
       "documentation": {
         "title": "Afgr\u00f8defordeling \u00d8kologisk vs Konventionel",
-        "description": "Fordeling af afgr\u00f8der p\u00e5 virksomhedens marker opdelt i \u00f8kologisk og konventionel dyrkning baseret p\u00e5 FVM-data",
+        "description": "Komplet oversigt over alle afgr\u00f8der dyrket p\u00e5 virksomhedens marker i 2024, opdelt i \u00f8kologisk (gr\u00f8n) og konventionel (bl\u00e5) produktion baseret p\u00e5 FVM-data",
         "sources": [
           {
             "name": "FVM WFS workflow (afgr\u00f8dedata)",
@@ -470,12 +461,11 @@
         "params": {
           "source": "field_yearly_data",
           "category": {
-            "timeContext": "last_n_years",
-            "n": 1,
+            "timeContext": "specific_year",
+            "year": 2024,
             "categoryColumn": "crop_name",
             "valueColumn": "area_ha",
             "stackByColumn": "is_organic",
-            "topN": 9,
             "orderBy": [
               {
                 "column": "area_ha",
@@ -1514,11 +1504,7 @@
                 "name": "Produktionssteder",
                 "source": "production_sites",
                 "geometryColumn": "location_geom",
-                "properties": [
-                  "chr",
-                  "site_name",
-                  "capacity"
-                ],
+                "properties": ["chr", "site_name", "capacity"],
                 "style": "production_site_marker"
               }
             ]
@@ -1533,11 +1519,7 @@
       "iteratorDataSource": {
         "params": {
           "source": "production_sites",
-          "columns": [
-            "chr",
-            "site_name",
-            "capacity"
-          ],
+          "columns": ["chr", "site_name", "capacity"],
           "orderBy": [
             {
               "column": "capacity",
@@ -1650,12 +1632,8 @@
                 },
                 "dateColumn": "event_date",
                 "descriptionColumn": "description",
-                "groupByColumns": [
-                  "event_type"
-                ],
-                "filterColumns": [
-                  "event_type"
-                ]
+                "groupByColumns": ["event_type"],
+                "filterColumns": ["event_type"]
               },
               "orderBy": [
                 {
@@ -1676,10 +1654,7 @@
               "filter": {
                 "chr": "{iteratorContext.chr}"
               },
-              "columns": [
-                "species_id",
-                "species_name"
-              ]
+              "columns": ["species_id", "species_name"]
             }
           },
           "iterationConfig": {
