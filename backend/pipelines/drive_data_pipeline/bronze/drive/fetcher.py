@@ -4,6 +4,7 @@ import io
 import ssl
 from typing import Any
 
+import requests
 from googleapiclient.discovery import Resource
 from googleapiclient.http import MediaIoBaseDownload
 
@@ -206,44 +207,18 @@ class GoogleDriveFetcher:
         try:
             # Get file metadata
             metadata = self._get_file_metadata(file_id)
+            file_size = int(metadata.get("size", 0))
 
-            # Create request to download the file
-            request = self.drive_service.files().get_media(fileId=file_id)
+            # Decide download strategy based on file size
+            # Use single request for files < 50MB, chunked for larger files
+            if file_size > 0 and file_size < 50 * 1024 * 1024:  # 50MB threshold
+                logger.info(f"Using single-request download for {file_size} byte file")
+                content = self._download_single_request(file_id)
+            else:
+                logger.info(f"Using chunked download for {file_size} byte file")
+                content = self._download_chunked(file_id)
 
-            # Use a BytesIO object to store the downloaded file
-            file_content = io.BytesIO()
-            downloader = MediaIoBaseDownload(file_content, request, chunksize=2 * 1024 * 1024)
-
-            # Download the file in chunks
-            done = False
-            progress = 0
-            chunk_count = 0
-            while not done:
-                try:
-                    status, done = downloader.next_chunk()
-                    chunk_count += 1
-
-                    if status:
-                        new_progress = int(status.progress() * 100)
-                        if (
-                            new_progress - progress >= 10
-                        ):  # Log every 10% progress for better feedback
-                            progress = new_progress
-                            logger.debug(f"Download progress: {progress}% (chunk {chunk_count})")
-
-                except Exception as chunk_error:
-                    # Log chunk-specific errors but let retry mechanism handle them
-                    logger.warning(
-                        f"Error downloading chunk {chunk_count} for file {file_id}: "
-                        f"{str(chunk_error)}"
-                    )
-                    raise
-
-            # Get the file content
-            file_content.seek(0)
-            content = file_content.read()
-
-            logger.info(f"Downloaded file {file_id} ({len(content)} bytes) in {chunk_count} chunks")
+            logger.info(f"Downloaded file {file_id} ({len(content)} bytes)")
             return content, metadata
 
         except ssl.SSLError as e:
@@ -258,3 +233,153 @@ class GoogleDriveFetcher:
             error_msg = f"Failed to download file {file_id}: {str(e)}"
             logger.error(error_msg)
             raise FileDownloadError(error_msg) from e
+
+    def _download_single_request(self, file_id: str) -> bytes:
+        """Download a file in a single HTTP request using the fastest method.
+
+        Uses files.get with alt=media parameter for maximum speed.
+        This is the fastest way according to Google Drive API docs.
+        """
+        import time
+
+        start_time = time.time()
+
+        # METHOD 1: Try the fastest approach using direct HTTP with alt=media
+        try:
+            # Get the access token from the service
+            credentials = self.drive_service._http.credentials
+            credentials.refresh(self.drive_service._http.request)
+            access_token = credentials.token
+
+            # Direct HTTP request with alt=media (fastest method)
+            url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept-Encoding": "gzip",  # Enable compression for speed
+                "User-Agent": "gzip",  # Required for compression
+            }
+
+            logger.debug(f"Using direct HTTP download with alt=media for file {file_id}")
+            response = requests.get(url, headers=headers, stream=False, timeout=300)
+            response.raise_for_status()
+            content = response.content
+
+            download_time = time.time() - start_time
+            speed_mbps = (len(content) / (1024 * 1024)) / download_time if download_time > 0 else 0
+            logger.info(
+                f"Direct HTTP download: {len(content)} bytes in {download_time:.2f}s "
+                f"({speed_mbps:.2f} MB/s)"
+            )
+
+            return content
+
+        except Exception as e:
+            logger.warning(f"Direct HTTP download failed, falling back to API client: {e}")
+
+            # METHOD 2: Fallback to the original API client method
+            request = self.drive_service.files().get_media(fileId=file_id)
+            content = request.execute()
+
+            download_time = time.time() - start_time
+            speed_mbps = (len(content) / (1024 * 1024)) / download_time if download_time > 0 else 0
+            logger.info(
+                f"API client download: {len(content)} bytes in {download_time:.2f}s "
+                f"({speed_mbps:.2f} MB/s)"
+            )
+
+            return content
+
+    def _download_chunked(self, file_id: str) -> bytes:
+        """Download a file using optimized chunked approach for large files."""
+        import time
+
+        start_time = time.time()
+
+        # Try direct HTTP streaming first (fastest for large files too)
+        try:
+            # Get the access token from the service
+            credentials = self.drive_service._http.credentials
+            credentials.refresh(self.drive_service._http.request)
+            access_token = credentials.token
+
+            # Direct HTTP request with alt=media and streaming
+            url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept-Encoding": "gzip",  # Enable compression
+                "User-Agent": "gzip",
+            }
+
+            logger.debug(f"Using direct HTTP streaming download for large file {file_id}")
+            response = requests.get(url, headers=headers, stream=True, timeout=300)
+            response.raise_for_status()
+
+            # Stream the content in chunks to avoid memory issues
+            content_chunks = []
+            total_size = 0
+            chunk_count = 0
+
+            for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):  # 8MB chunks
+                if chunk:  # Filter out keep-alive chunks
+                    content_chunks.append(chunk)
+                    total_size += len(chunk)
+                    chunk_count += 1
+
+                    if chunk_count % 5 == 0:  # Log every 5 chunks (40MB)
+                        logger.debug(
+                            f"Downloaded {total_size / (1024*1024):.1f} MB in {chunk_count} chunks"
+                        )
+
+            content = b"".join(content_chunks)
+
+            download_time = time.time() - start_time
+            speed_mbps = (len(content) / (1024 * 1024)) / download_time if download_time > 0 else 0
+            logger.info(
+                f"Direct HTTP streaming: {len(content)} bytes in {chunk_count} chunks, "
+                f"{download_time:.2f}s ({speed_mbps:.2f} MB/s)"
+            )
+
+            return content
+
+        except Exception as e:
+            logger.warning(
+                f"Direct HTTP streaming failed, falling back to MediaIoBaseDownload: {e}"
+            )
+
+            # Fallback to original chunked method
+            request = self.drive_service.files().get_media(fileId=file_id)
+            file_content = io.BytesIO()
+            downloader = MediaIoBaseDownload(file_content, request, chunksize=8 * 1024 * 1024)
+
+            done = False
+            progress = 0
+            chunk_count = 0
+            while not done:
+                try:
+                    status, done = downloader.next_chunk()
+                    chunk_count += 1
+
+                    if status:
+                        new_progress = int(status.progress() * 100)
+                        if new_progress - progress >= 10:
+                            progress = new_progress
+                            logger.debug(f"Download progress: {progress}% (chunk {chunk_count})")
+
+                except Exception as chunk_error:
+                    logger.warning(
+                        f"Error downloading chunk {chunk_count} for file {file_id}: "
+                        f"{str(chunk_error)}"
+                    )
+                    raise
+
+            file_content.seek(0)
+            content = file_content.read()
+
+            download_time = time.time() - start_time
+            speed_mbps = (len(content) / (1024 * 1024)) / download_time if download_time > 0 else 0
+            logger.info(
+                f"MediaIoBaseDownload: {len(content)} bytes in {chunk_count} chunks, "
+                f"{download_time:.2f}s ({speed_mbps:.2f} MB/s)"
+            )
+
+            return content
