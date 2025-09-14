@@ -2350,6 +2350,13 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             self.conn.execute("INSTALL spatial")
             self.conn.execute("LOAD spatial")
 
+            # Apply coordinate transformation to municipality boundaries
+            # This ensures they are in the same coordinate system as the field data
+            # Note: DAGI pipeline now produces proper EPSG:4326 LAT/LON order, matching field data
+            validate_and_transform_geometries_duckdb(
+                self.conn, "kommune_boundaries_raw", "dagi_kommuner", geometry_column="geometry"
+            )
+
             # Create processed kommune boundaries table
             self.conn.execute("""
                 CREATE OR REPLACE TABLE kommune_boundaries AS
