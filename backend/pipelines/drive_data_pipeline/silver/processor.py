@@ -81,10 +81,18 @@ class SilverProcessor:
         # Store the silver run path for later access
         self.silver_run_path = None
 
-        # Initialize schema adapter
-        self.schema_adapter = SchemaAdapter()
+        # Create shared DuckDB connection for all processors
+        from .duckdb_base import DuckDBProcessor
 
-        # Initialize PII validator (excluding CVR from masking)
+        shared_processor = DuckDBProcessor(dataset_name="silver_shared")
+        shared_conn = shared_processor.conn
+
+        # Initialize schema adapter with shared connection
+        self.schema_adapter = SchemaAdapter()
+        self.schema_adapter.conn = shared_conn
+        self.schema_adapter._owns_connection = False
+
+        # Initialize PII validator with shared connection (excluding CVR from masking)
         self.pii_validator = PIIValidator(
             pii_types={
                 PIIType.EMAIL,
@@ -97,6 +105,16 @@ class SilverProcessor:
             action=PIIAction.MASK,
             threshold=0.3,
         )
+        # Override the PII validator's connection
+        self.pii_validator.conn = shared_conn
+        self.pii_validator._owns_connection = False
+
+        # Store reference to shared processor to prevent premature cleanup
+        self._shared_processor = shared_processor
+
+        # Override the parquet manager's connection to use shared connection
+        self.parquet_manager.conn = shared_conn
+        self.parquet_manager._owns_connection = False
 
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
@@ -104,15 +122,31 @@ class SilverProcessor:
         from .transformers.fertiliser_transformer import FertiliserTransformer
         from .transformers.work_permits_transformer import WorkPermitsTransformer
 
-        # Initialize transformers map
+        # Initialize transformers map with shared connection
+        excel_transformer = ExcelTransformer()
+        excel_transformer.conn = shared_conn
+        excel_transformer._owns_connection = False
+
+        pdf_transformer = AdvancedPDFTransformer(
+            use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
+            ocr_language="dan+eng",
+        )
+        pdf_transformer.conn = shared_conn
+        pdf_transformer._owns_connection = False
+
+        fertiliser_transformer = FertiliserTransformer()
+        fertiliser_transformer.conn = shared_conn
+        fertiliser_transformer._owns_connection = False
+
+        work_permits_transformer = WorkPermitsTransformer()
+        work_permits_transformer.conn = shared_conn
+        work_permits_transformer._owns_connection = False
+
         self.transformers = {
-            "Excel": ExcelTransformer(),
-            "PDF": AdvancedPDFTransformer(
-                use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
-                ocr_language="dan+eng",
-            ),
-            "Fertiliser": FertiliserTransformer(),
-            "WorkPermits": WorkPermitsTransformer(),
+            "Excel": excel_transformer,
+            "PDF": pdf_transformer,
+            "Fertiliser": fertiliser_transformer,
+            "WorkPermits": work_permits_transformer,
         }
 
         logger.info("Initialized Silver processor")
@@ -780,21 +814,30 @@ class SilverProcessor:
 
                 # Read from GCS using shared connection
                 table_name = gcs_access.query_parquet_native(gcs_path, "SELECT *", "schema_table")
-                df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {table_name}").df()
             else:
                 # Local file - use standard DuckDB
                 import duckdb
 
                 temp_conn = duckdb.connect()
-                df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
+                # Read data but don't store in df since we use table_name below
+                temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')")
+                table_name = "local_schema_table"
+                temp_conn.execute(
+                    f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{output_path}')"
+                )
                 temp_conn.close()
 
             # Apply the schema
-            df_with_schema = self.schema_adapter.apply_schema(
-                df=df,
+            schema_table_name = self.schema_adapter.apply_schema(
+                table_name_or_data=table_name,  # Use the table name from GCS access
                 table_schema=table_schema,
                 infer_types=True,
             )
+
+            # Get the result as DataFrame
+            df_with_schema = self.schema_adapter.conn.execute(
+                f"SELECT * FROM {schema_table_name}"
+            ).df()
 
             # Save with schema to a new file
             schema_output_path = output_path.with_name(

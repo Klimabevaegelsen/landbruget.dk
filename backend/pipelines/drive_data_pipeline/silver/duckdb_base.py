@@ -34,11 +34,36 @@ except ImportError:
 class DuckDBProcessor:
     """Base class for DuckDB-based data processing in drive data pipeline."""
 
-    def __init__(self, db_path: str = ":memory:", dataset_name: str = "drive_data") -> None:
+    # Class-level shared connection
+    _shared_conn: duckdb.DuckDBPyConnection = None
+    _conn_ref_count: int = 0
+
+    def __init__(
+        self,
+        db_path: str = ":memory:",
+        dataset_name: str = "drive_data",
+        connection: duckdb.DuckDBPyConnection = None,
+    ) -> None:
         self.dataset_name = dataset_name
-        # Use unified pipeline's shared, optimized DuckDB connection with GCS support
-        self.conn = get_duckdb_with_gcs()
-        logger.info(f"🔗 Using unified DuckDB connection with GCS support for {dataset_name}")
+
+        if connection:
+            # Use provided connection (for sharing)
+            self.conn = connection
+            self._owns_connection = False
+            logger.info(f"🔗 Using provided DuckDB connection for {dataset_name}")
+        else:
+            # Use shared connection or create new one
+            if DuckDBProcessor._shared_conn is None:
+                DuckDBProcessor._shared_conn = get_duckdb_with_gcs()
+                logger.info("🔗 Created new shared DuckDB connection with GCS support")
+
+            self.conn = DuckDBProcessor._shared_conn
+            DuckDBProcessor._conn_ref_count += 1
+            self._owns_connection = True
+            logger.info(
+                f"🔗 Using shared DuckDB connection for {dataset_name} "
+                f"(ref count: {DuckDBProcessor._conn_ref_count})"
+            )
 
     def register_table(self, data: Any, table_name: str) -> str:
         """Register data (DataFrame, etc.) as a DuckDB table."""
@@ -193,10 +218,22 @@ class DuckDBProcessor:
                     # Don't raise exception since this is cleanup
 
     def close(self) -> None:
-        """Close database connection."""
-        if self.conn:
-            self.conn.close()
-            logger.debug("Closed DuckDB connection")
+        """Close database connection with reference counting."""
+        if self.conn and self._owns_connection:
+            DuckDBProcessor._conn_ref_count -= 1
+            logger.debug(f"Decremented connection ref count to {DuckDBProcessor._conn_ref_count}")
+
+            # Only close if this is the last reference
+            if DuckDBProcessor._conn_ref_count <= 0:
+                self.conn.close()
+                DuckDBProcessor._shared_conn = None
+                DuckDBProcessor._conn_ref_count = 0
+                logger.debug("Closed shared DuckDB connection (last reference)")
+            else:
+                logger.debug("Keeping shared DuckDB connection alive (other references exist)")
+        elif self.conn and not self._owns_connection:
+            # Don't close connections we don't own
+            logger.debug("Not closing provided DuckDB connection (not owned)")
 
     def __enter__(self) -> "DuckDBProcessor":
         return self
