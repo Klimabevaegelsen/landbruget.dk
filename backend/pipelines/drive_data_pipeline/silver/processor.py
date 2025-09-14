@@ -755,13 +755,39 @@ class SilverProcessor:
                 )
                 return None
 
-            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
-            import duckdb
+            # ✅ MIGRATION: Read parquet file using DuckDB with GCS support
+            output_path_str = str(output_path)
+            is_gcs_path = output_path_str.startswith("gs://")
 
-            # Use DuckDB to read parquet file
-            temp_conn = duckdb.connect()
-            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
-            temp_conn.close()
+            # Check if we're using GCS storage but have a local path
+            using_gcs_storage = (
+                hasattr(self.storage_manager, "storage_type")
+                and self.storage_manager.storage_type.lower() == "gcs"
+            )
+
+            if is_gcs_path or using_gcs_storage:
+                # For GCS files, use GCSDataAccess with shared connection
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                gcs_access = GCSDataAccess(connection=self.schema_adapter.conn)
+
+                # Construct GCS path if needed
+                if not is_gcs_path and using_gcs_storage:
+                    bucket = getattr(self.storage_manager, "bucket", "landbrugsdata-raw-data")
+                    gcs_path = f"gs://{bucket}/silver/{output_path_str}"
+                else:
+                    gcs_path = output_path_str
+
+                # Read from GCS using shared connection
+                table_name = gcs_access.query_parquet_native(gcs_path, "SELECT *", "schema_table")
+                df = gcs_access.duckdb_conn.execute(f"SELECT * FROM {table_name}").df()
+            else:
+                # Local file - use standard DuckDB
+                import duckdb
+
+                temp_conn = duckdb.connect()
+                df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
+                temp_conn.close()
 
             # Apply the schema
             df_with_schema = self.schema_adapter.apply_schema(
@@ -820,7 +846,8 @@ class SilverProcessor:
                 # For GCS files, we need to use GCS access to read the file
                 from unified_pipeline.util.gcs_access import GCSDataAccess
 
-                gcs_access = GCSDataAccess()
+                # Use the PII validator's shared DuckDB connection
+                gcs_access = GCSDataAccess(connection=self.pii_validator.conn)
 
                 # If we have a local path but are using GCS storage, construct the GCS path
                 if not is_gcs_path and using_gcs_storage:
