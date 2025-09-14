@@ -497,9 +497,52 @@ def main() -> int:
 
             # If no bronze_run_path (silver_only mode), find the latest bronze run
             if args.silver_only and not bronze_run_path:
-                # Find the latest bronze run directory
+                # Find the latest bronze run directory across all dataset directories
+                # After migration, bronze data is organized as: bronze/{dataset}/{timestamp}/
+                bronze_runs = []
+
+                # Look for dataset directories in bronze path
+                # Handle both local and GCS storage
+                if settings.storage_type.value == "gcs":
+                    # For GCS, use the storage manager to list directories
+                    try:
+                        # List dataset directories (fertiliser, work_permits, etc.)
+                        dataset_dirs = storage_manager.list_directories(settings.bronze_path)
+                        for dataset_dir in dataset_dirs:
+                            # List timestamp directories within each dataset
+                            timestamp_dirs = storage_manager.list_directories(dataset_dir)
+                            bronze_runs.extend(timestamp_dirs)
+                    except Exception as e:
+                        logger.warning(f"Failed to list GCS bronze directories: {e}")
+                        # Fallback: try to list specific known datasets including legacy structure
+                        dataset_names = [
+                            "fertiliser",
+                            "work_permits",
+                            "efterafgroeder",
+                            "goedning_data",
+                            "landbruget.dk_static_files",  # Legacy structure
+                        ]
+                        for dataset_name in dataset_names:
+                            try:
+                                dataset_path = Path(settings.bronze_path) / dataset_name
+                                timestamp_dirs = storage_manager.list_directories(dataset_path)
+                                bronze_runs.extend(timestamp_dirs)
+                            except Exception:
+                                continue
+                else:
+                    # For local storage, use filesystem operations
+                    bronze_base_path = Path(settings.bronze_path)
+                    if bronze_base_path.exists():
+                        for dataset_dir in bronze_base_path.iterdir():
+                            if dataset_dir.is_dir():
+                                # Look for timestamp directories within each dataset
+                                for timestamp_dir in dataset_dir.iterdir():
+                                    if timestamp_dir.is_dir():
+                                        bronze_runs.append(timestamp_dir)
+
+                # Sort by modification time and get the latest
                 bronze_runs = sorted(
-                    Path(settings.bronze_path).glob("*"),
+                    bronze_runs,
                     key=lambda p: p.stat().st_mtime if p.is_dir() else 0,
                     reverse=True,
                 )
@@ -510,6 +553,11 @@ def main() -> int:
                     if not args.quiet:
                         print(f"Error: {error_msg}")
                     return 1
+
+                # Log all available bronze runs for debugging
+                logger.info(f"Found {len(bronze_runs)} bronze runs:")
+                for i, run_path in enumerate(bronze_runs[:5]):  # Show top 5
+                    logger.info(f"  {i+1}. {run_path}")
 
                 bronze_run_path = bronze_runs[0]
                 logger.info(f"Using latest Bronze run for Silver processing: {bronze_run_path}")

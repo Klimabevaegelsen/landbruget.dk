@@ -78,6 +78,35 @@ class BronzeStorageManager:
         logger.info(f"Created run directory base: {run_dir} with timestamp: {timestamp}")
         return run_dir
 
+    def _map_subfolder_to_dataset(self, subfolder: str) -> str:
+        """Map old Google Drive subfolder names to new dataset names.
+
+        Args:
+            subfolder: Original subfolder name from Google Drive
+
+        Returns:
+            Mapped dataset name
+        """
+        # Mapping from old subfolder names to new dataset names
+        subfolder_mapping = {
+            "Fertiliser": "fertiliser",
+            "Work Permits": "work_permits",
+            "Efterafgrøder": "efterafgroeder",
+            "Gødning & Data": "goedning_data",
+        }
+
+        # Check for exact match first
+        if subfolder in subfolder_mapping:
+            return subfolder_mapping[subfolder]
+
+        # Check for case-insensitive match
+        for old_name, new_name in subfolder_mapping.items():
+            if subfolder.lower() == old_name.lower():
+                return new_name
+
+        # Fallback to sanitized version of original name
+        return self._sanitize_dataset_name(subfolder)
+
     def create_folder_structure(self, run_dir: Path, folder_path: str) -> Path:
         """Create a folder structure using harmonized pipeline organization.
 
@@ -100,13 +129,13 @@ class BronzeStorageManager:
         # Extract the subfolder name (skip the root Drive folder)
         if folder_path:
             # Split the path - expect format like "landbruget.dk_static_files/Fertiliser/2023_Data"
-            # We want "Fertiliser" as the dataset name, preserve "2023_Data" as internal structure
+            # We want "Fertiliser" mapped to "fertiliser" dataset, preserve "2023_Data" as internal
             path_parts = folder_path.split("/")
 
             if len(path_parts) >= 2:
                 # Use the first subfolder as dataset name (skip root folder)
                 subfolder = path_parts[1]
-                dataset_name = self._sanitize_dataset_name(subfolder)
+                dataset_name = self._map_subfolder_to_dataset(subfolder)
 
                 # Preserve any nested subfolders within the dataset
                 if len(path_parts) > 2:
