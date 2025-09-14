@@ -65,7 +65,20 @@ on:
           - DEBUG
           - ERROR
         default: "WARNING"
-
+      processing_mode:
+        description: "Processing mode for incremental updates"
+        type: choice
+        required: false
+        options:
+          - incremental
+          - full
+          - backfill
+        default: "incremental"
+      force_backfill_timestamp:
+        description: "Force specific bronze timestamp for backfill (YYYYMMDD_HHMMSS)"
+        type: string
+        required: false
+        default: ""
       limit_herds_per_species:
         description: "Limit number of herds processed per species"
         type: string
@@ -1266,6 +1279,8 @@ jobs:
         env:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           cd backend/pipelines/chr_pipeline
 
@@ -1277,6 +1292,20 @@ jobs:
           echo "GCS_BUCKET=$GCS_BUCKET" >> .env
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
+
+          # Add Supabase credentials for incremental processing tracking
+          if [[ -n "$SUPABASE_URL" ]]; then
+            echo "SUPABASE_URL=$SUPABASE_URL" >> .env
+          fi
+          if [[ -n "$SUPABASE_ANON_KEY" ]]; then
+            echo "SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY" >> .env
+          fi
+
+          # Set processing mode preferences
+          echo "CHR_PROCESSING_MODE=${{ inputs.processing_mode || 'incremental' }}" >> .env
+          if [[ -n "${{ inputs.force_backfill_timestamp }}" ]]; then
+            echo "CHR_FORCE_BACKFILL_TIMESTAMP=${{ inputs.force_backfill_timestamp }}" >> .env
+          fi
 
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr

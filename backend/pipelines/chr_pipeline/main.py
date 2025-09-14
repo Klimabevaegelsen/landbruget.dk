@@ -9,7 +9,7 @@ import time
 from calendar import monthrange
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from bronze.auth import (
     create_besaetning_client,
@@ -42,6 +42,18 @@ from silver.chr_silver_processing import process_chr_data as run_silver_processi
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+# Import incremental processing utilities
+try:
+    from backend.pipelines.unified_pipeline.src.unified_pipeline.core.incremental_processing import (
+        ProcessingRun,
+        get_incremental_processor,
+    )
+
+    INCREMENTAL_PROCESSING_AVAILABLE = True
+except ImportError:
+    print("⚠️ Incremental processing utilities not available - using legacy full processing")
+    INCREMENTAL_PROCESSING_AVAILABLE = False
+
 # Import pipeline metadata system for data tracing
 try:
     from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
@@ -53,6 +65,71 @@ except ImportError:
     PIPELINE_METADATA_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_date_range(processing_mode: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Calculate start and end dates based on processing mode.
+
+    Args:
+        processing_mode: 'incremental', 'full', or 'backfill'
+
+    Returns:
+        Tuple of (start_date, end_date) as strings in YYYY-MM-DD format
+    """
+    from datetime import date, timedelta
+
+    today = date.today()
+
+    if processing_mode == "incremental":
+        # Last 3 months (as per CHR plan)
+        start_date = today - timedelta(days=90)
+        end_date = today
+        logger.info(f"Incremental mode: processing last 3 months ({start_date} to {end_date})")
+        return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
+
+    elif processing_mode == "full":
+        # Full backfill (as per CHR plan: 2021-2025)
+        start_date = "2021-01-01"
+        end_date = today.strftime("%Y-%m-%d")
+        logger.info(f"Full mode: processing complete range ({start_date} to {end_date})")
+        return start_date, end_date
+
+    elif processing_mode == "backfill":
+        # For backfill, don't override dates - let manual override handle it
+        logger.info("Backfill mode: using manual date override or pipeline defaults")
+        return None, None
+
+    return None, None
+
+
+def determine_processing_mode(bronze_timestamp: str) -> Tuple[str, Optional[str]]:
+    """
+    Simple processing mode determination - defaults to 3 months, manual override available.
+
+    Args:
+        bronze_timestamp: The current bronze timestamp
+
+    Returns:
+        Tuple of (processing_mode, backfill_timestamp)
+        - processing_mode: 'full', 'incremental', or 'backfill'
+        - backfill_timestamp: Bronze timestamp to use for backfill (if applicable)
+    """
+    # Check for manual override first
+    env_processing_mode = os.getenv("CHR_PROCESSING_MODE", "incremental").lower()
+    force_backfill_timestamp = os.getenv("CHR_FORCE_BACKFILL_TIMESTAMP")
+
+    if force_backfill_timestamp:
+        logger.info(f"Using forced backfill timestamp: {force_backfill_timestamp}")
+        return "backfill", force_backfill_timestamp
+
+    if env_processing_mode == "full":
+        logger.info("Full processing mode selected")
+        return "full", None
+
+    # Default: incremental processing (3 months)
+    logger.info("Using incremental processing mode (default 3 months)")
+    return "incremental", None
 
 
 def setup_logging(log_level: str):
@@ -1063,20 +1140,61 @@ def main():
                     (bronze_timestamp and not buffer_data)
                 )
 
-                if use_streaming_mode and bronze_timestamp:
+                # Determine processing mode (incremental, backfill, or full)
+                processing_mode = "full"  # Default fallback
+                backfill_timestamp = None
+
+                if use_streaming_mode and bronze_timestamp and INCREMENTAL_PROCESSING_AVAILABLE:
+                    try:
+                        processing_mode, backfill_timestamp = determine_processing_mode(bronze_timestamp)
+                        logging.warning(f"🎯 Processing mode determined: {processing_mode}")
+
+                        # Calculate date ranges based on processing mode
+                        start_date, end_date = calculate_date_range(processing_mode)
+                        if start_date and end_date:
+                            logging.warning(f"📅 Date range: {start_date} to {end_date}")
+                            # Update the context args to use the calculated date ranges
+                            context["args"]["start_date"] = datetime.strptime(start_date, "%Y-%m-%d").date()
+                            context["args"]["end_date"] = datetime.strptime(end_date, "%Y-%m-%d").date()
+                            logging.warning("✅ Updated pipeline args with incremental date range")
+
+                        # Track processing run start (simple upsert)
+                        processor = get_incremental_processor()
+                        run_id = processor.track_processing_run(
+                            ProcessingRun(
+                                pipeline_name="chr",
+                                bronze_timestamp=backfill_timestamp or bronze_timestamp,
+                                processing_mode=processing_mode,
+                            )
+                        )
+                        logging.info(f"📊 Tracking processing run with ID: {run_id}")
+
+                    except Exception as e:
+                        logging.error(f"Error in incremental processing setup: {e}")
+                        logging.warning("Falling back to full processing mode")
+
+                # Choose the appropriate bronze timestamp for processing
+                effective_bronze_timestamp = backfill_timestamp or bronze_timestamp
+
+                if use_streaming_mode and effective_bronze_timestamp:
                     # Use streaming mode for memory efficiency
+                    mode_desc = f"{processing_mode.upper()} processing" if processing_mode != "full" else "STREAMING"
                     logging.warning(
-                        f"🚀 Using STREAMING mode for memory-efficient processing "
-                        f"(bronze_timestamp: {bronze_timestamp})"
+                        f"🚀 Using {mode_desc} mode for memory-efficient processing "
+                        f"(bronze_timestamp: {effective_bronze_timestamp})"
                     )
+
+                    if processing_mode == "backfill":
+                        logging.warning(f"📅 Using historical data from: {effective_bronze_timestamp}")
+
                     success = run_silver_processing(
                         silver_dir=silver_dir,
                         export_timestamp=EXPORT_TIMESTAMP,
-                        bronze_timestamp=bronze_timestamp,
+                        bronze_timestamp=effective_bronze_timestamp,
                         force_streaming=True,
                     )
                     if not success:
-                        raise RuntimeError("Silver processing (streaming mode) failed")
+                        raise RuntimeError(f"Silver processing ({processing_mode} mode) failed")
 
                 elif buffer_data:
                     # Use legacy in-memory mode
@@ -1086,7 +1204,7 @@ def main():
                         in_memory_data=buffer_data,
                         silver_dir=silver_dir,
                         export_timestamp=EXPORT_TIMESTAMP,
-                        bronze_timestamp=bronze_timestamp,
+                        bronze_timestamp=effective_bronze_timestamp,
                     )
                 elif bronze_dir_override:
                     # Use legacy file-based mode
@@ -1098,7 +1216,7 @@ def main():
                         in_memory_data=None,
                         silver_dir=silver_dir,
                         export_timestamp=EXPORT_TIMESTAMP,
-                        bronze_timestamp=bronze_timestamp,
+                        bronze_timestamp=effective_bronze_timestamp,
                     )
                 else:
                     # No valid bronze data source found - fail explicitly
