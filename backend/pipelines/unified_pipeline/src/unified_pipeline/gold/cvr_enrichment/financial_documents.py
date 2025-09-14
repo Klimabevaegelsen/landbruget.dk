@@ -1466,23 +1466,28 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         except Exception as e:
             self.log.warning(f"Crypto extension already loaded: {e}")
 
-        # Create company UUID function
-        self.conn.execute("""
+        # Get the namespace from environment variable
+        namespace = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
+        if not namespace:
+            raise ValueError("LANDBRUGSDATA_UUID_NAMESPACE environment variable is required")
+
+        # Create company UUID function using namespace from environment
+        self.conn.execute(f"""
             CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
                 SELECT CASE
                     WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
                          OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
                     THEN NULL
                     ELSE CONCAT(
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                       TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                                TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
                     )
                 END

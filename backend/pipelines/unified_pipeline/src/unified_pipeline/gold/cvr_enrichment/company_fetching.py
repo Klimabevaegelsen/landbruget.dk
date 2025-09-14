@@ -479,7 +479,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             INSERT INTO {table_name}
             SELECT
                 json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                md5(json_extract_string(json_data, '$.cvr_number'))::VARCHAR as company_uuid,
+                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                 json_extract_string(json_data, '$.company_name') as company_name,
                 json_extract_string(json_data, '$.company_type_description')
                     as company_type_description,
@@ -739,7 +739,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 current_city,
                 current_postal_code,
                 current_municipality,
-                md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                company_uuid(cvr_number) as company_uuid,
                 cvr_number,
                 role,
                 CASE
@@ -942,7 +942,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                         )::VARCHAR
                                 ELSE ''
                             END, '')))::VARCHAR as employment_uuid,
-                md5(ef.cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                company_uuid(ef.cvr_number) as company_uuid,
                 ef.cvr_number,
                 TRY_CAST(
                     CASE ef.employment_type
@@ -1278,7 +1278,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 CREATE TABLE {table_name} AS
                 SELECT
                     json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
-                    md5(json_extract_string(json_data, '$.cvr_number'))::VARCHAR as company_uuid,
+                    company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
                     json_extract_string(json_data, '$.company_name') as company_name,
                     json_extract_string(json_data, '$.company_type_description')
                         as company_type_description,
@@ -1499,7 +1499,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 current_postal_code,
                 current_municipality,
                 -- Generate company UUID for consistency with other tables
-                md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                company_uuid(cvr_number) as company_uuid,
                 cvr_number,
                 role,
                 -- Create a formatted role for display (simple title case for common roles)
@@ -1563,12 +1563,24 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
         self.log.info("Creating normalized ownership table from ownership data")
 
+        # Set up crypto extension for UUID generation
+        try:
+            self.conn.execute("INSTALL crypto FROM community")
+            self.conn.execute("LOAD crypto")
+        except Exception as e:
+            self.log.warning(f"Crypto extension already loaded: {e}")
+
+        # Get the namespace from environment variable
+        namespace = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
+        if not namespace:
+            raise ValueError("LANDBRUGSDATA_UUID_NAMESPACE environment variable is required")
+
         # Create ownership table
         ownership_table = "cvr_ownership"
         self.conn.execute(f"DROP TABLE IF EXISTS {ownership_table}")
 
-        self.conn.execute(
-            f"""
+        # Build the SQL with namespace interpolation
+        ownership_sql = f"""
             CREATE TABLE {ownership_table} AS
             WITH ownership_flattened AS (
                 SELECT
@@ -1635,8 +1647,24 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 md5(CONCAT(cvr_number::VARCHAR, '_',
                           COALESCE(unit_number::VARCHAR, 'unknown'), '_',
                           COALESCE(period_start, 'no_start')))::VARCHAR as ownership_uuid,
-                -- Generate company UUID for consistency with other tables
-                md5(cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                -- Generate company UUID using the same method as LandbrugsdataUUID
+                CASE
+                    WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
+                         OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
+                    THEN NULL
+                    ELSE CONCAT(
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                      TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                               TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                    )
+                END as company_uuid,
                 cvr_number,
                 person_uuid,
                 unit_number,
@@ -1649,9 +1677,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 processing_timestamp
             FROM ownership_extracted
             WHERE owner_name IS NOT NULL
-        """,
-            [json_strings],
-        )
+        """
+
+        self.conn.execute(ownership_sql, [json_strings])
 
         # Get count for logging
         ownership_count = self.conn.execute(f"SELECT COUNT(*) FROM {ownership_table}").fetchone()[0]
@@ -1834,7 +1862,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                                 ELSE ''
                             END, '')))::VARCHAR as employment_uuid,
                 -- Generate company UUID for consistency with other tables
-                md5(ef.cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                company_uuid(ef.cvr_number) as company_uuid,
                 ef.cvr_number,
                 TRY_CAST(
                     CASE ef.employment_type
