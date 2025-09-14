@@ -780,14 +780,21 @@ class SilverProcessor:
         """
         try:
             # Try to find a schema for this subfolder
-            table_schema = self.schema_manager.get_schema_by_subfolder(metadata.original_subfolder)
+            table_schema_dict = self.schema_manager.get_schema_by_subfolder(
+                metadata.original_subfolder
+            )
 
-            if not table_schema:
+            if not table_schema_dict:
                 logger.info(
                     f"No schema found for {metadata.original_subfolder}, "
                     f"skipping schema application"
                 )
                 return None
+
+            # Convert dict to TableSchema object
+            from .models.schema import TableSchema
+
+            table_schema = TableSchema.from_dict(table_schema_dict)
 
             # ✅ MIGRATION: Read parquet file using DuckDB with GCS support
             output_path_str = str(output_path)
@@ -815,17 +822,11 @@ class SilverProcessor:
                 # Read from GCS using shared connection
                 table_name = gcs_access.query_parquet_native(gcs_path, "SELECT *", "schema_table")
             else:
-                # Local file - use standard DuckDB
-                import duckdb
-
-                temp_conn = duckdb.connect()
-                # Read data but don't store in df since we use table_name below
-                temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')")
+                # Local file - use shared connection instead of temp connection
                 table_name = "local_schema_table"
-                temp_conn.execute(
+                self.schema_adapter.conn.execute(
                     f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{output_path}')"
                 )
-                temp_conn.close()
 
             # Apply the schema
             schema_table_name = self.schema_adapter.apply_schema(

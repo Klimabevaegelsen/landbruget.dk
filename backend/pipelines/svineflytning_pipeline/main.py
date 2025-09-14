@@ -57,10 +57,28 @@ def setup_logging(log_level: str):
 
 
 def get_default_dates() -> tuple[date, date]:
-    """Get default start and end dates (last 5 years)."""
+    """Get default start and end dates (last 5 years for full mode, 2 months for incremental)."""
     today = date.today()
     end_date = today
-    start_date = today.replace(year=today.year - 5)  # 5 years ago from today
+
+    # Check processing mode to determine default date range
+    processing_mode = os.getenv("SVINEFLYTNING_PROCESSING_MODE", "incremental").lower()
+
+    if processing_mode == "incremental":
+        # Last 2 months for incremental (as per CHR plan)
+        from datetime import timedelta
+
+        start_date = today - timedelta(days=60)
+        logger.info(f"Incremental mode: using 2-month range ({start_date} to {end_date})")
+    elif processing_mode == "full":
+        # Full backfill: 3 years (as per CHR plan)
+        start_date = today.replace(year=today.year - 3)
+        logger.info(f"Full mode: using 3-year range ({start_date} to {end_date})")
+    else:
+        # Default fallback
+        start_date = today.replace(year=today.year - 5)
+        logger.info(f"Default mode: using 5-year range ({start_date} to {end_date})")
+
     return start_date, end_date
 
 
