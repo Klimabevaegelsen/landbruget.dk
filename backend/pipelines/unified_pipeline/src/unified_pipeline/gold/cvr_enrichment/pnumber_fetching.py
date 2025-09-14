@@ -644,6 +644,41 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         """
         self.log.info("Creating normalized P-number employment table from employment data")
 
+        # Set up crypto extension for UUID generation
+        try:
+            self.conn.execute("INSTALL crypto FROM community")
+            self.conn.execute("LOAD crypto")
+        except Exception as e:
+            self.log.warning(f"Crypto extension already loaded: {e}")
+
+        # Get the namespace from environment variable
+        namespace = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
+        if not namespace:
+            raise ValueError("LANDBRUGSDATA_UUID_NAMESPACE environment variable is required")
+
+        # Create company UUID function using namespace from environment
+        self.conn.execute(f"""
+            CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
+                SELECT CASE
+                    WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
+                         OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
+                    THEN NULL
+                    ELSE CONCAT(
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                      TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                               TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                    )
+                END
+            )
+        """)
+
         # Create single normalized P-number employment table
         employment_table = "cvr_pnumber_employment"
         self.conn.execute(f"DROP TABLE IF EXISTS {employment_table}")
@@ -764,7 +799,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                                 ELSE ''
                             END, '')))::VARCHAR as pnumber_employment_uuid,
                 -- Generate company UUID for consistency with other tables
-                md5(ef.parent_cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                company_uuid(ef.parent_cvr_number) as company_uuid,
                 ef.parent_cvr_number as cvr_number,
                 ef.p_number,
                 ef.unit_name,
