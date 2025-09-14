@@ -64,11 +64,6 @@ on:
         type: number
         required: false
         default: 10
-      buffer_size:
-        description: "Number of responses to buffer before writing (50-100 recommended)"
-        type: number
-        required: false
-        default: 50
 
 jobs:
   run-pipeline:
@@ -118,7 +113,7 @@ jobs:
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-        run: |  # pragma: allowlist secret
+        run: | # pragma: allowlist secret
           # Set processing mode for incremental processing
            echo "SVINEFLYTNING_PROCESSING_MODE=${{ inputs.processing_mode || 'incremental' }}" >> $GITHUB_ENV  # pragma: allowlist secret
           if [[ -n "${{ inputs.force_backfill_timestamp }}" ]]; then  # pragma: allowlist secret
@@ -189,9 +184,7 @@ jobs:
               CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
             fi
 
-            if [ -n "${{ inputs.buffer_size }}" ]; then
-              CMD="$CMD --buffer-size ${{ inputs.buffer_size }}"
-            fi
+            CMD="$CMD --buffer-size 50"
           fi
 
           echo "Running command: $CMD"
