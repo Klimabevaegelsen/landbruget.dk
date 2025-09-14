@@ -514,13 +514,12 @@ def main() -> int:
                             bronze_runs.extend(timestamp_dirs)
                     except Exception as e:
                         logger.warning(f"Failed to list GCS bronze directories: {e}")
-                        # Fallback: try to list specific known datasets including legacy structure
+                        # Fallback: try to list specific known datasets
                         dataset_names = [
                             "fertiliser",
                             "work_permits",
                             "efterafgroeder",
                             "goedning_data",
-                            "landbruget.dk_static_files",  # Legacy structure
                         ]
                         for dataset_name in dataset_names:
                             try:

@@ -132,10 +132,14 @@ class BronzeStorageManager:
             # We want "Fertiliser" mapped to "fertiliser" dataset, preserve "2023_Data" as internal
             path_parts = folder_path.split("/")
 
+            # Debug logging to understand the folder structure
+            logger.info(f"Processing folder_path: '{folder_path}' -> parts: {path_parts}")
+
             if len(path_parts) >= 2:
                 # Use the first subfolder as dataset name (skip root folder)
                 subfolder = path_parts[1]
                 dataset_name = self._map_subfolder_to_dataset(subfolder)
+                logger.info(f"Mapped subfolder '{subfolder}' to dataset '{dataset_name}'")
 
                 # Preserve any nested subfolders within the dataset
                 if len(path_parts) > 2:
@@ -181,12 +185,8 @@ class BronzeStorageManager:
         """
         try:
             # Create folder structure
-            # If source_path is a folder name (not a full path), use it directly
-            if source_path and "/" not in source_path:
-                folder_path = source_path
-            else:
-                folder_path = os.path.dirname(source_path) if source_path else ""
-            target_dir = self.create_folder_structure(run_dir, folder_path)
+            # Use the full source_path which contains the folder hierarchy
+            target_dir = self.create_folder_structure(run_dir, source_path)
 
             # Create file path
             file_path = target_dir / filename
@@ -287,7 +287,7 @@ class BronzeStorageManager:
             if len(path_parts) >= 2:
                 # Use the first subfolder as dataset name (skip root folder)
                 subfolder = path_parts[1]
-                dataset_name = self._sanitize_dataset_name(subfolder)
+                dataset_name = self._map_subfolder_to_dataset(subfolder)
 
                 # Preserve any nested subfolders within the dataset
                 if len(path_parts) > 2:
