@@ -116,6 +116,11 @@ class SilverProcessor:
         self.parquet_manager.conn = shared_conn
         self.parquet_manager._owns_connection = False
 
+        # Create a persistent GCSDataAccess instance to avoid connection closure
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        self._shared_gcs_access = GCSDataAccess(connection=shared_conn)
+
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
         from .transformers.excel_transformer import ExcelTransformer
@@ -807,10 +812,8 @@ class SilverProcessor:
             )
 
             if is_gcs_path or using_gcs_storage:
-                # For GCS files, use GCSDataAccess with shared connection
-                from unified_pipeline.util.gcs_access import GCSDataAccess
-
-                gcs_access = GCSDataAccess(connection=self.schema_adapter.conn)
+                # Use the persistent GCSDataAccess instance to avoid connection closure
+                gcs_access = self._shared_gcs_access
 
                 # Construct GCS path if needed
                 if not is_gcs_path and using_gcs_storage:
@@ -887,11 +890,8 @@ class SilverProcessor:
             )
 
             if is_gcs_path or using_gcs_storage:
-                # For GCS files, we need to use GCS access to read the file
-                from unified_pipeline.util.gcs_access import GCSDataAccess
-
-                # Use the PII validator's shared DuckDB connection
-                gcs_access = GCSDataAccess(connection=self.pii_validator.conn)
+                # Use the persistent GCSDataAccess instance to avoid connection closure
+                gcs_access = self._shared_gcs_access
 
                 # If we have a local path but are using GCS storage, construct the GCS path
                 if not is_gcs_path and using_gcs_storage:
