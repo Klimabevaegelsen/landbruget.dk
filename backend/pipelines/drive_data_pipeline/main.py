@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import duckdb
 from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to enable imports
@@ -47,6 +48,79 @@ if not os.path.exists(env_path):
     # Try parent directory
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 load_dotenv(env_path)
+
+
+def _extract_cvr_numbers_flexible(
+    table_name: str, connection: duckdb.DuckDBPyConnection, logger: logging.Logger
+) -> list[str]:
+    """
+    Extract CVR numbers from a table using flexible column detection.
+
+    Tries multiple possible column names that might contain CVR numbers.
+    """
+    # Common column names that might contain CVR numbers
+    possible_cvr_columns = [
+        "cvr_number",
+        "cvr",
+        "cvr_nr",
+        "company_cvr",
+        "virksomhed_cvr",
+        "cvr_nummer",
+        "cvrnummer",
+        "cvr_no",
+        "company_registration",
+        "virksomhedsregistrering",
+        "company_id",
+        "virksomhed_id",
+    ]
+
+    try:
+        # Get table columns
+        columns_info = connection.execute(f"DESCRIBE {table_name}").fetchall()
+        available_columns = [col[0].lower() for col in columns_info]
+
+        logger.debug(f"Table {table_name} has columns: {available_columns}")
+
+        # Try to find a CVR column
+        cvr_column = None
+        for possible_col in possible_cvr_columns:
+            if possible_col.lower() in available_columns:
+                cvr_column = possible_col
+                break
+
+        if not cvr_column:
+            # Try to find columns that might contain CVR-like data (8-digit numbers)
+            for col_name in available_columns:
+                if any(keyword in col_name for keyword in ["cvr", "company", "virksomhed", "reg"]):
+                    cvr_column = col_name
+                    break
+
+        if not cvr_column:
+            logger.debug(f"No CVR column found in table {table_name}")
+            return []
+
+        # Extract CVR numbers using the found column
+        query = f"""
+        SELECT DISTINCT {cvr_column}
+        FROM {table_name}
+        WHERE {cvr_column} IS NOT NULL
+        AND {cvr_column} != ''
+        AND LENGTH(TRIM(CAST({cvr_column} AS VARCHAR))) = 8
+        AND TRIM(CAST({cvr_column} AS VARCHAR)) ~ '^[1-9][0-9]{{7}}$'
+        ORDER BY {cvr_column}
+        """
+
+        result = connection.execute(query).fetchall()
+        cvr_numbers = [str(row[0]).strip() for row in result]
+
+        if cvr_numbers:
+            logger.info(f"Extracted {len(cvr_numbers)} CVR numbers from column '{cvr_column}'")
+
+        return cvr_numbers
+
+    except Exception as e:
+        logger.debug(f"Error extracting CVR numbers from {table_name}: {e}")
+        return []
 
 
 def _save_discovered_cvr_numbers(
@@ -139,11 +213,11 @@ def _save_discovered_cvr_numbers(
                     try:
                         # Use GCS access connection for table creation and CVR extraction
                         gcs_access.query_parquet_native(file_path, "SELECT *", table_name)
-                        # Extract CVR numbers using the GCS connection
-                        cvr_numbers = extract_cvr_numbers_from_table(
+                        # Extract CVR numbers using flexible column detection
+                        cvr_numbers = _extract_cvr_numbers_flexible(
                             table_name=table_name,
                             connection=gcs_access.duckdb_conn,
-                            cvr_column="cvr_number",  # Standardized column name
+                            logger=logger,
                         )
                     except Exception as e:
                         logger.warning(f"Native loading failed, using fallback: {e}")
@@ -153,22 +227,22 @@ def _save_discovered_cvr_numbers(
                                 f"CREATE TABLE {table_name} AS "
                                 f"SELECT * FROM read_parquet('{temp_file}')"
                             )
-                        # Extract CVR numbers using the main connection for fallback
-                        cvr_numbers = extract_cvr_numbers_from_table(
+                        # Extract CVR numbers using flexible column detection
+                        cvr_numbers = _extract_cvr_numbers_flexible(
                             table_name=table_name,
                             connection=conn,
-                            cvr_column="cvr_number",  # Standardized column name
+                            logger=logger,
                         )
                 else:
                     # Local file - use directly
                     conn.execute(
                         f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
                     )
-                    # Extract CVR numbers from this table
-                    cvr_numbers = extract_cvr_numbers_from_table(
+                    # Extract CVR numbers using flexible column detection
+                    cvr_numbers = _extract_cvr_numbers_flexible(
                         table_name=table_name,
                         connection=conn,
-                        cvr_column="cvr_number",  # Standardized column name
+                        logger=logger,
                     )
 
                 if cvr_numbers:
