@@ -8,6 +8,9 @@ import duckdb
 
 # Handle imports for both standalone and package usage
 try:
+    # Use unified pipeline's optimized DuckDB connection
+    from unified_pipeline.util.gcs_access import get_duckdb_with_gcs
+
     from ..utils.logging import get_logger
 
     logger = get_logger()
@@ -17,24 +20,25 @@ except ImportError:
 
     logger = logging.getLogger(__name__)
 
+    # Fallback connection for standalone usage
+    def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
+        conn = duckdb.connect()
+        try:
+            conn.execute("INSTALL spatial")
+            conn.execute("LOAD spatial")
+        except Exception:
+            pass
+        return conn
+
 
 class DuckDBProcessor:
     """Base class for DuckDB-based data processing in drive data pipeline."""
 
     def __init__(self, db_path: str = ":memory:", dataset_name: str = "drive_data") -> None:
-        self.conn = duckdb.connect(db_path)
         self.dataset_name = dataset_name
-        self._setup_extensions()
-        logger.info(f"Initialized DuckDB processor for {dataset_name}")
-
-    def _setup_extensions(self) -> None:
-        """Setup required DuckDB extensions."""
-        try:
-            self.conn.execute("INSTALL spatial")
-            self.conn.execute("LOAD spatial")
-            logger.info("✅ DuckDB-spatial loaded successfully")
-        except Exception as e:
-            logger.warning(f"Could not load spatial extension: {e}")
+        # Use unified pipeline's shared, optimized DuckDB connection with GCS support
+        self.conn = get_duckdb_with_gcs()
+        logger.info(f"🔗 Using unified DuckDB connection with GCS support for {dataset_name}")
 
     def register_table(self, data: Any, table_name: str) -> str:
         """Register data (DataFrame, etc.) as a DuckDB table."""

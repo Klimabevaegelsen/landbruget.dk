@@ -17,6 +17,21 @@ import pandas as pd
 from ..models.schema import ColumnSchema, DataType, TableSchema
 from .base import BaseTransformer, TransformResult
 
+# Handle imports for both standalone and package usage
+try:
+    from unified_pipeline.util.gcs_access import get_duckdb_with_gcs
+except ImportError:
+    # Fallback for standalone usage
+    def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
+        conn = duckdb.connect()
+        try:
+            conn.execute("INSTALL spatial")
+            conn.execute("LOAD spatial")
+        except Exception:
+            pass
+        return conn
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +41,7 @@ class FertiliserTransformer(BaseTransformer):
     def __init__(self) -> None:
         """Initialize the fertiliser transformer."""
         super().__init__()
-        self.conn = duckdb.connect()
+        self.conn = get_duckdb_with_gcs()
         self._setup_harmonization_schemas()
 
     def _setup_harmonization_schemas(self) -> None:
@@ -61,7 +76,10 @@ class FertiliserTransformer(BaseTransformer):
         """
         filename = file_path.name.lower()
 
-        # Check for fertiliser-related files
+        # Get the full path to check for In-depth directory structure
+        full_path_str = str(file_path).lower()
+
+        # Check for main fertiliser-related files
         fertiliser_patterns = [
             "efterafgrøder",
             "efterafgroeder",
@@ -72,7 +90,35 @@ class FertiliserTransformer(BaseTransformer):
             "fertilizer",
         ]
 
-        return any(pattern in filename for pattern in fertiliser_patterns)
+        # Check for In-depth fertilizer files (B_*, V_*, etc. in GR folders)
+        indepth_patterns = [
+            "b_aftrk",
+            "b_aoggoed",
+            "b_biomasr",
+            "b_blandrk",
+            "b_dyrerk",
+            "b_forarbr",
+            "b_goedrk",
+            "b_modhumr",
+            "b_modrk",
+            "b_ovdrk",
+            "v_",  # V_ files
+            "erklrk",
+            "lg_company",
+        ]
+
+        # Check if it's in an In-depth/GR folder structure
+        is_in_gr_folder = "in-depth" in full_path_str and (
+            "gr " in full_path_str or "gr/" in full_path_str
+        )
+
+        # Main patterns match
+        main_match = any(pattern in filename for pattern in fertiliser_patterns)
+
+        # In-depth patterns match (and in correct folder structure)
+        indepth_match = is_in_gr_folder and any(pattern in filename for pattern in indepth_patterns)
+
+        return main_match or indepth_match
 
     def transform(
         self,
@@ -372,7 +418,13 @@ class FertiliserTransformer(BaseTransformer):
                 return self._process_efterafgroeder(df, filename)
             elif "gkea" in filename_lower:
                 return self._process_gkea(df, filename)
-            elif "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
+            elif (
+                "gødningsregnskaber" in filename_lower
+                or "goedningsregnskaber" in filename_lower
+                or any(
+                    pattern in filename_lower for pattern in ["b_", "v_", "erklrk", "lg_company"]
+                )
+            ):
                 return self._process_goedningsregnskaber(df, filename)
             else:
                 logger.warning(f"Unknown fertiliser file type: {filename}")
@@ -386,70 +438,103 @@ class FertiliserTransformer(BaseTransformer):
         """Process Efterafgrøder (cover crops) files."""
         logger.info(f"Processing Efterafgrøder file: {filename}")
 
-        # Create standardized DataFrame
+        # If DataFrame is empty, return empty harmonized DataFrame
+        if df.empty:
+            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+
+        # Create standardized DataFrame using actual column mappings from the data
         harmonized_data = {
-            "data_source": "efterafgroeder",
-            "year": df.get("prod_aar", pd.NA),
-            "cvr_number": df.get("cvr_number", pd.NA),
-            "capnumber": df.get("capnumber", pd.NA),
-            "markbloknummer": df.get("markbloknummer", pd.NA),
-            "marknummer": df.get("marknummer", pd.NA),
-            "journal_nummer": pd.NA,
-            "total_n_kvote": pd.NA,
-            "fosfortal": pd.NA,
-            "data_type": "Efterafgrøder",
-            "data_source_file": filename,
+            "data_source": ["efterafgroeder"] * len(df),
+            "year": df["PROD_AAR"].astype(str)
+            if "PROD_AAR" in df.columns
+            else pd.Series([pd.NA] * len(df)),
+            "cvr_number": df["CVR"].astype(str)
+            if "CVR" in df.columns
+            else pd.Series([pd.NA] * len(df)),
+            "capnumber": df["CapNumber"]
+            if "CapNumber" in df.columns
+            else pd.Series([pd.NA] * len(df)),
+            "markbloknummer": df["MARKBLOKNUMMER"]
+            if "MARKBLOKNUMMER" in df.columns
+            else pd.Series([pd.NA] * len(df)),
+            "marknummer": df["MARKNUMMER"]
+            if "MARKNUMMER" in df.columns
+            else pd.Series([pd.NA] * len(df)),
+            "indberet_alternativ": pd.Series([pd.NA] * len(df)),
+            "faktisk_areal_ha": pd.Series([pd.NA] * len(df)),
+            "omregnet_areal_ha": pd.Series([pd.NA] * len(df)),
+            "journal_nummer": pd.Series([pd.NA] * len(df)),
+            "total_n_kvote": pd.Series([pd.NA] * len(df)),
+            "fosfortal": pd.Series([pd.NA] * len(df)),
+            "data_type": ["Efterafgrøder"] * len(df),
+            "data_source_file": [filename] * len(df),
         }
 
-        # Map year-specific columns for Efterafgrøder
-        if "a18_indberetefterafgalternativ" in df.columns:
+        # Map year-specific columns for Efterafgrøder using actual column names
+        if "A19_INDBERETEFTERAFGALTERNATIV" in df.columns:
+            # 2023 format (based on inspection)
+            harmonized_data["indberet_alternativ"] = df["A19_INDBERETEFTERAFGALTERNATIV"]
+            harmonized_data["faktisk_areal_ha"] = (
+                pd.to_numeric(
+                    df["A20_FAKTISKHAUDLAGTEAALTERNATIV"].astype(str).str.replace(",", "."),
+                    errors="coerce",
+                )
+                if "A20_FAKTISKHAUDLAGTEAALTERNATIV" in df.columns
+                else pd.Series([pd.NA] * len(df))
+            )
+            harmonized_data["omregnet_areal_ha"] = (
+                pd.to_numeric(
+                    df["A23_OMREGNETHAMEDEA"].astype(str).str.replace(",", "."), errors="coerce"
+                )
+                if "A23_OMREGNETHAMEDEA" in df.columns
+                else pd.Series([pd.NA] * len(df))
+            )
+        elif "A18_INDBERETEFTERAFGALTERNATIV" in df.columns:
             # 2020 format
-            harmonized_data["indberet_alternativ"] = df["a18_indberetefterafgalternativ"]
-            harmonized_data["faktisk_areal_ha"] = pd.to_numeric(
-                df["a19_faktiskhaudlagteaalternativ"].astype(str).str.replace(",", "."),
-                errors="coerce",
-            )
-            harmonized_data["omregnet_areal_ha"] = pd.to_numeric(
-                df["a20_omregnethamedea"].astype(str).str.replace(",", "."), errors="coerce"
-            )
-        elif "a19_indberetefterafgalternativ" in df.columns:
-            # 2021 or 2023 format
-            harmonized_data["indberet_alternativ"] = df["a19_indberetefterafgalternativ"]
-            harmonized_data["faktisk_areal_ha"] = pd.to_numeric(
-                df["a20_faktiskhaudlagteaalternativ"].astype(str).str.replace(",", "."),
-                errors="coerce",
-            )
-            if "a21_omregnethamedea" in df.columns:
-                # 2021 format
-                harmonized_data["omregnet_areal_ha"] = pd.to_numeric(
-                    df["a21_omregnethamedea"].astype(str).str.replace(",", "."), errors="coerce"
+            harmonized_data["indberet_alternativ"] = df["A18_INDBERETEFTERAFGALTERNATIV"]
+            harmonized_data["faktisk_areal_ha"] = (
+                pd.to_numeric(
+                    df["A19_FAKTISKHAUDLAGTEAALTERNATIV"].astype(str).str.replace(",", "."),
+                    errors="coerce",
                 )
-            elif "a23_omregnethamedea" in df.columns:
-                # 2023 format
-                harmonized_data["omregnet_areal_ha"] = pd.to_numeric(
-                    df["a23_omregnethamedea"].astype(str).str.replace(",", "."), errors="coerce"
+                if "A19_FAKTISKHAUDLAGTEAALTERNATIV" in df.columns
+                else pd.Series([pd.NA] * len(df))
+            )
+            harmonized_data["omregnet_areal_ha"] = (
+                pd.to_numeric(
+                    df["A20_OMREGNETHAMEDEA"].astype(str).str.replace(",", "."), errors="coerce"
                 )
-        elif "a20_indberetefterafgalternativ" in df.columns:
+                if "A20_OMREGNETHAMEDEA" in df.columns
+                else pd.Series([pd.NA] * len(df))
+            )
+        elif "A20_INDBERETEFTERAFGALTERNATIV" in df.columns:
             # 2022 format
-            harmonized_data["indberet_alternativ"] = df["a20_indberetefterafgalternativ"]
-            harmonized_data["faktisk_areal_ha"] = pd.to_numeric(
-                df["a21_faktiskhaudlagteaalternativ"].astype(str).str.replace(",", "."),
-                errors="coerce",
+            harmonized_data["indberet_alternativ"] = df["A20_INDBERETEFTERAFGALTERNATIV"]
+            harmonized_data["faktisk_areal_ha"] = (
+                pd.to_numeric(
+                    df["A21_FAKTISKHAUDLAGTEAALTERNATIV"].astype(str).str.replace(",", "."),
+                    errors="coerce",
+                )
+                if "A21_FAKTISKHAUDLAGTEAALTERNATIV" in df.columns
+                else pd.Series([pd.NA] * len(df))
             )
-            harmonized_data["omregnet_areal_ha"] = pd.to_numeric(
-                df["a24_omregnethamedea"].astype(str).str.replace(",", "."), errors="coerce"
+            harmonized_data["omregnet_areal_ha"] = (
+                pd.to_numeric(
+                    df["A24_OMREGNETHAMEDEA"].astype(str).str.replace(",", "."), errors="coerce"
+                )
+                if "A24_OMREGNETHAMEDEA" in df.columns
+                else pd.Series([pd.NA] * len(df))
             )
-        else:
-            # Generic mapping for unknown formats
-            harmonized_data["indberet_alternativ"] = pd.NA
-            harmonized_data["faktisk_areal_ha"] = pd.NA
-            harmonized_data["omregnet_areal_ha"] = pd.NA
 
         return pd.DataFrame(harmonized_data)
 
     def _process_gkea(self, df: pd.DataFrame, filename: str) -> pd.DataFrame:
         """Process GKEA markplan files."""
         logger.info(f"Processing GKEA file: {filename}")
+
+        # If DataFrame is empty, return empty harmonized DataFrame
+        if df.empty:
+            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
 
         # GKEA files have different column structures by year
         # Extract year from filename
@@ -459,30 +544,35 @@ class FertiliserTransformer(BaseTransformer):
                 year = yr
                 break
 
-        # Create base harmonized structure
-        harmonized_data = {
-            "data_source": "gkea",
-            "year": year,
-            "cvr_number": pd.NA,
-            "capnumber": pd.NA,
-            "markbloknummer": pd.NA,
-            "marknummer": pd.NA,
-            "indberet_alternativ": pd.NA,
-            "faktisk_areal_ha": pd.NA,
-            "omregnet_areal_ha": pd.NA,
-            "journal_nummer": pd.NA,
-            "total_n_kvote": pd.NA,
-            "fosfortal": pd.NA,
-            "data_type": "GKEA Markplan",
-            "data_source_file": filename,
-        }
-
         # Map GKEA columns based on expected patterns
         # Skip header rows if they exist
         if len(df) > 2:
             df_data = df.iloc[2:].copy()  # Skip potential header rows
         else:
             df_data = df.copy()
+
+        # If processed DataFrame is empty, return empty harmonized DataFrame
+        if df_data.empty:
+            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+
+        # Create base harmonized structure using DataFrame length as index
+        num_rows = len(df_data)
+        harmonized_data = {
+            "data_source": ["gkea"] * num_rows,
+            "year": [year] * num_rows,
+            "cvr_number": pd.Series([pd.NA] * num_rows),
+            "capnumber": pd.Series([pd.NA] * num_rows),
+            "markbloknummer": pd.Series([pd.NA] * num_rows),
+            "marknummer": pd.Series([pd.NA] * num_rows),
+            "indberet_alternativ": pd.Series([pd.NA] * num_rows),
+            "faktisk_areal_ha": pd.Series([pd.NA] * num_rows),
+            "omregnet_areal_ha": pd.Series([pd.NA] * num_rows),
+            "journal_nummer": pd.Series([pd.NA] * num_rows),
+            "total_n_kvote": pd.Series([pd.NA] * num_rows),
+            "fosfortal": pd.Series([pd.NA] * num_rows),
+            "data_type": ["GKEA Markplan"] * num_rows,
+            "data_source_file": [filename] * num_rows,
+        }
 
         # Try to map columns based on common GKEA patterns
         cols = df_data.columns.tolist()
@@ -535,25 +625,55 @@ class FertiliserTransformer(BaseTransformer):
         return pd.DataFrame(harmonized_data)
 
     def _process_goedningsregnskaber(self, df: pd.DataFrame, filename: str) -> pd.DataFrame:
-        """Process Gødningsregnskaber (fertilizer accounts) files."""
-        logger.info(f"Processing Gødningsregnskaber file: {filename}")
+        """Process Gødningsregnskaber (fertilizer accounts) files and In-depth files."""
+        logger.info(f"Processing Gødningsregnskaber/In-depth file: {filename}")
 
-        # Create standardized DataFrame
+        # If DataFrame is empty, return empty harmonized DataFrame
+        if df.empty:
+            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+
+        # Extract year from filename or folder structure
+        year = None
+        for yr in ["2018", "2019", "2020", "2021", "2022", "2023", "2024"]:
+            if yr in filename:
+                year = yr
+                break
+
+        # Determine data source and type based on filename
+        filename_lower = filename.lower()
+        if "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
+            data_source = "goedningsregnskaber"
+            data_type = "Gødningsregnskaber"
+        elif "b_" in filename_lower:
+            data_source = "goedningsregnskaber_blok"
+            data_type = "Gødningsregnskaber Blok"
+        elif "v_" in filename_lower:
+            data_source = "goedningsregnskaber_vurdering"
+            data_type = "Gødningsregnskaber Vurdering"
+        else:
+            data_source = "goedningsregnskaber_other"
+            data_type = "Gødningsregnskaber Other"
+
+        # Create standardized DataFrame using actual column mappings from the data
         harmonized_data = {
-            "data_source": "goedningsregnskaber",
-            "year": df.get("f_planaar", pd.NA).astype(str) if "f_planaar" in df.columns else pd.NA,
-            "cvr_number": df.get("cvr_number", pd.NA),
-            "capnumber": pd.NA,
-            "markbloknummer": pd.NA,
-            "marknummer": pd.NA,
-            "indberet_alternativ": pd.NA,
-            "faktisk_areal_ha": pd.NA,
-            "omregnet_areal_ha": pd.NA,
-            "journal_nummer": pd.NA,
-            "total_n_kvote": pd.NA,
-            "fosfortal": pd.NA,
-            "data_type": "Gødningsregnskaber",
-            "data_source_file": filename,
+            "data_source": [data_source] * len(df),
+            "year": [year] * len(df),
+            "cvr_number": df["CVR"].astype(str)
+            if "CVR" in df.columns
+            else pd.Series([pd.NA] * len(df)),
+            "capnumber": pd.Series([pd.NA] * len(df)),
+            "markbloknummer": pd.Series([pd.NA] * len(df)),
+            "marknummer": pd.Series([pd.NA] * len(df)),
+            "indberet_alternativ": pd.Series([pd.NA] * len(df)),
+            "faktisk_areal_ha": pd.Series([pd.NA] * len(df)),
+            "omregnet_areal_ha": pd.Series([pd.NA] * len(df)),
+            "journal_nummer": df["NUMMER"]
+            if "NUMMER" in df.columns
+            else pd.Series([pd.NA] * len(df)),
+            "total_n_kvote": pd.Series([pd.NA] * len(df)),
+            "fosfortal": pd.Series([pd.NA] * len(df)),
+            "data_type": [data_type] * len(df),
+            "data_source_file": [filename] * len(df),
         }
 
         return pd.DataFrame(harmonized_data)
@@ -562,22 +682,29 @@ class FertiliserTransformer(BaseTransformer):
         """Process generic fertiliser files."""
         logger.info(f"Processing generic fertiliser file: {filename}")
 
-        # Create minimal harmonized structure
+        # If DataFrame is empty, return empty harmonized DataFrame
+        if df.empty:
+            return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
+
+        # Create minimal harmonized structure using DataFrame length as index
+        num_rows = len(df)
         harmonized_data = {
-            "data_source": "generic",
-            "year": pd.NA,
-            "cvr_number": df.get("cvr_number", pd.NA),
-            "capnumber": pd.NA,
-            "markbloknummer": pd.NA,
-            "marknummer": pd.NA,
-            "indberet_alternativ": pd.NA,
-            "faktisk_areal_ha": pd.NA,
-            "omregnet_areal_ha": pd.NA,
-            "journal_nummer": pd.NA,
-            "total_n_kvote": pd.NA,
-            "fosfortal": pd.NA,
-            "data_type": "Generic Fertiliser",
-            "data_source_file": filename,
+            "data_source": ["generic"] * num_rows,
+            "year": pd.Series([pd.NA] * num_rows),
+            "cvr_number": df.get("cvr_number", pd.Series([pd.NA] * num_rows)).reset_index(
+                drop=True
+            ),
+            "capnumber": pd.Series([pd.NA] * num_rows),
+            "markbloknummer": pd.Series([pd.NA] * num_rows),
+            "marknummer": pd.Series([pd.NA] * num_rows),
+            "indberet_alternativ": pd.Series([pd.NA] * num_rows),
+            "faktisk_areal_ha": pd.Series([pd.NA] * num_rows),
+            "omregnet_areal_ha": pd.Series([pd.NA] * num_rows),
+            "journal_nummer": pd.Series([pd.NA] * num_rows),
+            "total_n_kvote": pd.Series([pd.NA] * num_rows),
+            "fosfortal": pd.Series([pd.NA] * num_rows),
+            "data_type": ["Generic Fertiliser"] * num_rows,
+            "data_source_file": [filename] * num_rows,
         }
 
         return pd.DataFrame(harmonized_data)
@@ -592,6 +719,10 @@ class FertiliserTransformer(BaseTransformer):
             return "gkea"
         elif "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
             return "goedningsregnskaber"
+        elif "b_" in filename_lower:
+            return "goedningsregnskaber_blok"
+        elif "v_" in filename_lower:
+            return "goedningsregnskaber_vurdering"
         else:
             return "generic"
 
@@ -605,6 +736,10 @@ class FertiliserTransformer(BaseTransformer):
             return "GKEA Markplan"
         elif "gødningsregnskaber" in filename_lower or "goedningsregnskaber" in filename_lower:
             return "Gødningsregnskaber"
+        elif "b_" in filename_lower:
+            return "Gødningsregnskaber Blok"
+        elif "v_" in filename_lower:
+            return "Gødningsregnskaber Vurdering"
         else:
             return "Generic Fertiliser"
 

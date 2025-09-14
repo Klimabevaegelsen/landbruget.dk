@@ -14,18 +14,18 @@ from .schema_manager import SchemaManager
 from .storage import SilverStorageManager
 from .validators.pii_validator import PIIAction, PIIType, PIIValidator
 
+# Get logger
+logger = get_logger()
+
 # Import the new data tracing system
 try:
     from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
     PIPELINE_METADATA_AVAILABLE = True
 except ImportError:
-    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    logger.warning("Pipeline metadata system not available - continuing without data tracing")
     PipelineMetadataManager = None
     PIPELINE_METADATA_AVAILABLE = False
-
-# Get logger
-logger = get_logger()
 
 
 class SilverProcessor:
@@ -789,22 +789,37 @@ class SilverProcessor:
             Path to the PII-handled file or None if failed
         """
         try:
-            # Check if this is a GCS path or local path
+            # Check if this is a GCS path or if we're using GCS storage
             output_path_str = str(output_path)
             is_gcs_path = output_path_str.startswith("gs://")
 
-            if is_gcs_path:
+            # Also check if we're using GCS storage but have a local path
+            using_gcs_storage = (
+                hasattr(self.storage_manager, "storage_type")
+                and self.storage_manager.storage_type.lower() == "gcs"
+            )
+
+            if is_gcs_path or using_gcs_storage:
                 # For GCS files, we need to use GCS access to read the file
                 from unified_pipeline.util.gcs_access import GCSDataAccess
 
                 gcs_access = GCSDataAccess()
+
+                # If we have a local path but are using GCS storage, construct the GCS path
+                if not is_gcs_path and using_gcs_storage:
+                    # Convert local path to GCS path using storage manager's bucket and base path
+                    # The output_path is relative to the silver base path
+                    bucket = getattr(self.storage_manager, "bucket", "landbrugsdata-raw-data")
+                    gcs_path = f"gs://{bucket}/silver/{output_path_str}"
+                else:
+                    gcs_path = output_path_str
 
                 # Create a temporary table name for validation
                 temp_table = "pii_validation_table"
 
                 try:
                     # Load parquet data into DuckDB table
-                    gcs_access.query_parquet_native(output_path_str, "SELECT *", temp_table)
+                    gcs_access.query_parquet_native(gcs_path, "SELECT *", temp_table)
 
                     # Validate for PII using the table name instead of dataframe
                     validation_result = self.pii_validator.validate(temp_table)
@@ -815,7 +830,7 @@ class SilverProcessor:
                         handled_table = self.pii_validator.handle_pii(temp_table, validation_result)
 
                         # Generate new GCS path for handled file
-                        path_parts = output_path_str.split("/")
+                        path_parts = gcs_path.split("/")
                         filename = path_parts[-1]
                         filename_stem = filename.rsplit(".", 1)[0] if "." in filename else filename
                         filename_ext = "." + filename.rsplit(".", 1)[1] if "." in filename else ""
