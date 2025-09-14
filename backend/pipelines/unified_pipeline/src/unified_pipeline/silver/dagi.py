@@ -231,6 +231,17 @@ class DAGISilver(BaseSource[DAGISilverConfig], SilverJobInterface):
                 self.conn, processed_table, f"dagi_{layer_type}", geometry_column="geometry"
             )
 
+            # COORDINATE ORDER FIX: Convert from GeoJSON LON/LAT to proper EPSG:4326 LAT/LON
+            # GeoJSON uses [longitude, latitude] order, EPSG:4326 standard is [latitude, longitude]
+            self.log.info(
+                f"Converting {layer_type} from GeoJSON LON/LAT to EPSG:4326 LAT/LON order"
+            )
+            self.conn.execute(f"""
+                UPDATE {processed_table}
+                SET geometry = ST_FlipCoordinates(geometry)
+                WHERE geometry IS NOT NULL
+            """)
+
             # Transform to target CRS if needed (after validation ensures WGS84)
             if self.config.target_crs != "EPSG:4326":
                 self.conn.execute(f"""
