@@ -567,6 +567,39 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
         self.log.debug(f"Memory cleanup: collected {collected} objects")
 
+    @timed(name="Creating and saving ownership table")
+    def _create_and_save_ownership_table(self) -> None:
+        """
+        Create ownership table from all company data and save to GCS.
+
+        This method reads from the main companies table and extracts ownership
+        data for companies that have formal ownership percentages registered.
+        """
+        self.log.info("Creating normalized ownership table from company data")
+
+        # Get all company JSON data that contains ownership information
+        companies_with_ownership = self.conn.execute("""
+            SELECT company_data_json
+            FROM cvr_companies
+            WHERE json_array_length(json_extract(company_data_json, '$.ownership')) > 0
+        """).fetchall()
+
+        if not companies_with_ownership:
+            self.log.info(
+                "No companies with ownership data found - skipping ownership table creation"
+            )
+            return
+
+        # Extract JSON strings for processing
+        json_strings = [row[0] for row in companies_with_ownership]
+
+        self.log.info(f"Found {len(companies_with_ownership)} companies with ownership data")
+
+        # Create ownership table using the existing logic
+        self._create_ownership_table(json_strings)
+
+        self.log.info("Ownership table creation completed")
+
     @timed(name="Finalizing data and artifacts")
     def _finalize_data_and_artifacts(self, table_name: str, total_stats: Dict[str, Any]) -> None:
         """
@@ -600,6 +633,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             bucket=self.config.bucket,
             stage="gold",
         )
+
+        # Create and save ownership table to GCS
+        self._create_and_save_ownership_table()
 
         # Save locally for GitHub Actions artifact sharing
         import os
