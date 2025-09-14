@@ -1172,8 +1172,12 @@ class CVRAPIClient:
 
             for hit in hits:
                 try:
-                    # Skip null hits
-                    if hit is None:
+                    # Skip null hits or hits without proper structure
+                    if hit is None or not isinstance(hit, dict) or "_source" not in hit:
+                        continue
+
+                    # Additional safety check for _source content
+                    if hit["_source"] is None or not isinstance(hit["_source"], dict):
                         continue
 
                     # Parse each company's data using the same format as individual calls

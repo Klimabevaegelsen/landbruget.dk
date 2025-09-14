@@ -365,7 +365,13 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             )
         """)
 
+        # Setup UUID functions for DuckDB
+        from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+
+        LandbrugsdataUUID.setup_duckdb_functions(self.conn)
+
         self.log.info(f"Initialized empty output tables: {table_name}, cvr_persons, cvr_employment")
+        self.log.info("Setup UUID functions for DuckDB")
 
         return table_name
 
