@@ -100,33 +100,64 @@ jobs:
         run: |
           # Determine if we should process by month based on the step
           STEP="${{ inputs.step || 'all' }}"
-          YEAR_RANGE="${{ inputs.year_range || '2021-2025' }}"
+          PROCESSING_MODE="${{ inputs.processing_mode || 'incremental' }}"
 
           # Only use monthly matrix for animal_movements, vetstat, or when processing all steps
           if [[ "$STEP" == "all" || "$STEP" == "bronze_data_collection" || "$STEP" == "animal_movements" || "$STEP" == "vetstat" ]]; then
             PROCESS_BY_MONTH="true"
 
-            # Parse year range
-            if [[ "$YEAR_RANGE" == *"-"* ]]; then
-              START_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f1)
-              END_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f2)
+            # Calculate date range based on processing mode
+            if [[ "$PROCESSING_MODE" == "incremental" ]]; then
+              # Last 3 months for incremental
+              END_DATE=$(date +%Y-%m-%d)
+              START_DATE=$(date -d '3 months ago' +%Y-%m-%d)
+              START_YEAR=$(date -d '3 months ago' +%Y)
+              END_YEAR=$(date +%Y)
+              echo "🔄 Incremental mode: processing last 3 months ($START_DATE to $END_DATE)"
+            elif [[ "$PROCESSING_MODE" == "full" ]]; then
+              # Full range for full processing
+              START_YEAR=2021
+              END_YEAR=2025
+              echo "🔄 Full mode: processing complete range (2021-2025)"
             else
-              START_YEAR="$YEAR_RANGE"
-              END_YEAR="$YEAR_RANGE"
+              # Backfill mode - use year_range input or default
+              YEAR_RANGE="${{ inputs.year_range || '2021-2025' }}"
+              if [[ "$YEAR_RANGE" == *"-"* ]]; then
+                START_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f1)
+                END_YEAR=$(echo "$YEAR_RANGE" | cut -d'-' -f2)
+              else
+                START_YEAR="$YEAR_RANGE"
+                END_YEAR="$YEAR_RANGE"
+              fi
+              echo "🔄 Backfill mode: processing range ($START_YEAR-$END_YEAR)"
             fi
 
             # Generate array of months (year-month format)
             MONTHS="["
             FIRST_MONTH=true
-            for ((year=START_YEAR; year<=END_YEAR; year++)); do
-              for month in {1..12}; do
+
+            if [[ "$PROCESSING_MODE" == "incremental" ]]; then
+              # For incremental, generate only the last 3 months
+              for i in {0..2}; do
+                MONTH_DATE=$(date -d "$i months ago" +%Y-%m)
                 if [[ "$FIRST_MONTH" == "false" ]]; then
                   MONTHS="$MONTHS,"
                 fi
-                MONTHS="$MONTHS\"$year-$(printf "%02d" $month)\""
+                MONTHS="$MONTHS\"$MONTH_DATE\""
                 FIRST_MONTH=false
               done
-            done
+            else
+              # For full/backfill, generate all months in the year range
+              for ((year=START_YEAR; year<=END_YEAR; year++)); do
+                for month in {1..12}; do
+                  if [[ "$FIRST_MONTH" == "false" ]]; then
+                    MONTHS="$MONTHS,"
+                  fi
+                  MONTHS="$MONTHS\"$year-$(printf "%02d" $month)\""
+                  FIRST_MONTH=false
+                done
+              done
+            fi
             MONTHS="$MONTHS]"
 
             echo "months=$MONTHS" >> $GITHUB_OUTPUT
