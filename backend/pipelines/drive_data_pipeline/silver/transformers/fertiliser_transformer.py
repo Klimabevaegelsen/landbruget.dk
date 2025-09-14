@@ -545,17 +545,29 @@ class FertiliserTransformer(BaseTransformer):
                 break
 
         # Map GKEA columns based on expected patterns
-        # Skip header rows if they exist
+        # Skip header rows if they exist - be more careful about this
+        df_data = df.copy()
+
+        # Check if first few rows look like headers (contain mostly strings/NaN)
         if len(df) > 2:
-            df_data = df.iloc[2:].copy()  # Skip potential header rows
-        else:
-            df_data = df.copy()
+            # Look at first row to see if it looks like a header
+            first_row = df.iloc[0]
+            if first_row.isna().sum() > len(first_row) * 0.8:  # More than 80% NaN
+                df_data = df.iloc[2:].copy()  # Skip 2 header rows
+                df_data = df_data.reset_index(drop=True)  # Reset index to avoid mismatch
+            elif (
+                first_row.astype(str)
+                .str.contains("GKEA|Markplan|Gødning", case=False, na=False)
+                .any()
+            ):
+                df_data = df.iloc[2:].copy()  # Skip 2 header rows
+                df_data = df_data.reset_index(drop=True)  # Reset index to avoid mismatch
 
         # If processed DataFrame is empty, return empty harmonized DataFrame
         if df_data.empty:
             return pd.DataFrame(columns=list(self.harmonized_schema.keys()))
 
-        # Create base harmonized structure using DataFrame length as index
+        # Create base harmonized structure using the PROCESSED DataFrame length
         num_rows = len(df_data)
         harmonized_data = {
             "data_source": ["gkea"] * num_rows,
@@ -574,7 +586,7 @@ class FertiliserTransformer(BaseTransformer):
             "data_source_file": [filename] * num_rows,
         }
 
-        # Try to map columns based on common GKEA patterns
+        # Try to map columns based on common GKEA patterns using the processed data
         cols = df_data.columns.tolist()
 
         if len(cols) > 1:

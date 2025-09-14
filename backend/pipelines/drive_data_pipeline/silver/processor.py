@@ -172,11 +172,28 @@ class SilverProcessor:
                         continue
 
                 # Filter by subfolder if specified
-                if specific_subfolders and file_info.get("folder_name") not in specific_subfolders:
-                    logger.debug(
-                        f"Skipping file from unspecified subfolder: {file_info.get('folder_name')}"
-                    )
-                    continue
+                if specific_subfolders:
+                    folder_name = file_info.get("folder_name", "")
+                    file_path = file_info.get("file_path", "")
+
+                    # Check if any of the specified subfolders match
+                    # Either exact match or if the file path contains the subfolder
+                    matches_subfolder = False
+                    for subfolder in specific_subfolders:
+                        if (
+                            folder_name == subfolder
+                            or subfolder.lower() in file_path.lower()
+                            or folder_name.lower().startswith(subfolder.lower())
+                        ):
+                            matches_subfolder = True
+                            break
+
+                    if not matches_subfolder:
+                        logger.debug(
+                            f"Skipping file from unspecified subfolder: {folder_name} "
+                            f"(path: {file_path})"
+                        )
+                        continue
 
                 # Process the file from memory
                 success = self._process_file_from_memory(
