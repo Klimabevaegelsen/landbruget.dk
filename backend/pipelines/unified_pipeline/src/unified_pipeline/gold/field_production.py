@@ -884,71 +884,32 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 )
                 """)
 
-                # Check if municipality is pre-assigned in FVM marker data
-                municipality_preassigned = False
-                try:
-                    # Check if municipality column exists and has data
-                    columns_info = self.conn.execute("DESCRIBE current_year_fields").fetchall()
-                    column_names = [col[0] for col in columns_info]
+                # FVM marker data already has municipality assigned via spatial intersection
+                # No need for complex spatial assignment logic
+                self.conn.execute("""
+                CREATE OR REPLACE TABLE year_fields_with_zones_and_kommune AS
+                SELECT
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
+                    f.year,
+                    f.landsdel_code,
+                    f.landsdel_name,
+                    f.dst_regions,
+                    f.municipality as kommune_name,
+                    f.field_uuid,
+                    f.primary_field_id,
+                    f.geometry
+                FROM year_fields_with_zones f
+                """)
 
-                    if "municipality" in column_names:
-                        assigned_count = self.conn.execute("""
-                            SELECT COUNT(*) FROM current_year_fields
-                            WHERE municipality IS NOT NULL
-                        """).fetchone()[0]
-                        total_count = self.conn.execute(
-                            "SELECT COUNT(*) FROM current_year_fields"
-                        ).fetchone()[0]
-
-                        if assigned_count > 0:
-                            municipality_preassigned = True
-                            percentage = assigned_count / total_count * 100
-                            self.log.info(
-                                f"  ✅ Municipality pre-assigned in FVM data: "
-                                f"{assigned_count}/{total_count} fields ({percentage:.1f}%)"
-                            )
-                        else:
-                            self.log.warning(
-                                "  ⚠️ Municipality column exists but no assignments found - "
-                                "FVM silver pipeline may need to be rerun"
-                            )
-                    else:
-                        self.log.warning(
-                            "  ⚠️ No municipality column in FVM data - "
-                            "FVM silver pipeline needs to be updated"
-                        )
-                except Exception as e:
-                    self.log.warning(f"Error checking municipality pre-assignment: {e}")
-                    municipality_preassigned = False
-
-                if municipality_preassigned:
-                    # Use pre-assigned municipality data from FVM silver pipeline
-                    self.conn.execute("""
-                    CREATE OR REPLACE TABLE year_fields_with_zones_and_kommune AS
-                    SELECT
-                        f.*,
-                        f.municipality as kommune_name
-                    FROM year_fields_with_zones f
-                    """)
-
-                    self.log.info(
-                        "  🏛️ Using pre-assigned municipality data from FVM silver pipeline"
-                    )
-                else:
-                    # No fallback - municipality assignment should be handled by FVM silver pipeline
-                    self.log.error("  ❌ Municipality data not available from FVM silver pipeline")
-                    self.log.error(
-                        "  💡 Please ensure FVM silver pipeline includes municipality assignment"
-                    )
-
-                    # Create table without municipality for now (will have NULL values)
-                    self.conn.execute("""
-                    CREATE OR REPLACE TABLE year_fields_with_zones_and_kommune AS
-                    SELECT
-                        f.*,
-                        CAST(NULL AS VARCHAR) as kommune_name
-                    FROM year_fields_with_zones f
-                    """)
+                self.log.info(
+                    "  🏛️ Using municipality data from FVM silver pipeline "
+                    "(spatial intersection already done)"
+                )
 
                 # Step 3: Handle unassigned landsdel/dst_regions (similar approach)
                 self.log.info("  🗺️ Checking for unassigned landsdel/dst_regions...")
@@ -1005,6 +966,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     final_unassigned = self.conn.execute("""
                         SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
                         WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
+                    """).fetchone()[0]
+                    total_count = self.conn.execute("""
+                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
                     """).fetchone()[0]
                     self.log.info(
                         f"  ✅ Final region assignment: {total_count - final_unassigned}/"
@@ -1274,105 +1238,26 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Clean table-to-table join structure as per PR #545 requirements
             # Include municipality assignment in the same join for efficiency
 
-            # NEW: Check if municipality is pre-assigned in current batch
-            municipality_preassigned = False
-            try:
-                columns_info = self.conn.execute("DESCRIBE current_batch").fetchall()
-                column_names = [col[0] for col in columns_info]
-
-                if "municipality" in column_names:
-                    assigned_count = self.conn.execute("""
-                        SELECT COUNT(*) FROM current_batch
-                        WHERE municipality IS NOT NULL
-                    """).fetchone()[0]
-
-                    if assigned_count > 0:
-                        municipality_preassigned = True
-                        self.log.info(
-                            f"  ✅ Municipality pre-assigned in batch: {assigned_count} fields"
-                        )
-            except Exception:
-                municipality_preassigned = False
-
-            if municipality_preassigned:
-                # Use pre-assigned municipality data
-                self.conn.execute("""
-                    INSERT INTO year_fields_with_zones
-                    SELECT
-                        f.field_id,
-                        f.block_id,
-                        f.cvr_number,
-                        f.area_ha,
-                        f.crop_type,
-                        f.organic_farming,
-                        f.year,
-                        COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
-                        COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
-                        COALESCE(z.dst_regions, 'unknown') as dst_regions,
-                        f.municipality as kommune_name,
-                        f.field_uuid,
-                        f.primary_field_id,
-                        f.geometry
-                    FROM current_batch f
-                    LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
-                """)
-            else:
-                # Fallback to original municipality assignment logic
-                kommune_available = False
-                try:
-                    kommune_count = self.conn.execute(
-                        "SELECT COUNT(*) FROM kommune_boundaries"
-                    ).fetchone()[0]
-                    kommune_available = kommune_count > 0
-                except Exception:
-                    kommune_available = False
-
-            if not municipality_preassigned and kommune_available:
-                # Perform dual spatial join: DST zones + municipality in one operation
-                # Leave NULL values for unassigned fields so emergency assignment
-                # can handle them
-                self.conn.execute("""
-                    INSERT INTO year_fields_with_zones
-                    SELECT
-                        f.field_id,
-                        f.block_id,
-                        f.cvr_number,
-                        f.area_ha,
-                        f.crop_type,
-                        f.organic_farming,
-                        f.year,
-                        z.landsdel_code,
-                        z.landsdel_name,
-                        z.dst_regions,
-                        k.kommune_name,
-                        f.field_uuid,
-                        f.primary_field_id,
-                        f.geometry
-                    FROM current_batch f
-                    LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
-                    LEFT JOIN kommune_boundaries k ON ST_Intersects(f.geometry, k.geometry)
-                """)
-            else:
-                # DST zones only (leave NULL values for emergency assignment)
-                self.conn.execute("""
-                    INSERT INTO year_fields_with_zones
-                    SELECT
-                        f.field_id,
-                        f.block_id,
-                        f.cvr_number,
-                        f.area_ha,
-                        f.crop_type,
-                        f.organic_farming,
-                        f.year,
-                        z.landsdel_code,
-                        z.landsdel_name,
-                        z.dst_regions,
-                        NULL as kommune_name,
-                        f.field_uuid,
-                        f.primary_field_id,
-                        f.geometry
-                    FROM current_batch f
-                    LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+            # FVM marker data already has municipality assigned - just do DST zone join
+            self.conn.execute("""
+                INSERT INTO year_fields_with_zones
+                SELECT
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
+                    f.year,
+                    COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
+                    COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
+                    COALESCE(z.dst_regions, 'unknown') as dst_regions,
+                    f.municipality as kommune_name,
+                    f.field_uuid,
+                    f.primary_field_id,
+                    f.geometry
+                FROM current_batch f
+                LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
             """)
 
             # Clean up batch table immediately
@@ -1424,6 +1309,20 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"assuming all fields are non-organic"
             )
 
+        # Handle municipality column - check if municipality exists in FVM data
+        if "municipality" in column_names:
+            municipality_select = "municipality"
+            self.log.info(
+                f"✅ Found municipality column in FVM data for year {year} - "
+                f"using pre-assigned municipality data"
+            )
+        else:
+            municipality_select = "'Unknown' as municipality"
+            self.log.warning(
+                f"⚠️ No municipality column found in FVM data for year {year} - "
+                f"defaulting to Unknown (will need spatial assignment)"
+            )
+
         # Handle geometry column
         if "geometry" in column_names:
             # CRITICAL FIX: Field geometries have X=latitude, Y=longitude (swapped)
@@ -1448,6 +1347,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 area_ha,
                 {crop_type_select},
                 {organic_farming_select},
+                {municipality_select},
                 {year} as year,
                 {geometry_select},
                 {field_uuid_select},
@@ -1493,6 +1393,20 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"assuming all fields are non-organic"
             )
 
+        # Handle municipality column - check if municipality exists in FVM data
+        if "municipality" in column_names:
+            municipality_select = "municipality"
+            self.log.info(
+                f"✅ Found municipality column in FVM data for year {year} - "
+                f"using pre-assigned municipality data"
+            )
+        else:
+            municipality_select = "'Unknown' as municipality"
+            self.log.warning(
+                f"⚠️ No municipality column found in FVM data for year {year} - "
+                f"defaulting to Unknown (will need spatial assignment)"
+            )
+
         # Handle geometry column
         if "geometry" in column_names:
             # CRITICAL FIX: Field geometries have X=latitude, Y=longitude (swapped)
@@ -1517,6 +1431,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 area_ha,
                 {crop_type_select},
                 {organic_farming_select},
+                {municipality_select},
                 {year} as year,
                 {geometry_select},
                 {field_uuid_select},
