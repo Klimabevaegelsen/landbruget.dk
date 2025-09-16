@@ -7,7 +7,6 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
-import { debounce } from 'lodash';
 import { AlertTriangle } from 'lucide-react';
 import Map, {
   MapLayerMouseEvent,
@@ -497,81 +496,23 @@ export default function FieldAnalysisMap({
     padding: { top: 0, bottom: 0, left: 0, right: 0 },
   });
 
-  // Use external viewState if provided, otherwise use internal
-  // Memoize to prevent infinite re-renders - only update when actual values change
-  const currentViewState = useMemo(() => {
-    if (!externalViewState) {
-      return internalViewState;
-    }
+  // SIMPLIFIED viewState - use external if provided, otherwise internal
+  const currentViewState = externalViewState || internalViewState;
 
-    // Only merge if there are actual differences to avoid unnecessary object creation
-    const merged = {
-      longitude: externalViewState.longitude ?? internalViewState.longitude,
-      latitude: externalViewState.latitude ?? internalViewState.latitude,
-      zoom: externalViewState.zoom ?? internalViewState.zoom,
-      pitch: externalViewState.pitch ?? internalViewState.pitch,
-      bearing: externalViewState.bearing ?? internalViewState.bearing,
-      padding: externalViewState.padding ?? internalViewState.padding,
-    };
-
-    return merged;
-  }, [externalViewState, internalViewState]);
-
-  // Throttled parent notification to prevent excessive updates
-  // Use throttle instead of debounce for more consistent updates
-  const throttledParentNotification = useMemo(
-    () =>
-      debounce(
-        (viewState: ViewState) => {
-          onViewStateChange?.(viewState);
-        },
-        200,
-        {
-          leading: true, // Call immediately on first invocation
-          trailing: true, // Call at the end of the wait period
-          maxWait: 500, // Maximum time to wait between calls
-        }
-      ),
-    [onViewStateChange]
-  );
-
-  // Cleanup throttled function on unmount
-  useEffect(() => {
-    return () => {
-      throttledParentNotification.cancel();
-    };
-  }, [throttledParentNotification]);
-
-  // Handle view state changes
+  // Handle view state changes - SIMPLIFIED
   const handleViewStateChange = useCallback(
     (evt: { viewState: ViewState }) => {
       const newViewState = evt.viewState;
 
       // Only update internal state if we're not externally controlled
-      // This prevents infinite loops between MapLibre and React
-      // Also check if the state actually changed to avoid unnecessary updates
       if (!externalViewState) {
-        setInternalViewState((prevState) => {
-          // Only update if there's a meaningful change (avoid micro-movements)
-          const hasSignificantChange =
-            Math.abs(prevState.longitude - newViewState.longitude) > 0.0001 ||
-            Math.abs(prevState.latitude - newViewState.latitude) > 0.0001 ||
-            Math.abs(prevState.zoom - newViewState.zoom) > 0.01 ||
-            Math.abs((prevState.bearing || 0) - (newViewState.bearing || 0)) >
-              0.1 ||
-            Math.abs((prevState.pitch || 0) - (newViewState.pitch || 0)) > 0.1;
-
-          return hasSignificantChange ? newViewState : prevState;
-        });
+        setInternalViewState(newViewState);
       }
 
-      // Throttle parent notifications to prevent excessive re-renders
-      // Only notify parent if there's actually a callback
-      if (onViewStateChange) {
-        throttledParentNotification(newViewState);
-      }
+      // Notify parent immediately - no throttling
+      onViewStateChange?.(newViewState);
     },
-    [throttledParentNotification, externalViewState]
+    [onViewStateChange, externalViewState]
   );
 
   // Handle location selection from search
@@ -600,82 +541,49 @@ export default function FieldAnalysisMap({
     [onLocationSelect]
   );
 
-  // Set up loading timeout - use useRef to avoid recreating the callback
+  // SIMPLIFIED loading timeout
   const startLoadingTimeout = useCallback(() => {
-    // Clear any existing timeout
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
     }
 
-    // Set a 10-second timeout for map loading
     loadingTimeoutRef.current = setTimeout(() => {
       console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
-      // Use ref to avoid dependency on onMapReady
-      if (typeof onMapReady === 'function') {
-        onMapReady();
-      }
+      onMapReady?.();
     }, 10000);
   }, [onMapReady]);
 
-  // Clear loading timeout
-  const clearLoadingTimeout = useCallback(() => {
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-      loadingTimeoutRef.current = null;
-    }
-  }, []);
-
-  // Use refs to store latest values to avoid recreating callback
-  const pmtilesUrlsRef = useRef(pmtilesUrls);
-  const isLoadingRef = useRef(isLoading);
-
-  // Update refs when values change
-  useEffect(() => {
-    pmtilesUrlsRef.current = pmtilesUrls;
-  }, [pmtilesUrls]);
-
-  useEffect(() => {
-    isLoadingRef.current = isLoading;
-  }, [isLoading]);
-
-  // Check if all required sources are loaded
+  // SIMPLIFIED - Check if all required sources are loaded
   const checkAllSourcesLoaded = useCallback(() => {
-    const requiredSources = Object.keys(pmtilesUrlsRef.current).filter(
-      (key) =>
-        pmtilesUrlsRef.current[key as keyof typeof pmtilesUrlsRef.current]
+    const requiredSources = Object.keys(pmtilesUrls).filter(
+      (key) => pmtilesUrls[key as keyof typeof pmtilesUrls]
     );
     const allLoaded = requiredSources.every((source) =>
       loadedSourcesRef.current.has(source)
     );
 
-    if (allLoaded && isLoadingRef.current) {
+    if (allLoaded && isLoading) {
       console.log('All PMTiles sources loaded successfully');
-      // Clear timeout directly to avoid dependency
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = null;
       }
       setIsLoading(false);
-      if (typeof onMapReady === 'function') {
-        onMapReady();
-      }
+      onMapReady?.();
     }
-  }, [onMapReady]);
+  }, [pmtilesUrls, isLoading, onMapReady]);
 
   // Handle source data events to detect when PMTiles are loaded
   const handleSourceData = useCallback(
     (e: { sourceId: string; isSourceLoaded: boolean }) => {
-      if (
-        e.isSourceLoaded &&
-        Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)
-      ) {
+      if (e.isSourceLoaded && Object.keys(pmtilesUrls).includes(e.sourceId)) {
         loadedSourcesRef.current.add(e.sourceId);
         console.log(`PMTiles source loaded: ${e.sourceId}`);
         checkAllSourcesLoaded();
       }
     },
-    [checkAllSourcesLoaded] // Only depend on checkAllSourcesLoaded
+    [pmtilesUrls, checkAllSourcesLoaded] // Only depend on checkAllSourcesLoaded
   );
 
   // Initialize PMTiles protocol with retry mechanism
