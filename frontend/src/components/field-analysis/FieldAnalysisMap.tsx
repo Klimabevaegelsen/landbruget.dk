@@ -7,6 +7,7 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
+import { debounce } from 'lodash';
 import { AlertTriangle } from 'lucide-react';
 import Map, {
   MapLayerMouseEvent,
@@ -496,21 +497,67 @@ export default function FieldAnalysisMap({
   });
 
   // Use external viewState if provided, otherwise use internal
-  // Memoize to prevent infinite re-renders
+  // Memoize to prevent infinite re-renders - only update when actual values change
   const currentViewState = useMemo(() => {
-    return externalViewState
-      ? { ...internalViewState, ...externalViewState }
-      : internalViewState;
-  }, [internalViewState, externalViewState]);
+    if (!externalViewState) {
+      return internalViewState;
+    }
+
+    // Only merge if there are actual differences to avoid unnecessary object creation
+    const merged = {
+      longitude: externalViewState.longitude ?? internalViewState.longitude,
+      latitude: externalViewState.latitude ?? internalViewState.latitude,
+      zoom: externalViewState.zoom ?? internalViewState.zoom,
+      pitch: externalViewState.pitch ?? internalViewState.pitch,
+      bearing: externalViewState.bearing ?? internalViewState.bearing,
+      padding: externalViewState.padding ?? internalViewState.padding,
+    };
+
+    return merged;
+  }, [
+    internalViewState.longitude,
+    internalViewState.latitude,
+    internalViewState.zoom,
+    internalViewState.pitch,
+    internalViewState.bearing,
+    externalViewState?.longitude,
+    externalViewState?.latitude,
+    externalViewState?.zoom,
+    externalViewState?.pitch,
+    externalViewState?.bearing,
+  ]);
+
+  // Debounced parent notification to prevent excessive updates
+  const debouncedParentNotification = useMemo(
+    () =>
+      debounce((viewState: ViewState) => {
+        onViewStateChange?.(viewState);
+      }, 100),
+    [onViewStateChange]
+  );
+
+  // Cleanup debounced function on unmount
+  useEffect(() => {
+    return () => {
+      debouncedParentNotification.cancel();
+    };
+  }, [debouncedParentNotification]);
 
   // Handle view state changes
   const handleViewStateChange = useCallback(
     (evt: { viewState: ViewState }) => {
       const newViewState = evt.viewState;
-      setInternalViewState(newViewState);
-      onViewStateChange?.(newViewState);
+
+      // Only update internal state if we're not externally controlled
+      // This prevents infinite loops between MapLibre and React
+      if (!externalViewState) {
+        setInternalViewState(newViewState);
+      }
+
+      // Debounce parent notifications to prevent excessive re-renders
+      debouncedParentNotification(newViewState);
     },
-    [onViewStateChange]
+    [debouncedParentNotification, externalViewState]
   );
 
   // Handle location selection from search
