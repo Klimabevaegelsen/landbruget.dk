@@ -58,6 +58,7 @@ interface FieldAnalysisMapProps {
   onMapReady?: () => void;
   viewState?: Partial<ViewState>;
   onViewStateChange?: (viewState: ViewState) => void;
+  hasRightPanel?: boolean; // New prop to indicate if right panel is open
 }
 
 interface TooltipInfo {
@@ -516,21 +517,30 @@ export default function FieldAnalysisMap({
     return merged;
   }, [externalViewState, internalViewState]);
 
-  // Debounced parent notification to prevent excessive updates
-  const debouncedParentNotification = useMemo(
+  // Throttled parent notification to prevent excessive updates
+  // Use throttle instead of debounce for more consistent updates
+  const throttledParentNotification = useMemo(
     () =>
-      debounce((viewState: ViewState) => {
-        onViewStateChange?.(viewState);
-      }, 100),
+      debounce(
+        (viewState: ViewState) => {
+          onViewStateChange?.(viewState);
+        },
+        200,
+        {
+          leading: true, // Call immediately on first invocation
+          trailing: true, // Call at the end of the wait period
+          maxWait: 500, // Maximum time to wait between calls
+        }
+      ),
     [onViewStateChange]
   );
 
-  // Cleanup debounced function on unmount
+  // Cleanup throttled function on unmount
   useEffect(() => {
     return () => {
-      debouncedParentNotification.cancel();
+      throttledParentNotification.cancel();
     };
-  }, [debouncedParentNotification]);
+  }, [throttledParentNotification]);
 
   // Handle view state changes
   const handleViewStateChange = useCallback(
@@ -539,14 +549,29 @@ export default function FieldAnalysisMap({
 
       // Only update internal state if we're not externally controlled
       // This prevents infinite loops between MapLibre and React
+      // Also check if the state actually changed to avoid unnecessary updates
       if (!externalViewState) {
-        setInternalViewState(newViewState);
+        setInternalViewState((prevState) => {
+          // Only update if there's a meaningful change (avoid micro-movements)
+          const hasSignificantChange =
+            Math.abs(prevState.longitude - newViewState.longitude) > 0.0001 ||
+            Math.abs(prevState.latitude - newViewState.latitude) > 0.0001 ||
+            Math.abs(prevState.zoom - newViewState.zoom) > 0.01 ||
+            Math.abs((prevState.bearing || 0) - (newViewState.bearing || 0)) >
+              0.1 ||
+            Math.abs((prevState.pitch || 0) - (newViewState.pitch || 0)) > 0.1;
+
+          return hasSignificantChange ? newViewState : prevState;
+        });
       }
 
-      // Debounce parent notifications to prevent excessive re-renders
-      debouncedParentNotification(newViewState);
+      // Throttle parent notifications to prevent excessive re-renders
+      // Only notify parent if there's actually a callback
+      if (onViewStateChange) {
+        throttledParentNotification(newViewState);
+      }
     },
-    [debouncedParentNotification, externalViewState]
+    [throttledParentNotification, externalViewState]
   );
 
   // Handle location selection from search
@@ -895,17 +920,23 @@ export default function FieldAnalysisMap({
         createPartialCoveragePattern();
 
         // Main fields layer
-        map.addLayer({
+        const fieldsLayer: any = {
           id: 'fields-fill',
           source: 'fields',
           'source-layer': 'fields',
           type: 'fill',
           paint: paintProps,
-          filter: companyFilter,
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
-        });
+        };
+
+        // Only add filter if it exists (MapLibre expects array or undefined, not null)
+        if (companyFilter) {
+          fieldsLayer.filter = companyFilter;
+        }
+
+        map.addLayer(fieldsLayer);
 
         // Partial coverage overlay layer - uses same colors as main layer but with hash pattern
         const partialCoveragePaint = { ...paintProps };
@@ -952,7 +983,7 @@ export default function FieldAnalysisMap({
         });
 
         // Fields outline
-        map.addLayer({
+        const fieldsOutlineLayer: any = {
           id: 'fields-outline',
           source: 'fields',
           'source-layer': 'fields',
@@ -962,11 +993,17 @@ export default function FieldAnalysisMap({
             'line-width': 0.5,
             'line-opacity': 0.8,
           },
-          filter: companyFilter,
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
-        });
+        };
+
+        // Only add filter if it exists
+        if (companyFilter) {
+          fieldsOutlineLayer.filter = companyFilter;
+        }
+
+        map.addLayer(fieldsOutlineLayer);
 
         // Add organic borders layer - dashed green borders for organic fields
         let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
@@ -1592,12 +1629,20 @@ export default function FieldAnalysisMap({
       ? ['==', ['get', 'cvr_number'], parseInt(filterState.companyFilter)]
       : null;
 
-    // Update filters on existing layers
+    // Update filters on existing layers (only set filter if it exists)
     if (map.getLayer('fields-fill')) {
-      map.setFilter('fields-fill', companyFilter);
+      if (companyFilter) {
+        map.setFilter('fields-fill', companyFilter);
+      } else {
+        map.setFilter('fields-fill', null); // Clear filter
+      }
     }
     if (map.getLayer('fields-outline')) {
-      map.setFilter('fields-outline', companyFilter);
+      if (companyFilter) {
+        map.setFilter('fields-outline', companyFilter);
+      } else {
+        map.setFilter('fields-outline', null); // Clear filter
+      }
     }
     if (map.getLayer('fields-partial-coverage-base')) {
       const partialFilter = companyFilter
