@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const PMTILES_BASE_URL = 'https://data.pesticidkortet.dk';
-const CACHE_DURATION = 31536000; // 1 year in seconds (365 days)
+const CACHE_DURATION = 0; // Disable caching temporarily to fix infinite loop issues
 
 export async function GET(
   request: NextRequest,
@@ -20,8 +20,8 @@ export async function GET(
       requestHeaders.Range = range;
     }
 
-    // Add cache-friendly headers
-    requestHeaders['Cache-Control'] = 'public, max-age=31536000, immutable';
+    // Disable caching temporarily to fix infinite loop issues
+    requestHeaders['Cache-Control'] = 'no-cache, no-store, must-revalidate';
 
     console.log(
       `🗺️ Proxying PMTiles request: ${pmtilesPath}${range ? ` (range: ${range})` : ''}`
@@ -59,19 +59,21 @@ export async function GET(
       }
     });
 
-    // Add aggressive caching headers for immutable PMTiles
+    // Disable all caching temporarily to fix infinite loop issues
     responseHeaders.set(
       'Cache-Control',
-      `public, max-age=${CACHE_DURATION}, immutable`
+      'no-cache, no-store, must-revalidate, max-age=0'
     );
     responseHeaders.set(
       'CDN-Cache-Control',
-      `public, max-age=${CACHE_DURATION}`
+      'no-cache, no-store, must-revalidate'
     );
     responseHeaders.set(
       'Vercel-CDN-Cache-Control',
-      `public, max-age=${CACHE_DURATION}`
+      'no-cache, no-store, must-revalidate'
     );
+    responseHeaders.set('Pragma', 'no-cache');
+    responseHeaders.set('Expires', '0');
 
     // Add CORS headers for cross-origin requests
     responseHeaders.set('Access-Control-Allow-Origin', '*');
@@ -79,8 +81,8 @@ export async function GET(
     responseHeaders.set('Access-Control-Allow-Headers', 'Range, Cache-Control');
 
     // Add performance headers
-    responseHeaders.set('X-PMTiles-Cached', 'true');
-    responseHeaders.set('X-Cache-Status', 'MISS'); // Will be HIT on subsequent requests
+    responseHeaders.set('X-PMTiles-Cached', 'false');
+    responseHeaders.set('X-Cache-Status', 'DISABLED'); // Caching disabled
 
     console.log(
       `✅ PMTiles served: ${pmtilesPath} (${response.headers.get('content-length')} bytes)`
@@ -144,11 +146,13 @@ export async function HEAD(
       }
     );
 
-    // Add caching headers
+    // Disable caching headers
     responseHeaders.set(
       'Cache-Control',
-      `public, max-age=${CACHE_DURATION}, immutable`
+      'no-cache, no-store, must-revalidate, max-age=0'
     );
+    responseHeaders.set('Pragma', 'no-cache');
+    responseHeaders.set('Expires', '0');
     responseHeaders.set('Access-Control-Allow-Origin', '*');
 
     return new NextResponse(null, {
