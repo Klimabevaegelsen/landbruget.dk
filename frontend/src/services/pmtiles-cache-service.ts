@@ -28,9 +28,11 @@ class PMTilesCacheService {
     }
 
     // Determine URL based on proxy setting
+    // Add cache busting parameter to force refresh
+    const cacheBuster = Date.now();
     const url = this.USE_PROXY
-      ? `/api/pmtiles/pmtiles/${filename}` // Use our caching proxy
-      : `https://data.pesticidkortet.dk/pmtiles/${filename}`; // Direct R2 URL
+      ? `/api/pmtiles/pmtiles/${filename}?v=${cacheBuster}` // Use our caching proxy with cache buster
+      : `https://data.pesticidkortet.dk/pmtiles/${filename}?v=${cacheBuster}`; // Direct R2 URL with cache buster
 
     // Cache the URL
     this.cache.set(cacheKey, {
