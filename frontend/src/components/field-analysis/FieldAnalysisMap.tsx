@@ -1814,7 +1814,11 @@ export default function FieldAnalysisMap({
     <div className="relative h-full w-full touch-manipulation">
       {/* Search Bar - positioned to avoid sidebar collision */}
       <div
-        className="pointer-events-auto absolute top-4 right-4 left-4 z-30 md:right-auto md:left-4 md:w-80 lg:left-4 lg:w-96 xl:w-[28rem]"
+        className={`pointer-events-auto absolute top-4 left-4 z-30 transition-all duration-200 md:w-80 lg:w-96 xl:w-[28rem] ${
+          hasRightPanel
+            ? 'right-[21rem] xl:right-[29rem]'
+            : 'right-4 md:right-auto'
+        }`}
         style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
       >
         <SearchBar

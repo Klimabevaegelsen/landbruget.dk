@@ -13,6 +13,7 @@ import { useMobileDetection } from '@/hooks/use-mobile-detection';
 import { FieldSidebar } from './sidebar/field-sidebar';
 import { MobileFieldMenu } from './sidebar/mobile-menu';
 import { FieldDetailsSheet } from './sheets/field-details-sheet';
+import { FieldDetailsContent } from './shared/field-details-content';
 import { LoadingState } from '@/components/field-analysis/LoadingState';
 import { YearSlider } from '@/components/field-analysis/YearSlider';
 import { pmtilesCacheService } from '@/services/pmtiles-cache-service';
@@ -274,9 +275,17 @@ export default function FieldAnalysisMain() {
       )}
 
       {/* Main Map Area */}
-      <div className="relative flex-1">
+      <div className="relative min-w-0 flex-1">
         {/* Year Slider - positioned to avoid sidebar collision */}
-        <div className="pointer-events-auto absolute top-4 right-4 z-30 md:top-6 md:right-6 md:max-w-sm lg:top-20">
+        <div
+          className={`pointer-events-auto absolute top-4 z-30 transition-all duration-200 md:top-6 md:max-w-sm lg:top-20 ${
+            !isMobile && selectedField
+              ? 'right-[25rem] xl:right-[29rem]'
+              : !isMobile && clickedCoordinates
+                ? 'right-[21rem] xl:right-[25rem]'
+                : 'right-4 md:right-6'
+          }`}
+        >
           <YearSlider
             yearSelection={yearSelection}
             onYearChange={handleYearChange}
@@ -288,7 +297,6 @@ export default function FieldAnalysisMain() {
           <LoadingState message="Indlæser kortdata..." />
         ) : (
           <FieldAnalysisMap
-            key={`map-${yearSelection.selectedYear}-${pmtilesUrls.fields}`}
             pmtilesUrls={pmtilesUrls}
             layerVisibility={layerVisibility}
             filterState={filterState}
@@ -297,44 +305,119 @@ export default function FieldAnalysisMain() {
             onMapReady={handleMapReady}
             viewState={mapViewState}
             onViewStateChange={handleMapViewStateChange}
+            hasRightPanel={
+              !isMobile && (!!selectedField || !!clickedCoordinates)
+            }
           />
         )}
       </div>
 
-      {/* Field Details Sheet - Mobile First */}
-      <FieldDetailsSheet
-        field={selectedField}
-        isOpen={!!selectedField}
-        onClose={() => setSelectedField(null)}
-      />
-
-      {/* Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
-      {!selectedField && clickedCoordinates && !isMobile && (
-        <div className="bg-card w-80 border-l shadow-lg">
-          <div className="p-4">
-            <h3 className="mb-3 text-lg font-semibold">GPS Koordinater</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Latitude:</span>
-                <span className="font-mono">
-                  {clickedCoordinates.lat.toFixed(5)}
-                </span>
+      {/* Desktop Field Details Panel */}
+      {!isMobile && selectedField && (
+        <div className="bg-background animate-in slide-in-from-right flex w-96 flex-shrink-0 flex-col border-l shadow-xl duration-200 xl:w-[28rem]">
+          <div className="flex-1 overflow-hidden">
+            <div className="h-full overflow-y-auto">
+              {/* Header */}
+              <div className="bg-background/95 sticky top-0 z-10 border-b p-6 pb-4 backdrop-blur-sm">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-foreground text-xl font-bold">
+                      Markdetaljer
+                    </h2>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      {selectedField.crop_name || 'Ukendt afgrøde'} •{' '}
+                      {selectedField.kommune}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedField(null)}
+                    className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                    aria-label="Luk panel"
+                  >
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Longitude:</span>
-                <span className="font-mono">
-                  {clickedCoordinates.lng.toFixed(5)}
-                </span>
+
+              {/* Field Details Content */}
+              <div className="p-6 pt-4">
+                <FieldDetailsContent field={selectedField} />
               </div>
             </div>
-            <button
-              onClick={() => setClickedCoordinates(null)}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 mt-4 w-full rounded-lg px-4 py-2 transition-colors"
-            >
-              Luk
-            </button>
           </div>
         </div>
+      )}
+
+      {/* Desktop Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
+      {!isMobile && !selectedField && clickedCoordinates && (
+        <div className="bg-background animate-in slide-in-from-right flex w-80 flex-shrink-0 flex-col border-l shadow-xl duration-200 xl:w-96">
+          <div className="p-6">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">GPS Koordinater</h3>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Klik på kortet for at få koordinater
+                </p>
+              </div>
+              <button
+                onClick={() => setClickedCoordinates(null)}
+                className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                aria-label="Luk panel"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="bg-primary/10 rounded-lg p-4">
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Latitude:</span>
+                  <span className="font-mono font-medium">
+                    {clickedCoordinates.lat.toFixed(5)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Longitude:</span>
+                  <span className="font-mono font-medium">
+                    {clickedCoordinates.lng.toFixed(5)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Field Details Sheet */}
+      {isMobile && (
+        <FieldDetailsSheet
+          field={selectedField}
+          isOpen={!!selectedField}
+          onClose={() => setSelectedField(null)}
+        />
       )}
     </div>
   );
