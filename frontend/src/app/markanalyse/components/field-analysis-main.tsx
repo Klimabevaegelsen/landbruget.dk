@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react';
 import dynamic from 'next/dynamic';
 import { ViewState } from 'react-map-gl/maplibre';
 import { useMobileDetection } from '@/hooks/use-mobile-detection';
@@ -88,6 +94,12 @@ export default function FieldAnalysisMain() {
     setIsClient(true);
   }, []);
 
+  // Memoize availableYears to prevent unnecessary re-renders
+  const availableYears = useMemo(
+    () => yearSelection.availableYears,
+    [yearSelection.availableYears]
+  );
+
   // Load PMTiles URLs with caching
   useEffect(() => {
     const loadPMTilesUrls = async () => {
@@ -104,7 +116,7 @@ export default function FieldAnalysisMain() {
         // Preload adjacent years for smooth year switching
         await pmtilesCacheService.preloadAdjacentYears(
           yearSelection.selectedYear,
-          yearSelection.availableYears
+          availableYears
         );
 
         console.log('✅ PMTiles URLs loaded and adjacent years preloaded');
@@ -116,7 +128,7 @@ export default function FieldAnalysisMain() {
     if (isClient) {
       loadPMTilesUrls();
     }
-  }, [yearSelection.selectedYear, yearSelection.availableYears, isClient]);
+  }, [yearSelection.selectedYear, availableYears, isClient]);
 
   // Handle loading state when PMTiles URLs change
   useEffect(() => {
@@ -276,6 +288,7 @@ export default function FieldAnalysisMain() {
           <LoadingState message="Indlæser kortdata..." />
         ) : (
           <FieldAnalysisMap
+            key={`map-${yearSelection.selectedYear}-${pmtilesUrls.fields}`}
             pmtilesUrls={pmtilesUrls}
             layerVisibility={layerVisibility}
             filterState={filterState}
