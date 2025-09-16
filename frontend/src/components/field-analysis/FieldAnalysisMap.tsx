@@ -1,12 +1,6 @@
 'use client';
 
-import React, {
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-  useMemo,
-} from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import Map, {
   MapLayerMouseEvent,
@@ -676,7 +670,7 @@ export default function FieldAnalysisMap({
         loadingTimeoutRef.current = null;
       }
     };
-  }, []); // Simplified - just cleanup on unmount
+  }, [startLoadingTimeout]); // Added missing dependency
 
   // Cleanup event listeners on unmount
   useEffect(() => {
@@ -856,7 +850,7 @@ export default function FieldAnalysisMap({
         createPartialCoveragePattern();
 
         // Main fields layer
-        const fieldsLayer: any = {
+        const fieldsLayer = {
           id: 'fields-fill',
           source: 'fields',
           'source-layer': 'fields',
@@ -919,7 +913,7 @@ export default function FieldAnalysisMap({
         });
 
         // Fields outline
-        const fieldsOutlineLayer: any = {
+        const fieldsOutlineLayer = {
           id: 'fields-outline',
           source: 'fields',
           'source-layer': 'fields',
@@ -1653,7 +1647,7 @@ export default function FieldAnalysisMap({
         );
       }
     }
-  }, [filterState, layerVisibility.fields]); // Removed generateFieldsPaint to break circular dependency
+  }, [filterState, layerVisibility.fields, generateFieldsPaint]); // Added back generateFieldsPaint dependency
 
   // Handle hover events
   const onHover = useCallback(
