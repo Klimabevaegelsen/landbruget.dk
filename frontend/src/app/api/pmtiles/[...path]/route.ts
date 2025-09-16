@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const PMTILES_BASE_URL = 'https://data.pesticidkortet.dk';
-const CACHE_DURATION = 0; // Disable caching temporarily to fix infinite loop issues
+// Caching disabled temporarily to fix infinite loop issues
+// const CACHE_DURATION = 0;
 
 export async function GET(
   request: NextRequest,
