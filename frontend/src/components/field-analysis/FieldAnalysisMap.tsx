@@ -514,18 +514,7 @@ export default function FieldAnalysisMap({
     };
 
     return merged;
-  }, [
-    internalViewState.longitude,
-    internalViewState.latitude,
-    internalViewState.zoom,
-    internalViewState.pitch,
-    internalViewState.bearing,
-    externalViewState?.longitude,
-    externalViewState?.latitude,
-    externalViewState?.zoom,
-    externalViewState?.pitch,
-    externalViewState?.bearing,
-  ]);
+  }, [externalViewState, internalViewState]);
 
   // Debounced parent notification to prevent excessive updates
   const debouncedParentNotification = useMemo(
@@ -602,7 +591,7 @@ export default function FieldAnalysisMap({
         onMapReady();
       }
     }, 10000);
-  }, []); // Remove onMapReady dependency to prevent recreation
+  }, [onMapReady]);
 
   // Clear loading timeout
   const clearLoadingTimeout = useCallback(() => {
@@ -647,7 +636,7 @@ export default function FieldAnalysisMap({
         onMapReady();
       }
     }
-  }, []); // No dependencies to break circular dependency
+  }, [onMapReady]);
 
   // Handle source data events to detect when PMTiles are loaded
   const handleSourceData = useCallback(
@@ -1003,12 +992,7 @@ export default function FieldAnalysisMap({
         });
       }
     },
-    [
-      layerVisibility.fields,
-      generateFieldsPaint,
-      filterState.visualizationMode, // Used in generateFieldsPaint
-      filterState.companyFilter,
-    ]
+    [layerVisibility.fields, generateFieldsPaint, filterState.companyFilter]
   );
 
   // Add BNBO layers with cross-hatch pattern
