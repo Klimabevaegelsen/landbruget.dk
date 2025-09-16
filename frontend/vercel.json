@@ -48,23 +48,15 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate, max-age=0"
+          "value": "public, max-age=604800, immutable"
         },
         {
           "key": "CDN-Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
+          "value": "public, max-age=604800, immutable"
         },
         {
           "key": "Vercel-CDN-Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        },
-        {
-          "key": "Pragma",
-          "value": "no-cache"
-        },
-        {
-          "key": "Expires",
-          "value": "0"
+          "value": "public, max-age=604800, immutable"
         },
         {
           "key": "Access-Control-Allow-Origin",

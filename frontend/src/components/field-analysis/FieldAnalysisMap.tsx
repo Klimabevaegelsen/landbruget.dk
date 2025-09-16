@@ -634,7 +634,10 @@ export default function FieldAnalysisMap({
         }
 
         // Final failure after all retries
-        clearLoadingTimeout();
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
         setError(
           'Kunne ikke indlæse kortdata efter flere forsøg. Prøv at genindlæse siden.'
         );
@@ -646,9 +649,12 @@ export default function FieldAnalysisMap({
 
     // Cleanup timeout on unmount
     return () => {
-      clearLoadingTimeout();
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
     };
-  }, [startLoadingTimeout, clearLoadingTimeout]);
+  }, []); // Simplified - just cleanup on unmount
 
   // Cleanup event listeners on unmount
   useEffect(() => {
@@ -1344,7 +1350,10 @@ export default function FieldAnalysisMap({
       // If no sources were added (all URLs empty or sources already exist)
       if (sourcesAdded === 0) {
         console.log('No new sources to add, marking as ready');
-        clearLoadingTimeout();
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
         setIsLoading(false);
         onMapReady?.();
         return;
@@ -1379,7 +1388,6 @@ export default function FieldAnalysisMap({
     addWaterProjectsLayers,
     addBuildingsLayers,
     onMapReady,
-    clearLoadingTimeout,
     handleSourceData,
   ]);
 
@@ -1424,18 +1432,15 @@ export default function FieldAnalysisMap({
         console.log(`Waiting for optimized fields source to load...`);
       } catch (error) {
         console.error('Error updating PMTiles for year:', error);
-        clearLoadingTimeout();
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
         setError('Failed to load data for selected year');
         setIsLoading(false);
       }
     }
-  }, [
-    pmtilesUrls.fields,
-    addFieldsLayers,
-    onMapReady,
-    startLoadingTimeout,
-    clearLoadingTimeout,
-  ]);
+  }, [pmtilesUrls.fields, addFieldsLayers, onMapReady, startLoadingTimeout]);
 
   // Update layer visibility and styling when props change
   useEffect(() => {
@@ -1524,7 +1529,7 @@ export default function FieldAnalysisMap({
         layerVisibility.buildings ? 'visible' : 'none'
       );
     }
-  }, [layerVisibility, filterState.visualizationMode]);
+  }, [layerVisibility, filterState.visualizationMode]); // Only run when visibility or organic mode changes
 
   // Update filters when company filter changes
   useEffect(() => {
@@ -1626,7 +1631,7 @@ export default function FieldAnalysisMap({
         );
       }
     }
-  }, [filterState, layerVisibility.fields, generateFieldsPaint]);
+  }, [filterState, layerVisibility.fields]); // Removed generateFieldsPaint to break circular dependency
 
   // Handle hover events
   const onHover = useCallback(
