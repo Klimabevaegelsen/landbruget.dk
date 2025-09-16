@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 import { AlertTriangle } from 'lucide-react';
 import Map, {
   MapLayerMouseEvent,
@@ -490,9 +496,12 @@ export default function FieldAnalysisMap({
   });
 
   // Use external viewState if provided, otherwise use internal
-  const currentViewState = externalViewState
-    ? { ...internalViewState, ...externalViewState }
-    : internalViewState;
+  // Memoize to prevent infinite re-renders
+  const currentViewState = useMemo(() => {
+    return externalViewState
+      ? { ...internalViewState, ...externalViewState }
+      : internalViewState;
+  }, [internalViewState, externalViewState]);
 
   // Handle view state changes
   const handleViewStateChange = useCallback(
