@@ -850,7 +850,7 @@ export default function FieldAnalysisMap({
         createPartialCoveragePattern();
 
         // Main fields layer
-        const fieldsLayer = {
+        const fieldsLayer: any = {
           id: 'fields-fill',
           source: 'fields',
           'source-layer': 'fields',
@@ -913,7 +913,7 @@ export default function FieldAnalysisMap({
         });
 
         // Fields outline
-        const fieldsOutlineLayer = {
+        const fieldsOutlineLayer: any = {
           id: 'fields-outline',
           source: 'fields',
           'source-layer': 'fields',
