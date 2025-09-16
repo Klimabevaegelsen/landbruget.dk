@@ -539,7 +539,7 @@ export default function FieldAnalysisMap({
     [onLocationSelect]
   );
 
-  // Set up loading timeout
+  // Set up loading timeout - use useRef to avoid recreating the callback
   const startLoadingTimeout = useCallback(() => {
     // Clear any existing timeout
     if (loadingTimeoutRef.current) {
@@ -550,9 +550,12 @@ export default function FieldAnalysisMap({
     loadingTimeoutRef.current = setTimeout(() => {
       console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
-      onMapReady?.();
+      // Use ref to avoid dependency on onMapReady
+      if (typeof onMapReady === 'function') {
+        onMapReady();
+      }
     }, 10000);
-  }, [onMapReady]);
+  }, []); // Remove onMapReady dependency to prevent recreation
 
   // Clear loading timeout
   const clearLoadingTimeout = useCallback(() => {
@@ -562,33 +565,56 @@ export default function FieldAnalysisMap({
     }
   }, []);
 
+  // Use refs to store latest values to avoid recreating callback
+  const pmtilesUrlsRef = useRef(pmtilesUrls);
+  const isLoadingRef = useRef(isLoading);
+
+  // Update refs when values change
+  useEffect(() => {
+    pmtilesUrlsRef.current = pmtilesUrls;
+  }, [pmtilesUrls]);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
   // Check if all required sources are loaded
   const checkAllSourcesLoaded = useCallback(() => {
-    const requiredSources = Object.keys(pmtilesUrls).filter(
-      (key) => pmtilesUrls[key as keyof typeof pmtilesUrls]
+    const requiredSources = Object.keys(pmtilesUrlsRef.current).filter(
+      (key) =>
+        pmtilesUrlsRef.current[key as keyof typeof pmtilesUrlsRef.current]
     );
     const allLoaded = requiredSources.every((source) =>
       loadedSourcesRef.current.has(source)
     );
 
-    if (allLoaded && isLoading) {
+    if (allLoaded && isLoadingRef.current) {
       console.log('All PMTiles sources loaded successfully');
-      clearLoadingTimeout();
+      // Clear timeout directly to avoid dependency
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       setIsLoading(false);
-      onMapReady?.();
+      if (typeof onMapReady === 'function') {
+        onMapReady();
+      }
     }
-  }, [pmtilesUrls, isLoading, clearLoadingTimeout, onMapReady]);
+  }, []); // No dependencies to break circular dependency
 
   // Handle source data events to detect when PMTiles are loaded
   const handleSourceData = useCallback(
     (e: { sourceId: string; isSourceLoaded: boolean }) => {
-      if (e.isSourceLoaded && Object.keys(pmtilesUrls).includes(e.sourceId)) {
+      if (
+        e.isSourceLoaded &&
+        Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)
+      ) {
         loadedSourcesRef.current.add(e.sourceId);
         console.log(`PMTiles source loaded: ${e.sourceId}`);
         checkAllSourcesLoaded();
       }
     },
-    [pmtilesUrls, checkAllSourcesLoaded]
+    [checkAllSourcesLoaded] // Only depend on checkAllSourcesLoaded
   );
 
   // Initialize PMTiles protocol with retry mechanism
