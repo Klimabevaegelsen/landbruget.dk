@@ -499,18 +499,40 @@ export default function FieldAnalysisMap({
   // SIMPLIFIED viewState - use external if provided, otherwise internal
   const currentViewState = externalViewState || internalViewState;
 
-  // Handle view state changes - SIMPLIFIED
+  // Simple throttling for onViewStateChange to prevent lag during dragging
+  const lastNotifyTime = useRef(0);
+  const lastViewState = useRef<ViewState | null>(null);
+  const finalNotifyTimeout = useRef<NodeJS.Timeout | null>(null);
+  const THROTTLE_MS = 50; // Only notify parent every 50ms during dragging
+
+  // Handle view state changes - WITH SIMPLE THROTTLING
   const handleViewStateChange = useCallback(
     (evt: { viewState: ViewState }) => {
       const newViewState = evt.viewState;
 
-      // Only update internal state if we're not externally controlled
+      // Always update internal state immediately for smooth map movement
       if (!externalViewState) {
         setInternalViewState(newViewState);
       }
 
-      // Notify parent immediately - no throttling
-      onViewStateChange?.(newViewState);
+      // Throttle parent notifications to prevent lag
+      const now = Date.now();
+      lastViewState.current = newViewState;
+
+      if (onViewStateChange && now - lastNotifyTime.current > THROTTLE_MS) {
+        lastNotifyTime.current = now;
+        onViewStateChange(newViewState);
+      }
+
+      // Schedule final notification when movement stops
+      if (finalNotifyTimeout.current) {
+        clearTimeout(finalNotifyTimeout.current);
+      }
+      finalNotifyTimeout.current = setTimeout(() => {
+        if (onViewStateChange && lastViewState.current) {
+          onViewStateChange(lastViewState.current);
+        }
+      }, 200); // Send final position after 200ms of no movement
     },
     [onViewStateChange, externalViewState]
   );
