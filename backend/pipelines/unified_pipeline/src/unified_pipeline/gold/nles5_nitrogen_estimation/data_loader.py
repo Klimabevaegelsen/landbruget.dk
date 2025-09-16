@@ -67,30 +67,17 @@ class NLES5DataLoader:
         except Exception as e:
             self.log.error(f"Error discovering FVM marker years from GCS: {e}")
 
-        # Secondary: derive from local analysis JSONs if GCS discovery failed or returned empty
+        # Secondary: derive from hardcoded known years if GCS discovery failed
         if not years:
-            try:
-                # TODO: Load analysis files from GCS instead of local disk
-                analysis_dir = Path(__file__).resolve().parents[3] / "gcs_silver_analysis_nles5_json"
-                if analysis_dir.exists():
-                    for json_path in analysis_dir.glob("fvm_marker_*_analysis.json"):
-                        m = re.match(r"fvm_marker_(\d{4})_analysis\.json", json_path.name)
-                        if m:
-                            years.add(int(m.group(1)))
-                    if years:
-                        self.log.info(f"Using local analysis to determine available FVM years: {sorted(years)}")
-                else:
-                    self.log.warning(f"Local analysis directory not found: {analysis_dir}")
-            except Exception as e:
-                self.log.warning(f"Failed to derive FVM years from local analysis: {e}")
+            self.log.info("GCS discovery returned empty, using hardcoded fallback years based on GCS tree analysis")
 
-        # Tertiary: use hardcoded fallback if both GCS and local discovery failed (network issues)
+        # Tertiary: use hardcoded fallback if GCS discovery failed (network issues)
         if not years:
-            self.log.warning("⚠️ Both GCS and local discovery failed - using hardcoded fallback years")
-            # Based on our analysis, we know these years are available:
-            fallback_years = [2019, 2020, 2021, 2022]
+            self.log.warning("⚠️ GCS discovery failed - using hardcoded fallback years")
+            # Based on GCS tree analysis, these years are available:
+            fallback_years = [2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]
             years.update(fallback_years)
-            self.log.info(f"Using hardcoded fallback FVM years: {sorted(years)}")
+            self.log.info(f"Using hardcoded fallback FVM years from GCS tree: {sorted(years)}")
 
         return sorted(list(years))
 
@@ -1150,7 +1137,7 @@ class NLES5DataLoader:
             
     def _load_farm_data_for_year(self, year: int) -> Optional[str]:
         """
-        Load farm data for a specific year from local files into DuckDB.
+        Load farm data for a specific year from GCS bucket into DuckDB.
         
         Args:
             year: Year to load data for
@@ -1159,199 +1146,142 @@ class NLES5DataLoader:
             Table name with farm data or None if not available
         """
         try:
-            # TODO: Load gødningsregnskab from GCS instead of local disk
-            # Use absolute path to ensure we're looking in the right place
-            base_path = Path(os.path.abspath(self.config.farm_data_path)) / f"GR {year}"
-            if not base_path.exists():
-                self.log.warning(f"Farm data directory not found for year {year}: {base_path}")
+            # Load gødningsregnskab from GCS bucket
+            # Use the GCS path template from config: "silver/gr {year}/20250914_135946/"
+            gcs_path = f"gs://{self.config.bucket}/{self.config.farm_data_gcs_path.format(year=year)}"
+            self.log.info(f"Loading farm data from GCS: {gcs_path}")
+            
+            # List available parquet files in the year directory
+            pattern = f"{gcs_path}*.parquet"
+            files = self.gcs_access.list_files(pattern)
+            
+            if not files:
+                self.log.warning(f"No farm data files found for year {year} in GCS: {pattern}")
                 return None
-                
-            self.log.info(f"Loading farm data from: {base_path}")
             
             # Create temporary table name for this year
             main_table = f"farm_main_{year}"
             animal_table = f"farm_animal_{year}"
             final_table = f"farm_data_{year}"
             
-            # TODO: Load gødningsregnskab from GCS instead of local disk
-            # Load main farm data file (contains quota and fertilizer data)  
-            main_file = self._find_main_farm_file(base_path)
-            if main_file is None:
+            # Find main data files (typically 4061GR files or Del1/Del2 files)
+            main_files = [f for f in files if any(pattern in f for pattern in ['4061GR', '_Del1', '_Del2', 'FELTDEFINITION'])]
+            animal_files = [f for f in files if any(pattern in f for pattern in ['DYRERK', 'B_DYRERK'])]
+            
+            if not main_files:
                 self.log.warning(f"No main farm data files found for year {year}")
                 return None
-                
-            self.log.info(f"Loading main farm data from: {main_file}")
             
-            # Load main file into DuckDB
-            if not self._load_file_to_duckdb(main_file, main_table):
-                return None
+            # Load main files
+            self.log.info(f"Loading main farm data files: {len(main_files)} files")
+            if len(main_files) == 1:
+                self.gcs_access.create_table_from_gcs(main_table, main_files[0])
+            else:
+                # Combine multiple main files
+                union_parts = []
+                for i, file_path in enumerate(main_files):
+                    temp_table = f"farm_temp_main_{year}_{i}"
+                    self.gcs_access.create_table_from_gcs(temp_table, file_path)
+                    union_parts.append(f"SELECT * FROM {temp_table}")
                 
-            # TODO: Load gødningsregnskab from GCS instead of local disk
-            # Load animal production data (contains C_2016, C_2006)
-            animal_files = list(base_path.glob("*DYRERK*.csv")) + list(base_path.glob("*DYRERK*.xls"))
+                # Create combined main table
+                union_sql = f"CREATE TABLE {main_table} AS {' UNION ALL '.join(union_parts)}"
+                self.db.execute(union_sql)
+                
+                # Clean up temp tables
+                for i, _ in enumerate(main_files):
+                    self.db.execute(f"DROP TABLE IF EXISTS farm_temp_main_{year}_{i}")
             
+            # Load animal data if available
             if animal_files:
-                # Load and combine animal data
-                self._load_and_combine_animal_data(animal_files, animal_table)
+                self.log.info(f"Loading animal farm data files: {len(animal_files)} files")
+                if len(animal_files) == 1:
+                    self.gcs_access.create_table_from_gcs(animal_table, animal_files[0])
+                else:
+                    # Combine multiple animal files
+                    union_parts = []
+                    for i, file_path in enumerate(animal_files):
+                        temp_table = f"farm_temp_animal_{year}_{i}"
+                        self.gcs_access.create_table_from_gcs(temp_table, file_path)
+                        union_parts.append(f"SELECT * FROM {temp_table}")
+                    
+                    # Create combined animal table
+                    union_sql = f"CREATE TABLE {animal_table} AS {' UNION ALL '.join(union_parts)}"
+                    self.db.execute(union_sql)
+                    
+                    # Clean up temp tables
+                    for i, _ in enumerate(animal_files):
+                        self.db.execute(f"DROP TABLE IF EXISTS farm_temp_animal_{year}_{i}")
                 
-                # Merge main data with aggregated animal data
-                self.db.execute(f"""
-                    CREATE TABLE {final_table} AS
-                    SELECT m.*, 
-                           a.organic_n_production,
-                           a.animal_count,
-                           a.animal_units
-                    FROM {main_table} m
-                    LEFT JOIN {animal_table} a ON m.CVR = a.cvr
-                """)
+                # Merge main data with animal data (try to find CVR column in different formats)
+                try:
+                    self.db.execute(f"""
+                        CREATE TABLE {final_table} AS
+                        SELECT m.*, 
+                               COALESCE(a.organic_n_production, 0) as organic_n_production,
+                               COALESCE(a.animal_count, 0) as animal_count,
+                               COALESCE(a.animal_units, 0) as animal_units
+                        FROM {main_table} m
+                        LEFT JOIN {animal_table} a ON m.CVR = a.CVR
+                    """)
+                except Exception as e:
+                    self.log.warning(f"Failed to join with animal data: {e}. Using main data only.")
+                    self.db.execute(f"CREATE TABLE {final_table} AS SELECT * FROM {main_table}")
                 
                 # Drop temporary tables
                 self.db.execute(f"DROP TABLE IF EXISTS {main_table}")
                 self.db.execute(f"DROP TABLE IF EXISTS {animal_table}")
             else:
                 # No animal data available, just use main data
-                self.db.execute(f"ALTER TABLE {main_table} RENAME TO {final_table}")
+                self.db.execute(f"CREATE TABLE {final_table} AS SELECT * FROM {main_table}")
+                self.db.execute(f"DROP TABLE IF EXISTS {main_table}")
             
-            # Ensure CVR column exists
-            columns = [row[0].upper() for row in self.db.execute(f"DESCRIBE {final_table}").fetchall()]
-            if 'CVR' not in columns:
-                self.log.error(f"CVR column not found in farm data for year {year}")
-                self.db.execute(f"DROP TABLE IF EXISTS {final_table}")
+            # Check if data was loaded successfully
+            try:
+                row_count = self.db.execute(f"SELECT COUNT(*) FROM {final_table}").fetchone()[0]
+                if row_count == 0:
+                    self.log.warning(f"Farm data table for year {year} is empty")
+                    return None
+                
+                self.log.info(f"Successfully loaded {row_count:,} farm records for year {year}")
+                return final_table
+            except Exception as e:
+                self.log.error(f"Failed to verify farm data for year {year}: {e}")
                 return None
-            
-            # Log summary
-            row_count = self.db.execute(f"SELECT COUNT(*) FROM {final_table}").fetchone()[0]
-            self.log.info(f"Loaded {row_count:,} farm records for year {year}")
-            
-            return final_table
             
         except Exception as e:
             self.log.error(f"Failed to load farm data for year {year}: {e}")
             return None
             
     def _find_main_farm_file(self, base_path: Path) -> Optional[Path]:
-        """Find the main farm data file for a given year."""
-        # TODO: Load gødningsregnskab from GCS instead of local disk
-        # Try different file patterns based on year
-        patterns = ["*_6a.csv", "*_6b.csv", "*_6.xls", "*_6*.csv", "*_6*.xls"]
+        """
+        Legacy method for finding main farm data file - no longer used with GCS implementation.
         
-        for pattern in patterns:
-            files = list(base_path.glob(pattern))
-            if files:
-                # Prefer CSV over XLS
-                csv_files = [f for f in files if f.suffix.lower() == '.csv']
-                if csv_files:
-                    return csv_files[0]
-                return files[0]
+        This method is kept for backward compatibility but should not be called 
+        in the GCS-based farm data loading.
+        """
+        self.log.warning("_find_main_farm_file called but farm data is now loaded from GCS")
         return None
     
     def _load_file_to_duckdb(self, file_path: Path, table_name: str) -> bool:
-        """Load a CSV or Excel file to DuckDB table."""
-        # TODO: Load gødningsregnskab from GCS instead of local disk
-        try:
-            self.db.execute(f"DROP TABLE IF EXISTS {table_name}")
-            
-            if file_path.suffix.lower() == '.csv':
-                # Try different CSV configurations with correct DuckDB syntax
-                configs = [
-                    ("delim=';', header=true, encoding='utf-8', ignore_errors=true", "Semicolon delimiter with UTF-8"),
-                    ("delim=';', header=true, encoding='latin1'", "Semicolon delimiter with Latin-1"),
-                    ("delim=';', header=true, encoding='windows-1252'", "Semicolon delimiter with Windows-1252"),
-                    ("header=true, ignore_errors=true", "Auto-detect delimiter"),
-                ]
-                
-                for config, description in configs:
-                    try:
-                        self.db.execute(f"""
-                            CREATE TABLE {table_name} AS 
-                            SELECT * FROM read_csv('{file_path}', {config})
-                        """)
-                        # Check if we got reasonable column count
-                        col_count = len(self.db.execute(f"DESCRIBE {table_name}").fetchall())
-                        if col_count > 1:
-                            self.log.info(f"✅ Successfully loaded CSV with {description}: {col_count} columns")
-                            return True
-                        self.db.execute(f"DROP TABLE IF EXISTS {table_name}")
-                    except Exception as e:
-                        self.log.debug(f"Failed to load CSV with {description}: {e}")
-                        self.db.execute(f"DROP TABLE IF EXISTS {table_name}")
-                        continue
-            
-            elif file_path.suffix.lower() in ['.xls', '.xlsx']:
-                # For Excel files, we need to install spatial extension for Excel support
-                try:
-                    self.db.execute("INSTALL spatial")
-                    self.db.execute("LOAD spatial")
-                except:
-                    pass  # Extension might already be loaded
-                
-                # Try to read Excel file
-                self.db.execute(f"""
-                    CREATE TABLE {table_name} AS 
-                    SELECT * FROM st_read('{file_path}')
-                """)
-                return True
-            
-            return False
-            
-        except Exception as e:
-            self.log.error(f"Failed to load {file_path} to DuckDB: {e}")
-            return False
+        """
+        Legacy method for loading CSV/Excel files to DuckDB - no longer used with GCS implementation.
+        
+        This method is kept for backward compatibility but should not be called 
+        in the GCS-based farm data loading where parquet files are used directly.
+        """
+        self.log.warning("_load_file_to_duckdb called but farm data is now loaded from GCS parquet files")
+        return False
             
     def _load_and_combine_animal_data(self, animal_files: List[Path], animal_table: str) -> None:
-        """Load and combine animal data files, then aggregate by CVR."""
-        temp_tables = []
+        """
+        Legacy method for loading and combining animal data files - no longer used with GCS implementation.
         
-        try:
-            # TODO: Load gødningsregnskab from GCS instead of local disk
-            # Load each animal file to a temporary table
-            for i, animal_file in enumerate(animal_files):
-                temp_table = f"animal_temp_{i}"
-                self.log.info(f"Loading animal data from: {animal_file}")
-                
-                if self._load_file_to_duckdb(animal_file, temp_table):
-                    temp_tables.append(temp_table)
-            
-            if not temp_tables:
-                self.log.warning("No animal data files could be loaded")
-                return
-                
-            # Combine all animal tables
-            if len(temp_tables) == 1:
-                combined_table = temp_tables[0]
-            else:
-                combined_table = "animal_combined_temp"
-                union_queries = [f"SELECT * FROM {table}" for table in temp_tables]
-                union_query = " UNION ALL ".join(union_queries)
-                self.db.execute(f"CREATE TABLE {combined_table} AS {union_query}")
-            
-            # Aggregate by CVR - Handle case-insensitive column names
-            # Only use columns that actually exist in the data
-            self.db.execute(f"""
-                CREATE TABLE {animal_table} AS
-                SELECT 
-                    CVR as cvr,
-                    COALESCE(SUM(TRY_CAST(C_2016 AS DOUBLE)), 0) as organic_n_production,
-                    COALESCE(SUM(TRY_CAST(C_2006 AS DOUBLE)), 0) as animal_count,
-                    0 as animal_units  -- C_2017 doesn't exist in this dataset, use 0
-                FROM {combined_table}
-                WHERE CVR IS NOT NULL
-                GROUP BY CVR
-            """)
-            
-            # Clean up temporary tables
-            for temp_table in temp_tables:
-                self.db.execute(f"DROP TABLE IF EXISTS {temp_table}")
-            
-            if len(temp_tables) > 1:
-                self.db.execute(f"DROP TABLE IF EXISTS {combined_table}")
-                
-        except Exception as e:
-            self.log.error(f"Failed to load and combine animal data: {e}")
-            # Clean up on error
-            for temp_table in temp_tables:
-                self.db.execute(f"DROP TABLE IF EXISTS {temp_table}")
-            raise
+        This method is kept for backward compatibility but should not be called 
+        in the GCS-based farm data loading where animal data is handled directly in _load_farm_data_for_year.
+        """
+        self.log.warning("_load_and_combine_animal_data called but farm data is now loaded from GCS")
+        return
             
     def _get_key_farm_data_columns(self) -> List[str]:
         """

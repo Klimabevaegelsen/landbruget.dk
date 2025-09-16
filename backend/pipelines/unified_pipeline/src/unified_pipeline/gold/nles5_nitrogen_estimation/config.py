@@ -35,12 +35,11 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     field_plan_dataset: str = "field_plan"  # GKEA field plan data (in fertiliser directory)
     catch_crops_dataset: str = "catch_crops"  # Efterafgrøder data (in fertiliser directory)
     
-    # Farm-level gødningsregnskab data integration (NEW)
-    farm_data_source: str = "local"  # Source for farm data: "local" (files) or "gcs" (future parquet)
-    # TODO: Load gødningsregnskab from GCS instead of local disk
-    farm_data_path: str = "data/In-depth"  # Local path to extracted gødningsregnskab data
+    # Farm-level gødningsregnskab data integration
+    farm_data_source: str = "gcs"  # Source for farm data: "gcs" (GCS bucket parquet files)
+    farm_data_gcs_path: str = "silver/gr {year}/20250914_135946/"  # GCS path template for gødningsregnskab data
     enable_farm_data_integration: bool = True  # Enable farm data integration for enhanced accuracy
-    farm_data_years: Optional[List[int]] = [2018, 2019, 2020, 2021, 2022]  # Available farm data years
+    farm_data_years: Optional[List[int]] = [2018, 2019, 2020, 2021, 2022, 2023]  # Available farm data years (updated based on GCS tree)
     farm_data_cache_table: str = "farm_data_cache"  # DuckDB table name for cached farm data
 
     # Processing configuration - CHUNKED FOR STABILITY
@@ -72,7 +71,7 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Example: target_years = [2021, 2022, 2023] → loads [2019, 2020, 2021, 2022, 2023] (5 years instead of 18 years)
     # target_years: Optional[List[int]] = None  
     # NOTE: Updated analysis shows 2023 agricultural fields data IS available in GCS (fvm_marker_2023)
-    target_years: Optional[List[int]] = [2021, 2022, 2023]
+    target_years: Optional[List[int]] = [2021, 2022] #, 2023]
 
     # MEMORY OPTIMIZATION: Limits target calculation years (auto-discovery with memory management)
     # NLES5 requires 3-year windows: current + previous + year before previous
