@@ -1826,6 +1826,13 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         onMouseLeave={() => setHoverInfo(null)}
         onClick={onClick}
         cursor="default"
+        // Explicitly enable map interactions
+        dragPan={true}
+        scrollZoom={true}
+        touchZoom={true}
+        touchRotate={true}
+        doubleClickZoom={true}
+        keyboard={true}
       >
         <NavigationControl position="top-right" />
 

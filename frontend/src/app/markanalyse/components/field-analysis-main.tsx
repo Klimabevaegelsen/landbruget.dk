@@ -68,6 +68,7 @@ export default function FieldAnalysisMain() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
   // Map viewport state - preserve zoom and center when changing years
   const [mapViewState, setMapViewState] = useState<Partial<ViewState>>({
@@ -262,6 +263,7 @@ export default function FieldAnalysisMain() {
           onLayerToggle={handleLayerToggle}
           onFilterChange={handleFilterChange}
           onYearChange={handleYearChange}
+          onExpandedChange={setSidebarExpanded}
         />
       )}
 
@@ -285,7 +287,7 @@ export default function FieldAnalysisMain() {
       >
         {/* Year Slider - positioned to avoid sidebar and panel collision */}
         <div
-          className={`pointer-events-auto absolute top-4 z-30 transition-all duration-300 md:top-6 md:max-w-sm lg:top-20 ${
+          className={`pointer-events-none absolute top-4 z-30 transition-all duration-300 md:top-6 md:max-w-sm lg:top-20 ${
             !isMobile &&
             (selectedField || clickedCoordinates) &&
             !isPanelCollapsed
@@ -293,11 +295,13 @@ export default function FieldAnalysisMain() {
               : 'right-4 md:right-6'
           }`}
         >
-          <YearSlider
-            yearSelection={yearSelection}
-            onYearChange={handleYearChange}
-            isLoading={false} // Allow year changes even during loading
-          />
+          <div className="pointer-events-auto">
+            <YearSlider
+              yearSelection={yearSelection}
+              onYearChange={handleYearChange}
+              isLoading={false} // Allow year changes even during loading
+            />
+          </div>
         </div>
 
         <div

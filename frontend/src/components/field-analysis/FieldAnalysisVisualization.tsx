@@ -371,12 +371,14 @@ export default function FieldAnalysisVisualization() {
       {/* Main Map Area */}
       <div className="relative flex-1 touch-pan-x touch-pan-y">
         {/* Year Slider - positioned below search bar */}
-        <div className="pointer-events-auto absolute top-20 right-4 left-4 z-30 lg:top-4 lg:right-4 lg:left-[22rem]">
-          <YearSlider
-            yearSelection={yearSelection}
-            onYearChange={handleYearChange}
-            isLoading={false} // Allow year changes even during loading
-          />
+        <div className="pointer-events-none absolute top-20 right-4 left-4 z-30 lg:top-4 lg:right-4 lg:left-[22rem]">
+          <div className="pointer-events-auto">
+            <YearSlider
+              yearSelection={yearSelection}
+              onYearChange={handleYearChange}
+              isLoading={false} // Allow year changes even during loading
+            />
+          </div>
         </div>
 
         {isLoading ? (
