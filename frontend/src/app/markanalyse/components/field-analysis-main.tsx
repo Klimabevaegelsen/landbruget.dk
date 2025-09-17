@@ -282,7 +282,7 @@ export default function FieldAnalysisMain() {
       {/* Main Content Area - Account for fixed sidebar */}
       <div
         className={`relative h-full w-full overflow-hidden transition-all duration-200 ${
-          !isMobile ? 'ml-[70px] md:ml-[280px]' : ''
+          !isMobile ? (sidebarExpanded ? 'ml-[280px]' : 'ml-[70px]') : ''
         }`}
       >
         {/* Year Slider - positioned to avoid sidebar and panel collision */}

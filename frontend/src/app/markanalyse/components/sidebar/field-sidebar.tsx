@@ -5,6 +5,7 @@ import { Layers, Filter, Calendar, Settings } from 'lucide-react';
 import {
   Sidebar,
   SidebarHeader,
+  SidebarHeaderContent,
   SidebarContent,
   SidebarGroup,
   SidebarItem,
@@ -23,6 +24,7 @@ interface FieldSidebarProps {
   onLayerToggle: (layerName: keyof LayerVisibility) => void;
   onFilterChange: (filters: Partial<FilterState>) => void;
   onYearChange: (year: number) => void;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 export function FieldSidebar({
@@ -32,27 +34,30 @@ export function FieldSidebar({
   onLayerToggle,
   onFilterChange,
   onYearChange,
+  onExpandedChange,
 }: FieldSidebarProps) {
   const [activeSection, setActiveSection] = useState<
     'layers' | 'filters' | 'years' | 'settings'
   >('layers');
 
   return (
-    <Sidebar defaultExpanded={true} collapsible>
-      <SidebarHeader>
-        <div className="flex items-center gap-3">
-          <div className="bg-primary flex h-10 w-10 items-center justify-center rounded-xl shadow-sm">
-            <Layers className="text-primary-foreground h-5 w-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-foreground truncate text-base font-bold">
-              Markanalyse
-            </h2>
-            <p className="text-muted-foreground truncate text-sm font-medium">
-              {yearSelection.selectedYear} data
-            </p>
-          </div>
+    <Sidebar
+      defaultExpanded={false}
+      collapsible
+      onExpandedChange={onExpandedChange}
+    >
+      <SidebarHeader className="flex items-center justify-center">
+        <div className="bg-primary flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl shadow-sm">
+          <Layers className="text-primary-foreground h-5 w-5" />
         </div>
+        <SidebarHeaderContent className="ml-3 min-w-0 flex-1">
+          <h2 className="text-foreground truncate text-base font-bold">
+            Markanalyse
+          </h2>
+          <p className="text-muted-foreground truncate text-sm font-medium">
+            {yearSelection.selectedYear} data
+          </p>
+        </SidebarHeaderContent>
       </SidebarHeader>
 
       <SidebarContent>
