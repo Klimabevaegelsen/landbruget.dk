@@ -279,7 +279,7 @@ export default function FieldAnalysisMain() {
 
       {/* Main Content Area - Account for fixed sidebar */}
       <div
-        className={`relative h-full transition-all duration-200 ${
+        className={`relative h-full w-full overflow-hidden transition-all duration-200 ${
           !isMobile ? 'ml-[70px] md:ml-[280px]' : ''
         }`}
       >
@@ -300,31 +300,36 @@ export default function FieldAnalysisMain() {
           />
         </div>
 
-        {isLoading ? (
-          <LoadingState message="Indlæser kortdata..." />
-        ) : (
-          <FieldAnalysisMap
-            pmtilesUrls={pmtilesUrls}
-            layerVisibility={layerVisibility}
-            filterState={filterState}
-            onFieldSelect={handleFieldSelect}
-            onMapClick={handleMapClick}
-            onMapReady={handleMapReady}
-            viewState={mapViewState}
-            onViewStateChange={handleMapViewStateChange}
-            hasRightPanel={
-              !isMobile &&
-              (!!selectedField || !!clickedCoordinates) &&
-              !isPanelCollapsed
-            }
-          />
-        )}
+        <div
+          className="absolute inset-0 h-full w-full"
+          style={{ touchAction: 'pan-x pan-y' }}
+        >
+          {isLoading ? (
+            <LoadingState message="Indlæser kortdata..." />
+          ) : (
+            <FieldAnalysisMap
+              pmtilesUrls={pmtilesUrls}
+              layerVisibility={layerVisibility}
+              filterState={filterState}
+              onFieldSelect={handleFieldSelect}
+              onMapClick={handleMapClick}
+              onMapReady={handleMapReady}
+              viewState={mapViewState}
+              onViewStateChange={handleMapViewStateChange}
+              hasRightPanel={
+                !isMobile &&
+                (!!selectedField || !!clickedCoordinates) &&
+                !isPanelCollapsed
+              }
+            />
+          )}
+        </div>
       </div>
 
       {/* Desktop Field Details Panel */}
       {!isMobile && selectedField && (
         <div
-          className={`bg-background fixed top-[120px] right-0 z-40 flex h-[calc(100vh-120px)] flex-col border-l shadow-xl transition-all duration-300 ${
+          className={`bg-background fixed top-[120px] right-0 z-30 flex h-[calc(100vh-120px)] flex-col border-l shadow-xl transition-all duration-300 ${
             isPanelCollapsed ? 'w-16' : 'w-96 xl:w-[28rem]'
           }`}
         >
@@ -427,7 +432,7 @@ export default function FieldAnalysisMain() {
       {/* Desktop Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
       {!isMobile && !selectedField && clickedCoordinates && (
         <div
-          className={`bg-background fixed top-[120px] right-0 z-40 flex h-[calc(100vh-120px)] flex-col border-l shadow-xl transition-all duration-300 ${
+          className={`bg-background fixed top-[120px] right-0 z-30 flex h-[calc(100vh-120px)] flex-col border-l shadow-xl transition-all duration-300 ${
             isPanelCollapsed ? 'w-16' : 'w-80 xl:w-96'
           }`}
         >
