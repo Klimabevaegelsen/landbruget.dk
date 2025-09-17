@@ -58,7 +58,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
         <aside
           ref={ref}
           className={cn(
-            'fixed top-[120px] z-50 h-[calc(100vh-120px)] flex-shrink-0 flex-col items-center justify-between pb-4',
+            'fixed top-[120px] left-0 z-40 h-[calc(100vh-120px)] flex-shrink-0 flex-col items-center justify-between pb-4',
             'bg-card border-border sidebar-transition border-r',
             'hidden md:flex', // Hide on mobile by default
             collapsible && [
