@@ -104,20 +104,19 @@ export function YearSlider({
             />
 
             {/* Year markers */}
-            <div className="mt-4 flex justify-between px-1">
+            <div className="relative mt-6 h-8">
               {availableYears.map((year, index) => (
                 <div
                   key={year}
-                  className={`text-sm font-medium transition-colors ${
+                  className={`absolute text-xs font-medium whitespace-nowrap transition-colors ${
                     year === selectedYear
                       ? 'text-primary'
                       : 'text-muted-foreground'
                   }`}
                   style={{
-                    transform: 'translateX(-50%)',
-                    marginLeft: index === 0 ? '0' : undefined,
-                    marginRight:
-                      index === availableYears.length - 1 ? '0' : undefined,
+                    left: `${(index / (availableYears.length - 1)) * 100}%`,
+                    transform: 'translateX(-50%) rotate(-45deg)',
+                    transformOrigin: 'center center',
                   }}
                 >
                   {year}
