@@ -509,8 +509,10 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     padding: { top: 0, bottom: 0, left: 0, right: 0 },
   });
 
-  // SIMPLIFIED viewState - use external if provided, otherwise internal
-  const currentViewState = externalViewState || internalViewState;
+  // PROPERLY MERGE viewState - merge external with internal defaults
+  const currentViewState: ViewState = externalViewState
+    ? { ...internalViewState, ...externalViewState }
+    : internalViewState;
 
   // Optimized throttling using requestAnimationFrame for smooth performance
   const rafIdRef = useRef<number | null>(null);
@@ -1792,7 +1794,10 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   ];
 
   return (
-    <div className="relative h-full w-full touch-manipulation">
+    <div
+      className="relative h-full w-full touch-manipulation"
+      style={{ touchAction: 'pan-x pan-y' }}
+    >
       {/* Search Bar - positioned to avoid sidebar collision */}
       <div
         className={`pointer-events-auto absolute top-4 left-4 z-30 transition-all duration-200 md:w-80 lg:w-96 xl:w-[28rem] ${

@@ -67,6 +67,7 @@ export default function FieldAnalysisMain() {
     lng: number;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
   // Map viewport state - preserve zoom and center when changing years
   const [mapViewState, setMapViewState] = useState<Partial<ViewState>>({
@@ -173,12 +174,14 @@ export default function FieldAnalysisMain() {
   // Handle field selection
   const handleFieldSelect = useCallback((fieldData: FieldAnalysisData) => {
     setSelectedField(fieldData);
+    setIsPanelCollapsed(false); // Expand panel when new field is selected
   }, []);
 
   // Handle map clicks (for coordinates only)
   const handleMapClick = useCallback(
     (coordinates: { lat: number; lng: number }) => {
       setClickedCoordinates(coordinates);
+      setIsPanelCollapsed(false); // Expand panel when coordinates are clicked
 
       // If a field is currently selected, update its click coordinates
       if (selectedField) {
@@ -278,12 +281,12 @@ export default function FieldAnalysisMain() {
       <div className="relative min-w-0 flex-1">
         {/* Year Slider - positioned to avoid sidebar collision */}
         <div
-          className={`pointer-events-auto absolute top-4 z-30 transition-all duration-200 md:top-6 md:max-w-sm lg:top-20 ${
-            !isMobile && selectedField
+          className={`pointer-events-auto absolute top-4 z-30 transition-all duration-300 md:top-6 md:max-w-sm lg:top-20 ${
+            !isMobile &&
+            (selectedField || clickedCoordinates) &&
+            !isPanelCollapsed
               ? 'right-[25rem] xl:right-[29rem]'
-              : !isMobile && clickedCoordinates
-                ? 'right-[21rem] xl:right-[25rem]'
-                : 'right-4 md:right-6'
+              : 'right-4 md:right-6'
           }`}
         >
           <YearSlider
@@ -306,7 +309,9 @@ export default function FieldAnalysisMain() {
             viewState={mapViewState}
             onViewStateChange={handleMapViewStateChange}
             hasRightPanel={
-              !isMobile && (!!selectedField || !!clickedCoordinates)
+              !isMobile &&
+              (!!selectedField || !!clickedCoordinates) &&
+              !isPanelCollapsed
             }
           />
         )}
@@ -314,23 +319,173 @@ export default function FieldAnalysisMain() {
 
       {/* Desktop Field Details Panel */}
       {!isMobile && selectedField && (
-        <div className="bg-background animate-in slide-in-from-right flex w-96 flex-shrink-0 flex-col border-l shadow-xl duration-200 xl:w-[28rem]">
+        <div
+          className={`bg-background flex flex-shrink-0 flex-col border-l shadow-xl transition-all duration-300 ${
+            isPanelCollapsed ? 'w-16' : 'w-96 xl:w-[28rem]'
+          }`}
+        >
           <div className="flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto">
-              {/* Header */}
-              <div className="bg-background/95 sticky top-0 z-10 border-b p-6 pb-4 backdrop-blur-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-foreground text-xl font-bold">
-                      Markdetaljer
-                    </h2>
-                    <p className="text-muted-foreground mt-1 text-sm">
-                      {selectedField.crop_name || 'Ukendt afgrøde'} •{' '}
-                      {selectedField.kommune}
-                    </p>
+            {isPanelCollapsed ? (
+              /* Collapsed State - Show only toggle button */
+              <div className="flex h-full flex-col items-center justify-start p-4">
+                <button
+                  onClick={() => setIsPanelCollapsed(false)}
+                  className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                  aria-label="Vis panel"
+                  title="Vis markdetaljer"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 19l-7-7 7-7"
+                    />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              /* Expanded State - Show full content */
+              <div className="h-full overflow-y-auto">
+                {/* Header */}
+                <div className="bg-background/95 sticky top-0 z-10 border-b p-6 pb-4 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-foreground text-xl font-bold">
+                        Markdetaljer
+                      </h2>
+                      <p className="text-muted-foreground mt-1 truncate text-sm">
+                        {selectedField.crop_name || 'Ukendt afgrøde'} •{' '}
+                        {selectedField.kommune}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {/* Collapse Button */}
+                      <button
+                        onClick={() => setIsPanelCollapsed(true)}
+                        className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                        aria-label="Skjul panel"
+                        title="Skjul panel for bedre kortoversigt"
+                      >
+                        <svg
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5l7 7-7 7"
+                          />
+                        </svg>
+                      </button>
+                      {/* Close Button */}
+                      <button
+                        onClick={() => setSelectedField(null)}
+                        className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                        aria-label="Luk panel"
+                      >
+                        <svg
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
+                </div>
+
+                {/* Field Details Content */}
+                <div className="p-6 pt-4">
+                  <FieldDetailsContent field={selectedField} />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
+      {!isMobile && !selectedField && clickedCoordinates && (
+        <div
+          className={`bg-background flex flex-shrink-0 flex-col border-l shadow-xl transition-all duration-300 ${
+            isPanelCollapsed ? 'w-16' : 'w-80 xl:w-96'
+          }`}
+        >
+          {isPanelCollapsed ? (
+            /* Collapsed State - Show only toggle button */
+            <div className="flex h-full flex-col items-center justify-start p-4">
+              <button
+                onClick={() => setIsPanelCollapsed(false)}
+                className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                aria-label="Vis koordinater"
+                title="Vis GPS koordinater"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            /* Expanded State - Show full content */
+            <div className="p-6">
+              <div className="mb-6 flex items-center justify-between">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg font-semibold">GPS Koordinater</h3>
+                  <p className="text-muted-foreground mt-1 truncate text-sm">
+                    Klik på kortet for at få koordinater
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Collapse Button */}
                   <button
-                    onClick={() => setSelectedField(null)}
+                    onClick={() => setIsPanelCollapsed(true)}
+                    className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                    aria-label="Skjul panel"
+                    title="Skjul panel for bedre kortoversigt"
+                  >
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                  {/* Close Button */}
+                  <button
+                    onClick={() => setClickedCoordinates(null)}
                     className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
                     aria-label="Luk panel"
                   >
@@ -350,64 +505,24 @@ export default function FieldAnalysisMain() {
                   </button>
                 </div>
               </div>
-
-              {/* Field Details Content */}
-              <div className="p-6 pt-4">
-                <FieldDetailsContent field={selectedField} />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Desktop Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
-      {!isMobile && !selectedField && clickedCoordinates && (
-        <div className="bg-background animate-in slide-in-from-right flex w-80 flex-shrink-0 flex-col border-l shadow-xl duration-200 xl:w-96">
-          <div className="p-6">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">GPS Koordinater</h3>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  Klik på kortet for at få koordinater
-                </p>
-              </div>
-              <button
-                onClick={() => setClickedCoordinates(null)}
-                className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
-                aria-label="Luk panel"
-              >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-            <div className="bg-primary/10 rounded-lg p-4">
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Latitude:</span>
-                  <span className="font-mono font-medium">
-                    {clickedCoordinates.lat.toFixed(5)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Longitude:</span>
-                  <span className="font-mono font-medium">
-                    {clickedCoordinates.lng.toFixed(5)}
-                  </span>
+              <div className="bg-primary/10 rounded-lg p-4">
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Latitude:</span>
+                    <span className="font-mono font-medium">
+                      {clickedCoordinates.lat.toFixed(5)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Longitude:</span>
+                    <span className="font-mono font-medium">
+                      {clickedCoordinates.lng.toFixed(5)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
