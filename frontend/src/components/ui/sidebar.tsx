@@ -23,6 +23,7 @@ function useSidebar() {
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   defaultExpanded?: boolean;
   collapsible?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
@@ -31,6 +32,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
       className,
       defaultExpanded = false,
       collapsible = true,
+      onExpandedChange,
       children,
       ...props
     },
@@ -46,12 +48,17 @@ const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
       }
     }, [isMobile]);
 
+    // Notify parent of expanded state changes
+    React.useEffect(() => {
+      onExpandedChange?.(isExpanded);
+    }, [isExpanded, onExpandedChange]);
+
     return (
       <SidebarContext.Provider value={{ isExpanded, setIsExpanded, isMobile }}>
         <aside
           ref={ref}
           className={cn(
-            'fixed top-0 z-50 h-screen flex-shrink-0 flex-col items-center justify-between pb-4',
+            'fixed top-[120px] z-50 h-[calc(100vh-120px)] flex-shrink-0 flex-col items-center justify-between pb-4',
             'bg-card border-border sidebar-transition border-r',
             'hidden md:flex', // Hide on mobile by default
             collapsible && [

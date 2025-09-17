@@ -69,6 +69,9 @@ export default function FieldAnalysisMain() {
   const [isLoading, setIsLoading] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
+  // Sidebar expanded state
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+
   // Map viewport state - preserve zoom and center when changing years
   const [mapViewState, setMapViewState] = useState<Partial<ViewState>>({
     longitude: 9.501785,
@@ -252,7 +255,7 @@ export default function FieldAnalysisMain() {
   }
 
   return (
-    <div className="bg-background flex h-screen">
+    <div className="bg-background flex h-[calc(100vh-120px)] min-h-[calc(100vh-120px)]">
       {/* Desktop Sidebar */}
       {!isMobile && (
         <FieldSidebar
@@ -262,6 +265,7 @@ export default function FieldAnalysisMain() {
           onLayerToggle={handleLayerToggle}
           onFilterChange={handleFilterChange}
           onYearChange={handleYearChange}
+          onExpandedChange={setIsSidebarExpanded}
         />
       )}
 
@@ -278,8 +282,12 @@ export default function FieldAnalysisMain() {
       )}
 
       {/* Main Map Area */}
-      <div className="relative min-w-0 flex-1">
-        {/* Year Slider - positioned to avoid sidebar collision */}
+      <div
+        className={`relative min-w-0 flex-1 transition-all duration-200 ${
+          !isMobile ? 'ml-[70px] md:ml-[280px]' : ''
+        }`}
+      >
+        {/* Year Slider - positioned to avoid sidebar and panel collision */}
         <div
           className={`pointer-events-auto absolute top-4 z-30 transition-all duration-300 md:top-6 md:max-w-sm lg:top-20 ${
             !isMobile &&

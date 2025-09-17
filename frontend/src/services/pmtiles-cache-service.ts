@@ -12,7 +12,7 @@ interface PMTilesPreloadOptions {
 class PMTilesCacheService {
   private cache = new Map<string, CachedPMTilesUrl>();
   private readonly CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week in milliseconds
-  private readonly USE_PROXY = false; // Use direct URLs for better performance
+  private readonly USE_PROXY = true; // Use proxy to avoid CORS issues
 
   /**
    * Get a PMTiles URL with caching optimization
@@ -85,7 +85,7 @@ class PMTilesCacheService {
         const link = document.createElement('link');
         link.rel = 'preload';
         link.href = url;
-        link.as = 'fetch';
+        // PMTiles are binary data, don't specify 'as' attribute
         link.crossOrigin = 'anonymous';
 
         // Add to document head
