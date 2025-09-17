@@ -101,6 +101,30 @@ const SidebarHeader = React.forwardRef<HTMLDivElement, SidebarHeaderProps>(
 );
 SidebarHeader.displayName = 'SidebarHeader';
 
+type SidebarHeaderContentProps = React.HTMLAttributes<HTMLDivElement>;
+
+const SidebarHeaderContent = React.forwardRef<
+  HTMLDivElement,
+  SidebarHeaderContentProps
+>(({ className, children, ...props }, ref) => {
+  const { isExpanded } = useSidebar();
+
+  if (!isExpanded) {
+    return null; // Hide content when collapsed
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={cn('transition-all duration-200', className)}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+});
+SidebarHeaderContent.displayName = 'SidebarHeaderContent';
+
 type SidebarContentProps = React.HTMLAttributes<HTMLDivElement>;
 
 const SidebarContent = React.forwardRef<HTMLDivElement, SidebarContentProps>(
@@ -218,6 +242,7 @@ SidebarGroup.displayName = 'SidebarGroup';
 export {
   Sidebar,
   SidebarHeader,
+  SidebarHeaderContent,
   SidebarContent,
   SidebarFooter,
   SidebarItem,
