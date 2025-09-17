@@ -1,6 +1,13 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+  memo,
+} from 'react';
 import { AlertTriangle } from 'lucide-react';
 import Map, {
   MapLayerMouseEvent,
@@ -461,7 +468,7 @@ function MapTooltip({
   );
 }
 
-export default function FieldAnalysisMap({
+const FieldAnalysisMap = memo(function FieldAnalysisMap({
   pmtilesUrls,
   layerVisibility,
   filterState,
@@ -493,13 +500,12 @@ export default function FieldAnalysisMap({
   // SIMPLIFIED viewState - use external if provided, otherwise internal
   const currentViewState = externalViewState || internalViewState;
 
-  // Simple throttling for onViewStateChange to prevent lag during dragging
-  const lastNotifyTime = useRef(0);
+  // Optimized throttling using requestAnimationFrame for smooth performance
+  const rafIdRef = useRef<number | null>(null);
   const lastViewState = useRef<ViewState | null>(null);
   const finalNotifyTimeout = useRef<NodeJS.Timeout | null>(null);
-  const THROTTLE_MS = 50; // Only notify parent every 50ms during dragging
 
-  // Handle view state changes - WITH SIMPLE THROTTLING
+  // Handle view state changes - OPTIMIZED WITH RAF THROTTLING
   const handleViewStateChange = useCallback(
     (evt: { viewState: ViewState }) => {
       const newViewState = evt.viewState;
@@ -509,13 +515,17 @@ export default function FieldAnalysisMap({
         setInternalViewState(newViewState);
       }
 
-      // Throttle parent notifications to prevent lag
-      const now = Date.now();
+      // Store the latest view state
       lastViewState.current = newViewState;
 
-      if (onViewStateChange && now - lastNotifyTime.current > THROTTLE_MS) {
-        lastNotifyTime.current = now;
-        onViewStateChange(newViewState);
+      // Use RAF throttling for smooth performance during interactions
+      if (onViewStateChange && !rafIdRef.current) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null;
+          if (lastViewState.current) {
+            onViewStateChange(lastViewState.current);
+          }
+        });
       }
 
       // Schedule final notification when movement stops
@@ -526,7 +536,7 @@ export default function FieldAnalysisMap({
         if (onViewStateChange && lastViewState.current) {
           onViewStateChange(lastViewState.current);
         }
-      }, 200); // Send final position after 200ms of no movement
+      }, 150); // Send final position after 150ms of no movement
     },
     [onViewStateChange, externalViewState]
   );
@@ -557,7 +567,17 @@ export default function FieldAnalysisMap({
     [onLocationSelect]
   );
 
-  // SIMPLIFIED loading timeout
+  // Stable callback refs to prevent excessive re-creation
+  const onMapReadyRef = useRef(onMapReady);
+  const pmtilesUrlsRef = useRef(pmtilesUrls);
+
+  // Update refs when props change
+  useEffect(() => {
+    onMapReadyRef.current = onMapReady;
+    pmtilesUrlsRef.current = pmtilesUrls;
+  });
+
+  // OPTIMIZED loading timeout with stable dependencies
   const startLoadingTimeout = useCallback(() => {
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
@@ -566,14 +586,15 @@ export default function FieldAnalysisMap({
     loadingTimeoutRef.current = setTimeout(() => {
       console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
-      onMapReady?.();
+      onMapReadyRef.current?.();
     }, 10000);
-  }, [onMapReady]);
+  }, []); // No dependencies - uses ref
 
-  // SIMPLIFIED - Check if all required sources are loaded
+  // OPTIMIZED - Check if all required sources are loaded
   const checkAllSourcesLoaded = useCallback(() => {
-    const requiredSources = Object.keys(pmtilesUrls).filter(
-      (key) => pmtilesUrls[key as keyof typeof pmtilesUrls]
+    const requiredSources = Object.keys(pmtilesUrlsRef.current).filter(
+      (key) =>
+        pmtilesUrlsRef.current[key as keyof typeof pmtilesUrlsRef.current]
     );
     const allLoaded = requiredSources.every((source) =>
       loadedSourcesRef.current.has(source)
@@ -586,20 +607,23 @@ export default function FieldAnalysisMap({
         loadingTimeoutRef.current = null;
       }
       setIsLoading(false);
-      onMapReady?.();
+      onMapReadyRef.current?.();
     }
-  }, [pmtilesUrls, isLoading, onMapReady]);
+  }, [isLoading]); // Only depend on isLoading state
 
   // Handle source data events to detect when PMTiles are loaded
   const handleSourceData = useCallback(
     (e: { sourceId: string; isSourceLoaded: boolean }) => {
-      if (e.isSourceLoaded && Object.keys(pmtilesUrls).includes(e.sourceId)) {
+      if (
+        e.isSourceLoaded &&
+        Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)
+      ) {
         loadedSourcesRef.current.add(e.sourceId);
         console.log(`PMTiles source loaded: ${e.sourceId}`);
         checkAllSourcesLoaded();
       }
     },
-    [pmtilesUrls, checkAllSourcesLoaded] // Only depend on checkAllSourcesLoaded
+    [checkAllSourcesLoaded]
   );
 
   // Initialize PMTiles protocol with retry mechanism
@@ -672,10 +696,23 @@ export default function FieldAnalysisMap({
     };
   }, [startLoadingTimeout]); // Added missing dependency
 
-  // Cleanup event listeners on unmount
+  // Cleanup event listeners and RAF on unmount
   useEffect(() => {
     const currentMapRef = mapRef.current;
     return () => {
+      // Cleanup RAF
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+
+      // Cleanup final notify timeout
+      if (finalNotifyTimeout.current) {
+        clearTimeout(finalNotifyTimeout.current);
+        finalNotifyTimeout.current = null;
+      }
+
+      // Cleanup map event listeners
       if (currentMapRef) {
         const map = currentMapRef.getMap() as MapInstance & {
           off: (
@@ -688,8 +725,8 @@ export default function FieldAnalysisMap({
     };
   }, [handleSourceData]);
 
-  // Generate dynamic paint properties based on visualization mode
-  const generateFieldsPaint = useCallback(() => {
+  // Memoize paint properties to prevent expensive recalculations during drag/zoom
+  const fieldsPaintProps = useMemo(() => {
     const { visualizationMode, colorUnit, useDecileColoring } = filterState;
     const colorScheme = getColorScheme(visualizationMode);
 
@@ -798,13 +835,17 @@ export default function FieldAnalysisMap({
         'fill-opacity': 0.7,
       };
     }
-  }, [filterState]);
+  }, [
+    filterState.visualizationMode,
+    filterState.colorUnit,
+    filterState.useDecileColoring,
+  ]);
 
   // Add field analysis layers
   const addFieldsLayers = useCallback(
     (map: MapInstance) => {
       if (map.getSource('fields') && !map.getLayer('fields-fill')) {
-        const paintProps = generateFieldsPaint();
+        const paintProps = fieldsPaintProps;
 
         // Create company filter if specified
         const companyFilter: unknown = filterState.companyFilter
@@ -959,7 +1000,7 @@ export default function FieldAnalysisMap({
         });
       }
     },
-    [layerVisibility.fields, generateFieldsPaint, filterState.companyFilter]
+    [layerVisibility.fields, fieldsPaintProps, filterState.companyFilter]
   );
 
   // Add BNBO layers with cross-hatch pattern
@@ -1596,7 +1637,7 @@ export default function FieldAnalysisMap({
     const map = mapRef.current.getMap();
 
     if (map.getLayer('fields-fill')) {
-      const paintProps = generateFieldsPaint();
+      const paintProps = fieldsPaintProps;
 
       // Update the fill color
       map.setPaintProperty(
@@ -1647,7 +1688,7 @@ export default function FieldAnalysisMap({
         );
       }
     }
-  }, [filterState, layerVisibility.fields, generateFieldsPaint]); // Added back generateFieldsPaint dependency
+  }, [fieldsPaintProps, layerVisibility.fields]); // Use memoized paint props
 
   // Handle hover events
   const onHover = useCallback(
@@ -1783,4 +1824,6 @@ export default function FieldAnalysisMap({
       {hoverInfo && <MapTooltip {...hoverInfo} />}
     </div>
   );
-}
+});
+
+export default FieldAnalysisMap;
