@@ -21,11 +21,11 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
                 ? 'kg/ha'
                 : 'kg',
           colors: [
-            { color: '#22c55e', label: 'Lav', range: '0-20' },
-            { color: '#84cc16', label: 'Lav-medium', range: '20-50' },
-            { color: '#eab308', label: 'Medium', range: '50-100' },
-            { color: '#f97316', label: 'Medium-høj', range: '100-200' },
-            { color: '#ef4444', label: 'Høj', range: '200+' },
+            { color: '#ffffff', label: 'Lav', range: '0-20' },
+            { color: '#fecaca', label: 'Lav-medium', range: '20-50' },
+            { color: '#f87171', label: 'Medium', range: '50-100' },
+            { color: '#dc2626', label: 'Medium-høj', range: '100-200' },
+            { color: '#991b1b', label: 'Høj', range: '200+' },
           ],
         };
       case 'pfas_belastning':
@@ -78,11 +78,11 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
           title: 'Pesticidbelastning',
           unit: 'Belastning',
           colors: [
-            { color: '#22c55e', label: 'Lav', range: '0-20' },
-            { color: '#84cc16', label: 'Lav-medium', range: '20-50' },
-            { color: '#eab308', label: 'Medium', range: '50-100' },
-            { color: '#f97316', label: 'Medium-høj', range: '100-200' },
-            { color: '#ef4444', label: 'Høj', range: '200+' },
+            { color: '#ffffff', label: 'Lav', range: '0-20' },
+            { color: '#fecaca', label: 'Lav-medium', range: '20-50' },
+            { color: '#f87171', label: 'Medium', range: '50-100' },
+            { color: '#dc2626', label: 'Medium-høj', range: '100-200' },
+            { color: '#991b1b', label: 'Høj', range: '200+' },
           ],
         };
     }
