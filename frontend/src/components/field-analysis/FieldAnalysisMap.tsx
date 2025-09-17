@@ -489,6 +489,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   onMapReady,
   viewState: externalViewState,
   onViewStateChange,
+  hasRightPanel,
 }: FieldAnalysisMapProps) {
   const { mapStyle } = useMapTheme();
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
@@ -1440,7 +1441,10 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       console.log(`Waiting for ${sourcesAdded} PMTiles sources to load...`);
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
-      clearLoadingTimeout();
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       setError('Failed to load map data');
       setIsLoading(false);
     }
