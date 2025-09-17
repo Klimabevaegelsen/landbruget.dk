@@ -69,9 +69,6 @@ export default function FieldAnalysisMain() {
   const [isLoading, setIsLoading] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
 
-  // Sidebar expanded state
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
-
   // Map viewport state - preserve zoom and center when changing years
   const [mapViewState, setMapViewState] = useState<Partial<ViewState>>({
     longitude: 9.501785,
@@ -265,7 +262,6 @@ export default function FieldAnalysisMain() {
           onLayerToggle={handleLayerToggle}
           onFilterChange={handleFilterChange}
           onYearChange={handleYearChange}
-          onExpandedChange={setIsSidebarExpanded}
         />
       )}
 
