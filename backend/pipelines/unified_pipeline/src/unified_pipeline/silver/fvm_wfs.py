@@ -1088,6 +1088,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             if layer_type == "Marker":
                 await self._assign_municipalities_to_fields(final_table_name, year)
 
+            # NEW: Enrich early years with complete CVR numbers from fields data
+            if layer_type == "Marker":
+                await self._enrich_with_fields_data(final_table_name, year)
+
             # Clean up any remaining temporary tables to prevent accumulation
             for table in valid_relations:
                 self.conn.execute(f"DROP TABLE IF EXISTS {table}")
@@ -2552,6 +2556,259 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 self.conn.execute("DROP TABLE IF EXISTS municipality_intersections")
                 self.conn.execute("DROP TABLE IF EXISTS unassigned_fields")
                 self.conn.execute("DROP TABLE IF EXISTS closest_assignments")
+            except Exception:
+                pass
+            # Don't fail the entire pipeline, just log the error
+            pass
+
+    async def _discover_available_fields_years(self) -> List[int]:
+        """
+        Discover available years from fields data in GCS.
+
+        This method lists the fields data directory in GCS and extracts the years
+        from the MARKER_*.parquet filenames to determine which years have fields
+        data available for CVR enrichment.
+
+        Returns:
+            List[int]: List of years for which fields data is available
+        """
+        try:
+            # Use GCS data access to list files in the fields directory
+            fields_base_path = f"gs://{self.config.bucket}/silver/fields/"
+
+            # Import subprocess to use gsutil for listing
+            import subprocess
+
+            # List the contents of the fields directory to find the timestamp directory
+            result = subprocess.run(
+                ["gsutil", "ls", fields_base_path], capture_output=True, text=True, check=True
+            )
+
+            # Find the latest timestamp directory
+            timestamp_dirs = [
+                line.strip()
+                for line in result.stdout.strip().split("\n")
+                if line.strip().endswith("/")
+            ]
+            if not timestamp_dirs:
+                self.log.warning("No timestamp directories found in fields data")
+                return []
+
+            # Use the latest timestamp directory (they should be sorted chronologically)
+            self.log.debug(f"Found {len(timestamp_dirs)} timestamp directories: {timestamp_dirs}")
+            latest_timestamp_dir = max(timestamp_dirs)
+            timestamp_only = latest_timestamp_dir.rstrip("/").split("/")[-1]
+            self.log.info(f"Using latest fields data timestamp: {timestamp_only}")
+
+            # List files in the latest timestamp directory
+            result = subprocess.run(
+                ["gsutil", "ls", latest_timestamp_dir], capture_output=True, text=True, check=True
+            )
+
+            # Extract years from MARKER_*.parquet filenames
+            available_years = []
+            for line in result.stdout.strip().split("\n"):
+                if "MARKER_" in line and line.endswith(".parquet"):
+                    # Extract year from filename like "MARKER_2008.parquet"
+                    filename = line.split("/")[-1]  # Get just the filename
+                    if filename.startswith("MARKER_") and filename.endswith(".parquet"):
+                        year_str = filename[7:-8]  # Remove "MARKER_" prefix and ".parquet" suffix
+                        if year_str.isdigit():
+                            available_years.append(int(year_str))
+
+            available_years.sort()
+            self.log.info(f"Discovered fields data for years: {available_years}")
+            return available_years
+
+        except Exception as e:
+            self.log.warning(f"Could not discover available fields years: {e}")
+            # Return empty list if discovery fails - don't use hardcoded fallback
+            self.log.info("No fields data discovery possible, skipping CVR enrichment")
+            return []
+
+    async def _get_fields_data_path(self, year: int) -> str:
+        """
+        Get the GCS path for fields data for a specific year.
+
+        This method discovers the latest timestamp directory and constructs
+        the full GCS path to the MARKER_{year}.parquet file.
+
+        Args:
+            year: Year for which to get the fields data path
+
+        Returns:
+            str: Full GCS path to the fields data file
+        """
+        try:
+            # Import subprocess to use gsutil for listing
+            import subprocess
+
+            fields_base_path = f"gs://{self.config.bucket}/silver/fields/"
+
+            # List the contents of the fields directory to find the timestamp directory
+            result = subprocess.run(
+                ["gsutil", "ls", fields_base_path], capture_output=True, text=True, check=True
+            )
+
+            # Find the latest timestamp directory
+            timestamp_dirs = [
+                line.strip()
+                for line in result.stdout.strip().split("\n")
+                if line.strip().endswith("/")
+            ]
+            if not timestamp_dirs:
+                raise Exception("No timestamp directories found in fields data")
+
+            # Use the latest timestamp directory
+            latest_timestamp_dir = max(timestamp_dirs)
+            timestamp_only = latest_timestamp_dir.rstrip("/").split("/")[-1]
+            self.log.debug(f"Using latest fields data timestamp: {timestamp_only}")
+
+            # Construct the full path
+            fields_gcs_path = f"{latest_timestamp_dir}MARKER_{year}.parquet"
+            return fields_gcs_path
+
+        except Exception as e:
+            self.log.warning(f"Could not discover fields data path for year {year}: {e}")
+            # Return None if discovery fails - don't use hardcoded fallback
+            return None
+
+    async def _enrich_with_fields_data(self, table_name: str, year: int) -> None:
+        """
+        Enrich FVM marker data with complete CVR numbers from fields data for early years.
+
+        This method joins FVM marker data with fields data (MARKER_*.parquet files) to
+        provide complete 8-digit CVR numbers for years 2008-2014 where fields data is available.
+
+        The FVM data often has truncated CVR numbers (4-6 digits), while the fields data
+        contains complete 8-digit CVR numbers that can be used for proper company identification.
+
+        Join strategy:
+        - FVM.block_id = Fields.markbloknr_c AND FVM.field_id = Fields.mark_nr
+        - Only enriches records where FVM CVR is incomplete (< 8 digits)
+        - Preserves existing complete CVR numbers
+
+        Args:
+            table_name: Name of the FVM marker table to enrich
+            year: Year of the data being processed
+        """
+        # Discover available years from fields data in GCS
+        fields_available_years = await self._discover_available_fields_years()
+
+        if year not in fields_available_years:
+            self.log.debug(f"No fields data available for year {year}, skipping CVR enrichment")
+            return
+
+        self.log.info(f"Starting CVR enrichment from fields data for year {year}")
+
+        try:
+            # Check if the table has the required columns for joining
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            column_names = [col[0] for col in columns_info]
+
+            required_cols = ["block_id", "field_id", "cvr_number"]
+            missing_cols = [col for col in required_cols if col not in column_names]
+
+            if missing_cols:
+                self.log.warning(
+                    f"Missing required columns for fields join: {missing_cols}. "
+                    f"Skipping enrichment."
+                )
+                return
+
+            # Check if we have any records that could benefit from enrichment
+            incomplete_cvr_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE cvr_number IS NULL
+                   OR cvr_number = ''
+                   OR cvr_number = '0'
+                   OR LENGTH(cvr_number) < 8
+            """).fetchone()[0]
+
+            if incomplete_cvr_count == 0:
+                self.log.info(f"All CVR numbers are complete for year {year}, skipping enrichment")
+                return
+
+            self.log.info(f"Found {incomplete_cvr_count:,} records with incomplete CVR numbers")
+
+            # Download fields data for this year using the latest available timestamp
+            fields_gcs_path = await self._get_fields_data_path(year)
+
+            if not fields_gcs_path:
+                self.log.warning(f"Could not determine fields data path for year {year}")
+                return
+
+            try:
+                # Load fields data into DuckDB
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE fields_data_{year} AS
+                    SELECT * FROM read_parquet('{fields_gcs_path}')
+                """)
+
+                fields_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM fields_data_{year}"
+                ).fetchone()[0]
+                self.log.info(f"Loaded {fields_count:,} records from fields data for year {year}")
+
+            except Exception as e:
+                self.log.warning(f"Could not load fields data from {fields_gcs_path}: {e}")
+                return
+
+            # Perform the enrichment join
+            # Update FVM records with complete CVR numbers from fields data
+            update_query = f"""
+                UPDATE {table_name}
+                SET cvr_number = fields.cvr_number
+                FROM fields_data_{year} fields
+                WHERE {table_name}.block_id = fields.markbloknr_c
+                  AND {table_name}.field_id = fields.mark_nr
+                  AND fields.cvr_number IS NOT NULL
+                  AND LENGTH(fields.cvr_number) = 8
+                  AND ({table_name}.cvr_number IS NULL
+                       OR {table_name}.cvr_number = ''
+                       OR {table_name}.cvr_number = '0'
+                       OR LENGTH({table_name}.cvr_number) < 8)
+            """
+
+            self.conn.execute(update_query)
+
+            # Check how many records were enriched
+            enriched_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name} f
+                INNER JOIN fields_data_{year} fields
+                    ON f.block_id = fields.markbloknr_c
+                    AND f.field_id = fields.mark_nr
+                WHERE LENGTH(f.cvr_number) = 8
+                  AND fields.cvr_number IS NOT NULL
+                  AND LENGTH(fields.cvr_number) = 8
+            """).fetchone()[0]
+
+            # Final count of complete CVR numbers
+            complete_cvr_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE cvr_number IS NOT NULL
+                  AND cvr_number != ''
+                  AND cvr_number != '0'
+                  AND LENGTH(cvr_number) = 8
+            """).fetchone()[0]
+
+            total_records = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+            self.log.info(
+                f"✅ CVR enrichment completed for year {year}: "
+                f"{enriched_count:,} records potentially enriched, "
+                f"{complete_cvr_count:,}/{total_records:,} "
+                f"({complete_cvr_count/total_records*100:.1f}%) now have complete CVR numbers"
+            )
+
+            # Clean up temporary table
+            self.conn.execute(f"DROP TABLE IF EXISTS fields_data_{year}")
+
+        except Exception as e:
+            self.log.error(f"Error during CVR enrichment for year {year}: {e}")
+            # Clean up on error
+            try:
+                self.conn.execute(f"DROP TABLE IF EXISTS fields_data_{year}")
             except Exception:
                 pass
             # Don't fail the entire pipeline, just log the error
