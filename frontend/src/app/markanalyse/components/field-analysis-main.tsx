@@ -252,7 +252,7 @@ export default function FieldAnalysisMain() {
   }
 
   return (
-    <div className="bg-background flex h-[calc(100vh-120px)] min-h-[calc(100vh-120px)]">
+    <div className="bg-background h-[calc(100vh-120px)] min-h-[calc(100vh-120px)]">
       {/* Desktop Sidebar */}
       {!isMobile && (
         <FieldSidebar
@@ -277,9 +277,9 @@ export default function FieldAnalysisMain() {
         />
       )}
 
-      {/* Main Map Area */}
+      {/* Main Content Area - Account for fixed sidebar */}
       <div
-        className={`relative min-w-0 flex-1 transition-all duration-200 ${
+        className={`relative h-full transition-all duration-200 ${
           !isMobile ? 'ml-[70px] md:ml-[280px]' : ''
         }`}
       >
@@ -324,7 +324,7 @@ export default function FieldAnalysisMain() {
       {/* Desktop Field Details Panel */}
       {!isMobile && selectedField && (
         <div
-          className={`bg-background flex flex-shrink-0 flex-col border-l shadow-xl transition-all duration-300 ${
+          className={`bg-background fixed top-[120px] right-0 z-40 flex h-[calc(100vh-120px)] flex-col border-l shadow-xl transition-all duration-300 ${
             isPanelCollapsed ? 'w-16' : 'w-96 xl:w-[28rem]'
           }`}
         >
@@ -427,7 +427,7 @@ export default function FieldAnalysisMain() {
       {/* Desktop Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
       {!isMobile && !selectedField && clickedCoordinates && (
         <div
-          className={`bg-background flex flex-shrink-0 flex-col border-l shadow-xl transition-all duration-300 ${
+          className={`bg-background fixed top-[120px] right-0 z-40 flex h-[calc(100vh-120px)] flex-col border-l shadow-xl transition-all duration-300 ${
             isPanelCollapsed ? 'w-16' : 'w-80 xl:w-96'
           }`}
         >
