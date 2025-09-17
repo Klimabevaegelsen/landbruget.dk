@@ -1388,6 +1388,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 "⚠️ No is_organic column found in FVM data - assuming all fields are non-organic"
             )
 
+        # Handle municipality column - check if municipality exists in FVM data
+        if "municipality" in temp_column_names:
+            municipality_column = "municipality"
+            self.log.info("✅ Found municipality column in FVM data - municipality will be included")
+        else:
+            municipality_column = "NULL as municipality"
+            self.log.warning(
+                "⚠️ No municipality column found in FVM data - using NULL for municipality"
+            )
+
         # Check if field_uuid exists in the source data
         has_field_uuid = "field_uuid" in temp_column_names
 
@@ -1423,7 +1433,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 year{geometry_select},
                 -- Add field UUID support with fallback to composite key
                 {primary_field_id_select},
-                {field_uuid_select}
+                {field_uuid_select},
+                -- Add municipality support from FVM data
+                {municipality_column}
             FROM marker_temp
         """)
 
