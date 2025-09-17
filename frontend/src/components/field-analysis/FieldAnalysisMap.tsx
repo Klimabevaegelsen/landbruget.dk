@@ -38,6 +38,17 @@ interface MapInstance {
   setFilter: (id: string, filter: unknown) => void;
 }
 
+// Type for MapLibre layer with optional filter property
+interface MapLibreLayer {
+  id: string;
+  source: string;
+  'source-layer': string;
+  type: string;
+  paint: Record<string, unknown>;
+  layout: Record<string, unknown>;
+  filter?: unknown;
+}
+
 interface FieldAnalysisMapProps {
   pmtilesUrls: {
     fields: string;
@@ -835,11 +846,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         'fill-opacity': 0.7,
       };
     }
-  }, [
-    filterState.visualizationMode,
-    filterState.colorUnit,
-    filterState.useDecileColoring,
-  ]);
+  }, [filterState]);
 
   // Add field analysis layers
   const addFieldsLayers = useCallback(
@@ -891,7 +898,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         createPartialCoveragePattern();
 
         // Main fields layer
-        const fieldsLayer: any = {
+        const fieldsLayer: MapLibreLayer = {
           id: 'fields-fill',
           source: 'fields',
           'source-layer': 'fields',
@@ -954,7 +961,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         });
 
         // Fields outline
-        const fieldsOutlineLayer: any = {
+        const fieldsOutlineLayer: MapLibreLayer = {
           id: 'fields-outline',
           source: 'fields',
           'source-layer': 'fields',
