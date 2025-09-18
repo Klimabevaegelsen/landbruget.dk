@@ -281,19 +281,30 @@ export default function FieldAnalysisMain() {
 
       {/* Main Content Area - Account for fixed sidebar */}
       <div
-        className={`relative h-full w-full overflow-hidden transition-all duration-200 ${
-          !isMobile ? (sidebarExpanded ? 'ml-[280px]' : 'ml-[70px]') : ''
+        className={`relative h-full overflow-hidden transition-all duration-200 ${
+          !isMobile
+            ? sidebarExpanded
+              ? 'ml-[280px] w-[calc(100%-280px)]'
+              : 'ml-[70px] w-[calc(100%-70px)]'
+            : 'w-full'
         }`}
       >
         {/* Year Slider - positioned to avoid sidebar and panel collision */}
         <div
-          className={`pointer-events-none absolute top-4 z-30 transition-all duration-300 md:top-6 md:max-w-sm lg:top-20 ${
-            !isMobile &&
-            (selectedField || clickedCoordinates) &&
-            !isPanelCollapsed
-              ? 'right-[25rem] xl:right-[29rem]'
-              : 'right-4 md:right-6'
-          }`}
+          className={`pointer-events-none absolute top-4 right-4 z-30 max-h-[calc(100vh-8rem)] transition-all duration-300`}
+          data-testid="year-slider-container"
+          style={{
+            // Force a maximum width that ensures it stays within viewport
+            width: '15rem',
+            maxWidth: 'calc(100vw - 2rem)',
+            // When panel is open, adjust position to avoid overlap
+            marginRight:
+              !isMobile &&
+              (selectedField || clickedCoordinates) &&
+              !isPanelCollapsed
+                ? '20rem'
+                : '0',
+          }}
         >
           <div className="pointer-events-auto">
             <YearSlider

@@ -36,6 +36,7 @@ export function YearSlider({
   return (
     <div
       className={`bg-background/95 rounded-lg p-4 shadow-lg backdrop-blur-sm sm:p-6 ${className}`}
+      data-testid="year-slider"
     >
       {/* Mobile: Dropdown */}
       <div className="sm:hidden">

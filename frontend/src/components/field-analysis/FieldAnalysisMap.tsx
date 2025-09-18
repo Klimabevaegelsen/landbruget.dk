@@ -1795,12 +1795,20 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
 
   return (
     <div
-      className="relative h-full w-full touch-manipulation"
-      style={{ touchAction: 'pan-x pan-y' }}
+      className="relative h-full w-full"
+      style={{
+        touchAction: 'pan-x pan-y',
+        // Ensure proper interaction handling
+        cursor: 'grab',
+        userSelect: 'none',
+        // Prevent any potential overflow issues
+        overflow: 'hidden',
+      }}
+      data-testid="field-analysis-map"
     >
       {/* Search Bar - positioned to avoid sidebar collision */}
       <div
-        className={`pointer-events-auto absolute top-4 left-4 z-30 transition-all duration-200 md:w-80 lg:w-96 xl:w-[28rem] ${
+        className={`pointer-events-auto absolute top-4 left-4 z-30 transition-all duration-200 md:left-[90px] md:w-80 lg:w-96 xl:w-[28rem] ${
           hasRightPanel
             ? 'right-[21rem] xl:right-[29rem]'
             : 'right-4 md:right-auto'
@@ -1825,23 +1833,36 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         onMouseMove={onHover}
         onMouseLeave={() => setHoverInfo(null)}
         onClick={onClick}
-        cursor="default"
+        cursor="grab"
         // Explicitly enable map interactions
         dragPan={true}
         scrollZoom={true}
         touchZoom={true}
-        touchRotate={true}
+        touchRotate={false} // Disable rotation to avoid conflicts with pan
         doubleClickZoom={true}
         keyboard={true}
+        // Ensure proper touch handling
+        touchPitch={false}
       >
         <NavigationControl position="top-right" />
 
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
 
-      {/* Color Legend - positioned to avoid mobile controls */}
-      <div className="pointer-events-auto absolute bottom-4 left-4 z-30 md:bottom-6 md:left-6">
-        <ColorLegend filterState={filterState} />
+      {/* Color Legend - positioned to avoid mobile controls and sidebar collision */}
+      <div
+        className="pointer-events-auto absolute left-4 z-30 max-w-[calc(100vw-2rem)] md:left-[90px] md:max-w-xs"
+        data-testid="color-legend-container"
+        style={{
+          // Position from bottom, but limit height to ensure it fits
+          bottom: '1rem',
+          maxHeight: 'calc(100vh - 8rem)', // Ensure it fits within viewport
+          overflow: 'auto', // Allow scrolling if content is too tall
+        }}
+      >
+        <div style={{ maxHeight: '12rem', overflow: 'auto' }}>
+          <ColorLegend filterState={filterState} />
+        </div>
       </div>
 
       {hoverInfo && <MapTooltip {...hoverInfo} />}
