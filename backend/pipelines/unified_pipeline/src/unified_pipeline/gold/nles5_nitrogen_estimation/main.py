@@ -1695,7 +1695,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Clean up any partial lookup table
             try:
                 self.conn.execute("DROP TABLE IF EXISTS field_uuid_lookup")
-            except:
+            except Exception:
                 pass
             raise
 
