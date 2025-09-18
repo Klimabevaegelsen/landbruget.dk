@@ -253,7 +253,13 @@ export default function FieldAnalysisMain() {
   }
 
   return (
-    <div className="bg-background h-[calc(100vh-120px)] min-h-[calc(100vh-120px)]">
+    <div
+      className={`bg-background relative ${
+        isMobile
+          ? 'min-h-[calc(100vh-120px)]' // Mobile: flexible height
+          : 'h-[calc(100vh-120px)]' // Desktop: fixed height
+      }`}
+    >
       {/* Desktop Sidebar */}
       {!isMobile && (
         <FieldSidebar
@@ -281,29 +287,29 @@ export default function FieldAnalysisMain() {
 
       {/* Main Content Area - Account for fixed sidebar */}
       <div
-        className={`relative h-full overflow-hidden transition-all duration-200 ${
+        className={`relative overflow-hidden transition-all duration-200 ${
           !isMobile
             ? sidebarExpanded
-              ? 'ml-[280px] w-[calc(100%-280px)]'
-              : 'ml-[70px] w-[calc(100%-70px)]'
-            : 'w-full'
+              ? 'ml-[280px] h-full w-[calc(100%-280px)]' // Desktop: fixed height, sidebar margins
+              : 'ml-[70px] h-full w-[calc(100%-70px)]'
+            : 'min-h-[calc(100vh-120px)] w-full' // Mobile: full width, flexible height
         }`}
       >
         {/* Year Slider - positioned to avoid sidebar and panel collision */}
         <div
-          className={`pointer-events-none absolute top-4 right-4 z-30 max-h-[calc(100vh-8rem)] transition-all duration-300`}
+          className={`pointer-events-none absolute top-4 z-30 max-h-[calc(100vh-8rem)] transition-all duration-300`}
           data-testid="year-slider-container"
           style={{
             // Force a maximum width that ensures it stays within viewport
             width: '15rem',
             maxWidth: 'calc(100vw - 2rem)',
             // When panel is open, adjust position to avoid overlap
-            marginRight:
+            right:
               !isMobile &&
               (selectedField || clickedCoordinates) &&
               !isPanelCollapsed
-                ? '20rem'
-                : '0',
+                ? 'calc(28rem + 1rem)' // Panel width + margin
+                : '1rem',
           }}
         >
           <div className="pointer-events-auto">
@@ -316,7 +322,11 @@ export default function FieldAnalysisMain() {
         </div>
 
         <div
-          className="absolute inset-0 h-full w-full"
+          className={`absolute inset-0 w-full ${
+            isMobile
+              ? 'min-h-[calc(100vh-160px)]' // Mobile: account for mobile menu
+              : 'h-full' // Desktop: use parent height
+          }`}
           style={{ touchAction: 'pan-x pan-y' }}
         >
           {isLoading ? (
@@ -482,7 +492,7 @@ export default function FieldAnalysisMain() {
                 <div className="min-w-0 flex-1">
                   <h3 className="text-lg font-semibold">GPS Koordinater</h3>
                   <p className="text-muted-foreground mt-1 truncate text-sm">
-                    Klik på kortet for at få koordinater
+                    Klik på en mark for detaljerede oplysninger
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -543,6 +553,25 @@ export default function FieldAnalysisMain() {
                       {clickedCoordinates.lng.toFixed(5)}
                     </span>
                   </div>
+                </div>
+                <div className="mt-4 space-y-2">
+                  <a
+                    href={`https://skraafoto.kortforsyningen.dk/?x=${clickedCoordinates.lng}&y=${clickedCoordinates.lat}&zoom=15`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex w-full items-center justify-center rounded px-3 py-2 text-center text-sm font-medium transition-colors"
+                  >
+                    Se Skråfoto
+                  </a>
+                  <button
+                    onClick={() => {
+                      const googleMapsUrl = `https://www.google.com/maps?q=${clickedCoordinates.lat},${clickedCoordinates.lng}`;
+                      window.open(googleMapsUrl, '_blank');
+                    }}
+                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 active:bg-secondary/80 flex w-full items-center justify-center rounded px-3 py-2 text-center text-sm font-medium transition-colors"
+                  >
+                    Åbn i Google Maps
+                  </button>
                 </div>
               </div>
             </div>
