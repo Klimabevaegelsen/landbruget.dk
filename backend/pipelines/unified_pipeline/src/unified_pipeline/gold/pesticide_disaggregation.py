@@ -1892,7 +1892,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     m_fields.field_uuid,
-                    m_fields.field_uuid as primary_field_id
+                    m_fields.field_uuid as primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM BestMatchEvaluation p
                 JOIN MarkerFieldCVRCropTotals main_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR
@@ -2023,7 +2025,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     m_fields.field_uuid,
-                    m_fields.field_uuid as primary_field_id
+                    m_fields.field_uuid as primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM BestMatchEvaluation p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
@@ -2905,7 +2909,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     NOW() as DisaggregationDate,
                     -- Add field UUID support - need to join back to marker table
                     m.field_uuid,
-                    m.primary_field_id
+                    m.primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m.municipality
                 FROM FieldAllocations fa
                 JOIN marker m ON fa.field_uuid = m.field_uuid
             """
