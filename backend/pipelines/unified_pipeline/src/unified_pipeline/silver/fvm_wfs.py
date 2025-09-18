@@ -2573,50 +2573,26 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             List[int]: List of years for which fields data is available
         """
         try:
-            # Use GCS data access to list files in the fields directory
-            fields_base_path = f"gs://{self.config.bucket}/silver/fields/"
+            # Use GCS data access to list files in the fields directory (same pattern as others)
+            fields_pattern = f"gs://{self.config.bucket}/silver/fields/*/MARKER_*.parquet"
 
-            # Import subprocess to use gsutil for listing
-            import subprocess
-
-            # List the contents of the fields directory to find the timestamp directory
-            result = subprocess.run(
-                ["gsutil", "ls", fields_base_path], capture_output=True, text=True, check=True
-            )
-
-            # Find the latest timestamp directory
-            timestamp_dirs = [
-                line.strip()
-                for line in result.stdout.strip().split("\n")
-                if line.strip().endswith("/")
-            ]
-            if not timestamp_dirs:
-                self.log.warning("No timestamp directories found in fields data")
+            # Find all MARKER files using GCSDataAccess
+            marker_files = self.gcs_access.list_files(fields_pattern)
+            if not marker_files:
+                self.log.warning("No fields data files found")
                 return []
-
-            # Use the latest timestamp directory (they should be sorted chronologically)
-            self.log.debug(f"Found {len(timestamp_dirs)} timestamp directories: {timestamp_dirs}")
-            latest_timestamp_dir = max(timestamp_dirs)
-            timestamp_only = latest_timestamp_dir.rstrip("/").split("/")[-1]
-            self.log.info(f"Using latest fields data timestamp: {timestamp_only}")
-
-            # List files in the latest timestamp directory
-            result = subprocess.run(
-                ["gsutil", "ls", latest_timestamp_dir], capture_output=True, text=True, check=True
-            )
 
             # Extract years from MARKER_*.parquet filenames
             available_years = []
-            for line in result.stdout.strip().split("\n"):
-                if "MARKER_" in line and line.endswith(".parquet"):
-                    # Extract year from filename like "MARKER_2008.parquet"
-                    filename = line.split("/")[-1]  # Get just the filename
-                    if filename.startswith("MARKER_") and filename.endswith(".parquet"):
-                        year_str = filename[7:-8]  # Remove "MARKER_" prefix and ".parquet" suffix
-                        if year_str.isdigit():
-                            available_years.append(int(year_str))
+            for file_path in marker_files:
+                # Extract filename from full path
+                filename = file_path.split("/")[-1]  # Get just the filename
+                if filename.startswith("MARKER_") and filename.endswith(".parquet"):
+                    year_str = filename[7:-8]  # Remove "MARKER_" prefix and ".parquet" suffix
+                    if year_str.isdigit():
+                        available_years.append(int(year_str))
 
-            available_years.sort()
+            available_years = sorted(list(set(available_years)))  # Remove duplicates and sort
             self.log.info(f"Discovered fields data for years: {available_years}")
             return available_years
 
@@ -2640,33 +2616,20 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             str: Full GCS path to the fields data file
         """
         try:
-            # Import subprocess to use gsutil for listing
-            import subprocess
+            # Use GCS data access to find the latest file for this year (same pattern as others)
+            fields_pattern = f"gs://{self.config.bucket}/silver/fields/*/MARKER_{year}.parquet"
 
-            fields_base_path = f"gs://{self.config.bucket}/silver/fields/"
+            # Find all files for this year using GCSDataAccess
+            marker_files = self.gcs_access.list_files(fields_pattern)
+            if not marker_files:
+                raise Exception(f"No fields data files found for year {year}")
 
-            # List the contents of the fields directory to find the timestamp directory
-            result = subprocess.run(
-                ["gsutil", "ls", fields_base_path], capture_output=True, text=True, check=True
-            )
-
-            # Find the latest timestamp directory
-            timestamp_dirs = [
-                line.strip()
-                for line in result.stdout.strip().split("\n")
-                if line.strip().endswith("/")
-            ]
-            if not timestamp_dirs:
-                raise Exception("No timestamp directories found in fields data")
-
-            # Use the latest timestamp directory
-            latest_timestamp_dir = max(timestamp_dirs)
-            timestamp_only = latest_timestamp_dir.rstrip("/").split("/")[-1]
+            # Get the latest file (sorted by timestamp in path)
+            latest_fields_file = sorted(marker_files)[-1]  # Latest by timestamp
+            timestamp_only = latest_fields_file.split("/")[-2]  # Extract timestamp from path
             self.log.debug(f"Using latest fields data timestamp: {timestamp_only}")
 
-            # Construct the full path
-            fields_gcs_path = f"{latest_timestamp_dir}MARKER_{year}.parquet"
-            return fields_gcs_path
+            return latest_fields_file
 
         except Exception as e:
             self.log.warning(f"Could not discover fields data path for year {year}: {e}")
@@ -2739,11 +2702,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 return
 
             try:
-                # Load fields data into DuckDB
-                self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE fields_data_{year} AS
-                    SELECT * FROM read_parquet('{fields_gcs_path}')
-                """)
+                # Load fields data using GCSDataAccess (same pattern as other parts of the pipeline)
+                self.gcs_access.query_parquet_direct(
+                    fields_gcs_path, "SELECT *", f"fields_data_{year}"
+                )
 
                 fields_count = self.conn.execute(
                     f"SELECT COUNT(*) FROM fields_data_{year}"
