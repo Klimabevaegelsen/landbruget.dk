@@ -1,16 +1,17 @@
 import { CheckBadgeIcon } from '@heroicons/react/24/outline';
 import { Container } from '../container';
+import { Tractor, Heart } from 'lucide-react';
 import Link from 'next/link';
 
 export function NavBanner() {
   return (
     <div className="w-full">
       {/* Maintenance Banner */}
-      <div className="w-full border-b border-yellow-200 bg-yellow-100 py-3">
-        <Container>
+      <div className="border-conventional/20 bg-conventional/10 w-full border-b py-3">
+        <Container variant="nav">
           <div className="flex justify-center text-center">
-            <p className="text-sm font-medium text-yellow-800">
-              <span className="mr-2">🚜</span>
+            <p className="text-conventional text-sm font-medium">
+              <Tractor className="mr-2 inline h-4 w-4" />
               <strong>Undskyld vi roder</strong>
               <span className="mx-2">•</span>
               Hjemmesiden er ved at blive gjort klar til lanceringen. Det
@@ -20,7 +21,7 @@ export function NavBanner() {
                 href="https://github.com/Klimabevaegelsen/landbruget.dk/issues"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold underline hover:no-underline"
+                className="touch-target inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2 py-1 font-semibold underline hover:no-underline"
               >
                 Github
               </a>{' '}
@@ -29,11 +30,11 @@ export function NavBanner() {
                 href="https://join.slack.com/t/landbrugetdk/shared_invite/zt-3bcf1whh0-mY6GqDGRhC0BuG3ADNLB2Q"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-semibold underline hover:no-underline"
+                className="touch-target inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2 py-1 font-semibold underline hover:no-underline"
               >
                 Slack
               </a>{' '}
-              med kyshånd <span className="ml-1">🫶</span>
+              med kyshånd <Heart className="ml-1 inline h-4 w-4" />
             </p>
           </div>
         </Container>
@@ -41,7 +42,7 @@ export function NavBanner() {
 
       {/* Original Nav Banner */}
       <div className="bg-primary-foreground h-10 w-full">
-        <Container className="h-full" subclassName="h-full">
+        <Container variant="nav" className="h-full" subclassName="h-full">
           <div className="flex size-full justify-center md:justify-between">
             <div className="flex gap-x-6">
               <p className="flex items-center gap-x-1 text-xs font-bold">
@@ -51,7 +52,7 @@ export function NavBanner() {
                   href="https://github.com/klimabevaegelsen/landbruget.dk/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline hover:no-underline"
+                  className="touch-target inline-flex min-h-[44px] min-w-[44px] items-center justify-center px-2 py-1 underline hover:no-underline"
                 >
                   open source
                 </a>

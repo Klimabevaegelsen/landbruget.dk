@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { GlobalSearch } from '../global-search';
 import { useHomepageStatsCache } from '@/hooks/useHomepageStatsCache';
+import { useTheme } from '@/components/theme/theme-provider';
+import { BarChart3 } from 'lucide-react';
 
 interface HomepageStatistics {
   total_data_points: number;
@@ -19,8 +21,29 @@ export default function Hero() {
   const [stats, setStats] = useState<HomepageStatistics | null>(null);
   const [loading, setLoading] = useState(true);
   const [usingCache, setUsingCache] = useState(false);
+  const [isDark, setIsDark] = useState(false);
 
   const { getCachedData, setCachedData } = useHomepageStatsCache();
+  const { theme } = useTheme();
+
+  // Handle theme detection
+  useEffect(() => {
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia(
+        '(prefers-color-scheme: dark)'
+      ).matches;
+      setIsDark(systemTheme);
+
+      // Listen for system theme changes
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = (e: MediaQueryListEvent) => setIsDark(e.matches);
+      mediaQuery.addEventListener('change', handleChange);
+
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    } else {
+      setIsDark(theme === 'dark');
+    }
+  }, [theme]);
 
   const fetchStats = useCallback(
     async (forceRefresh: boolean = false) => {
@@ -81,41 +104,71 @@ export default function Hero() {
       : '46.000+'; // Fallback based on our query results
 
   return (
-    <div className="relative isolate overflow-hidden px-6 pt-14 lg:px-8">
+    <div className="hero-section relative isolate overflow-hidden px-6 pt-14 lg:px-8">
       {/* Background Image */}
       <div className="absolute inset-0 -z-10">
         <picture>
           <source
             media="(min-width: 1024px)"
-            srcSet="/images/hero/hero-desktop.webp"
+            srcSet={
+              isDark
+                ? '/images/hero/hero-desktop-dark.webp'
+                : '/images/hero/hero-desktop.webp'
+            }
             type="image/webp"
           />
           <source
             media="(min-width: 1024px)"
-            srcSet="/images/hero/hero-desktop.jpg"
+            srcSet={
+              isDark
+                ? '/images/hero/hero-desktop-dark.jpg'
+                : '/images/hero/hero-desktop.jpg'
+            }
             type="image/jpeg"
           />
           <source
             media="(min-width: 768px)"
-            srcSet="/images/hero/hero-tablet.webp"
+            srcSet={
+              isDark
+                ? '/images/hero/hero-tablet-dark.webp'
+                : '/images/hero/hero-tablet.webp'
+            }
             type="image/webp"
           />
           <source
             media="(min-width: 768px)"
-            srcSet="/images/hero/hero-tablet.jpg"
+            srcSet={
+              isDark
+                ? '/images/hero/hero-tablet-dark.jpg'
+                : '/images/hero/hero-tablet.jpg'
+            }
             type="image/jpeg"
           />
-          <source srcSet="/images/hero/hero-mobile.webp" type="image/webp" />
+          <source
+            srcSet={
+              isDark
+                ? '/images/hero/hero-mobile-dark.webp'
+                : '/images/hero/hero-mobile.webp'
+            }
+            type="image/webp"
+          />
           <img
-            src="/images/hero/hero-mobile.jpg"
+            src={
+              isDark
+                ? '/images/hero/hero-mobile-dark.jpg'
+                : '/images/hero/hero-mobile.jpg'
+            }
             alt="Danish agricultural landscape"
-            className="h-full w-full object-cover object-center"
+            className="h-full w-full max-w-full object-cover object-center"
+            style={{ aspectRatio: '16 / 9' }}
             loading="eager"
             decoding="async"
           />
         </picture>
-        {/* Overlay for better text readability */}
-        <div className="absolute inset-0 bg-black/40"></div>
+        {/* Overlay for better text readability - adjust opacity for dark mode */}
+        <div
+          className={`absolute inset-0 ${isDark ? 'bg-background/60' : 'bg-background/40'}`}
+        ></div>
       </div>
       <div className="mx-auto max-w-4xl py-18 sm:py-28 lg:py-40">
         <div className="flex flex-col gap-6 text-center">
@@ -156,7 +209,8 @@ export default function Hero() {
 
           {usingCache && !loading && (
             <p className="mt-2 text-xs text-white/70">
-              📊 Data fra cache • Opdateres automatisk hver uge
+              <BarChart3 className="mr-1 inline h-3 w-3" /> Data fra cache •
+              Opdateres hver tirsdag
             </p>
           )}
         </div>

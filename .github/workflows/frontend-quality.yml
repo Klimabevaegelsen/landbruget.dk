@@ -1,0 +1,128 @@
+# Frontend Code Quality Checks
+# This workflow runs oxlint, prettier, and type checking on frontend changes
+
+name: Frontend Code Quality
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "frontend/**/*.{ts,tsx,js,jsx,json,css,md}"
+      - "frontend-pesticide/**/*.{ts,tsx,js,jsx,json,css,md}"
+      - "frontend/package.json"
+      - "frontend-pesticide/package.json"
+      - ".github/workflows/frontend-quality.yml"
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**/*.{ts,tsx,js,jsx,json,css,md}"
+      - "frontend-pesticide/**/*.{ts,tsx,js,jsx,json,css,md}"
+
+jobs:
+  frontend-lint:
+    name: Frontend Linting (Oxlint)
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        project: [frontend, frontend-pesticide]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.project }}
+        run: npm ci
+
+      - name: Run Oxlint
+        working-directory: ${{ matrix.project }}
+        run: |
+          echo "## Oxlint Results for ${{ matrix.project }}" >> $GITHUB_STEP_SUMMARY
+          if npm run lint; then
+            echo "✅ **No linting issues found**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Linting issues detected**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please fix the linting issues above." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+  frontend-format:
+    name: Frontend Formatting (Prettier)
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        project: [frontend, frontend-pesticide]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.project }}
+        run: npm ci
+
+      - name: Check formatting
+        working-directory: ${{ matrix.project }}
+        run: |
+          echo "## Prettier Formatting Check for ${{ matrix.project }}" >> $GITHUB_STEP_SUMMARY
+          if npm run format:check; then
+            echo "✅ **All files are properly formatted**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Formatting issues detected**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Run \`npm run format\` in the ${{ matrix.project }} directory to auto-format files." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+  frontend-typecheck:
+    name: Frontend Type Checking
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        project: [frontend, frontend-pesticide]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.project }}
+        run: npm ci
+
+      - name: Type check
+        working-directory: ${{ matrix.project }}
+        run: |
+          echo "## TypeScript Type Check for ${{ matrix.project }}" >> $GITHUB_STEP_SUMMARY
+          if npx tsc --noEmit; then
+            echo "✅ **No type errors found**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Type errors detected**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please fix the TypeScript errors above." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi

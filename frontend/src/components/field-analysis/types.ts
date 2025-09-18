@@ -92,6 +92,7 @@ export interface FilterState {
   visualizationMode: VisualizationMode;
   colorUnit: ColorUnit;
   useDecileColoring: boolean;
+  companyFilter?: string;
 }
 
 export function getYearRangeDisplay(year: number): string {

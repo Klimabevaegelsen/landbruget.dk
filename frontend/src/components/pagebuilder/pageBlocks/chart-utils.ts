@@ -4,7 +4,11 @@
 
 import { PageBuilderItem, IteratedSection } from '@/services/supabase/types';
 
-export type MissingDataType = 'nitrate' | 'carbon' | 'subsidies';
+export type MissingDataType =
+  | 'nitrate'
+  | 'carbon'
+  | 'subsidies'
+  | 'worker_welfare';
 
 /**
  * Determines if a chart should show a placeholder based on its _key
@@ -37,6 +41,11 @@ export function shouldShowPlaceholder(
     return 'carbon';
   }
 
+  // Worker welfare charts
+  if (chartKey === 'worker-welfare-injuries') {
+    return 'worker_welfare';
+  }
+
   return null;
 }
 
@@ -62,7 +71,29 @@ function hasData(item: PageBuilderItem): boolean {
       );
 
     case 'dataGrid':
-      return item.rows?.length > 0;
+      if (!item.rows || item.rows.length === 0) {
+        return false;
+      }
+      // Check if all rows have only N/A values (excluding keys like 'year', 'id', etc.)
+      return item.rows.some((row) => {
+        return Object.entries(row).some(([key, value]) => {
+          // Skip non-data columns like year, id, etc.
+          if (
+            key === 'year' ||
+            key === 'id' ||
+            key.toLowerCase().includes('year')
+          ) {
+            return false;
+          }
+          // Consider row has data if any value is not N/A, null, undefined, or empty string
+          return (
+            value !== 'N/A' &&
+            value !== null &&
+            value !== undefined &&
+            value !== ''
+          );
+        });
+      });
 
     case 'kpiGroup':
       return item.kpis?.length > 0;
@@ -101,12 +132,33 @@ export function hasCategoryData(category: IteratedSection): boolean {
     return false;
   }
 
-  // Check if any section has any content with data
+  // Check if any section has any content with real data OR predefined placeholders
   return category.sections.some((section) =>
     section.content?.some((item) => {
-      // Skip items that should show predefined placeholders - they're not "no data"
+      // Consider both real data and predefined placeholders as "having content"
       if (shouldShowPlaceholder(item._key)) {
         return true;
+      }
+      return hasData(item);
+    })
+  );
+}
+
+/**
+ * Checks if a category has only real data (excluding predefined placeholders)
+ * This is used to determine if individual empty charts should be hidden
+ */
+export function hasRealDataOnly(category: IteratedSection): boolean {
+  if (!category.sections || category.sections.length === 0) {
+    return false;
+  }
+
+  // Check if any section has real data (not just predefined placeholders)
+  return category.sections.some((section) =>
+    section.content?.some((item) => {
+      // Skip predefined placeholders - we only care about real data
+      if (shouldShowPlaceholder(item._key)) {
+        return false;
       }
       return hasData(item);
     })

@@ -6,7 +6,13 @@ import { DataModeSelector } from '@/components/controls/DataModeSelector';
 import { TopBar } from '@/components/layout/TopBar';
 import { DataSidebar } from '@/components/overlays/DataSidebar';
 import { MobileBottomPanel } from '@/components/overlays/MobileBottomPanel';
-import { useMapStore, useDataState, useLoadingState, useTooltipState, type YearSelection } from '@/stores/map-store';
+import {
+  useMapStore,
+  useDataState,
+  useLoadingState,
+  useTooltipState,
+  type YearSelection,
+} from '@/stores/map-store';
 import { useUIStore } from '@/stores/ui-store';
 import { pmtilesDiscovery } from '@/services/pmtiles-discovery';
 
@@ -25,17 +31,18 @@ export default function Home() {
   const [showSidebar, setShowSidebar] = useState(true); // Start with sidebar visible
 
   // Store state
-  const { selectedYear } = useDataState();
+  const { selectedYear: _selectedYear } = useDataState();
   const { error } = useLoadingState();
   const { showTooltip, tooltipData, tooltipPosition } = useTooltipState();
-  const { isMobile, setIsMobile, showMobilePanel, setShowMobilePanel } = useUIStore();
+  const { isMobile, setIsMobile, showMobilePanel, setShowMobilePanel } =
+    useUIStore();
 
   // Store actions
   const {
     setAvailableYearOptions,
     setError: mapSetError,
     clearError: mapClearError,
-    flyToLocation
+    flyToLocation,
   } = useMapStore();
 
   // Detect mobile viewport with improved handling
@@ -94,7 +101,10 @@ export default function Home() {
   }, []); // Empty dependency array - only run once on mount
 
   // Convert tooltip data to HoverInfo format for sidebar
-  const convertToHoverInfo = (tooltipData: Record<string, unknown>, position: { x: number; y: number }): HoverInfo | null => {
+  const convertToHoverInfo = (
+    tooltipData: Record<string, unknown>,
+    position: { x: number; y: number }
+  ): HoverInfo | null => {
     if (!tooltipData) return null;
 
     // Determine layer type based on data
@@ -111,12 +121,15 @@ export default function Home() {
       layer,
       data: tooltipData,
       coordinate: [0, 0], // We don't have coordinate from tooltip
-      pixel: [position.x, position.y]
+      pixel: [position.x, position.y],
     };
   };
 
   // Get current hover info for sidebar/mobile panel - only when there's tooltip data
-  const hoverInfo = showTooltip && tooltipData ? convertToHoverInfo(tooltipData, tooltipPosition) : null;
+  const hoverInfo =
+    showTooltip && tooltipData
+      ? convertToHoverInfo(tooltipData, tooltipPosition)
+      : null;
 
   const handleCloseSidebar = () => {
     if (isMobile) {
@@ -130,25 +143,38 @@ export default function Home() {
     setShowMobilePanel(false);
   };
 
-  const handleLocationSelect = (location: { lat: number; lng: number; address: string }) => {
+  const handleLocationSelect = (location: {
+    lat: number;
+    lng: number;
+    address: string;
+  }) => {
     console.log('Selected location:', location);
     // Navigate to the selected location on the map
     flyToLocation({
       lat: location.lat,
       lng: location.lng,
-      zoom: 12 // Zoom to a reasonable level to see the area
+      zoom: 12, // Zoom to a reasonable level to see the area
     });
   };
 
   // Loading state with mobile-optimized layout
   if (isInitializing || !isInitialized) {
-    console.log('🔄 Still loading - isInitializing:', isInitializing, 'isInitialized:', isInitialized);
+    console.log(
+      '🔄 Still loading - isInitializing:',
+      isInitializing,
+      'isInitialized:',
+      isInitialized
+    );
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center px-4">
-        <div className="text-center max-w-sm">
-          <div className="w-8 h-8 border-2 border-white/40 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white text-base sm:text-lg font-medium">Loading PMTiles Map...</p>
-          <p className="text-white/60 text-sm mt-2">Discovering latest data from GCS bucket</p>
+      <div className="flex min-h-screen items-center justify-center bg-black px-4">
+        <div className="max-w-sm text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-white/40 border-t-transparent"></div>
+          <p className="text-base font-medium text-white sm:text-lg">
+            Loading PMTiles Map...
+          </p>
+          <p className="mt-2 text-sm text-white/60">
+            Discovering latest data from GCS bucket
+          </p>
         </div>
       </div>
     );
@@ -157,18 +183,20 @@ export default function Home() {
   // Error state with mobile-optimized layout
   if (error) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center px-4">
-        <div className="text-center max-w-sm">
-          <div className="text-red-400 text-4xl mb-4">⚠️</div>
-          <p className="text-white text-base sm:text-lg font-medium">Error Loading Map</p>
-          <p className="text-white/60 text-sm mt-2 break-words">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-black px-4">
+        <div className="max-w-sm text-center">
+          <div className="mb-4 text-4xl text-red-400">⚠️</div>
+          <p className="text-base font-medium text-white sm:text-lg">
+            Error Loading Map
+          </p>
+          <p className="mt-2 text-sm break-words text-white/60">{error}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col overflow-hidden">
+    <div className="flex min-h-screen flex-col overflow-hidden bg-black">
       {/* Top Bar - Mobile Optimized */}
       <TopBar
         showControls={showControls}
@@ -181,25 +209,33 @@ export default function Home() {
       />
 
       {/* Main Content Area - Mobile Optimized */}
-      <div className="flex-1 flex relative min-h-0">
+      <div className="relative flex min-h-0 flex-1">
         {/* Left Sidebar - Advanced Controls (hidden by default, desktop only) */}
         {showControls && !isMobile && (
-          <div className="w-80 bg-black/80 backdrop-blur-md border-r border-white/10 overflow-y-auto flex-shrink-0">
-            <div className="p-4 space-y-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Advanced Controls</h3>
+          <div className="w-80 flex-shrink-0 overflow-y-auto border-r border-white/10 bg-black/80 backdrop-blur-md">
+            <div className="space-y-6 p-4">
+              <h3 className="mb-4 text-lg font-semibold text-white">
+                Advanced Controls
+              </h3>
 
               {/* Data Mode Selector */}
               <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-2">Data Mode</h4>
+                <h4 className="mb-2 text-sm font-medium text-gray-300">
+                  Data Mode
+                </h4>
                 <DataModeSelector variant="sidebar" />
               </div>
 
               {/* Layer Visibility Controls */}
               <div>
-                <h4 className="text-sm font-medium text-gray-300 mb-3">Layer Visibility</h4>
+                <h4 className="mb-3 text-sm font-medium text-gray-300">
+                  Layer Visibility
+                </h4>
                 <div className="space-y-3">
                   {/* Basemap controls would go here */}
-                  <div className="text-sm text-gray-400">Basemap controls coming soon...</div>
+                  <div className="text-sm text-gray-400">
+                    Basemap controls coming soon...
+                  </div>
                 </div>
               </div>
             </div>
@@ -207,9 +243,9 @@ export default function Home() {
         )}
 
         {/* Map Container - Mobile Optimized */}
-        <div className="flex-1 relative transition-all duration-300 ease-in-out min-h-0">
-          <div className="w-full h-full relative">
-            <PMTilesMap className="w-full h-full" />
+        <div className="relative min-h-0 flex-1 transition-all duration-300 ease-in-out">
+          <div className="relative h-full w-full">
+            <PMTilesMap className="h-full w-full" />
           </div>
         </div>
 

@@ -91,9 +91,9 @@ function ToastComponent({
 
   const variantStyles = {
     default: 'border bg-background text-foreground',
-    success: 'border-green-200 bg-green-50 text-green-900',
-    error: 'border-red-200 bg-red-50 text-red-900',
-    loading: 'border-blue-200 bg-blue-50 text-blue-900',
+    success: 'border-organic/20 bg-organic/10 text-organic',
+    error: 'border-destructive/20 bg-destructive/10 text-destructive',
+    loading: 'border-primary/20 bg-primary/10 text-primary',
   };
 
   return (
@@ -105,7 +105,7 @@ function ToastComponent({
     >
       <div className="flex items-center space-x-3">
         {variant === 'loading' && (
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-300 border-t-blue-600" />
+          <div className="border-primary/30 border-t-primary h-4 w-4 animate-spin rounded-full border-2" />
         )}
         <div className="grid gap-1">
           {title && <div className="text-sm font-semibold">{title}</div>}

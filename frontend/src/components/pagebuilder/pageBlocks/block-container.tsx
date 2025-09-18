@@ -42,7 +42,7 @@ export function BlockContainer({
         ref={headerRef}
         className={cn(
           'group flex flex-col gap-2 overflow-hidden md:flex-row md:items-center',
-          stickyTitle && 'sticky top-0 z-40 bg-white py-4'
+          stickyTitle && 'bg-background sticky top-0 z-40 py-4'
         )}
       >
         <h2 className="text-xl font-bold md:text-2xl">{title}</h2>

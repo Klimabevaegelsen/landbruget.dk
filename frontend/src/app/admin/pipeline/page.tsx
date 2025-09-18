@@ -1,14 +1,16 @@
 import { H3PfasTrigger } from '@/components/pipeline/h3-pfas-trigger';
+import { TestTube, BarChart3, BookOpen } from 'lucide-react';
 
 export default function PipelinePage() {
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="bg-muted min-h-screen py-8">
       <div className="container mx-auto px-4">
         <div className="mb-8 text-center">
-          <h1 className="mb-4 text-4xl font-bold text-gray-900">
-            🧪 Pipeline Administration
+          <h1 className="text-foreground mb-4 flex items-center justify-center text-4xl font-bold">
+            <TestTube className="mr-3 h-8 w-8" />
+            Pipeline Administration
           </h1>
-          <p className="mx-auto max-w-2xl text-lg text-gray-600">
+          <p className="text-muted-foreground mx-auto max-w-2xl text-lg">
             Trigger and monitor data processing pipelines for agricultural and
             environmental analysis.
           </p>
@@ -18,10 +20,10 @@ export default function PipelinePage() {
           {/* H3 PFAS Pipeline Section */}
           <section>
             <div className="mb-6">
-              <h2 className="mb-2 text-2xl font-semibold text-gray-900">
+              <h2 className="text-foreground mb-2 text-2xl font-semibold">
                 H3 PFAS Exposure Analysis
               </h2>
-              <p className="text-gray-600">
+              <p className="text-muted-foreground">
                 Process agricultural field data to analyze PFAS-containing
                 pesticide exposure at different spatial resolutions using H3
                 hexagonal grids and municipality boundaries.
@@ -32,15 +34,16 @@ export default function PipelinePage() {
           </section>
 
           {/* Pipeline Status Section */}
-          <section className="rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-4 text-2xl font-semibold text-gray-900">
-              📊 Pipeline Status
+          <section className="bg-background rounded-lg p-6 shadow-lg">
+            <h2 className="text-foreground mb-4 flex items-center text-2xl font-semibold">
+              <BarChart3 className="mr-2 h-6 w-6" />
+              Pipeline Status
             </h2>
             <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg bg-gray-50 p-4">
+              <div className="bg-muted flex items-center justify-between rounded-lg p-4">
                 <div>
                   <h3 className="font-medium">H3 PFAS Analysis</h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-muted-foreground text-sm">
                     Last run: Check GitHub Actions
                   </p>
                 </div>
@@ -57,9 +60,10 @@ export default function PipelinePage() {
           </section>
 
           {/* Documentation Section */}
-          <section className="rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="mb-4 text-2xl font-semibold text-gray-900">
-              📚 Documentation
+          <section className="bg-background rounded-lg p-6 shadow-lg">
+            <h2 className="text-foreground mb-4 flex items-center text-2xl font-semibold">
+              <BookOpen className="mr-2 h-6 w-6" />
+              Documentation
             </h2>
             <div className="prose max-w-none">
               <h3>H3 PFAS Pipeline Features:</h3>

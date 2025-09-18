@@ -13,7 +13,7 @@ export function TractorLoader() {
             </div>
           </div>
         </div>
-        <div className="animate-morph relative overflow-hidden bg-[#C1EAFE] p-5 md:p-20">
+        <div className="animate-morph bg-primary/10 dark:bg-primary/20 relative overflow-hidden p-5 md:p-20">
           <Image
             src="/img/placeholder/tractor.gif"
             alt="Tractor"

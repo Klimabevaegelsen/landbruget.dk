@@ -1,8 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@custom-variant dark (&:is(.dark *));
-
 @keyframes typing {
   from {
     width: 0;
@@ -39,98 +37,226 @@
   .animate-morph {
     animation: morphShape 5s ease-in-out infinite;
   }
+
+  /* Mobile-first touch optimizations */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .mobile-controls {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .mobile-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 50;
+  }
+
+  /* iOS safe area support */
+  .mobile-header {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .mobile-footer {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  .mobile-content {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Enhanced transitions for mobile */
+  .sheet-transition {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar-transition {
+    transition: all 0.2s ease-[cubic-bezier(0.4, 0, 0.2, 1)];
+  }
+
+  /* Chart visibility enhancements */
+  .recharts-wrapper {
+    min-height: 300px !important;
+  }
+
+  .recharts-surface {
+    background-color: transparent !important;
+  }
+
+  .recharts-cartesian-grid-horizontal line,
+  .recharts-cartesian-grid-vertical line {
+    opacity: 0.3 !important;
+  }
+
+  .recharts-bar,
+  .recharts-area,
+  .recharts-line {
+    filter: brightness(1.1) !important;
+  }
 }
 
-@theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --primary-darker: #166534;
-}
-
+/* Unified Color System - Tailwind v4 with proper dark mode */
 @theme {
-  --color-primary-darker: #166534;
-  --color-foreground-darker: #e0f5e8;
+  /* Core Layout Colors */
+  --color-background: oklch(100% 0 0);
+  --color-foreground: oklch(15% 0 0);
+  --color-card: oklch(98% 0.005 106);
+  --color-card-foreground: oklch(15% 0 0);
+  --color-popover: oklch(100% 0 0);
+  --color-popover-foreground: oklch(15% 0 0);
+
+  /* Agricultural Primary Theme */
+  --color-primary: oklch(55% 0.15 142);
+  --color-primary-foreground: oklch(98% 0.01 142);
+
+  /* Secondary & Accent Colors */
+  --color-secondary: oklch(96% 0.01 106);
+  --color-secondary-foreground: oklch(20% 0 0);
+  --color-muted: oklch(96% 0.01 106);
+  --color-muted-foreground: oklch(45% 0.01 106);
+  --color-accent: oklch(96% 0.01 106);
+  --color-accent-foreground: oklch(20% 0 0);
+
+  /* Interactive Elements */
+  --color-border: oklch(90% 0.01 106);
+  --color-input: oklch(90% 0.01 106);
+  --color-ring: oklch(55% 0.15 142);
+  --color-destructive: oklch(65% 0.15 25);
+  --color-destructive-foreground: oklch(98% 0.01 25);
+
+  /* Agricultural Domain Colors */
+  --color-organic: oklch(60% 0.15 142);
+  --color-conventional: oklch(70% 0.12 85);
+  --color-high-risk: oklch(65% 0.15 25);
+  --color-low-risk: oklch(70% 0.12 142);
+  --color-bnbo: oklch(75% 0.08 230);
+  --color-wetland: oklch(70% 0.1 230);
+
+  /* Professional Chart Colors - Light mode (for Tailwind v4 + Recharts compatibility) */
+  --color-chart-1: oklch(35% 0.08 106); /* Dark primary for light backgrounds */
+  --color-chart-2: oklch(
+    45% 0.12 200
+  ); /* Dark blue accent for light backgrounds */
+  --color-chart-3: oklch(
+    50% 0.15 142
+  ); /* Dark green accent for light backgrounds */
+  --color-chart-4: oklch(
+    45% 0.12 85
+  ); /* Dark orange accent for light backgrounds */
+  --color-chart-5: oklch(
+    40% 0.1 320
+  ); /* Dark purple accent for light backgrounds */
+
+  /* Recharts-compatible HSL versions */
+  --chart-color-1-hsl: 220 14% 35%;
+  --chart-color-2-hsl: 214 32% 45%;
+  --chart-color-3-hsl: 142 76% 36%;
+  --chart-color-4-hsl: 25 95% 53%;
+  --chart-color-5-hsl: 271 91% 65%;
+
+  /* Sidebar Colors */
+  --color-sidebar: oklch(98% 0.005 106);
+  --color-sidebar-foreground: oklch(15% 0 0);
+  --color-sidebar-primary: oklch(20% 0 0);
+  --color-sidebar-primary-foreground: oklch(98% 0.005 106);
+  --color-sidebar-accent: oklch(96% 0.01 106);
+  --color-sidebar-accent-foreground: oklch(20% 0 0);
+  --color-sidebar-border: oklch(90% 0.01 106);
+  --color-sidebar-ring: oklch(55% 0.15 142);
+
+  /* System */
+  --radius: 0.5rem;
 }
 
-:root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #2a8b4e;
-  --primary-foreground: #eef8f2;
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+/* Dark Mode Variants */
+.dark {
+  /* Core Layout Colors - Dark */
+  --color-background: oklch(8% 0.01 106);
+  --color-foreground: oklch(95% 0.01 106);
+  --color-card: oklch(10% 0.01 106);
+  --color-card-foreground: oklch(95% 0.01 106);
+  --color-popover: oklch(8% 0.01 106);
+  --color-popover-foreground: oklch(95% 0.01 106);
+
+  /* Agricultural Primary Theme - Dark */
+  --color-primary: oklch(65% 0.12 142);
+  --color-primary-foreground: oklch(10% 0.01 106);
+
+  /* Secondary & Accent Colors - Dark */
+  --color-secondary: oklch(15% 0.01 106);
+  --color-secondary-foreground: oklch(85% 0.01 106);
+  --color-muted: oklch(15% 0.01 106);
+  --color-muted-foreground: oklch(65% 0.01 106);
+  --color-accent: oklch(15% 0.01 106);
+  --color-accent-foreground: oklch(85% 0.01 106);
+
+  /* Interactive Elements - Dark */
+  --color-border: oklch(20% 0.01 106);
+  --color-input: oklch(20% 0.01 106);
+  --color-ring: oklch(65% 0.12 142);
+  --color-destructive: oklch(70% 0.12 25);
+  --color-destructive-foreground: oklch(10% 0.01 25);
+
+  /* Agricultural Domain Colors - Dark */
+  --color-organic: oklch(70% 0.12 142);
+  --color-conventional: oklch(75% 0.1 85);
+  --color-high-risk: oklch(70% 0.12 25);
+  --color-low-risk: oklch(75% 0.1 142);
+  --color-bnbo: oklch(80% 0.06 230);
+  --color-wetland: oklch(75% 0.08 230);
+
+  /* Professional Chart Colors - Dark mode (for Tailwind v4 + Recharts compatibility) */
+  --color-chart-1: oklch(90% 0.05 106); /* Light primary for dark backgrounds */
+  --color-chart-2: oklch(
+    80% 0.12 200
+  ); /* Light blue accent for dark backgrounds */
+  --color-chart-3: oklch(
+    75% 0.15 142
+  ); /* Light green accent for dark backgrounds */
+  --color-chart-4: oklch(
+    80% 0.12 85
+  ); /* Light orange accent for dark backgrounds */
+  --color-chart-5: oklch(
+    85% 0.1 320
+  ); /* Light purple accent for dark backgrounds */
+
+  /* Recharts-compatible HSL versions for dark mode */
+  --chart-color-1-hsl: 220 14% 85%;
+  --chart-color-2-hsl: 214 32% 75%;
+  --chart-color-3-hsl: 142 76% 65%;
+  --chart-color-4-hsl: 25 95% 70%;
+  --chart-color-5-hsl: 271 91% 80%;
+
+  /* Sidebar Colors - Dark */
+  --color-sidebar: oklch(10% 0.01 106);
+  --color-sidebar-foreground: oklch(95% 0.01 106);
+  --color-sidebar-primary: oklch(85% 0.01 106);
+  --color-sidebar-primary-foreground: oklch(10% 0.01 106);
+  --color-sidebar-accent: oklch(15% 0.01 106);
+  --color-sidebar-accent-foreground: oklch(85% 0.01 106);
+  --color-sidebar-border: oklch(20% 0.01 106);
+  --color-sidebar-ring: oklch(65% 0.12 142);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-plus-jakarta-sans);
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
   }
 
   .skeleton-item {
-    @apply rounded-md bg-gray-200;
+    @apply bg-muted animate-pulse rounded-md;
   }
 
   /* Mobile safe area support */
@@ -149,13 +275,236 @@
     }
   }
 
-  /* Improve touch targets for mobile */
+  /* CRITICAL: Prevent horizontal scroll on mobile devices - NUCLEAR OPTION */
+  @media (max-width: 375px) {
+    /* AGGRESSIVE: Force everything to respect viewport */
+    * {
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+      hyphens: auto;
+    }
+
+    /* NUCLEAR: Force body and html to never overflow */
+    html,
+    body {
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    /* Force all layout containers */
+    .container,
+    main,
+    section,
+    div,
+    nav,
+    header,
+    footer,
+    article,
+    aside {
+      max-width: 100% !important;
+      min-width: unset !important;
+      width: auto !important;
+      overflow-x: hidden !important;
+    }
+
+    /* Specific component overrides */
+    .hero-section,
+    .nav-banner,
+    .navbar,
+    .footer,
+    .global-search,
+    .search-container {
+      max-width: 100vw !important;
+      overflow-x: hidden !important;
+    }
+
+    /* Fix common culprits - form elements */
+    input,
+    select,
+    textarea,
+    button {
+      max-width: calc(100% - 8px) !important;
+      min-width: unset !important;
+    }
+
+    /* Fix flexbox containers that might expand */
+    .flex,
+    [class*='flex'] {
+      flex-wrap: wrap !important;
+      max-width: 100% !important;
+    }
+
+    /* Fix grid containers */
+    .grid,
+    [class*='grid'] {
+      max-width: 100% !important;
+      overflow-x: hidden !important;
+    }
+
+    /* Fix any absolute/fixed positioned elements */
+    [class*='absolute'],
+    [class*='fixed'] {
+      max-width: 100vw !important;
+      left: 0 !important;
+      right: 0 !important;
+    }
+
+    /* Fix text concatenation issues by forcing proper spacing */
+    a + a,
+    span + span,
+    div + div {
+      margin-left: 0.5rem;
+    }
+
+    /* Ensure navigation elements wrap properly */
+    nav,
+    .nav-menu,
+    .footer-links {
+      flex-wrap: wrap !important;
+      gap: 0.5rem !important;
+    }
+
+    /* Force images to be responsive and maintain aspect ratios */
+    img {
+      max-width: 100% !important;
+      height: auto !important;
+      object-fit: cover;
+    }
+
+    /* Specific fixes for hero and other layout images */
+    .hero-section img {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      object-position: center !important;
+    }
+
+    /* Prevent image distortion in picture elements */
+    picture {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    picture img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Fix form elements that might be too wide */
+    input,
+    select,
+    textarea {
+      max-width: 100% !important;
+      min-width: unset !important;
+    }
+
+    /* Prevent tables from causing overflow */
+    table {
+      width: 100% !important;
+      table-layout: fixed;
+      word-wrap: break-word;
+    }
+
+    /* Fix button groups that might be too wide */
+    .button-group,
+    .btn-group {
+      flex-wrap: wrap !important;
+      gap: 0.5rem !important;
+    }
+  }
+
+  /* Improve touch targets for mobile - WCAG 2.1 AA Compliance */
   @media (max-width: 1024px) {
     button,
     input,
     select,
-    textarea {
+    textarea,
+    a,
+    input[type='button'],
+    input[type='submit'],
+    [role='button'],
+    [tabindex='0'] {
       min-height: 44px;
     }
+
+    /* Ensure interactive elements have adequate touch area */
+    button:not(.touch-target),
+    a:not(.touch-target) {
+      min-width: 44px;
+      padding: 12px;
+    }
+
+    /* Radio buttons and checkboxes */
+    input[type='radio'] + label,
+    input[type='checkbox'] + label,
+    .radio-button,
+    .checkbox-button {
+      min-height: 44px;
+      min-width: 44px;
+      padding: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* CRITICAL: Fix element overlap issues */
+    .nav-banner {
+      z-index: 50;
+      position: relative;
+    }
+
+    .main-nav {
+      z-index: 40;
+      position: relative;
+    }
+
+    .hero-section {
+      z-index: 30;
+      position: relative;
+    }
+
+    footer {
+      z-index: 20;
+      position: relative;
+    }
+
+    /* Ensure proper section spacing to prevent overlaps */
+    section + section,
+    .section + .section {
+      margin-top: 2rem;
+    }
+
+    /* Fix text concatenation in navigation and footer */
+    nav a,
+    .nav-links a,
+    .footer-links a {
+      display: inline-block;
+      margin-right: 1rem;
+      word-break: keep-all;
+      white-space: nowrap;
+    }
+
+    /* Fix dropdown/select concatenation issues */
+    select option,
+    .dropdown-item {
+      padding: 0.5rem;
+      display: block;
+      white-space: normal;
+    }
+  }
+
+  /* Smooth theme transitions */
+  .theme-transition {
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease,
+      border-color 0.3s ease;
   }
 }

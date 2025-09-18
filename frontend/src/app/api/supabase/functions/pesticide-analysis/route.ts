@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(data, {
       headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate', // Disable cache for testing
+        'Cache-Control': 'public, max-age=1800, stale-while-revalidate=3600', // 30 min fresh, 1 hour stale
       },
     });
   } catch (error) {

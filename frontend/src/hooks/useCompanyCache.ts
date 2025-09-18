@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import {
+  getNextTuesdayExpiration,
+  isCacheValidUntilTuesday,
+} from '@/lib/cache-utils';
 
 interface CompanyBasicInfo {
   company_id: string;
@@ -37,6 +41,7 @@ interface CachedCompanyData {
   basic_info: CompanyBasicInfo;
   details?: CompanyDetails;
   timestamp: number;
+  expiresAt: number; // Tuesday-based expiration
   last_accessed: number;
 }
 
@@ -51,7 +56,7 @@ interface CompanyCacheStats {
     access_count: number;
   }>;
 }
-const COMPANY_CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week
+// Company cache uses Tuesday-based expiration like other caches
 const MAX_CACHE_ENTRIES = 500; // Limit to prevent localStorage bloat
 const CLEANUP_THRESHOLD = 0.8; // Clean up when cache is 80% full
 
@@ -75,8 +80,11 @@ export function useCompanyCache() {
           Object.entries(parsed).forEach(([companyId, data]) => {
             const cachedData = data as CachedCompanyData;
 
-            // Check if cache is still valid
-            if (Date.now() - cachedData.timestamp < COMPANY_CACHE_DURATION) {
+            // Check if cache is still valid (Tuesday-based expiration)
+            if (
+              cachedData.expiresAt &&
+              isCacheValidUntilTuesday(cachedData.expiresAt)
+            ) {
               newCache.set(companyId, cachedData);
             }
           });
@@ -198,6 +206,7 @@ export function useCompanyCache() {
                 municipality: item.municipality,
               },
               timestamp: Date.now(),
+              expiresAt: getNextTuesdayExpiration(),
               last_accessed: Date.now(),
             };
 
@@ -229,8 +238,8 @@ export function useCompanyCache() {
         return null;
       }
 
-      // Check if cache is still valid
-      if (Date.now() - cached.timestamp >= COMPANY_CACHE_DURATION) {
+      // Check if cache is still valid (Tuesday-based expiration)
+      if (!cached.expiresAt || !isCacheValidUntilTuesday(cached.expiresAt)) {
         return null;
       }
 
@@ -265,6 +274,7 @@ export function useCompanyCache() {
         // Update existing cache with details
         cached.details = details;
         cached.timestamp = Date.now();
+        cached.expiresAt = getNextTuesdayExpiration();
         cached.last_accessed = Date.now();
       } else {
         // Create new cache entry
@@ -277,6 +287,7 @@ export function useCompanyCache() {
           },
           details,
           timestamp: Date.now(),
+          expiresAt: getNextTuesdayExpiration(),
           last_accessed: Date.now(),
         };
         newCache.set(companyId, companyData);
@@ -302,7 +313,7 @@ export function useCompanyCache() {
       }
 
       // Check if cache is still valid
-      if (Date.now() - cached.timestamp >= COMPANY_CACHE_DURATION) {
+      if (!cached.expiresAt || !isCacheValidUntilTuesday(cached.expiresAt)) {
         return null;
       }
 
@@ -401,7 +412,7 @@ export function useCompanyCache() {
       if (!cached) return false;
 
       // Check if cache is still valid
-      if (Date.now() - cached.timestamp >= COMPANY_CACHE_DURATION) {
+      if (!cached.expiresAt || !isCacheValidUntilTuesday(cached.expiresAt)) {
         return false;
       }
 
@@ -420,7 +431,7 @@ export function useCompanyCache() {
       }
 
       // Check if cache is still valid
-      if (Date.now() - cached.timestamp >= COMPANY_CACHE_DURATION) {
+      if (!cached.expiresAt || !isCacheValidUntilTuesday(cached.expiresAt)) {
         return null;
       }
 

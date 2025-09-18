@@ -60,7 +60,11 @@ interface DataStore {
   clearCache: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  setCurrentData: (h3?: H3DataPoint[], bnbo?: BNBOArea[], bbr?: BBRBuilding[]) => void;
+  setCurrentData: (
+    h3?: H3DataPoint[],
+    bnbo?: BNBOArea[],
+    bbr?: BBRBuilding[]
+  ) => void;
 }
 
 export const useDataStore = create<DataStore>((set, get) => ({
@@ -98,7 +102,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
         h3Cache: newCache,
         currentH3Data: mockData,
         isLoading: false,
-        loadingProgress: 100
+        loadingProgress: 100,
       });
 
       return mockData;
@@ -106,7 +110,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
       set({
         isLoading: false,
         loadingProgress: 0,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
       throw error;
     }
@@ -139,7 +143,11 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
   setLoading: (loading: boolean) => set({ isLoading: loading }),
   setError: (error: string | null) => set({ error }),
-  setCurrentData: (h3?: H3DataPoint[], bnbo?: BNBOArea[], bbr?: BBRBuilding[]) => {
+  setCurrentData: (
+    h3?: H3DataPoint[],
+    bnbo?: BNBOArea[],
+    bbr?: BBRBuilding[]
+  ) => {
     const updates: Partial<DataStore> = {};
     if (h3) updates.currentH3Data = h3;
     if (bnbo) updates.currentBNBOData = bnbo;

@@ -110,10 +110,16 @@ class CVREnrichmentSharedConfig(BaseModel):
     )
 
     # Independent execution configuration
+    # CRITICAL: Set to False to ensure referential integrity across CVR datasets
+    # When True, steps load from different pipeline runs causing UUID mismatches
     enable_independent_execution: bool = Field(
-        default=True,
+        default=False,
         description="Whether to enable independent step execution by fetching "
-        "latest files from GCS",
+        "latest files from GCS. MUST be False for CVR enrichment to ensure "
+        "referential integrity and prevent UUID consistency issues. When True, "
+        "related datasets (companies, financial, persons) may reference different "
+        "company sets instead of the same company set, causing foreign key "
+        "violations during Supabase migrations.",
     )
 
     max_days_back_for_inputs: int = Field(

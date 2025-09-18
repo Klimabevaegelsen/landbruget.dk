@@ -3,7 +3,9 @@
 import datetime
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 
 from ..config.settings import Settings
 from ..utils.logging import get_logger, set_context
@@ -76,7 +78,11 @@ class BronzeProcessor:
         self.run_timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         self.run_path = self.bronze_storage.create_run_directory(self.run_timestamp)
 
+        # Thread-safe progress tracking
+        self.progress_lock = Lock()
+
         logger.info(f"Initialized Bronze processor with run timestamp: {self.run_timestamp}")
+        logger.info(f"Max workers for parallel processing: {settings.max_workers}")
 
     def process_drive_folder(
         self,
@@ -204,16 +210,24 @@ class BronzeProcessor:
         """
         processed_count = 0
 
-        # Process files in the folder
+        # Filter files by supported types first
+        files_to_process = []
         for file in folder.files:
-            # Check if the file type is supported
             if supported_file_types:
                 extension = Path(file.name).suffix.lower().lstrip(".")
                 if extension not in supported_file_types:
                     logger.debug(f"Skipping unsupported file type: {file.name}")
                     continue
+            files_to_process.append(file)
 
-            # Download and save the file
+        # TEMPORARILY DISABLE parallel processing due to Google Drive API SSL issues
+        # Process files sequentially to ensure stability
+        logger.info(
+            f"Processing {len(files_to_process)} files sequentially "
+            f"(parallel disabled for API stability)"
+        )
+
+        for file in files_to_process:
             success = self._process_file(file, folder.path, folder.name, in_memory_data)
             processed_count += 1 if success else 0
 
@@ -237,6 +251,73 @@ class BronzeProcessor:
                     subfolder, None, supported_file_types, in_memory_data
                 )
 
+        return processed_count
+
+    def _process_files_parallel(
+        self,
+        files: list[DriveFile],
+        folder_path: str,
+        folder_name: str,
+        in_memory_data: dict | None = None,
+    ) -> int:
+        """Process multiple files in parallel.
+
+        Args:
+            files: List of DriveFile objects to process
+            folder_path: Path of the folder containing the files
+            folder_name: Name of the folder containing the files
+            in_memory_data: Dict to collect file data for in-memory processing (optional)
+
+        Returns:
+            Number of files processed successfully
+        """
+        processed_count = 0
+
+        def process_single_file(file: DriveFile) -> tuple[bool, int]:
+            """Process a single file and return success status and file size."""
+            import random
+            import time
+
+            try:
+                # Add small random delay to stagger API calls and reduce SSL connection pressure
+                delay = random.uniform(0.5, 2.0)  # 0.5-2 second delay
+                time.sleep(delay)
+
+                success = self._process_file(file, folder_path, folder_name, in_memory_data)
+                file_size = int(file.size) if hasattr(file, "size") and file.size else 0
+                return success, file_size
+            except Exception as e:
+                logger.error(f"Error processing file {file.name}: {e}")
+                return False, 0
+
+        # Process files in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=self.settings.max_workers) as executor:
+            # Submit all file processing tasks
+            future_to_file = {executor.submit(process_single_file, file): file for file in files}
+
+            # Process completed tasks as they finish
+            for future in as_completed(future_to_file):
+                file = future_to_file[future]
+                try:
+                    success, file_size = future.result()
+                    if success:
+                        processed_count += 1
+
+                    # Thread-safe progress update
+                    if self.progress_callback:
+                        with self.progress_lock:
+                            self.progress_callback(1, success, file_size)
+
+                except Exception as e:
+                    logger.error(f"Error in parallel processing of {file.name}: {e}")
+                    # Still update progress for failed files
+                    if self.progress_callback:
+                        with self.progress_lock:
+                            self.progress_callback(1, False, 0)
+
+        logger.info(
+            f"Parallel processing completed: {processed_count}/{len(files)} files successful"
+        )
         return processed_count
 
     def _process_file(

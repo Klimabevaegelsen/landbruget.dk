@@ -141,6 +141,28 @@ backend/test_wfs.py
 .secrets
 .secrets.*
 *.secrets
+!.secrets.baseline
+
+# Additional credential patterns
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*_rsa
+*_dsa
+*_ecdsa
+*_ed25519
+.aws/
+.gcp/
+.azure/
+credentials.json
+service-account*.json
+*-key.json
+*-credentials.json
+*.env.prod
+*.env.production
 
 # Analysis directories and generated content
 /src/

@@ -121,111 +121,6 @@ pageBuilder:
                 - "address"
               style: "hq_marker"
 
-  - _key: financials-latest-kpis
-    _type: kpiGroup
-    title: "Finansielle nøgletal (seneste år)"
-    documentation:
-      title: "Finansielle nøgletal"
-      description: "Seneste finansielle nøgletal for virksomheden baseret på CVR regnskabsdata"
-      sources:
-        - name: "CVR enrichment workflow"
-          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
-      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#weekly-workflows-every-monday-2-am-utc"
-    dataSource:
-      params:
-        source: "yearly_financials"
-        kpis:
-          timeContext: "last_n_years"
-          n: 1
-          metrics:
-            - key: "net_profit"
-              label: "Nettoresultat"
-              column: "net_profit_loss"
-              format: "currency"
-            - key: "operating_profit"
-              label: "Driftsresultat"
-              column: "operating_profit_loss"
-              format: "currency"
-            - key: "total_assets"
-              label: "Samlede Aktiver"
-              column: "total_assets"
-              format: "currency"
-            - key: "equity_ratio"
-              label: "Soliditetsgrad"
-              column: "equity_ratio"
-              format: "percentage"
-
-  - _key: financials-history
-    _type: barChart
-    title: "Økonomisk udvikling (pr. år)"
-    documentation:
-      title: "Økonomisk udvikling over tid"
-      description: "Historisk udvikling i virksomhedens finansielle nøgletal baseret på CVR regnskabsdata"
-      sources:
-        - name: "CVR enrichment workflow"
-          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
-      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#weekly-workflows-every-monday-2-am-utc"
-    dataSource:
-      params:
-        source: "yearly_financials"
-        timeSeries:
-          timeColumn: "reporting_year"
-          metrics:
-            - key: "net_profit"
-              column: "net_profit_loss"
-              seriesName: "Nettoresultat"
-            - key: "operating_profit"
-              column: "operating_profit_loss"
-              seriesName: "Driftsresultat"
-            - key: "total_assets"
-              column: "total_assets"
-              seriesName: "Samlede aktiver"
-        orderBy:
-          - column: "reporting_year"
-            direction: "asc"
-
-  - _key: financials-detailed-kpis
-    _type: kpiGroup
-    title: "Detaljerede finansielle nøgletal"
-    documentation:
-      title: "Detaljerede finansielle nøgletal"
-      description: "Udvidede finansielle nøgletal inkluderende medarbejderoplysninger, likviditet og rentabilitetsmål fra CVR regnskabsdata"
-      sources:
-        - name: "CVR enrichment workflow"
-          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
-      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#weekly-workflows-every-monday-2-am-utc"
-    dataSource:
-      params:
-        source: "yearly_financials"
-        kpis:
-          timeContext: "last_n_years"
-          n: 1
-          metrics:
-            - key: "total_equity"
-              label: "Egenkapital"
-              column: "total_equity"
-              format: "currency"
-            - key: "employee_costs"
-              label: "Lønomkostninger"
-              column: "employee_benefits_expense"
-              format: "currency"
-            - key: "employees"
-              label: "Antal Medarbejdere"
-              column: "average_number_of_employees"
-              format: "number"
-            - key: "cash"
-              label: "Likvide Midler"
-              column: "cash_and_cash_equivalents"
-              format: "currency"
-            - key: "return_on_assets"
-              label: "Forrentning af Aktiver"
-              column: "return_on_assets"
-              format: "percentage"
-            - key: "profit_per_employee"
-              label: "Resultat pr. Medarbejder"
-              column: "profit_per_employee"
-              format: "currency"
-
   - _key: subsidies-history-stacked
     _type: stackedBarChart
     title: "Tilskud fordelt på type (pr. år)"
@@ -287,10 +182,10 @@ pageBuilder:
 
   - _key: land-use-crop-distribution
     _type: horizontalStackedBarChart
-    title: "Afgrødefordeling (seneste år, øko/konv)"
+    title: "Afgrødefordeling - alle afgrøder for 2024"
     documentation:
       title: "Afgrødefordeling Økologisk vs Konventionel"
-      description: "Fordeling af afgrøder på virksomhedens marker opdelt i økologisk og konventionel dyrkning baseret på FVM-data"
+      description: "Komplet oversigt over alle afgrøder dyrket på virksomhedens marker i 2024, opdelt i økologisk (grøn) og konventionel (blå) produktion baseret på FVM-data"
       sources:
         - name: "FVM WFS workflow (afgrødedata)"
           url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/fvm_wfs.md"
@@ -301,12 +196,11 @@ pageBuilder:
       params:
         source: "field_yearly_data"
         category:
-          timeContext: "last_n_years"
-          n: 1
+          timeContext: "specific_year"
+          year: 2024
           categoryColumn: "crop_name"
           valueColumn: "area_ha"
           stackByColumn: "is_organic"
-          topN: 9
           orderBy:
             - column: "area_ha"
               direction: "desc"
@@ -772,97 +666,6 @@ pageBuilder:
             direction: "asc"
     allowFiltering: true
 
-  - _key: worker-welfare-kpis
-    _type: kpiGroup
-    title: "Medarbejderforhold nøgletal (seneste)"
-    documentation:
-      title: "Medarbejderforhold og Arbejdsmiljø"
-      description: "Nøgletal for medarbejderforhold baseret på arbejdstilsynsdata, arbejdstilladelser og arbejdsskader"
-      sources:
-        - name: "Worker safety workflow"
-          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_safety.md"
-        - name: "Work permits workflow"
-          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/work_permits.md"
-        - name: "Arbejdstilsynet inspections workflow"
-          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/arbejdstilsynet_inspections.md"
-      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-safety-and-compliance-workflows"
-    dataSource:
-      params:
-        source: "worker_yearly_summary"
-        kpis:
-          timeContext: "last_n_years"
-          n: 1
-          metrics:
-            - key: "employees"
-              label: "Gns. Antal Ansatte (År)"
-              column: "average_employee_count"
-            - key: "injuries"
-              label: "Arbejdsskader (År)"
-              column: "injury_count_reported"
-
-  - _key: worker-welfare-employees-monthly
-    _type: barChart
-    title: "Antal ansatte pr. måned"
-    documentation:
-      title: "Månedlig Medarbejderantal"
-      description: "Historisk udvikling i antal ansatte pr. måned baseret på arbejdsmarkedsdata"
-      sources:
-        - name: "Worker welfare workflow"
-          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_welfare.md"
-      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-welfare-workflow"
-    dataSource:
-      params:
-        source: "employee_monthly_counts"
-        timeSeries:
-          timeColumn: "month_year"
-          metrics:
-            - key: "employee_count"
-              column: "employee_count"
-              seriesName: "Antal ansatte"
-        orderBy:
-          - column: "month_year"
-            direction: "asc"
-
-  - _key: worker-welfare-visas
-    _type: stackedBarChart
-    title: "Førstegangstilladelser pr. år (fordelt på nationalitet)"
-    documentation:
-      title: "Arbejdstilladelser Fordelt på Nationalitet"
-      description: "Årlig udvikling i førstegangstilladelser til udenlandsk arbejdskraft fordelt på nationalitet baseret på arbejdstilladelsesdata"
-      sources:
-        - name: "Worker welfare workflow (visa data)"
-          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_welfare.md"
-      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-welfare-workflow"
-    dataSource:
-      params:
-        source: "visa_yearly_counts"
-        timeSeries:
-          timeColumn: "year"
-          valueColumn: "first_permits_count"
-          groupByColumn: "nationality"
-        orderBy:
-          - column: "year"
-            direction: "asc"
-
-  - _key: worker-welfare-injuries
-    _type: dataGrid
-    title: "Arbejdsskader pr. år (rapporteret antal)"
-    dataSource:
-      params:
-        source: "worker_yearly_summary"
-        table:
-          columns:
-            - key: "year"
-              label: "År"
-              column: "year"
-            - key: "count"
-              label: "Antal Skader Rapporteret"
-              column: "injury_count_reported"
-        orderBy:
-          - column: "year"
-            direction: "desc"
-    allowFiltering: false
-
   - _key: animal-welfare-kpis-overall
     _type: kpiGroup
     title: "Dyrevelærd nøgletal (samlet)"
@@ -895,10 +698,10 @@ pageBuilder:
               label: "Antal Dyr Transporteret"
               column: "total_animals_transported"
             - key: "rank_dk_prod"
-              label: "Rankering på landsplan (Prod. Ækv.)"
+              label: "Rankering på landsplan (Kapacitet)"
               column: "rank_dk_total_animal_equivalents"
             - key: "rank_mun_prod"
-              label: "Rankering i kommunen (Prod. Ækv.)"
+              label: "Rankering i kommunen (Kapacitet)"
               column: "rank_municipality_total_animal_equivalents"
             - key: "rank_dk_antibiotics"
               label: "Rankering på landsplan (Antibiotika)"
@@ -915,12 +718,12 @@ pageBuilder:
 
   - _key: animal-welfare-production-species-chart
     _type: stackedBarChart
-    title: "Dyreproduktion pr. år (samlet, fordelt på art)"
+    title: "Dyreproduktionskapacitet (samlet, fordelt på art)"
     documentation:
-      title: "Dyreproduktion Fordelt på Arter"
-      description: "Historisk udvikling i husdyrproduktion fordelt på forskellige dyrearter baseret på CHR-registreringer"
+      title: "Dyrekapacitet Fordelt på Arter"
+      description: "Historisk udvikling i dyrekapacitet fordelt på forskellige dyrearter baseret på CHR-registreringer"
       sources:
-        - name: "CHR pipeline (husdyrproduktion)"
+        - name: "CHR pipeline (dyrekapacitet)"
           url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/chr_pipeline/README_COMPREHENSIVE.md"
       dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#chr-pipeline-animal-health-and-movement-data"
     dataSource:
@@ -1088,7 +891,7 @@ pageBuilder:
         template:
           - _key: species-kpis-{iteratorContext.chr}-{iteratorContext.species_id}
             _type: kpiGroup
-            title: "{iteratorContext.species_name} produktion & placering"
+            title: "{iteratorContext.species_name} kapacitet & placering"
             dataSource:
               params:
                 source: "site_species_production_ranked"
@@ -1110,7 +913,7 @@ pageBuilder:
 
           - _key: species-age-chart-{iteratorContext.chr}-{iteratorContext.species_id}
             _type: stackedBarChart
-            title: "{iteratorContext.species_name} kapacitet pr. år (kategori)"
+            title: "{iteratorContext.species_name} produktionskapacitet (kategori)"
             documentation:
               title: "Dyrekapacitet Fordelt på Kategorier"
               description: "Historisk udvikling i dyrekapacitet fordelt på forskellige kategorier (alder/type) for specifik dyreart på produktionsstedet baseret på CHR-data"
@@ -1152,6 +955,202 @@ pageBuilder:
         orderBy:
           - column: "transport_date_week_start"
             direction: "asc"
+
+  - _key: financials-latest-kpis
+    _type: kpiGroup
+    title: "Finansielle nøgletal (seneste år)"
+    documentation:
+      title: "Finansielle nøgletal"
+      description: "Seneste finansielle nøgletal for virksomheden baseret på CVR regnskabsdata"
+      sources:
+        - name: "CVR enrichment workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#weekly-workflows-every-monday-2-am-utc"
+    dataSource:
+      params:
+        source: "yearly_financials"
+        kpis:
+          timeContext: "last_n_years"
+          n: 1
+          metrics:
+            - key: "net_profit"
+              label: "Nettoresultat"
+              column: "net_profit_loss"
+              format: "currency"
+            - key: "operating_profit"
+              label: "Driftsresultat"
+              column: "operating_profit_loss"
+              format: "currency"
+            - key: "total_assets"
+              label: "Samlede Aktiver"
+              column: "total_assets"
+              format: "currency"
+            - key: "equity_ratio"
+              label: "Soliditetsgrad"
+              column: "equity_ratio"
+              format: "percentage"
+
+  - _key: financials-history
+    _type: barChart
+    title: "Økonomisk udvikling (pr. år)"
+    documentation:
+      title: "Økonomisk udvikling over tid"
+      description: "Historisk udvikling i virksomhedens finansielle nøgletal baseret på CVR regnskabsdata"
+      sources:
+        - name: "CVR enrichment workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#weekly-workflows-every-monday-2-am-utc"
+    dataSource:
+      params:
+        source: "yearly_financials"
+        timeSeries:
+          timeColumn: "reporting_year"
+          metrics:
+            - key: "net_profit"
+              column: "net_profit_loss"
+              seriesName: "Nettoresultat"
+            - key: "operating_profit"
+              column: "operating_profit_loss"
+              seriesName: "Driftsresultat"
+            - key: "total_assets"
+              column: "total_assets"
+              seriesName: "Samlede aktiver"
+        orderBy:
+          - column: "reporting_year"
+            direction: "asc"
+
+  - _key: financials-detailed-kpis
+    _type: kpiGroup
+    title: "Detaljerede finansielle nøgletal"
+    documentation:
+      title: "Detaljerede finansielle nøgletal"
+      description: "Udvidede finansielle nøgletal inkluderende medarbejderoplysninger, likviditet og rentabilitetsmål fra CVR regnskabsdata"
+      sources:
+        - name: "CVR enrichment workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/cvr_enrichment.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#weekly-workflows-every-monday-2-am-utc"
+    dataSource:
+      params:
+        source: "yearly_financials"
+        kpis:
+          timeContext: "last_n_years"
+          n: 1
+          metrics:
+            - key: "total_equity"
+              label: "Egenkapital"
+              column: "total_equity"
+              format: "currency"
+            - key: "employee_costs"
+              label: "Lønomkostninger"
+              column: "employee_benefits_expense"
+              format: "currency"
+            - key: "employees"
+              label: "Antal Medarbejdere"
+              column: "average_number_of_employees"
+              format: "number"
+            - key: "cash"
+              label: "Likvide Midler"
+              column: "cash_and_cash_equivalents"
+              format: "currency"
+            - key: "return_on_assets"
+              label: "Forrentning af Aktiver"
+              column: "return_on_assets"
+              format: "percentage"
+            - key: "profit_per_employee"
+              label: "Resultat pr. Medarbejder"
+              column: "profit_per_employee"
+              format: "currency"
+
+  - _key: worker-welfare-kpis
+    _type: kpiGroup
+    title: "Medarbejderforhold nøgletal (seneste)"
+    documentation:
+      title: "Medarbejderforhold og Arbejdsmiljø"
+      description: "Nøgletal for medarbejderforhold baseret på arbejdstilsynsdata, arbejdstilladelser og arbejdsskader"
+      sources:
+        - name: "Worker safety workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_safety.md"
+        - name: "Work permits workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/work_permits.md"
+        - name: "Arbejdstilsynet inspections workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/arbejdstilsynet_inspections.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-safety-and-compliance-workflows"
+    dataSource:
+      params:
+        source: "worker_yearly_summary"
+        kpis:
+          timeContext: "last_n_years"
+          n: 1
+          metrics:
+            - key: "employees"
+              label: "Gns. Antal Ansatte (År)"
+              column: "average_employee_count"
+            - key: "injuries"
+              label: "Arbejdsskader (År)"
+              column: "injury_count_reported"
+
+  - _key: worker-welfare-employees-monthly
+    _type: barChart
+    title: "Antal ansatte pr. måned"
+    documentation:
+      title: "Månedlig Medarbejderantal"
+      description: "Historisk udvikling i antal ansatte pr. måned baseret på arbejdsmarkedsdata"
+      sources:
+        - name: "Worker welfare workflow"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_welfare.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-welfare-workflow"
+    dataSource:
+      params:
+        source: "employee_monthly_counts"
+        timeSeries:
+          timeColumn: "month_year"
+          metrics:
+            - key: "employee_count"
+              column: "employee_count"
+              seriesName: "Antal ansatte"
+        orderBy:
+          - column: "month_year"
+            direction: "asc"
+
+  - _key: worker-welfare-visas
+    _type: stackedBarChart
+    title: "Førstegangstilladelser pr. år (fordelt på nationalitet)"
+    documentation:
+      title: "Arbejdstilladelser Fordelt på Nationalitet"
+      description: "Årlig udvikling i førstegangstilladelser til udenlandsk arbejdskraft fordelt på nationalitet baseret på arbejdstilladelsesdata"
+      sources:
+        - name: "Worker welfare workflow (visa data)"
+          url: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/backend/pipelines/unified_pipeline/docs/workflows/worker_welfare.md"
+      dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#worker-welfare-workflow"
+    dataSource:
+      params:
+        source: "visa_yearly_counts"
+        timeSeries:
+          timeColumn: "year"
+          valueColumn: "first_permits_count"
+          groupByColumn: "nationality"
+        orderBy:
+          - column: "year"
+            direction: "asc"
+
+  - _key: worker-welfare-injuries
+    _type: dataGrid
+    title: "Arbejdsskader pr. år (rapporteret antal)"
+    dataSource:
+      params:
+        source: "worker_yearly_summary"
+        table:
+          columns:
+            - key: "year"
+              label: "År"
+              column: "year"
+            - key: "count"
+              label: "Antal Skader Rapporteret"
+              column: "injury_count_reported"
+        orderBy:
+          - column: "year"
+            direction: "desc"
+    allowFiltering: false
 
   - _key: carbon-accounting-kpis
     _type: kpiGroup

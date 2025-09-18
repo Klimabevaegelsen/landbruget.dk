@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <div>
-      <Container>
+      <Container variant="hero">
         <Hero />
       </Container>
       <Container className="py-12">

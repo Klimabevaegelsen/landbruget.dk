@@ -334,24 +334,44 @@ def get_chr_column(con: duckdb.DuckDBPyConnection, table_name: str) -> Optional[
 
 
 def get_date_columns(con: duckdb.DuckDBPyConnection, table_name: str) -> Dict[str, Optional[str]]:
-    """Find date-related columns dynamically."""
+    """Find date-related columns dynamically with improved logic for animal welfare data."""
     try:
         columns = con.execute(f"DESCRIBE {table_name}").fetchall()
         column_names = [col[0] for col in columns]
 
         result = {}
 
-        # Look for start date
-        start_candidates = [
-            col for col in column_names if any(word in col.lower() for word in ["start", "from", "begin"])
-        ]
-        result["start"] = start_candidates[0] if start_candidates else None
+        # Special handling for animal welfare data
+        if table_name == "animal_welfare":
+            # For animal welfare, prefer the specific intervention dates
+            intervention_start = next((col for col in column_names if "indsatsomraade_startdato" in col.lower()), None)
+            intervention_end = next((col for col in column_names if "indsatsomraade_slutdato" in col.lower()), None)
 
-        # Look for end date
-        end_candidates = [
-            col for col in column_names if any(word in col.lower() for word in ["end", "slut", "to", "expir"])
-        ]
-        result["end"] = end_candidates[0] if end_candidates else None
+            if intervention_start:
+                result["start"] = intervention_start
+            if intervention_end:
+                result["end"] = intervention_end
+
+            logger.info(f"🎯 Animal welfare date columns: start={result.get('start')}, end={result.get('end')}")
+        else:
+            # Generic logic for other tables
+            # Look for start date
+            start_candidates = [
+                col for col in column_names if any(word in col.lower() for word in ["start", "from", "begin"])
+            ]
+            result["start"] = start_candidates[0] if start_candidates else None
+
+            # Look for end date - improved pattern matching
+            end_candidates = []
+            for col in column_names:
+                col_lower = col.lower()
+                # Only match actual end patterns, avoid false positives like "to" in "startdato"
+                if any(word in col_lower for word in ["end", "slut", "expir"]) and "start" not in col_lower:
+                    end_candidates.append(col)
+                elif col_lower.endswith("_to") or col_lower.endswith("to_date"):
+                    end_candidates.append(col)
+
+            result["end"] = end_candidates[0] if end_candidates else None
 
         # Look for general date
         date_candidates = [col for col in column_names if any(word in col.lower() for word in ["date", "dato", "time"])]
@@ -381,45 +401,27 @@ def create_animal_welfare_timeline_parts(con: duckdb.DuckDBPyConnection) -> List
             (col for col in column_names if any(word in col.lower() for word in ["indsats", "description", "område"])),
             "NULL",
         )
-        species_col = next(
-            (col for col in column_names if any(word in col.lower() for word in ["dyre", "species", "art"])),
-            "'Unknown'",
-        )
+        # Use standardized species columns (created by standardize_species_data)
+        species_code_col = "species_code"
+        species_name_col = "species_name"
 
-        # Start events
+        # Create single intervention events with start date as event_date and end date in end_date field
         if date_cols.get("start"):
             parts.append(f"""
             SELECT
                 {chr_col} as chr_number,
                 'animal_welfare' as event_source,
-                'intervention_start' as event_type,
+                'intervention' as event_type,
                 COALESCE({desc_col}, 'Animal welfare intervention') as event_description,
                 'Animal_Welfare' as event_category,
-                COALESCE({species_col}, 'Unknown') as species,
+                COALESCE({species_name_col}, 'Unknown') as species,
+                {species_code_col} as species_code,
                 TRY_CAST({date_cols["start"]} AS TIMESTAMP) as event_date,
                 TRY_CAST({date_cols.get("end", "NULL")} AS TIMESTAMP) as end_date,
                 'animal_welfare' as source_file
             FROM animal_welfare
             WHERE {chr_col} IS NOT NULL
               AND {date_cols["start"]} IS NOT NULL
-            """)
-
-        # End events (if we have end dates)
-        if date_cols.get("end"):
-            parts.append(f"""
-            SELECT
-                {chr_col} as chr_number,
-                'animal_welfare' as event_source,
-                'intervention_end' as event_type,
-                COALESCE({desc_col}, 'Animal welfare intervention end') as event_description,
-                'Animal_Welfare' as event_category,
-                COALESCE({species_col}, 'Unknown') as species,
-                TRY_CAST({date_cols["end"]} AS TIMESTAMP) as event_date,
-                NULL as end_date,
-                'animal_welfare' as source_file
-            FROM animal_welfare
-            WHERE {chr_col} IS NOT NULL
-              AND {date_cols["end"]} IS NOT NULL
             """)
 
         logger.info(f"✅ Created {len(parts)} animal welfare timeline parts")
@@ -475,6 +477,23 @@ def create_vet_events_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[str
             END as event_description,
             'Veterinary' as event_category,
             COALESCE({species_col}, 'Unknown') as species,
+            COALESCE(CAST(species_code AS VARCHAR),
+                CASE
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%svin%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%pig%' THEN '15'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%kvæg%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%cattle%' THEN '12'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%får%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%sheep%' THEN '13'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%ged%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%goat%' THEN '14'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%hest%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%horse%' THEN '11'
+                    WHEN LOWER(COALESCE({species_col}, '')) LIKE '%fjerkræ%'
+                         OR LOWER(COALESCE({species_col}, '')) LIKE '%poultry%' THEN '50'
+                    ELSE NULL
+                END
+            ) as species_code,
             TRY_CAST({date_col} AS TIMESTAMP) as event_date,
             NULL as end_date,
             'property_vet_events' as source_file
@@ -514,6 +533,7 @@ def create_tail_cutting_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[s
             'Tail cutting control inspection' as event_description,
             'Tail_Cutting' as event_category,
             'Pig' as species,
+            '15' as species_code,
             TRY_CAST({date_col} AS TIMESTAMP) as event_date,
             NULL as end_date,
             'pig_tail_cutting' as source_file
@@ -563,6 +583,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                 'SPF-SU Certificate: ' || COALESCE({health_col}, 'Unknown') as event_description,
                 'SPF_Certificate' as event_category,
                 'Pig' as species,
+                '15' as species_code,
                 TRY_CAST({cert_date_col} AS TIMESTAMP) as event_date,
                 NULL as end_date,
                 'spf_su_herds' as source_file
@@ -594,6 +615,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                     '{disease_name}: er smittet med eller kontrolleres fri for' as event_description,
                     '{disease_name}' as event_category,
                     'Pig' as species,
+                    '15' as species_code,
                     CAST('{pipeline_run_date}' AS TIMESTAMP) as event_date,
                     NULL as end_date,
                     'spf_su_herds' as source_file
@@ -617,6 +639,7 @@ def create_spf_su_timeline_parts(con: duckdb.DuckDBPyConnection, pipeline_run_da
                     '{san_name}: sanering igang' as event_description,
                     'Sanitation' as event_category,
                     'Pig' as species,
+                    '15' as species_code,
                     CAST('{pipeline_run_date}' AS TIMESTAMP) as event_date,
                     NULL as end_date,
                     'spf_su_herds' as source_file
@@ -668,6 +691,7 @@ def create_stable_fire_timeline_parts(con: duckdb.DuckDBPyConnection) -> List[st
             'Stable fire event (spatially matched)' as event_description,
             'Fire' as event_category,
             'Unknown' as species,
+            NULL as species_code,
             TRY_CAST({date_col} AS TIMESTAMP) as event_date,
             NULL as end_date,
             'stable_fires' as source_file
@@ -796,6 +820,126 @@ def load_data_sources(gcs_access: GCSDataAccess) -> Dict[str, bool]:
     return loaded_tables
 
 
+def standardize_species_data(con: duckdb.DuckDBPyConnection) -> None:
+    """Standardize species codes and names across all loaded data sources."""
+    try:
+        # Check if animal_welfare table exists and standardize species column
+        tables = con.execute("SHOW TABLES").fetchall()
+        table_names = [table[0] for table in tables]
+
+        if "animal_welfare" in table_names:
+            logger.info("🔧 Standardizing species codes in animal_welfare data...")
+
+            # First, add standardized species code and name columns
+            con.execute("""
+                CREATE OR REPLACE TABLE animal_welfare AS
+                SELECT
+                    *,
+                    CASE
+                        WHEN dyreart IS NULL OR TRIM(dyreart) = '' THEN NULL
+                        WHEN LOWER(dyreart) LIKE '%svin%' OR LOWER(dyreart) LIKE '%pig%'
+                             OR LOWER(dyreart) LIKE '%15%' THEN '15'
+                        WHEN LOWER(dyreart) LIKE '%kvæg%' OR LOWER(dyreart) LIKE '%cattle%'
+                             OR LOWER(dyreart) LIKE '%cow%' OR LOWER(dyreart) LIKE '%12%' THEN '12'
+                        WHEN LOWER(dyreart) LIKE '%får%' OR LOWER(dyreart) LIKE '%sheep%'
+                             OR LOWER(dyreart) LIKE '%13%' THEN '13'
+                        WHEN LOWER(dyreart) LIKE '%ged%' OR LOWER(dyreart) LIKE '%goat%'
+                             OR LOWER(dyreart) LIKE '%14%' THEN '14'
+                        WHEN LOWER(dyreart) LIKE '%hest%' OR LOWER(dyreart) LIKE '%horse%'
+                             OR LOWER(dyreart) LIKE '%11%' THEN '11'
+                        WHEN LOWER(dyreart) LIKE '%fjerkræ%' OR LOWER(dyreart) LIKE '%poultry%'
+                             OR LOWER(dyreart) LIKE '%chicken%' OR LOWER(dyreart) LIKE '%50%' THEN '50'
+                        ELSE NULL
+                    END as species_code,
+                    CASE
+                        WHEN dyreart IS NULL OR TRIM(dyreart) = '' THEN NULL
+                        WHEN LOWER(dyreart) LIKE '%svin%' OR LOWER(dyreart) LIKE '%pig%'
+                             OR LOWER(dyreart) LIKE '%15%' THEN 'Svin'
+                        WHEN LOWER(dyreart) LIKE '%kvæg%' OR LOWER(dyreart) LIKE '%cattle%'
+                             OR LOWER(dyreart) LIKE '%cow%' OR LOWER(dyreart) LIKE '%12%' THEN 'Kvæg'
+                        WHEN LOWER(dyreart) LIKE '%får%' OR LOWER(dyreart) LIKE '%sheep%'
+                             OR LOWER(dyreart) LIKE '%13%' THEN 'Får'
+                        WHEN LOWER(dyreart) LIKE '%ged%' OR LOWER(dyreart) LIKE '%goat%'
+                             OR LOWER(dyreart) LIKE '%14%' THEN 'Ged'
+                        WHEN LOWER(dyreart) LIKE '%hest%' OR LOWER(dyreart) LIKE '%horse%'
+                             OR LOWER(dyreart) LIKE '%11%' THEN 'Hest'
+                        WHEN LOWER(dyreart) LIKE '%fjerkræ%' OR LOWER(dyreart) LIKE '%poultry%'
+                             OR LOWER(dyreart) LIKE '%chicken%' OR LOWER(dyreart) LIKE '%50%' THEN 'Fjerkræ'
+                        ELSE TRIM(dyreart)
+                    END as species_name
+                FROM animal_welfare
+            """)
+            logger.info("✅ Standardized species codes and names in animal_welfare data")
+
+        if "property_vet_events" in table_names:
+            logger.info("🔧 Standardizing species codes in property_vet_events data...")
+
+            # Check if species_code column exists
+            columns = con.execute("DESCRIBE property_vet_events").fetchall()
+            column_names = [col[0] for col in columns]
+
+            if "species_code" in column_names:
+                # Update existing species_code and species_name columns
+                con.execute("""
+                    CREATE OR REPLACE TABLE property_vet_events AS
+                    SELECT
+                        * EXCLUDE (species_code, species_name),
+                        CASE
+                            WHEN species_code IS NOT NULL
+                                 AND TRIM(CAST(species_code AS VARCHAR)) != ''
+                                 THEN CAST(species_code AS VARCHAR)
+                            WHEN species_name IS NULL OR TRIM(species_name) = '' THEN NULL
+                            WHEN LOWER(species_name) LIKE '%svin%' OR LOWER(species_name) LIKE '%pig%' THEN '15'
+                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%'
+                                 OR LOWER(species_name) LIKE '%cow%' THEN '12'
+                            WHEN LOWER(species_name) LIKE '%får%' OR LOWER(species_name) LIKE '%sheep%' THEN '13'
+                            WHEN LOWER(species_name) LIKE '%ged%' OR LOWER(species_name) LIKE '%goat%' THEN '14'
+                            WHEN LOWER(species_name) LIKE '%hest%' OR LOWER(species_name) LIKE '%horse%' THEN '11'
+                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%'
+                                 OR LOWER(species_name) LIKE '%chicken%' THEN '50'
+                            ELSE NULL
+                        END as species_code,
+                        CASE
+                            WHEN species_name IS NULL OR TRIM(species_name) = '' THEN NULL
+                            WHEN LOWER(species_name) LIKE '%svin%' OR LOWER(species_name) LIKE '%pig%' THEN 'Svin'
+                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%'
+                                 OR LOWER(species_name) LIKE '%cow%' THEN 'Kvæg'
+                            WHEN LOWER(species_name) LIKE '%får%' OR LOWER(species_name) LIKE '%sheep%' THEN 'Får'
+                            WHEN LOWER(species_name) LIKE '%ged%' OR LOWER(species_name) LIKE '%goat%' THEN 'Ged'
+                            WHEN LOWER(species_name) LIKE '%hest%' OR LOWER(species_name) LIKE '%horse%' THEN 'Hest'
+                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%'
+                                 OR LOWER(species_name) LIKE '%chicken%' THEN 'Fjerkræ'
+                            ELSE TRIM(species_name)
+                        END as species_name
+                    FROM property_vet_events
+                """)
+            else:
+                # Add species_code column based on species_name
+                con.execute("""
+                    CREATE OR REPLACE TABLE property_vet_events AS
+                    SELECT
+                        *,
+                        CASE
+                            WHEN species_name IS NULL OR TRIM(species_name) = '' THEN NULL
+                            WHEN LOWER(species_name) LIKE '%svin%' OR LOWER(species_name) LIKE '%pig%' THEN '15'
+                            WHEN LOWER(species_name) LIKE '%kvæg%' OR LOWER(species_name) LIKE '%cattle%'
+                                 OR LOWER(species_name) LIKE '%cow%' THEN '12'
+                            WHEN LOWER(species_name) LIKE '%får%' OR LOWER(species_name) LIKE '%sheep%' THEN '13'
+                            WHEN LOWER(species_name) LIKE '%ged%' OR LOWER(species_name) LIKE '%goat%' THEN '14'
+                            WHEN LOWER(species_name) LIKE '%hest%' OR LOWER(species_name) LIKE '%horse%' THEN '11'
+                            WHEN LOWER(species_name) LIKE '%fjerkræ%' OR LOWER(species_name) LIKE '%poultry%'
+                                 OR LOWER(species_name) LIKE '%chicken%' THEN '50'
+                            ELSE NULL
+                        END as species_code
+                    FROM property_vet_events
+                """)
+
+            logger.info("✅ Standardized species codes and names in property_vet_events data")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Species standardization failed: {e}")
+
+
 def create_veterinary_timeline(
     con: duckdb.DuckDBPyConnection, pipeline_run_date: str, gcs_access: Optional[GCSDataAccess] = None
 ) -> bool:
@@ -823,6 +967,9 @@ def create_veterinary_timeline(
 
         # Note: now we need to use gcs_access.duckdb_conn instead of con
         con = gcs_access.duckdb_conn
+
+        # Standardize species data across all loaded sources
+        standardize_species_data(con)
 
         # Check what we have to work with
         available_sources = [name for name, loaded in loaded_tables.items() if loaded]
@@ -880,6 +1027,24 @@ def create_veterinary_timeline(
         if not timeline_parts:
             logger.error("❌ No timeline parts could be created")
             return False
+
+        # Debug: Test each timeline part individually before UNION
+        logger.info("🔍 Testing individual timeline parts for column consistency...")
+        for i, part in enumerate(timeline_parts):
+            try:
+                # Test each part individually
+                result = con.execute(f"DESCRIBE ({part})").fetchall()
+                col_count = len(result)
+                cols_preview = [row[0] for row in result[:3]]
+                cols_suffix = "..." if col_count > 3 else ""
+                logger.info(f"   Part {i+1}: {col_count} columns - {cols_preview}{cols_suffix}")
+
+                if col_count != 10:
+                    logger.error(f"❌ Part {i+1} has {col_count} columns, expected 10!")
+                    logger.error(f"   All columns: {[row[0] for row in result]}")
+
+            except Exception as e:
+                logger.error(f"❌ Part {i+1} failed individual test: {e}")
 
         # Combine all timeline parts
         full_query = "CREATE OR REPLACE TABLE veterinary_timeline AS\n" + "\nUNION ALL\n".join(timeline_parts)

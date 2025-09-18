@@ -8,6 +8,9 @@ import duckdb
 
 # Handle imports for both standalone and package usage
 try:
+    # Use unified pipeline's optimized DuckDB connection
+    from unified_pipeline.util.gcs_access import get_duckdb_with_gcs
+
     from ..utils.logging import get_logger
 
     logger = get_logger()
@@ -17,24 +20,50 @@ except ImportError:
 
     logger = logging.getLogger(__name__)
 
+    # Fallback connection for standalone usage
+    def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
+        conn = duckdb.connect()
+        try:
+            conn.execute("INSTALL spatial")
+            conn.execute("LOAD spatial")
+        except Exception:
+            pass
+        return conn
+
 
 class DuckDBProcessor:
     """Base class for DuckDB-based data processing in drive data pipeline."""
 
-    def __init__(self, db_path: str = ":memory:", dataset_name: str = "drive_data") -> None:
-        self.conn = duckdb.connect(db_path)
-        self.dataset_name = dataset_name
-        self._setup_extensions()
-        logger.info(f"Initialized DuckDB processor for {dataset_name}")
+    # Class-level shared connection
+    _shared_conn: duckdb.DuckDBPyConnection = None
+    _conn_ref_count: int = 0
 
-    def _setup_extensions(self) -> None:
-        """Setup required DuckDB extensions."""
-        try:
-            self.conn.execute("INSTALL spatial")
-            self.conn.execute("LOAD spatial")
-            logger.info("✅ DuckDB-spatial loaded successfully")
-        except Exception as e:
-            logger.warning(f"Could not load spatial extension: {e}")
+    def __init__(
+        self,
+        db_path: str = ":memory:",
+        dataset_name: str = "drive_data",
+        connection: duckdb.DuckDBPyConnection = None,
+    ) -> None:
+        self.dataset_name = dataset_name
+
+        if connection:
+            # Use provided connection (for sharing)
+            self.conn = connection
+            self._owns_connection = False
+            logger.info(f"🔗 Using provided DuckDB connection for {dataset_name}")
+        else:
+            # Use shared connection or create new one
+            if DuckDBProcessor._shared_conn is None:
+                DuckDBProcessor._shared_conn = get_duckdb_with_gcs()
+                logger.info("🔗 Created new shared DuckDB connection with GCS support")
+
+            self.conn = DuckDBProcessor._shared_conn
+            DuckDBProcessor._conn_ref_count += 1
+            self._owns_connection = True
+            logger.info(
+                f"🔗 Using shared DuckDB connection for {dataset_name} "
+                f"(ref count: {DuckDBProcessor._conn_ref_count})"
+            )
 
     def register_table(self, data: Any, table_name: str) -> str:
         """Register data (DataFrame, etc.) as a DuckDB table."""
@@ -189,10 +218,22 @@ class DuckDBProcessor:
                     # Don't raise exception since this is cleanup
 
     def close(self) -> None:
-        """Close database connection."""
-        if self.conn:
-            self.conn.close()
-            logger.debug("Closed DuckDB connection")
+        """Close database connection with reference counting."""
+        if self.conn and self._owns_connection:
+            DuckDBProcessor._conn_ref_count -= 1
+            logger.debug(f"Decremented connection ref count to {DuckDBProcessor._conn_ref_count}")
+
+            # Only close if this is the last reference
+            if DuckDBProcessor._conn_ref_count <= 0:
+                self.conn.close()
+                DuckDBProcessor._shared_conn = None
+                DuckDBProcessor._conn_ref_count = 0
+                logger.debug("Closed shared DuckDB connection (last reference)")
+            else:
+                logger.debug("Keeping shared DuckDB connection alive (other references exist)")
+        elif self.conn and not self._owns_connection:
+            # Don't close connections we don't own
+            logger.debug("Not closing provided DuckDB connection (not owned)")
 
     def __enter__(self) -> "DuckDBProcessor":
         return self

@@ -84,7 +84,10 @@ interface TooltipData {
   resolution?: number;
 }
 
-const formatNumber = (value: number | undefined, decimals: number = 2): string => {
+const formatNumber = (
+  value: number | undefined,
+  decimals: number = 2
+): string => {
   if (value === undefined || value === null) return 'N/A';
   if (value === 0) return '0';
 
@@ -98,8 +101,6 @@ const formatNumber = (value: number | undefined, decimals: number = 2): string =
   });
 };
 
-
-
 const formatPercentage = (value: number | undefined): string => {
   if (value === undefined || value === null) return 'N/A';
   return `${formatNumber(value * 100, 1)}%`;
@@ -112,112 +113,171 @@ function getTooltipType(data: TooltipData): 'h3' | 'kommune' | 'bnbo' {
 }
 
 const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
-
-  const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
-  const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
-  const diquatGrams = data.diquat_grams || data.total_diquat_containing_active_ingredient_grams || 0;
-  const glyphosateGrams = data.glyphosate_grams || data.total_glyphosate_containing_active_ingredient_grams || 0;
-  const applications = data.applications || data.total_pesticide_applications || 0;
+  const pfasGrams =
+    data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
+  const pesticideLoad =
+    data.pesticide_load || data.total_pesticide_belastning || 0;
+  const diquatGrams =
+    data.diquat_grams ||
+    data.total_diquat_containing_active_ingredient_grams ||
+    0;
+  const glyphosateGrams =
+    data.glyphosate_grams ||
+    data.total_glyphosate_containing_active_ingredient_grams ||
+    0;
+  const applications =
+    data.applications || data.total_pesticide_applications || 0;
   const fieldCount = data.unique_field_count || data.field_count || 0;
   const area = data.h3_cell_area_ha || data.agricultural_area_ha || 0;
   const coverage = data.actual_coverage_ratio || data.avg_field_coverage || 0;
 
   // Calculate intensities
-  const pfasIntensity = data.pfas_intensity || data.pfas_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? pfasGrams / area : 0);
-  const pesticideIntensity = data.pesticide_intensity || data.pesticide_belastning_per_ha || (area > 0 ? pesticideLoad / area : 0);
-  const diquatIntensity = data.diquat_intensity || data.diquat_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? diquatGrams / area : 0);
-  const glyphosateIntensity = data.glyphosate_intensity || data.glyphosate_containing_active_ingredient_intensity_grams_per_ha || (area > 0 ? glyphosateGrams / area : 0);
+  const pfasIntensity =
+    data.pfas_intensity ||
+    data.pfas_containing_active_ingredient_intensity_grams_per_ha ||
+    (area > 0 ? pfasGrams / area : 0);
+  const pesticideIntensity =
+    data.pesticide_intensity ||
+    data.pesticide_belastning_per_ha ||
+    (area > 0 ? pesticideLoad / area : 0);
+  const diquatIntensity =
+    data.diquat_intensity ||
+    data.diquat_containing_active_ingredient_intensity_grams_per_ha ||
+    (area > 0 ? diquatGrams / area : 0);
+  const glyphosateIntensity =
+    data.glyphosate_intensity ||
+    data.glyphosate_containing_active_ingredient_intensity_grams_per_ha ||
+    (area > 0 ? glyphosateGrams / area : 0);
 
   return (
-    <div className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs space-y-3" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <div className="p-4 space-y-3">
+    <div
+      className="max-w-xs space-y-3 rounded-lg border-0 bg-white/95 shadow-2xl backdrop-blur-sm"
+      style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+    >
+      <div className="space-y-3 p-4">
         {/* Header - Clean and minimal */}
-        <div className="bg-slate-900 rounded-md px-3 py-2">
-          <div className="text-white text-sm font-medium">Agricultural Area</div>
-          <div className="text-slate-300 text-xs">
-            {area > 0 ? `${formatNumber(area, 1)} hectares` : 'Area data unavailable'}
+        <div className="rounded-md bg-slate-900 px-3 py-2">
+          <div className="text-sm font-medium text-white">
+            Agricultural Area
+          </div>
+          <div className="text-xs text-slate-300">
+            {area > 0
+              ? `${formatNumber(area, 1)} hectares`
+              : 'Area data unavailable'}
           </div>
         </div>
 
         {/* Total Pesticide Load - Primary metric */}
-        <div className="bg-orange-50 rounded-md px-3 py-2 border-l-4 border-orange-400">
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-orange-800 text-sm font-medium">Total Pesticide Load</div>
+        <div className="rounded-md border-l-4 border-orange-400 bg-orange-50 px-3 py-2">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="text-sm font-medium text-orange-800">
+              Total Pesticide Load
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-orange-900 font-semibold text-base">{formatNumber(pesticideLoad, 2)}</div>
+              <div className="text-base font-semibold text-orange-900">
+                {formatNumber(pesticideLoad, 2)}
+              </div>
               <div className="text-orange-600">kg total</div>
             </div>
             <div>
-              <div className="text-orange-900 font-semibold text-base">{formatNumber(pesticideIntensity, 2)}</div>
+              <div className="text-base font-semibold text-orange-900">
+                {formatNumber(pesticideIntensity, 2)}
+              </div>
               <div className="text-orange-600">kg per hectare</div>
             </div>
           </div>
         </div>
 
         {/* PFAS - Clean warning design */}
-        <div className="bg-red-50 rounded-md px-3 py-2 border-l-4 border-red-400">
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-red-800 text-sm font-medium">PFAS Active Ingredients</div>
-            <div className="text-red-600 text-xs font-medium">Persistent</div>
+        <div className="rounded-md border-l-4 border-red-400 bg-red-50 px-3 py-2">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="text-sm font-medium text-red-800">
+              PFAS Active Ingredients
+            </div>
+            <div className="text-xs font-medium text-red-600">Persistent</div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-red-900 font-semibold text-base">{formatNumber(pfasGrams, 2)}</div>
+              <div className="text-base font-semibold text-red-900">
+                {formatNumber(pfasGrams, 2)}
+              </div>
               <div className="text-red-600">grams total</div>
             </div>
             <div>
-              <div className="text-red-900 font-semibold text-base">{formatNumber(pfasIntensity, 2)}</div>
+              <div className="text-base font-semibold text-red-900">
+                {formatNumber(pfasIntensity, 2)}
+              </div>
               <div className="text-red-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Glyphosate - Clean design */}
-        <div className="bg-green-50 rounded-md px-3 py-2 border-l-4 border-green-400">
-          <div className="text-green-800 text-sm font-medium mb-1">Glyphosate Active Ingredients</div>
+        <div className="rounded-md border-l-4 border-green-400 bg-green-50 px-3 py-2">
+          <div className="mb-1 text-sm font-medium text-green-800">
+            Glyphosate Active Ingredients
+          </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateGrams, 2)}</div>
+              <div className="text-base font-semibold text-green-900">
+                {formatNumber(glyphosateGrams, 2)}
+              </div>
               <div className="text-green-600">grams total</div>
             </div>
             <div>
-              <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateIntensity, 2)}</div>
+              <div className="text-base font-semibold text-green-900">
+                {formatNumber(glyphosateIntensity, 2)}
+              </div>
               <div className="text-green-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Diquat - Clean design */}
-        <div className="bg-amber-50 rounded-md px-3 py-2 border-l-4 border-amber-400">
-          <div className="text-amber-800 text-sm font-medium mb-1">Diquat Active Ingredients</div>
+        <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
+          <div className="mb-1 text-sm font-medium text-amber-800">
+            Diquat Active Ingredients
+          </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatGrams, 2)}</div>
+              <div className="text-base font-semibold text-amber-900">
+                {formatNumber(diquatGrams, 2)}
+              </div>
               <div className="text-amber-600">grams total</div>
             </div>
             <div>
-              <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatIntensity, 2)}</div>
+              <div className="text-base font-semibold text-amber-900">
+                {formatNumber(diquatIntensity, 2)}
+              </div>
               <div className="text-amber-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Agricultural Activity - Minimal stats */}
-        <div className="bg-slate-50 rounded-md px-3 py-2">
-          <div className="text-slate-700 text-sm font-medium mb-2">Activity</div>
+        <div className="rounded-md bg-slate-50 px-3 py-2">
+          <div className="mb-2 text-sm font-medium text-slate-700">
+            Activity
+          </div>
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="text-center">
-              <div className="font-semibold text-slate-900 text-sm">{applications}</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {applications}
+              </div>
               <div className="text-slate-600">Applications</div>
             </div>
             <div className="text-center">
-              <div className="font-semibold text-slate-900 text-sm">{fieldCount}</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {fieldCount}
+              </div>
               <div className="text-slate-600">Fields</div>
             </div>
             <div className="text-center">
-              <div className="font-semibold text-slate-900 text-sm">{formatPercentage(coverage)}</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {formatPercentage(coverage)}
+              </div>
               <div className="text-slate-600">Coverage</div>
             </div>
           </div>
@@ -228,112 +288,168 @@ const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
 };
 
 const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
-
-  const pfasGrams = data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
-  const pesticideLoad = data.pesticide_load || data.total_pesticide_belastning || 0;
-  const diquatGrams = data.diquat_grams || data.total_diquat_containing_active_ingredient_grams || 0;
-  const glyphosateGrams = data.glyphosate_grams || data.total_glyphosate_containing_active_ingredient_grams || 0;
-  const applications = data.applications || data.total_pesticide_applications || 0;
+  const pfasGrams =
+    data.pfas_grams || data.total_pfas_containing_active_ingredient_grams || 0;
+  const pesticideLoad =
+    data.pesticide_load || data.total_pesticide_belastning || 0;
+  const diquatGrams =
+    data.diquat_grams ||
+    data.total_diquat_containing_active_ingredient_grams ||
+    0;
+  const glyphosateGrams =
+    data.glyphosate_grams ||
+    data.total_glyphosate_containing_active_ingredient_grams ||
+    0;
+  const applications =
+    data.applications || data.total_pesticide_applications || 0;
   const fieldCount = data.field_count || data.unique_field_count || 0;
-  const area = data.agricultural_area_ha || data.total_agricultural_area_ha || 0;
-  const coverage = data.agricultural_coverage_pct ? data.agricultural_coverage_pct / 100 : 0;
+  const area =
+    data.agricultural_area_ha || data.total_agricultural_area_ha || 0;
+  const coverage = data.agricultural_coverage_pct
+    ? data.agricultural_coverage_pct / 100
+    : 0;
 
   // Calculate intensities
-  const pfasIntensity = data.pfas_pesticide_belastning_per_ha || (area > 0 ? pfasGrams / area : 0);
-  const pesticideIntensity = data.pesticide_belastning_per_ha || (area > 0 ? pesticideLoad / area : 0);
-  const diquatIntensity = data.diquat_pesticide_belastning_per_ha || (area > 0 ? diquatGrams / area : 0);
-  const glyphosateIntensity = data.glyphosate_pesticide_belastning_per_ha || (area > 0 ? glyphosateGrams / area : 0);
+  const pfasIntensity =
+    data.pfas_pesticide_belastning_per_ha || (area > 0 ? pfasGrams / area : 0);
+  const pesticideIntensity =
+    data.pesticide_belastning_per_ha || (area > 0 ? pesticideLoad / area : 0);
+  const diquatIntensity =
+    data.diquat_pesticide_belastning_per_ha ||
+    (area > 0 ? diquatGrams / area : 0);
+  const glyphosateIntensity =
+    data.glyphosate_pesticide_belastning_per_ha ||
+    (area > 0 ? glyphosateGrams / area : 0);
 
   return (
-    <div className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs space-y-3" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <div className="p-4 space-y-3">
+    <div
+      className="max-w-xs space-y-3 rounded-lg border-0 bg-white/95 shadow-2xl backdrop-blur-sm"
+      style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+    >
+      <div className="space-y-3 p-4">
         {/* Header - Clean and minimal */}
-        <div className="bg-slate-900 rounded-md px-3 py-2">
-          <div className="text-white text-sm font-medium">Municipality: {data.kommune_name || 'Unknown'}</div>
-          <div className="text-slate-300 text-xs">
-            {area > 0 ? `${formatNumber(area, 1)} hectares agricultural area` : 'Area data unavailable'}
+        <div className="rounded-md bg-slate-900 px-3 py-2">
+          <div className="text-sm font-medium text-white">
+            Municipality: {data.kommune_name || 'Unknown'}
+          </div>
+          <div className="text-xs text-slate-300">
+            {area > 0
+              ? `${formatNumber(area, 1)} hectares agricultural area`
+              : 'Area data unavailable'}
           </div>
         </div>
 
         {/* Total Pesticide Load - Primary metric */}
-        <div className="bg-orange-50 rounded-md px-3 py-2 border-l-4 border-orange-400">
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-orange-800 text-sm font-medium">Total Pesticide Load</div>
+        <div className="rounded-md border-l-4 border-orange-400 bg-orange-50 px-3 py-2">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="text-sm font-medium text-orange-800">
+              Total Pesticide Load
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-orange-900 font-semibold text-base">{formatNumber(pesticideLoad, 2)}</div>
+              <div className="text-base font-semibold text-orange-900">
+                {formatNumber(pesticideLoad, 2)}
+              </div>
               <div className="text-orange-600">kg total</div>
             </div>
             <div>
-              <div className="text-orange-900 font-semibold text-base">{formatNumber(pesticideIntensity, 2)}</div>
+              <div className="text-base font-semibold text-orange-900">
+                {formatNumber(pesticideIntensity, 2)}
+              </div>
               <div className="text-orange-600">kg per hectare</div>
             </div>
           </div>
         </div>
 
         {/* PFAS - Clean warning design */}
-        <div className="bg-red-50 rounded-md px-3 py-2 border-l-4 border-red-400">
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-red-800 text-sm font-medium">PFAS Active Ingredients</div>
-            <div className="text-red-600 text-xs font-medium">Persistent</div>
+        <div className="rounded-md border-l-4 border-red-400 bg-red-50 px-3 py-2">
+          <div className="mb-1 flex items-center justify-between">
+            <div className="text-sm font-medium text-red-800">
+              PFAS Active Ingredients
+            </div>
+            <div className="text-xs font-medium text-red-600">Persistent</div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-red-900 font-semibold text-base">{formatNumber(pfasGrams, 2)}</div>
+              <div className="text-base font-semibold text-red-900">
+                {formatNumber(pfasGrams, 2)}
+              </div>
               <div className="text-red-600">grams total</div>
             </div>
             <div>
-              <div className="text-red-900 font-semibold text-base">{formatNumber(pfasIntensity, 2)}</div>
+              <div className="text-base font-semibold text-red-900">
+                {formatNumber(pfasIntensity, 2)}
+              </div>
               <div className="text-red-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Glyphosate - Clean design */}
-        <div className="bg-green-50 rounded-md px-3 py-2 border-l-4 border-green-400">
-          <div className="text-green-800 text-sm font-medium mb-1">Glyphosate Active Ingredients</div>
+        <div className="rounded-md border-l-4 border-green-400 bg-green-50 px-3 py-2">
+          <div className="mb-1 text-sm font-medium text-green-800">
+            Glyphosate Active Ingredients
+          </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateGrams, 2)}</div>
+              <div className="text-base font-semibold text-green-900">
+                {formatNumber(glyphosateGrams, 2)}
+              </div>
               <div className="text-green-600">grams total</div>
             </div>
             <div>
-              <div className="text-green-900 font-semibold text-base">{formatNumber(glyphosateIntensity, 2)}</div>
+              <div className="text-base font-semibold text-green-900">
+                {formatNumber(glyphosateIntensity, 2)}
+              </div>
               <div className="text-green-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Diquat - Clean design */}
-        <div className="bg-amber-50 rounded-md px-3 py-2 border-l-4 border-amber-400">
-          <div className="text-amber-800 text-sm font-medium mb-1">Diquat Active Ingredients</div>
+        <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
+          <div className="mb-1 text-sm font-medium text-amber-800">
+            Diquat Active Ingredients
+          </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatGrams, 2)}</div>
+              <div className="text-base font-semibold text-amber-900">
+                {formatNumber(diquatGrams, 2)}
+              </div>
               <div className="text-amber-600">grams total</div>
             </div>
             <div>
-              <div className="text-amber-900 font-semibold text-base">{formatNumber(diquatIntensity, 2)}</div>
+              <div className="text-base font-semibold text-amber-900">
+                {formatNumber(diquatIntensity, 2)}
+              </div>
               <div className="text-amber-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Agricultural Activity - Minimal stats */}
-        <div className="bg-slate-50 rounded-md px-3 py-2">
-          <div className="text-slate-700 text-sm font-medium mb-2">Activity</div>
+        <div className="rounded-md bg-slate-50 px-3 py-2">
+          <div className="mb-2 text-sm font-medium text-slate-700">
+            Activity
+          </div>
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="text-center">
-              <div className="font-semibold text-slate-900 text-sm">{applications}</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {applications}
+              </div>
               <div className="text-slate-600">Applications</div>
             </div>
             <div className="text-center">
-              <div className="font-semibold text-slate-900 text-sm">{fieldCount}</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {fieldCount}
+              </div>
               <div className="text-slate-600">Fields</div>
             </div>
             <div className="text-center">
-              <div className="font-semibold text-slate-900 text-sm">{formatPercentage(coverage)}</div>
+              <div className="text-sm font-semibold text-slate-900">
+                {formatPercentage(coverage)}
+              </div>
               <div className="text-slate-600">Coverage</div>
             </div>
           </div>
@@ -344,7 +460,9 @@ const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
 };
 
 const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
-  const statusConfig = data.status ? BNBO_STATUS_CONFIG[data.status as keyof typeof BNBO_STATUS_CONFIG] : null;
+  const statusConfig = data.status
+    ? BNBO_STATUS_CONFIG[data.status as keyof typeof BNBO_STATUS_CONFIG]
+    : null;
 
   return (
     <div className="space-y-3">
@@ -354,9 +472,14 @@ const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         <div className="relative">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-mono text-sm font-semibold tracking-wide">ENVIRONMENTAL PROTECTION ZONE</h3>
+              <h3 className="font-mono text-sm font-semibold tracking-wide">
+                ENVIRONMENTAL PROTECTION ZONE
+              </h3>
               <p className="font-mono text-xs text-gray-300">
-                BNBO SECTOR {data.bnbo_id ? data.bnbo_id.substring(0, 8).toUpperCase() : 'UNKNOWN'}
+                BNBO SECTOR{' '}
+                {data.bnbo_id
+                  ? data.bnbo_id.substring(0, 8).toUpperCase()
+                  : 'UNKNOWN'}
               </p>
             </div>
             <div className="text-right">
@@ -370,24 +493,32 @@ const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
       </div>
 
       {/* Protection Status */}
-      <div className="border border-gray-300 bg-gray-50 rounded p-3">
+      <div className="rounded border border-gray-300 bg-gray-50 p-3">
         {statusConfig && (
-          <div className="flex items-center space-x-3 mb-3">
+          <div className="mb-3 flex items-center space-x-3">
             <div
-              className="w-4 h-4 rounded border border-gray-400"
+              className="h-4 w-4 rounded border border-gray-400"
               style={{ backgroundColor: statusConfig.color }}
             />
             <div>
-              <div className="font-mono text-sm font-semibold text-gray-900">{statusConfig.label}</div>
-              <div className="font-mono text-xs text-gray-600">{statusConfig.description}</div>
+              <div className="font-mono text-sm font-semibold text-gray-900">
+                {statusConfig.label}
+              </div>
+              <div className="font-mono text-xs text-gray-600">
+                {statusConfig.description}
+              </div>
             </div>
           </div>
         )}
 
         {data.description && (
           <div className="mt-3">
-            <div className="font-mono text-xs font-semibold text-gray-900 mb-1">DESCRIPTION:</div>
-            <p className="font-mono text-xs text-gray-600 break-words">{data.description}</p>
+            <div className="mb-1 font-mono text-xs font-semibold text-gray-900">
+              DESCRIPTION:
+            </div>
+            <p className="font-mono text-xs break-words text-gray-600">
+              {data.description}
+            </p>
           </div>
         )}
       </div>
@@ -396,7 +527,7 @@ const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
       <div className="border-t border-gray-300 pt-2">
         <div className="font-mono text-xs text-gray-500">
           <span className="font-semibold">BNBO ID:</span>
-          <span className="ml-1 bg-gray-200 px-1 py-0.5 rounded font-mono">
+          <span className="ml-1 rounded bg-gray-200 px-1 py-0.5 font-mono">
             {data.bnbo_id || 'UNKNOWN'}
           </span>
         </div>
@@ -428,7 +559,7 @@ export const MapTooltip: React.FC = () => {
 
   const adjustedPosition = {
     left: tooltipPosition.x + tooltipDistance,
-    top: tooltipPosition.y + tooltipDistance
+    top: tooltipPosition.y + tooltipDistance,
   };
 
   // Choose horizontal position - keep tooltip far from cursor
@@ -443,7 +574,8 @@ export const MapTooltip: React.FC = () => {
     if (spaceRight > spaceLeft) {
       adjustedPosition.left = tooltipPosition.x + tooltipDistance;
     } else {
-      adjustedPosition.left = tooltipPosition.x - tooltipWidth - tooltipDistance;
+      adjustedPosition.left =
+        tooltipPosition.x - tooltipWidth - tooltipDistance;
     }
   }
 
@@ -459,30 +591,31 @@ export const MapTooltip: React.FC = () => {
     if (spaceBelow > spaceAbove) {
       adjustedPosition.top = tooltipPosition.y + tooltipDistance;
     } else {
-      adjustedPosition.top = tooltipPosition.y - tooltipHeight - tooltipDistance;
+      adjustedPosition.top =
+        tooltipPosition.y - tooltipHeight - tooltipDistance;
     }
   }
 
   // Final bounds checking to ensure tooltip stays on screen
-  adjustedPosition.left = Math.max(padding, Math.min(
-    adjustedPosition.left,
-    window.innerWidth - tooltipWidth - padding
-  ));
+  adjustedPosition.left = Math.max(
+    padding,
+    Math.min(adjustedPosition.left, window.innerWidth - tooltipWidth - padding)
+  );
 
-  adjustedPosition.top = Math.max(padding, Math.min(
-    adjustedPosition.top,
-    window.innerHeight - tooltipHeight - padding
-  ));
+  adjustedPosition.top = Math.max(
+    padding,
+    Math.min(adjustedPosition.top, window.innerHeight - tooltipHeight - padding)
+  );
 
   return (
     <div
-      className="fixed z-50 pointer-events-none"
+      className="pointer-events-none fixed z-50"
       style={{
         left: adjustedPosition.left,
         top: adjustedPosition.top,
       }}
     >
-      <div className="bg-white border border-gray-400 rounded-lg shadow-xl max-w-sm">
+      <div className="max-w-sm rounded-lg border border-gray-400 bg-white shadow-xl">
         <div className="p-4">
           {tooltipType === 'h3' && <H3Tooltip data={tooltipData} />}
           {tooltipType === 'kommune' && <KommuneTooltip data={tooltipData} />}
@@ -491,10 +624,10 @@ export const MapTooltip: React.FC = () => {
           {/* Raw data debug section - more scientific */}
           {process.env.NODE_ENV === 'development' && (
             <details className="mt-3">
-              <summary className="font-mono text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+              <summary className="cursor-pointer font-mono text-xs text-gray-500 hover:text-gray-700">
                 RAW DATA DEBUG
               </summary>
-              <pre className="font-mono text-xs mt-2 p-2 bg-gray-100 rounded overflow-auto max-h-32 text-gray-700">
+              <pre className="mt-2 max-h-32 overflow-auto rounded bg-gray-100 p-2 font-mono text-xs text-gray-700">
                 {JSON.stringify(tooltipData, null, 2)}
               </pre>
             </details>

@@ -59,7 +59,7 @@ export function GlobalSearch({
             <Button
               key={suggestion}
               variant="secondary"
-              className="bg-white/75 hover:bg-white/90"
+              className="bg-background/75 hover:bg-background/90"
               onClick={() => {
                 setSearch(suggestion);
                 setOpen(true);
@@ -221,7 +221,7 @@ function SearchOverlay({
       <div
         className={cn(
           'h-auto w-full rounded-lg shadow-lg',
-          !borderless && 'border border-gray-100'
+          !borderless && 'border-border border'
         )}
       >
         <Input
@@ -248,17 +248,19 @@ function SearchOverlay({
             </div>
           ))}
         </div>
-        <div className="max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg bg-white">
+        <div className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg">
           {isLoading && (
             <div className="flex items-center justify-center p-8">
               <div className="border-primary h-8 w-8 animate-spin rounded-full border-b-2"></div>
-              <span className="ml-3 text-sm text-gray-600">Søger...</span>
+              <span className="text-muted-foreground ml-3 text-sm">
+                Søger...
+              </span>
             </div>
           )}
 
           {error && (
             <div className="flex items-center justify-center p-8">
-              <div className="text-sm text-red-600">{error}</div>
+              <div className="text-destructive text-sm">{error}</div>
             </div>
           )}
 
@@ -267,7 +269,7 @@ function SearchOverlay({
             searchResults.length === 0 &&
             search.trim().length >= 2 && (
               <div className="flex items-center justify-center p-8">
-                <div className="text-sm text-gray-500">
+                <div className="text-muted-foreground text-sm">
                   Ingen resultater fundet for &ldquo;{search}&rdquo;
                 </div>
               </div>
@@ -275,7 +277,7 @@ function SearchOverlay({
 
           {!isLoading && !error && search.trim().length < 2 && (
             <div className="flex items-center justify-center p-8">
-              <div className="text-sm text-gray-500">
+              <div className="text-muted-foreground text-sm">
                 Indtast mindst 2 tegn for at søge
               </div>
             </div>
@@ -319,7 +321,7 @@ function SearchResultCard({
 
   return (
     <Link href={`/virksomhed/${result.id}`} onClick={handleClick}>
-      <div className="group flex items-center justify-between gap-2 p-4 hover:bg-gray-100">
+      <div className="group hover:bg-muted/50 flex items-center justify-between gap-2 p-4">
         <div className="flex items-center gap-2">
           <Image
             src={'/farm-icon.png'}

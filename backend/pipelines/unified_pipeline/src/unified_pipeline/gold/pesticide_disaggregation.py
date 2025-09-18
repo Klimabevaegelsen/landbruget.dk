@@ -1506,6 +1506,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 "⚠️ No is_organic column found in FVM data - assuming all fields are non-organic"
             )
 
+        # Handle municipality column - check if municipality exists in FVM data
+        if "municipality" in temp_column_names:
+            municipality_column = "municipality"
+            self.log.info("✅ Found municipality column in FVM data - municipality will be included")
+        else:
+            municipality_column = "NULL as municipality"
+            self.log.warning(
+                "⚠️ No municipality column found in FVM data - using NULL for municipality"
+            )
+
         # Check if field_uuid exists in the source data
         has_field_uuid = "field_uuid" in temp_column_names
 
@@ -1541,7 +1551,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 year{geometry_select},
                 -- Add field UUID support with fallback to composite key
                 {primary_field_id_select},
-                {field_uuid_select}
+                {field_uuid_select},
+                -- Add municipality support from FVM data
+                {municipality_column}
             FROM marker_temp
         """)
 
@@ -1669,7 +1681,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         return True
 
     def _create_results_table(self):
-        """Create the disaggregated results table with original schema."""
+        """Create the disaggregated results table with original schema plus municipality support."""
         create_table_sql = """
         CREATE TABLE disaggregated_pesticide_applications (
             DisaggregatedID VARCHAR,
@@ -1688,7 +1700,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             DisaggregationDate TIMESTAMP,
             -- Add field UUID support for better field identification
             field_uuid VARCHAR,
-            primary_field_id VARCHAR
+            primary_field_id VARCHAR,
+            -- Add municipality support from FVM marker data
+            municipality VARCHAR
         )
         """
         self.duckdb_conn.execute(create_table_sql)
@@ -2006,7 +2020,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     m_fields.field_uuid,
-                    m_fields.field_uuid as primary_field_id
+                    m_fields.field_uuid as primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM BestMatchEvaluation p
                 JOIN MarkerFieldCVRCropTotals main_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR
@@ -2137,7 +2153,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     m_fields.field_uuid,
-                    m_fields.field_uuid as primary_field_id
+                    m_fields.field_uuid as primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM BestMatchEvaluation p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
@@ -2282,7 +2300,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     NOW() as DisaggregationDate,
                     -- Add field UUID support
                     m_fields.field_uuid,
-                    m_fields.field_uuid
+                    m_fields.field_uuid,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM pending_pesticide_rows p
                 -- STEP 2: Match pesticide applications to company+crop totals
                 JOIN MarkerFieldCVRCropTotals marker_totals
@@ -2397,7 +2417,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     NOW() as DisaggregationDate,
                     -- Add field UUID support
                     m_fields.field_uuid,
-                    m_fields.field_uuid
+                    m_fields.field_uuid,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM pending_pesticide_rows p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
                     ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
@@ -2468,7 +2490,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         m.area_ha as FieldArea,
                         m.field_id as FieldIdentifier,
                                                  ANY_VALUE(m.field_uuid) as field_uuid,
-                         ANY_VALUE(m.field_uuid) as primary_field_id
+                         ANY_VALUE(m.field_uuid) as primary_field_id,
+                        ANY_VALUE(m.municipality) as municipality
                     FROM marker m
                     WHERE m.cvr_number IS NOT NULL
                       AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
@@ -2508,6 +2531,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         sf.FieldIdentifier,
                         sf.field_uuid,
                         sf.primary_field_id,
+                        sf.municipality,
                         (pf.AcreageSize / sf.FieldArea) * 100 as CoveragePercent
                     FROM MarkerSingleFieldCVRCrop sf
                     JOIN PendingForSingleFields pf
@@ -2533,7 +2557,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     NOW() as DisaggregationDate,
                     -- Add field UUID support
                     c.field_uuid,
-                    c.primary_field_id
+                    c.primary_field_id,
+                    -- Add municipality from FVM marker data
+                    c.municipality
                 FROM CandidatesWithFields c
             """
 
@@ -3011,7 +3037,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     NOW() as DisaggregationDate,
                     -- Add field UUID support - need to join back to marker table
                     m.field_uuid,
-                    m.primary_field_id
+                    m.primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m.municipality
                 FROM FieldAllocations fa
                 JOIN marker m ON fa.field_uuid = m.field_uuid
             """

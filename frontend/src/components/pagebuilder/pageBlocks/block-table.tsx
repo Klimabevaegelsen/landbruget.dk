@@ -12,7 +12,10 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { NoDataPlaceholder } from './no-data-placeholder';
 import { useCategoryDataContext } from './CategoryDataContext';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import {
+  DocumentationAccordion,
+  TableCSVDownloadButton,
+} from '@/components/chart';
 
 export function BlockTable({ grid }: { grid: BaseDataGrid }) {
   const { isInCategoryWithData } = useCategoryDataContext();
@@ -28,11 +31,8 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
     if (!isInCategoryWithData) {
       return <NoDataPlaceholder />;
     } else {
-      return (
-        <div className="py-8 text-center text-gray-500">
-          Ingen data tilgængelig for denne tabel
-        </div>
-      );
+      // If we're in a category with data, render nothing instead of individual message
+      return null;
     }
   }
   const columns: ColumnDef<Record<string, string | number | boolean>>[] =
@@ -46,9 +46,9 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
           >
             {col.label}
             {column.getIsSorted() === 'asc' ? (
-              <ArrowUpIcon className="ml-2 size-3 text-black" />
+              <ArrowUpIcon className="text-foreground ml-2 size-3" />
             ) : column.getIsSorted() === 'desc' ? (
-              <ArrowDownIcon className="ml-2 size-3 text-black" />
+              <ArrowDownIcon className="text-foreground ml-2 size-3" />
             ) : (
               <div className="ml-2 size-3">
                 <ArrowsUpDownIcon className="hidden group-hover:block" />
@@ -64,6 +64,15 @@ export function BlockTable({ grid }: { grid: BaseDataGrid }) {
 
   return (
     <div className="">
+      {/* Header with download button */}
+      <div className="mb-4 flex items-center justify-end">
+        <TableCSVDownloadButton
+          table={grid}
+          chartTitle={grid.title}
+          chartKey={grid._key}
+        />
+      </div>
+
       <DynamicDataTable
         columns={columns}
         data={grid.rows}

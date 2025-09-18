@@ -5,7 +5,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 interface MunicipalityRankingRequest {
-  category?: 'land_use' | 'production' | 'environmental' | 'animal_health' | 'worker_safety' | 'all';
+  category?: 'land_use' | 'production' | 'pesticide_burden' | 'pesticide_pfas' | 'pesticide_glyphosate' | 'antibiotic_usage' | 'environmental' | 'worker_safety' | 'incidents' | 'organic_farming' | 'all';
   year?: number;
   limit?: number;
   sort_by?: string;
@@ -24,9 +24,14 @@ interface MunicipalityRankingResponse {
   rankings: {
     land_use?: MunicipalityRanking[];
     production?: MunicipalityRanking[];
+    pesticide_burden?: MunicipalityRanking[];
+    pesticide_pfas?: MunicipalityRanking[];
+    pesticide_glyphosate?: MunicipalityRanking[];
+    antibiotic_usage?: MunicipalityRanking[];
     environmental?: MunicipalityRanking[];
-    animal_health?: MunicipalityRanking[];
     worker_safety?: MunicipalityRanking[];
+    incidents?: MunicipalityRanking[];
+    organic_farming?: MunicipalityRanking[];
   };
   metadata: {
     year: number;
@@ -87,25 +92,60 @@ serve(async (req) => {
       response.metadata.categories_included.push('production');
     }
 
-    // Environmental Rankings
+    // Pesticide Burden Rankings
+    if (params.category === 'all' || params.category === 'pesticide_burden') {
+      const pesticideRankings = await getPesticideBurdenRankings(supabase, params);
+      response.rankings.pesticide_burden = pesticideRankings;
+      response.metadata.categories_included.push('pesticide_burden');
+    }
+
+    // PFAS Pesticide Rankings
+    if (params.category === 'all' || params.category === 'pesticide_pfas') {
+      const pfasRankings = await getPFASPesticideRankings(supabase, params);
+      response.rankings.pesticide_pfas = pfasRankings;
+      response.metadata.categories_included.push('pesticide_pfas');
+    }
+
+    // Glyphosate Pesticide Rankings
+    if (params.category === 'all' || params.category === 'pesticide_glyphosate') {
+      const glyphosateRankings = await getGlyphosatePesticideRankings(supabase, params);
+      response.rankings.pesticide_glyphosate = glyphosateRankings;
+      response.metadata.categories_included.push('pesticide_glyphosate');
+    }
+
+    // Antibiotic Usage Rankings
+    if (params.category === 'all' || params.category === 'antibiotic_usage') {
+      const antibioticRankings = await getAntibioticUsageRankings(supabase, params);
+      response.rankings.antibiotic_usage = antibioticRankings;
+      response.metadata.categories_included.push('antibiotic_usage');
+    }
+
+    // Environmental Rankings (nitrogen leaching)
     if (params.category === 'all' || params.category === 'environmental') {
       const environmentalRankings = await getEnvironmentalRankings(supabase, params);
       response.rankings.environmental = environmentalRankings;
       response.metadata.categories_included.push('environmental');
     }
 
-    // Animal Health Rankings
-    if (params.category === 'all' || params.category === 'animal_health') {
-      const animalHealthRankings = await getAnimalHealthRankings(supabase, params);
-      response.rankings.animal_health = animalHealthRankings;
-      response.metadata.categories_included.push('animal_health');
-    }
-
-    // Worker Safety Rankings
+    // Worker Safety and Incidents Rankings
     if (params.category === 'all' || params.category === 'worker_safety') {
       const workerSafetyRankings = await getWorkerSafetyRankings(supabase, params);
       response.rankings.worker_safety = workerSafetyRankings;
       response.metadata.categories_included.push('worker_safety');
+    }
+
+    // Incidents Rankings
+    if (params.category === 'all' || params.category === 'incidents') {
+      const incidentRankings = await getIncidentRankings(supabase, params);
+      response.rankings.incidents = incidentRankings;
+      response.metadata.categories_included.push('incidents');
+    }
+
+    // Organic Farming Rankings
+    if (params.category === 'all' || params.category === 'organic_farming') {
+      const organicRankings = await getOrganicFarmingRankings(supabase, params);
+      response.rankings.organic_farming = organicRankings;
+      response.metadata.categories_included.push('organic_farming');
     }
 
     // Calculate total municipalities (use land use as baseline)
@@ -145,7 +185,7 @@ async function getLandUseRankings(supabase: any, params: MunicipalityRankingRequ
   const { data, error } = await supabase
     .from('municipality_land_use_summary')
     .select('*')
-    .eq('year', 2025) // Use 2025 for field boundaries, 2024 organic data
+    .eq('year', params.year) // Use requested year
     .order('total_area_ha', { ascending: false })
     .limit(params.limit);
 
@@ -168,9 +208,9 @@ async function getLandUseRankings(supabase: any, params: MunicipalityRankingRequ
 
 async function getProductionRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
   const { data, error } = await supabase
-    .from('municipality_production_summary')
+    .from('municipality_animal_production_summary')
     .select('*')
-    .order('total_capacity', { ascending: false })
+    .order('total_animal_capacity', { ascending: false })
     .limit(params.limit);
 
   if (error) throw error;
@@ -178,23 +218,241 @@ async function getProductionRankings(supabase: any, params: MunicipalityRankingR
   return data.map((row: any, index: number) => ({
     municipality: row.municipality,
     rank: index + 1,
-    value: row.total_capacity || 0,
-    metric: 'total_production_capacity',
+    value: row.total_animal_capacity,
+    metric: 'total_animal_capacity',
     additional_data: {
-      total_sites: row.total_sites,
-      sites_with_capacity: row.sites_with_capacity,
-      avg_capacity: row.avg_capacity,
-      unique_companies: row.unique_companies,
-      total_antibiotics_ddd_2024: row.total_antibiotics_ddd_2024 || 0,
-      total_transports_2024: row.total_transports_2024 || 0
+      total_production_sites: row.total_production_sites,
+      avg_site_capacity: Math.round(row.avg_site_capacity || 0),
+      unique_companies: row.unique_companies
     }
   }));
 }
 
+
+// Pesticide Burden Rankings (total burden)
+async function getPesticideBurdenRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
+  const { data, error } = await supabase
+    .from('municipality_pesticide_burden_summary')
+    .select('*')
+    .eq('year', params.year || 2023) // Use most recent pesticide data
+    .order('total_pesticide_burden', { ascending: false })
+    .limit(params.limit);
+
+  if (error) throw error;
+
+  return data.map((row: any, index: number) => ({
+    municipality: row.municipality,
+    rank: index + 1,
+    value: row.total_pesticide_burden || 0,
+    metric: 'total_pesticide_burden',
+    additional_data: {
+      total_applications: row.total_applications || 0,
+      total_treated_area_ha: row.total_treated_area_ha || 0,
+      health_burden: row.total_health_burden || 0,
+      unique_companies: row.unique_companies || 0,
+      glyphosate_burden: row.glyphosate_burden || 0,
+      pfas_burden: row.pfas_burden || 0
+    }
+  }));
+}
+
+// PFAS Pesticide Rankings
+async function getPFASPesticideRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
+  const { data, error } = await supabase
+    .from('municipality_pesticide_burden_summary')
+    .select('*')
+    .eq('year', params.year || 2023)
+    .order('pfas_burden', { ascending: false })
+    .limit(params.limit);
+
+  if (error) throw error;
+
+  return data.map((row: any, index: number) => ({
+    municipality: row.municipality,
+    rank: index + 1,
+    value: row.pfas_burden || 0,
+    metric: 'pfas_pesticide_burden',
+    additional_data: {
+      pfas_applications: row.pfas_applications || 0,
+      total_pesticide_burden: row.total_pesticide_burden || 0,
+      unique_companies: row.unique_companies || 0,
+      total_treated_area_ha: row.total_treated_area_ha || 0
+    }
+  }));
+}
+
+// Glyphosate Pesticide Rankings
+async function getGlyphosatePesticideRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
+  const { data, error } = await supabase
+    .from('municipality_pesticide_burden_summary')
+    .select('*')
+    .eq('year', params.year || 2023)
+    .order('glyphosate_burden', { ascending: false })
+    .limit(params.limit);
+
+  if (error) throw error;
+
+  return data.map((row: any, index: number) => ({
+    municipality: row.municipality,
+    rank: index + 1,
+    value: row.glyphosate_burden || 0,
+    metric: 'glyphosate_pesticide_burden',
+    additional_data: {
+      glyphosate_applications: row.glyphosate_applications || 0,
+      total_pesticide_burden: row.total_pesticide_burden || 0,
+      unique_companies: row.unique_companies || 0,
+      total_treated_area_ha: row.total_treated_area_ha || 0
+    }
+  }));
+}
+
+// Antibiotic Usage Rankings (using production sites with antibiotic data)
+async function getAntibioticUsageRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
+  const { data, error } = await supabase
+    .from('municipality_production_summary')
+    .select('*')
+    .order('total_antibiotics_ddd_2024', { ascending: false })
+    .limit(params.limit);
+
+  if (error) throw error;
+
+  return data.map((row: any, index: number) => ({
+    municipality: row.municipality,
+    rank: index + 1,
+    value: row.total_antibiotics_ddd_2024 || 0,
+    metric: 'total_antibiotic_ddd_usage',
+    additional_data: {
+      total_production_sites: row.total_sites || 0,
+      sites_with_antibiotics: row.sites_with_2024_data || 0,
+      avg_antibiotics_per_site: row.avg_antibiotics_ddd_2024 || 0,
+      total_animal_capacity: row.total_capacity || 0,
+      unique_companies: row.unique_companies || 0
+    }
+  }));
+}
+
+// Environmental Rankings (nitrogen leaching)
 async function getEnvironmentalRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
   const { data, error } = await supabase
-    .from('municipality_environmental_summary')
+    .from('municipality_land_use_summary')
     .select('*')
+    .eq('year', params.year || 2024)
+    .order('avg_n_leached_kg', { ascending: false }) // Higher nitrogen leaching is worse
+    .limit(params.limit);
+
+  if (error) throw error;
+
+  return data.map((row: any, index: number) => ({
+    municipality: row.municipality,
+    rank: index + 1,
+    value: row.avg_n_leached_kg || 0,
+    metric: 'avg_nitrogen_leaching_kg',
+    additional_data: {
+      total_fields: row.total_fields || 0,
+      total_area_ha: row.total_area_ha || 0,
+      avg_pesticide_load: row.avg_pesticide_load_index || 0,
+      organic_percentage: row.organic_percentage || 0,
+      unique_companies: row.unique_companies || 0
+    }
+  }));
+}
+
+// Worker Safety Rankings (based on incident data)
+async function getWorkerSafetyRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
+  // Get incident counts by municipality (via company location)
+  const { data, error } = await supabase
+    .rpc('get_municipality_incident_summary', {
+      target_year: params.year || 2024
+    });
+
+  if (error) throw error;
+
+  return data.map((row: any, index: number) => ({
+    municipality: row.municipality,
+    rank: index + 1,
+    value: row.total_incidents || 0,
+    metric: 'total_workplace_incidents',
+    additional_data: {
+      companies_with_incidents: row.companies_with_incidents || 0,
+      incident_types: row.incident_types || 0,
+      severe_incidents: row.severe_incidents || 0,
+      incident_rate_per_company: row.incident_rate_per_company || 0
+    }
+  }));
+}
+
+// Incidents Rankings (separate from worker safety)
+async function getIncidentRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
+  // Get all incident data by municipality
+  const { data, error } = await supabase
+    .from('incidents')
+    .select(`
+      *,
+      companies!inner(municipality)
+    `)
+    .eq('year', params.year || 2024);
+
+  if (error) throw error;
+
+  // Group by municipality
+  const municipalityIncidents = data.reduce((acc: any, incident: any) => {
+    const municipality = incident.companies.municipality;
+    if (!municipality) return acc;
+    
+    if (!acc[municipality]) {
+      acc[municipality] = {
+        municipality,
+        total_incidents: 0,
+        severity_high: 0,
+        severity_medium: 0,
+        severity_low: 0,
+        unique_companies: new Set(),
+        incident_types: new Set()
+      };
+    }
+    
+    acc[municipality].total_incidents++;
+    acc[municipality].unique_companies.add(incident.company_id);
+    acc[municipality].incident_types.add(incident.type);
+    
+    if (incident.severity === 'high') acc[municipality].severity_high++;
+    else if (incident.severity === 'medium') acc[municipality].severity_medium++;
+    else acc[municipality].severity_low++;
+    
+    return acc;
+  }, {});
+
+  // Convert to array and sort
+  const rankings = Object.values(municipalityIncidents)
+    .map((data: any) => ({
+      ...data,
+      unique_companies: data.unique_companies.size,
+      incident_types: data.incident_types.size
+    }))
+    .sort((a: any, b: any) => b.total_incidents - a.total_incidents)
+    .slice(0, params.limit);
+
+  return rankings.map((row: any, index: number) => ({
+    municipality: row.municipality,
+    rank: index + 1,
+    value: row.total_incidents,
+    metric: 'total_incidents',
+    additional_data: {
+      companies_with_incidents: row.unique_companies,
+      incident_types_count: row.incident_types,
+      high_severity: row.severity_high,
+      medium_severity: row.severity_medium,
+      low_severity: row.severity_low
+    }
+  }));
+}
+
+// Organic Farming Rankings
+async function getOrganicFarmingRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
+  const { data, error } = await supabase
+    .from('municipality_land_use_summary')
+    .select('*')
+    .eq('year', params.year || 2024)
     .order('organic_percentage', { ascending: false })
     .limit(params.limit);
 
@@ -206,63 +464,11 @@ async function getEnvironmentalRankings(supabase: any, params: MunicipalityRanki
     value: row.organic_percentage || 0,
     metric: 'organic_farming_percentage',
     additional_data: {
-      total_fields: row.total_fields_with_env_data,
-      organic_fields: row.organic_fields || 0,
       organic_area_ha: row.organic_area_ha || 0,
-      environmental_burden_score: row.environmental_burden_score || 0,
-      bnbo_not_dealt_with_count: row.bnbo_not_dealt_with_count || 0,
-      wetland_not_restored_count: row.wetland_not_restored_count || 0
-    }
-  }));
-}
-
-async function getAnimalHealthRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
-  const { data, error } = await supabase
-    .from('municipality_animal_health_summary')
-    .select('*')
-    .eq('year', 2025)
-    .order('avg_antibiotic_usage_add', { ascending: true }) // Lower is better for antibiotics
-    .limit(params.limit);
-
-  if (error) throw error;
-
-  return data.map((row: any, index: number) => ({
-    municipality: row.municipality,
-    rank: index + 1,
-    value: row.avg_antibiotic_usage_add || 0,
-    metric: 'avg_antibiotic_usage_add_per_100_animals_per_day',
-    additional_data: {
-      companies_with_antibiotics: row.companies_with_antibiotics,
-      sites_with_antibiotics: row.sites_with_antibiotics,
-      total_antibiotic_doses: row.total_antibiotic_doses || 0,
-      total_transports: row.total_transports || 0,
-      total_animals_transported: row.total_animals_transported || 0,
-      animal_health_burden_score: row.animal_health_burden_score || 0
-    }
-  }));
-}
-
-async function getWorkerSafetyRankings(supabase: any, params: MunicipalityRankingRequest): Promise<MunicipalityRanking[]> {
-  const { data, error } = await supabase
-    .from('municipality_worker_safety_summary')
-    .select('*')
-    .order('worker_safety_burden_score', { ascending: true }) // Lower is better for safety
-    .limit(params.limit);
-
-  if (error) throw error;
-
-  return data.map((row: any, index: number) => ({
-    municipality: row.municipality,
-    rank: index + 1,
-    value: row.worker_safety_burden_score || 0,
-    metric: 'worker_safety_burden_score',
-    additional_data: {
-      companies_with_workers: row.companies_with_workers,
-      total_estimated_employees: row.total_estimated_employees || 0,
-      total_visa_workers: row.total_visa_workers || 0,
-      visa_worker_percentage: row.visa_worker_percentage || 0,
-      total_incidents: row.total_incidents || 0,
-      incidents_per_1000_employees: row.incidents_per_1000_employees || 0
+      total_area_ha: row.total_area_ha || 0,
+      total_fields: row.total_fields || 0,
+      unique_companies: row.unique_companies || 0,
+      avg_field_size: row.avg_field_size || 0
     }
   }));
 }

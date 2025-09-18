@@ -14,18 +14,18 @@ from .schema_manager import SchemaManager
 from .storage import SilverStorageManager
 from .validators.pii_validator import PIIAction, PIIType, PIIValidator
 
+# Get logger
+logger = get_logger()
+
 # Import the new data tracing system
 try:
     from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
     PIPELINE_METADATA_AVAILABLE = True
 except ImportError:
-    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    logger.warning("Pipeline metadata system not available - continuing without data tracing")
     PipelineMetadataManager = None
     PIPELINE_METADATA_AVAILABLE = False
-
-# Get logger
-logger = get_logger()
 
 
 class SilverProcessor:
@@ -81,10 +81,18 @@ class SilverProcessor:
         # Store the silver run path for later access
         self.silver_run_path = None
 
-        # Initialize schema adapter
-        self.schema_adapter = SchemaAdapter()
+        # Create shared DuckDB connection for all processors
+        from .duckdb_base import DuckDBProcessor
 
-        # Initialize PII validator (excluding CVR from masking)
+        shared_processor = DuckDBProcessor(dataset_name="silver_shared")
+        shared_conn = shared_processor.conn
+
+        # Initialize schema adapter with shared connection
+        self.schema_adapter = SchemaAdapter()
+        self.schema_adapter.conn = shared_conn
+        self.schema_adapter._owns_connection = False
+
+        # Initialize PII validator with shared connection (excluding CVR from masking)
         self.pii_validator = PIIValidator(
             pii_types={
                 PIIType.EMAIL,
@@ -97,6 +105,21 @@ class SilverProcessor:
             action=PIIAction.MASK,
             threshold=0.3,
         )
+        # Override the PII validator's connection
+        self.pii_validator.conn = shared_conn
+        self.pii_validator._owns_connection = False
+
+        # Store reference to shared processor to prevent premature cleanup
+        self._shared_processor = shared_processor
+
+        # Override the parquet manager's connection to use shared connection
+        self.parquet_manager.conn = shared_conn
+        self.parquet_manager._owns_connection = False
+
+        # Create a persistent GCSDataAccess instance to avoid connection closure
+        from unified_pipeline.util.gcs_access import GCSDataAccess
+
+        self._shared_gcs_access = GCSDataAccess(connection=shared_conn)
 
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
@@ -104,15 +127,31 @@ class SilverProcessor:
         from .transformers.fertiliser_transformer import FertiliserTransformer
         from .transformers.work_permits_transformer import WorkPermitsTransformer
 
-        # Initialize transformers map
+        # Initialize transformers map with shared connection
+        excel_transformer = ExcelTransformer()
+        excel_transformer.conn = shared_conn
+        excel_transformer._owns_connection = False
+
+        pdf_transformer = AdvancedPDFTransformer(
+            use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
+            ocr_language="dan+eng",
+        )
+        pdf_transformer.conn = shared_conn
+        pdf_transformer._owns_connection = False
+
+        fertiliser_transformer = FertiliserTransformer()
+        fertiliser_transformer.conn = shared_conn
+        fertiliser_transformer._owns_connection = False
+
+        work_permits_transformer = WorkPermitsTransformer()
+        work_permits_transformer.conn = shared_conn
+        work_permits_transformer._owns_connection = False
+
         self.transformers = {
-            "Excel": ExcelTransformer(),
-            "PDF": AdvancedPDFTransformer(
-                use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
-                ocr_language="dan+eng",
-            ),
-            "Fertiliser": FertiliserTransformer(),
-            "WorkPermits": WorkPermitsTransformer(),
+            "Excel": excel_transformer,
+            "PDF": pdf_transformer,
+            "Fertiliser": fertiliser_transformer,
+            "WorkPermits": work_permits_transformer,
         }
 
         logger.info("Initialized Silver processor")
@@ -172,11 +211,28 @@ class SilverProcessor:
                         continue
 
                 # Filter by subfolder if specified
-                if specific_subfolders and file_info.get("folder_name") not in specific_subfolders:
-                    logger.debug(
-                        f"Skipping file from unspecified subfolder: {file_info.get('folder_name')}"
-                    )
-                    continue
+                if specific_subfolders:
+                    folder_name = file_info.get("folder_name", "")
+                    file_path = file_info.get("file_path", "")
+
+                    # Check if any of the specified subfolders match
+                    # Either exact match or if the file path contains the subfolder
+                    matches_subfolder = False
+                    for subfolder in specific_subfolders:
+                        if (
+                            folder_name == subfolder
+                            or subfolder.lower() in file_path.lower()
+                            or folder_name.lower().startswith(subfolder.lower())
+                        ):
+                            matches_subfolder = True
+                            break
+
+                    if not matches_subfolder:
+                        logger.debug(
+                            f"Skipping file from unspecified subfolder: {folder_name} "
+                            f"(path: {file_path})"
+                        )
+                        continue
 
                 # Process the file from memory
                 success = self._process_file_from_memory(
@@ -729,29 +785,63 @@ class SilverProcessor:
         """
         try:
             # Try to find a schema for this subfolder
-            table_schema = self.schema_manager.get_schema_by_subfolder(metadata.original_subfolder)
+            table_schema_dict = self.schema_manager.get_schema_by_subfolder(
+                metadata.original_subfolder
+            )
 
-            if not table_schema:
+            if not table_schema_dict:
                 logger.info(
                     f"No schema found for {metadata.original_subfolder}, "
                     f"skipping schema application"
                 )
                 return None
 
-            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
-            import duckdb
+            # Convert dict to TableSchema object
+            from .models.schema import TableSchema
 
-            # Use DuckDB to read parquet file
-            temp_conn = duckdb.connect()
-            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
-            temp_conn.close()
+            table_schema = TableSchema.from_dict(table_schema_dict)
+
+            # ✅ MIGRATION: Read parquet file using DuckDB with GCS support
+            output_path_str = str(output_path)
+            is_gcs_path = output_path_str.startswith("gs://")
+
+            # Check if we're using GCS storage but have a local path
+            using_gcs_storage = (
+                hasattr(self.storage_manager, "storage_type")
+                and self.storage_manager.storage_type.lower() == "gcs"
+            )
+
+            if is_gcs_path or using_gcs_storage:
+                # Use the persistent GCSDataAccess instance to avoid connection closure
+                gcs_access = self._shared_gcs_access
+
+                # Construct GCS path if needed
+                if not is_gcs_path and using_gcs_storage:
+                    bucket = getattr(self.storage_manager, "bucket", "landbrugsdata-raw-data")
+                    gcs_path = f"gs://{bucket}/silver/{output_path_str}"
+                else:
+                    gcs_path = output_path_str
+
+                # Read from GCS using shared connection
+                table_name = gcs_access.query_parquet_native(gcs_path, "SELECT *", "schema_table")
+            else:
+                # Local file - use shared connection instead of temp connection
+                table_name = "local_schema_table"
+                self.schema_adapter.conn.execute(
+                    f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{output_path}')"
+                )
 
             # Apply the schema
-            df_with_schema = self.schema_adapter.apply_schema(
-                df=df,
+            schema_table_name = self.schema_adapter.apply_schema(
+                table_name_or_data=table_name,  # Use the table name from GCS access
                 table_schema=table_schema,
                 infer_types=True,
             )
+
+            # Get the result as DataFrame
+            df_with_schema = self.schema_adapter.conn.execute(
+                f"SELECT * FROM {schema_table_name}"
+            ).df()
 
             # Save with schema to a new file
             schema_output_path = output_path.with_name(
@@ -789,22 +879,35 @@ class SilverProcessor:
             Path to the PII-handled file or None if failed
         """
         try:
-            # Check if this is a GCS path or local path
+            # Check if this is a GCS path or if we're using GCS storage
             output_path_str = str(output_path)
             is_gcs_path = output_path_str.startswith("gs://")
 
-            if is_gcs_path:
-                # For GCS files, we need to use GCS access to read the file
-                from unified_pipeline.util.gcs_access import GCSDataAccess
+            # Also check if we're using GCS storage but have a local path
+            using_gcs_storage = (
+                hasattr(self.storage_manager, "storage_type")
+                and self.storage_manager.storage_type.lower() == "gcs"
+            )
 
-                gcs_access = GCSDataAccess()
+            if is_gcs_path or using_gcs_storage:
+                # Use the persistent GCSDataAccess instance to avoid connection closure
+                gcs_access = self._shared_gcs_access
+
+                # If we have a local path but are using GCS storage, construct the GCS path
+                if not is_gcs_path and using_gcs_storage:
+                    # Convert local path to GCS path using storage manager's bucket and base path
+                    # The output_path is relative to the silver base path
+                    bucket = getattr(self.storage_manager, "bucket", "landbrugsdata-raw-data")
+                    gcs_path = f"gs://{bucket}/silver/{output_path_str}"
+                else:
+                    gcs_path = output_path_str
 
                 # Create a temporary table name for validation
                 temp_table = "pii_validation_table"
 
                 try:
                     # Load parquet data into DuckDB table
-                    gcs_access.query_parquet_native(output_path_str, "SELECT *", temp_table)
+                    gcs_access.query_parquet_native(gcs_path, "SELECT *", temp_table)
 
                     # Validate for PII using the table name instead of dataframe
                     validation_result = self.pii_validator.validate(temp_table)
@@ -815,7 +918,7 @@ class SilverProcessor:
                         handled_table = self.pii_validator.handle_pii(temp_table, validation_result)
 
                         # Generate new GCS path for handled file
-                        path_parts = output_path_str.split("/")
+                        path_parts = gcs_path.split("/")
                         filename = path_parts[-1]
                         filename_stem = filename.rsplit(".", 1)[0] if "." in filename else filename
                         filename_ext = "." + filename.rsplit(".", 1)[1] if "." in filename else ""

@@ -10,6 +10,7 @@ Interactive map visualization of Danish agricultural and environmental data.
 - Real-time data updates
 - Layer controls
 - Data filtering
+- Mobile-optimized responsive design with WCAG 2.1 AA compliance
 
 ## Tech Stack
 

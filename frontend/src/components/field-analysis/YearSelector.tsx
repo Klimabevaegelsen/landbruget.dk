@@ -23,7 +23,7 @@ export function YearSelector({
     <div className={`relative ${className}`}>
       <label
         htmlFor="year-selector"
-        className="mb-1 block text-sm font-medium text-gray-700"
+        className="text-foreground mb-2 block text-sm font-medium"
       >
         År
       </label>
@@ -33,7 +33,7 @@ export function YearSelector({
           value={selectedYear}
           onChange={(e) => onYearChange(parseInt(e.target.value))}
           disabled={isLoading}
-          className={`block w-full rounded-md border-gray-300 bg-white py-2 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
+          className={`border-border bg-background block min-h-[44px] w-full rounded-md py-3 pr-10 pl-3 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none ${
             isLoading ? 'cursor-not-allowed opacity-50' : ''
           }`}
         >
@@ -43,12 +43,17 @@ export function YearSelector({
             </option>
           ))}
         </select>
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
           <ChevronDownIcon
-            className="h-4 w-4 text-gray-400"
+            className="text-muted-foreground h-5 w-5"
             aria-hidden="true"
           />
         </div>
+        {isLoading && (
+          <div className="absolute inset-y-0 right-8 flex items-center">
+            <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-blue-600"></div>
+          </div>
+        )}
       </div>
     </div>
   );

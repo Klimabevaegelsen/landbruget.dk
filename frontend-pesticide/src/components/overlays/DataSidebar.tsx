@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useCallback } from 'react';
+import React from 'react';
 import { X } from 'lucide-react';
 
 // Define HoverInfo interface
@@ -17,9 +17,16 @@ interface DataSidebarProps {
   isVisible?: boolean;
 }
 
-export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSidebarProps) {
+export function DataSidebar({
+  hoverInfo,
+  onClose,
+  isVisible = false,
+}: DataSidebarProps) {
   // Format functions
-  const formatNumber = (value: number | undefined, decimals: number = 2): string => {
+  const formatNumber = (
+    value: number | undefined,
+    decimals: number = 2
+  ): string => {
     if (value === undefined || value === null) return '0';
     if (value === 0) return '0';
     if (value < 0.01 && value > 0) return '<0.01';
@@ -34,17 +41,33 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
     if (!hoverInfo) return null;
 
     if (hoverInfo.layer === 'h3') {
-      const pfasGrams = Number(hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams) || 0;
-      const pesticideLoad = Number(hoverInfo.data.pesticide_load || hoverInfo.data.total_pesticide_load) || 0;
+      const pfasGrams =
+        Number(hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams) ||
+        0;
+      const pesticideLoad =
+        Number(
+          hoverInfo.data.pesticide_load || hoverInfo.data.total_pesticide_load
+        ) || 0;
       const diquatGrams = Number(hoverInfo.data.diquat_grams) || 0;
       const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams) || 0;
-      const area = Number(hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha) || 0;
+      const area =
+        Number(
+          hoverInfo.data.agricultural_area_ha || hoverInfo.data.h3_cell_area_ha
+        ) || 0;
 
       // Calculate intensities
-      const pfasIntensity = Number(hoverInfo.data.pfas_intensity) || (area > 0 ? pfasGrams / area : 0);
-      const pesticideIntensity = Number(hoverInfo.data.pesticide_intensity) || (area > 0 ? pesticideLoad / area : 0);
-      const diquatIntensity = Number(hoverInfo.data.diquat_intensity) || (area > 0 ? diquatGrams / area : 0);
-      const glyphosateIntensity = Number(hoverInfo.data.glyphosate_intensity) || (area > 0 ? glyphosateGrams / area : 0);
+      const pfasIntensity =
+        Number(hoverInfo.data.pfas_intensity) ||
+        (area > 0 ? pfasGrams / area : 0);
+      const pesticideIntensity =
+        Number(hoverInfo.data.pesticide_intensity) ||
+        (area > 0 ? pesticideLoad / area : 0);
+      const diquatIntensity =
+        Number(hoverInfo.data.diquat_intensity) ||
+        (area > 0 ? diquatGrams / area : 0);
+      const glyphosateIntensity =
+        Number(hoverInfo.data.glyphosate_intensity) ||
+        (area > 0 ? glyphosateGrams / area : 0);
 
       const applicationCount = Number(hoverInfo.data.application_count) || 0;
       const fieldCount = Number(hoverInfo.data.field_count) || 0;
@@ -53,25 +76,35 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
       return (
         <div className="space-y-3">
           {/* Header */}
-          <div className="bg-slate-700 rounded-lg p-3 border border-slate-600">
-            <h3 className="text-base font-semibold mb-1 text-white">Agricultural Area</h3>
-            <div className="text-slate-300 text-sm">
-              {area > 0 ? `${formatNumber(area, 1)} hectares` : 'Area data unavailable'}
+          <div className="rounded-lg border border-slate-600 bg-slate-700 p-3">
+            <h3 className="mb-1 text-base font-semibold text-white">
+              Agricultural Area
+            </h3>
+            <div className="text-sm text-slate-300">
+              {area > 0
+                ? `${formatNumber(area, 1)} hectares`
+                : 'Area data unavailable'}
             </div>
           </div>
 
           {/* Total Pesticide Load */}
-          <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-orange-400">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-orange-300 font-medium text-sm">Total Pesticide Load</h4>
+          <div className="rounded-lg border-l-4 border-orange-400 bg-slate-800 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-sm font-medium text-orange-300">
+                Total Pesticide Load
+              </h4>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="text-center">
-                <div className="text-lg font-bold text-orange-200">{String(formatNumber(pesticideLoad, 2))}</div>
+                <div className="text-lg font-bold text-orange-200">
+                  {String(formatNumber(pesticideLoad, 2))}
+                </div>
                 <div className="text-xs text-orange-400">kg total</div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-bold text-orange-200">{String(formatNumber(pesticideIntensity, 2))}</div>
+                <div className="text-lg font-bold text-orange-200">
+                  {String(formatNumber(pesticideIntensity, 2))}
+                </div>
                 <div className="text-xs text-orange-400">kg per hectare</div>
               </div>
             </div>
@@ -79,20 +112,26 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
 
           {/* PFAS - only show if there are PFAS values > 0 */}
           {pfasGrams > 0 && (
-            <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-red-400">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-red-300 font-medium text-sm">PFAS Active Ingredients</h4>
-                <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded-full font-medium border border-red-700">
+            <div className="rounded-lg border-l-4 border-red-400 bg-slate-800 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-sm font-medium text-red-300">
+                  PFAS Active Ingredients
+                </h4>
+                <span className="rounded-full border border-red-700 bg-red-900/50 px-1.5 py-0.5 text-xs font-medium text-red-300">
                   Persistent
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center">
-                  <div className="text-lg font-bold text-red-200">{formatNumber(pfasGrams, 2)}</div>
+                  <div className="text-lg font-bold text-red-200">
+                    {formatNumber(pfasGrams, 2)}
+                  </div>
                   <div className="text-xs text-red-400">grams total</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-bold text-red-200">{formatNumber(pfasIntensity, 2)}</div>
+                  <div className="text-lg font-bold text-red-200">
+                    {formatNumber(pfasIntensity, 2)}
+                  </div>
                   <div className="text-xs text-red-400">grams per hectare</div>
                 </div>
               </div>
@@ -101,18 +140,26 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
 
           {/* Glyphosate - only show if there are glyphosate values > 0 */}
           {glyphosateGrams > 0 && (
-            <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-green-400">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-green-300 font-medium text-sm">Glyphosate Active Ingredients</h4>
+            <div className="rounded-lg border-l-4 border-green-400 bg-slate-800 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-sm font-medium text-green-300">
+                  Glyphosate Active Ingredients
+                </h4>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center">
-                  <div className="text-lg font-bold text-green-200">{formatNumber(glyphosateGrams, 2)}</div>
+                  <div className="text-lg font-bold text-green-200">
+                    {formatNumber(glyphosateGrams, 2)}
+                  </div>
                   <div className="text-xs text-green-400">grams total</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-bold text-green-200">{formatNumber(glyphosateIntensity, 2)}</div>
-                  <div className="text-xs text-green-400">grams per hectare</div>
+                  <div className="text-lg font-bold text-green-200">
+                    {formatNumber(glyphosateIntensity, 2)}
+                  </div>
+                  <div className="text-xs text-green-400">
+                    grams per hectare
+                  </div>
                 </div>
               </div>
             </div>
@@ -120,37 +167,53 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
 
           {/* Diquat - only show if there are diquat values > 0 */}
           {diquatGrams > 0 && (
-            <div className="bg-slate-800 rounded-lg p-3 border-l-4 border-amber-400">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-amber-300 font-medium text-sm">Diquat Active Ingredients</h4>
+            <div className="rounded-lg border-l-4 border-amber-400 bg-slate-800 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-sm font-medium text-amber-300">
+                  Diquat Active Ingredients
+                </h4>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center">
-                  <div className="text-lg font-bold text-amber-200">{formatNumber(diquatGrams, 2)}</div>
+                  <div className="text-lg font-bold text-amber-200">
+                    {formatNumber(diquatGrams, 2)}
+                  </div>
                   <div className="text-xs text-amber-400">grams total</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-bold text-amber-200">{formatNumber(diquatIntensity, 2)}</div>
-                  <div className="text-xs text-amber-400">grams per hectare</div>
+                  <div className="text-lg font-bold text-amber-200">
+                    {formatNumber(diquatIntensity, 2)}
+                  </div>
+                  <div className="text-xs text-amber-400">
+                    grams per hectare
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {/* Activity Summary */}
-          <div className="bg-slate-800 rounded-lg p-3 border border-slate-600">
-            <h4 className="text-slate-200 font-medium mb-2 text-sm">Activity</h4>
+          <div className="rounded-lg border border-slate-600 bg-slate-800 p-3">
+            <h4 className="mb-2 text-sm font-medium text-slate-200">
+              Activity
+            </h4>
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
-                <div className="text-base font-bold text-slate-100">{applicationCount}</div>
+                <div className="text-base font-bold text-slate-100">
+                  {applicationCount}
+                </div>
                 <div className="text-xs text-slate-400">Applications</div>
               </div>
               <div>
-                <div className="text-base font-bold text-slate-100">{fieldCount}</div>
+                <div className="text-base font-bold text-slate-100">
+                  {fieldCount}
+                </div>
                 <div className="text-xs text-slate-400">Fields</div>
               </div>
               <div>
-                <div className="text-base font-bold text-slate-100">{formatNumber(coveragePercent, 0)}%</div>
+                <div className="text-base font-bold text-slate-100">
+                  {formatNumber(coveragePercent, 0)}%
+                </div>
                 <div className="text-xs text-slate-400">Coverage</div>
               </div>
             </div>
@@ -162,23 +225,29 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
     if (hoverInfo.layer === 'bnbo') {
       return (
         <div className="space-y-4">
-          <div className="bg-slate-700 rounded-lg p-4 border border-slate-600">
-            <h3 className="text-lg font-semibold mb-2 text-white">BNBO Protected Area</h3>
-            <div className="text-slate-300 text-sm">
+          <div className="rounded-lg border border-slate-600 bg-slate-700 p-4">
+            <h3 className="mb-2 text-lg font-semibold text-white">
+              BNBO Protected Area
+            </h3>
+            <div className="text-sm text-slate-300">
               {hoverInfo.data.status || 'Status unknown'}
             </div>
           </div>
 
-          <div className="bg-slate-800 rounded-lg p-4 border border-slate-600">
-            <h4 className="text-slate-200 font-semibold mb-3">Area Details</h4>
+          <div className="rounded-lg border border-slate-600 bg-slate-800 p-4">
+            <h4 className="mb-3 font-semibold text-slate-200">Area Details</h4>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-400">Area:</span>
-                <span className="font-medium text-slate-200">{formatNumber(Number(hoverInfo.data.area_ha), 2)} ha</span>
+                <span className="font-medium text-slate-200">
+                  {formatNumber(Number(hoverInfo.data.area_ha), 2)} ha
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Protection Level:</span>
-                <span className="font-medium text-slate-200">{hoverInfo.data.protection_level || 'Unknown'}</span>
+                <span className="font-medium text-slate-200">
+                  {hoverInfo.data.protection_level || 'Unknown'}
+                </span>
               </div>
             </div>
           </div>
@@ -189,27 +258,35 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
     if (hoverInfo.layer === 'bbr') {
       return (
         <div className="space-y-4">
-          <div className="bg-slate-700 rounded-lg p-4 border border-slate-600">
-            <h3 className="text-lg font-semibold mb-2 text-white">Building</h3>
-            <div className="text-slate-300 text-sm">
+          <div className="rounded-lg border border-slate-600 bg-slate-700 p-4">
+            <h3 className="mb-2 text-lg font-semibold text-white">Building</h3>
+            <div className="text-sm text-slate-300">
               {hoverInfo.data.building_type || 'Type unknown'}
             </div>
           </div>
 
-          <div className="bg-slate-800 rounded-lg p-4 border border-slate-600">
-            <h4 className="text-slate-200 font-semibold mb-3">Building Details</h4>
+          <div className="rounded-lg border border-slate-600 bg-slate-800 p-4">
+            <h4 className="mb-3 font-semibold text-slate-200">
+              Building Details
+            </h4>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-400">Type:</span>
-                <span className="font-medium text-slate-200">{hoverInfo.data.building_type || 'Unknown'}</span>
+                <span className="font-medium text-slate-200">
+                  {hoverInfo.data.building_type || 'Unknown'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Use:</span>
-                <span className="font-medium text-slate-200">{hoverInfo.data.building_use || 'Unknown'}</span>
+                <span className="font-medium text-slate-200">
+                  {hoverInfo.data.building_use || 'Unknown'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Year:</span>
-                <span className="font-medium text-slate-200">{hoverInfo.data.construction_year || 'Unknown'}</span>
+                <span className="font-medium text-slate-200">
+                  {hoverInfo.data.construction_year || 'Unknown'}
+                </span>
               </div>
             </div>
           </div>
@@ -221,27 +298,31 @@ export function DataSidebar({ hoverInfo, onClose, isVisible = false }: DataSideb
   };
 
   return (
-    <div className={`fixed top-0 right-0 h-full w-80 bg-slate-900/95 backdrop-blur-sm border-l border-slate-700 shadow-2xl z-40 transform transition-transform duration-300 ease-in-out ${
-      isVisible ? 'translate-x-0' : 'translate-x-full'
-    }`}>
+    <div
+      className={`fixed top-0 right-0 z-40 h-full w-80 transform border-l border-slate-700 bg-slate-900/95 shadow-2xl backdrop-blur-sm transition-transform duration-300 ease-in-out ${
+        isVisible ? 'translate-x-0' : 'translate-x-full'
+      }`}
+    >
       {/* Spacer to account for top bar */}
       <div className="h-[9rem]"></div>
 
       {/* Header */}
-      <div className="bg-slate-800 border-b border-slate-700 p-3 flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-slate-700 bg-slate-800 p-3">
         <h2 className="text-base font-semibold text-white">Area Details</h2>
         <button
           onClick={onClose}
-          className="p-1 hover:bg-slate-700 rounded-full transition-colors"
+          className="rounded-full p-1 transition-colors hover:bg-slate-700"
         >
-          <X className="w-4 h-4 text-slate-400 hover:text-white" />
+          <X className="h-4 w-4 text-slate-400 hover:text-white" />
         </button>
       </div>
 
       {/* Content */}
-      <div className="p-3 overflow-y-auto h-[calc(100vh-9rem-3.5rem)] pb-16">
-        {hoverInfo ? renderSidebarContent() : (
-          <div className="flex items-center justify-center h-full text-slate-400">
+      <div className="h-[calc(100vh-9rem-3.5rem)] overflow-y-auto p-3 pb-16">
+        {hoverInfo ? (
+          renderSidebarContent()
+        ) : (
+          <div className="flex h-full items-center justify-center text-slate-400">
             <p className="text-center">Hover over an area to see details</p>
           </div>
         )}

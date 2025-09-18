@@ -7,7 +7,7 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative bg-white">
+    <div className="bg-background text-foreground theme-transition relative">
       <Navbar banner={<NavBanner />} />
       <main>{children}</main>
       <Footer />
