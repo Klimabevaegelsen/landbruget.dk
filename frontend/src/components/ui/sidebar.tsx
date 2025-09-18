@@ -59,7 +59,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, SidebarProps>(
           ref={ref}
           className={cn(
             'fixed top-[120px] left-0 z-40 h-[calc(100vh-120px)] flex-shrink-0 flex-col items-center justify-between pb-4',
-            'bg-card border-border sidebar-transition border-r',
+            'bg-card border-border sidebar-transition overflow-hidden border-r',
             'hidden md:flex', // Hide on mobile by default
             collapsible && [
               isExpanded ? 'w-[280px]' : 'w-[70px]',
@@ -125,15 +125,56 @@ const SidebarHeaderContent = React.forwardRef<
 });
 SidebarHeaderContent.displayName = 'SidebarHeaderContent';
 
+type SidebarExpandedContentProps = React.HTMLAttributes<HTMLDivElement>;
+
+const SidebarExpandedContent = React.forwardRef<
+  HTMLDivElement,
+  SidebarExpandedContentProps
+>(({ className, children, ...props }, ref) => {
+  const context = React.useContext(SidebarContext);
+
+  if (!context) {
+    // If no context, don't render (this means we're outside a Sidebar)
+    return null;
+  }
+
+  const { isExpanded } = context;
+
+  if (!isExpanded) {
+    return null; // Hide content when collapsed
+  }
+
+  return (
+    <div
+      ref={ref}
+      className={cn('transition-all duration-200', className)}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+});
+SidebarExpandedContent.displayName = 'SidebarExpandedContent';
+
 type SidebarContentProps = React.HTMLAttributes<HTMLDivElement>;
 
 const SidebarContent = React.forwardRef<HTMLDivElement, SidebarContentProps>(
   ({ className, children, ...props }, ref) => {
+    const { isExpanded } = useSidebar();
+
     return (
       <div
         ref={ref}
-        className={cn('flex-1 overflow-y-auto p-2', className)}
+        className={cn(
+          'flex-1 p-2',
+          isExpanded ? 'overflow-x-visible overflow-y-auto' : 'overflow-hidden',
+          className
+        )}
         {...props}
+        style={{
+          ...(props.style || {}),
+          ...(isExpanded ? {} : { overflow: 'hidden', width: '100%' }),
+        }}
       >
         {children}
       </div>
@@ -243,6 +284,7 @@ export {
   Sidebar,
   SidebarHeader,
   SidebarHeaderContent,
+  SidebarExpandedContent,
   SidebarContent,
   SidebarFooter,
   SidebarItem,
