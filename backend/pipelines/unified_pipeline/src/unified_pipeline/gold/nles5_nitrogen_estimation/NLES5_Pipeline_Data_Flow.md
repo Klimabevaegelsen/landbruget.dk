@@ -135,9 +135,15 @@ flowchart TD
 - **Validation**: Comprehensive quality controls per N2023_62 Table 1 (21 validation rules)
 
 ### Output Tables
-- **Intermediate**: `nles5_estimates_final_batched` (per batch/year)
-- **Final**: `nles5_nitrogen_estimates_gold` (consolidated results)
+- **Intermediate**: `nles5_estimates_final_batched` (per batch/year with field_uuid)
+- **Final**: `nles5_nitrogen_estimates_gold` (consolidated results with field_uuid)
 - **Analysis tables**: `nles5_estimates_analysis`, `nles5_uncertainty_estimates`, etc.
+
+### Field UUID Integration
+- **Field UUIDs**: Generated from geometry in FVM silver data (field_uuid column)
+- **UUID Join**: Final estimates joined to agricultural_fields_spatial by field_id + year
+- **Uniqueness**: field_id is unique per year, enabling clean UUID lookup
+- **Coverage**: All final results include field_uuid for per-field tracking
 
 ## Notes
 - Fields are spatially joined to climate per year using ST_Intersects with buffered climate points; then joined to soil polygons.

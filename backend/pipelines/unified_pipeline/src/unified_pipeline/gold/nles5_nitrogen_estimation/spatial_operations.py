@@ -68,7 +68,7 @@ class NLES5SpatialOperations:
                     CREATE OR REPLACE TABLE fields_climate_candidates AS
                     SELECT 
                         f.field_id, f.geom, f.geometry, f.area_ha, f.crop_code, f.crop_name, 
-                        f.cvr_number, f.year, f.block_id, f.field_uuid, f.journal_number, 
+                        f.cvr_number, f.year, f.block_id, f.journal_number, 
                         f.layer_type, f.processed_at, f.reported_area_ha, f.GB, f.field_area_m2,
                         c.year as climate_year,
                         c.geometry as climate_point,
@@ -95,7 +95,7 @@ class NLES5SpatialOperations:
                     )
                     SELECT 
                         field_id, geom, geometry, area_ha, crop_code, crop_name, cvr_number, year,
-                        block_id, field_uuid, journal_number, layer_type, processed_at, 
+                        block_id, journal_number, layer_type, processed_at, 
                         reported_area_ha, GB, field_area_m2,
                         climate_year, climate_point,
                         perco_apr_aug_current, perco_sep_mar_current,
@@ -687,7 +687,7 @@ class NLES5SpatialOperations:
                     )
                     SELECT 
                         field_id, geom, geometry, area_ha, crop_code, crop_name, cvr_number, year,
-                        block_id, field_uuid, journal_number, layer_type, processed_at, 
+                        block_id, journal_number, layer_type, processed_at, 
                         reported_area_ha, GB, field_area_m2,
                         climate_year, climate_point,
                         perco_apr_aug_current, perco_sep_mar_current,
@@ -930,7 +930,6 @@ class NLES5SpatialOperations:
                     CREATE OR REPLACE TABLE agricultural_fields_spatial AS
                     SELECT
                         field_id,
-                        field_id as field_uuid,
                         cvr_number,
                         area_ha,
                         crop_code,
