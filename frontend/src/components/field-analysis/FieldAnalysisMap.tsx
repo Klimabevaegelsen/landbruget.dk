@@ -851,6 +851,23 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     }
   }, [filterState]);
 
+  // Remove field analysis layers
+  const removeFieldsLayers = useCallback((map: MapInstance) => {
+    const fieldLayerIds = [
+      'organic-borders',
+      'fields-outline',
+      'fields-partial-coverage-pattern',
+      'fields-partial-coverage-base',
+      'fields-fill',
+    ];
+
+    fieldLayerIds.forEach((layerId) => {
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+    });
+  }, []);
+
   // Add field analysis layers
   const addFieldsLayers = useCallback(
     (map: MapInstance) => {
@@ -1492,6 +1509,8 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
 
         // Remove and re-add source (MapLibre doesn't support direct URL updates)
         // But we do it more efficiently by only affecting the fields source
+        // First remove all field layers that depend on the source
+        removeFieldsLayers(map);
         map.removeSource('fields');
         map.addSource('fields', newSource);
 
@@ -1510,7 +1529,13 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         setIsLoading(false);
       }
     }
-  }, [pmtilesUrls.fields, addFieldsLayers, onMapReady, startLoadingTimeout]);
+  }, [
+    pmtilesUrls.fields,
+    addFieldsLayers,
+    removeFieldsLayers,
+    onMapReady,
+    startLoadingTimeout,
+  ]);
 
   // Update layer visibility and styling when props change
   useEffect(() => {
