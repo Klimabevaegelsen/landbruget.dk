@@ -62,10 +62,12 @@ from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import (
     PNumberFetching,
     PNumberFetchingConfig,
 )
-from unified_pipeline.gold.cvr_geometry_datasets import (
-    CVRGeometryDatasets,
-    CVRGeometryDatasetsConfig,
-)
+
+# CVR Geometry Datasets module not yet implemented
+# from unified_pipeline.gold.cvr_geometry_datasets import (
+#     CVRGeometryDatasets,
+#     CVRGeometryDatasetsConfig,
+# )
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
     FieldAreaAnalysisGoldConfig,
@@ -73,6 +75,10 @@ from unified_pipeline.gold.field_area_analysis import (
 from unified_pipeline.gold.field_production import (
     FieldProductionGold,
     FieldProductionGoldConfig,
+)
+from unified_pipeline.gold.nles5_nitrogen_estimation import (
+    NLES5NitrogenEstimationGold,
+    NLES5NitrogenEstimationGoldConfig,
 )
 from unified_pipeline.gold.pesticide_compliance import (
     PesticideComplianceGold,
@@ -511,6 +517,14 @@ def execute(cli_config: cli_models.CliConfig) -> int:
                 (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
             ],
         },
+        cli_models.Source.nles5_nitrogen_estimation: {
+            cli_models.Stage.gold: [(NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig)],
+            cli_models.Stage.all: [
+                # Note: This requires silver datasets to be available:
+                # agricultural_fields, soil_types, dmi (climate data)
+                (NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig),
+            ],
+        },
         cli_models.Source.pesticide_proximity: {
             cli_models.Stage.gold: [(PesticideProximityGold, PesticideProximityGoldConfig)],
             cli_models.Stage.all: [
@@ -544,13 +558,14 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             # cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
             # REMOVED: Eliminated in redesign
         },
-        cli_models.Source.cvr_geometry_datasets: {
-            cli_models.Stage.gold: [(CVRGeometryDatasets, CVRGeometryDatasetsConfig)],
-            cli_models.Stage.all: [
-                # Phase 1: CVR address points and CHR property points
-                (CVRGeometryDatasets, CVRGeometryDatasetsConfig),
-            ],
-        },
+        # CVR Geometry Datasets pipeline not yet implemented
+        # cli_models.Source.cvr_geometry_datasets: {
+        #     cli_models.Stage.gold: [(CVRGeometryDatasets, CVRGeometryDatasetsConfig)],
+        #     cli_models.Stage.all: [
+        #         # Phase 1: CVR address points and CHR property points
+        #         (CVRGeometryDatasets, CVRGeometryDatasetsConfig),
+        #     ],
+        # },
         cli_models.Source.dst: {
             cli_models.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
             cli_models.Stage.silver: [(DSTSilver, DSTSilverConfig)],

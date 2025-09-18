@@ -46,6 +46,7 @@ class Source(Enum):
         property_cadastral_merge: Property-Cadastral merge gold layer
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
+        nles5_nitrogen_estimation: NLES5 nitrogen washout estimation gold layer
         pesticide_disaggregation: Pesticide disaggregation gold layer
         pesticide_proximity: Pesticide proximity analysis gold layer
         pesticide_compliance: Pesticide regulatory compliance analysis gold layer
@@ -69,6 +70,7 @@ class Source(Enum):
     field_production = "field_production"
     field_area_analysis = "field_area_analysis"
     pesticide_disaggregation = "pesticide_disaggregation"
+    nles5_nitrogen_estimation = "nles5_nitrogen_estimation"
     pesticide_proximity = "pesticide_proximity"
     pesticide_compliance = "pesticide_compliance"
     cvr_enrichment = "cvr_enrichment"
