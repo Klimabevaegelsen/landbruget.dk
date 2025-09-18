@@ -12,9 +12,8 @@ Key features:
 - Support for both field_id (FVM identifiers) and field_uuid (geometry-based UUIDs)
 """
 
-import re
 import uuid
-from typing import Any, Dict, List, Set, Optional
+from typing import Any, Dict, Set
 from unified_pipeline.util.timing import timed
 
 
