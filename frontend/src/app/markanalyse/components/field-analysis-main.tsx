@@ -309,7 +309,7 @@ export default function FieldAnalysisMain() {
               (selectedField || clickedCoordinates) &&
               !isPanelCollapsed
                 ? 'calc(28rem + 1rem)' // Panel width + margin
-                : '1rem',
+                : '4rem', // Leave space for zoom controls (was 1rem)
           }}
         >
           <div className="pointer-events-auto">
