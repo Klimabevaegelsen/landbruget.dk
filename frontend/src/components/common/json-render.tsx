@@ -20,7 +20,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
   const indent = '  '.repeat(level);
 
   if (value === null) {
-    return <span className="text-gray-500">null</span>;
+    return <span className="text-muted-foreground">null</span>;
   }
 
   if (typeof value === 'boolean') {
@@ -44,7 +44,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-gray-400 hover:text-gray-600"
+          className="hover:text-muted-foreground text-muted-foreground"
         >
           {isExpanded ? '▼' : '▶'} [
         </button>
@@ -75,7 +75,7 @@ function JsonNode({ value, level = 0 }: JsonNodeProps) {
       <div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-gray-400 hover:text-gray-600"
+          className="hover:text-muted-foreground text-muted-foreground"
         >
           {isExpanded ? '▼' : '▶'} {'{'}
         </button>

@@ -2,7 +2,24 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Building2, MapPin, ExternalLink, Database } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Building2,
+  MapPin,
+  ExternalLink,
+  Database,
+  ChevronDown,
+  ArrowUpDown,
+} from 'lucide-react';
+import { useState } from 'react';
 import { useCompanyNavigation } from '@/hooks/useCompanyNavigation';
 import { useCompanyCache } from '@/hooks/useCompanyCache';
 
@@ -17,7 +34,7 @@ interface RankingItem {
   year?: number;
 }
 
-interface RankingTableProps {
+interface RankingTableEnhancedProps {
   id: string;
   title: string;
   category: string;
@@ -25,27 +42,26 @@ interface RankingTableProps {
   unit: string;
   items: RankingItem[];
   last_updated?: string;
-  showTop?: number; // Show only top N items, default shows all
+  showTop?: number;
 }
 
-const getRankIcon = (rank: number) => {
-  return <span className="text-sm font-medium text-gray-900">{rank}</span>;
-};
+type SortField = 'rank' | 'company_name' | 'value' | 'municipality';
+type SortDirection = 'asc' | 'desc';
 
 const getCategoryColor = (category: string) => {
   switch (category) {
     case 'financial':
-      return 'bg-green-100 text-green-800 border-green-200';
+      return 'bg-organic/10 text-organic border-organic/20';
     case 'field':
-      return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      return 'bg-low-risk/10 text-low-risk border-low-risk/20';
     case 'environment':
-      return 'bg-red-100 text-red-800 border-red-200';
+      return 'bg-destructive/10 text-destructive border-destructive/20';
     case 'animal':
-      return 'bg-orange-100 text-orange-800 border-orange-200';
+      return 'bg-conventional/10 text-conventional border-conventional/20';
     case 'worker':
-      return 'bg-blue-100 text-blue-800 border-blue-200';
+      return 'bg-primary/10 text-primary border-primary/20';
     default:
-      return 'bg-gray-100 text-gray-800 border-gray-200';
+      return 'bg-muted text-muted-foreground border-border';
   }
 };
 
@@ -66,25 +82,91 @@ const getCategoryLabel = (category: string) => {
   }
 };
 
-export default function RankingTable({
+export default function RankingTableEnhanced({
   title,
   category,
   description,
   items,
   showTop = 20,
-}: RankingTableProps) {
+}: RankingTableEnhancedProps) {
   const { navigateToCompany } = useCompanyNavigation();
   const { getCompanyForDisplay } = useCompanyCache();
-  const displayItems = items.slice(0, showTop);
+
+  const [sortField, setSortField] = useState<SortField>('rank');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [showAll, setShowAll] = useState(false);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedItems = [...items].sort((a, b) => {
+    let aValue: string | number;
+    let bValue: string | number;
+
+    switch (sortField) {
+      case 'rank':
+        aValue = a.rank;
+        bValue = b.rank;
+        break;
+      case 'company_name':
+        aValue = a.company_name;
+        bValue = b.company_name;
+        break;
+      case 'value':
+        aValue = a.value;
+        bValue = b.value;
+        break;
+      case 'municipality':
+        aValue = a.municipality || '';
+        bValue = b.municipality || '';
+        break;
+      default:
+        return 0;
+    }
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortDirection === 'asc'
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
+    }
+
+    return sortDirection === 'asc'
+      ? (aValue as number) - (bValue as number)
+      : (bValue as number) - (aValue as number);
+  });
+
+  const displayItems = showAll ? sortedItems : sortedItems.slice(0, showTop);
+
+  const SortButton = ({
+    field,
+    children,
+  }: {
+    field: SortField;
+    children: React.ReactNode;
+  }) => (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-8 font-medium"
+      onClick={() => handleSort(field)}
+    >
+      {children}
+      <ArrowUpDown className="ml-2 h-4 w-4" />
+    </Button>
+  );
 
   return (
     <Card className="w-full">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-4">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
-            <CardTitle className="text-lg font-semibold text-gray-900">
-              {title}
-            </CardTitle>
+            <CardTitle className="text-lg font-semibold">{title}</CardTitle>
             <Badge
               variant="outline"
               className={`text-xs ${getCategoryColor(category)}`}
@@ -93,83 +175,127 @@ export default function RankingTable({
             </Badge>
           </div>
         </div>
-        <p className="text-sm text-gray-600">{description}</p>
+        <p className="text-muted-foreground text-sm">{description}</p>
       </CardHeader>
 
       <CardContent className="p-0">
-        <div className="divide-y divide-gray-100">
-          {displayItems.map((item) => {
-            const isCached = getCompanyForDisplay(item.company_id) !== null;
-
-            return (
-              <div
-                key={`${item.company_id}-${item.rank}`}
-                className="flex items-center justify-between px-6 py-3 transition-colors hover:bg-gray-50"
-              >
-                <div className="flex min-w-0 flex-1 items-center space-x-3">
-                  <div className="flex w-8 flex-shrink-0 justify-center">
-                    {getRankIcon(item.rank)}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center space-x-2">
-                      <Building2 className="h-4 w-4 flex-shrink-0 text-gray-400" />
-                      <button
-                        onClick={() =>
-                          navigateToCompany(item.company_id, item.company_name)
-                        }
-                        className="truncate text-left text-sm font-medium text-gray-900 transition-colors hover:text-blue-600"
-                      >
-                        {item.company_name}
-                      </button>
-                      <ExternalLink className="h-3 w-3 text-gray-400" />
-                      {isCached && (
-                        <Database className="h-3 w-3 text-green-500" />
-                      )}
-                    </div>
-
-                    <div className="mt-1 flex items-center space-x-4">
-                      <div className="flex items-center space-x-1 text-xs text-gray-500">
-                        <span>CVR:</span>
-                        <span className="font-mono">{item.cvr_number}</span>
-                      </div>
-                      {item.municipality && (
-                        <div className="flex items-center space-x-1 text-xs text-gray-500">
-                          <MapPin className="h-3 w-3" />
-                          <span>{item.municipality}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex-shrink-0 text-right">
-                  <div className="text-sm font-semibold text-gray-900">
-                    {item.formatted_value}
-                  </div>
-                  {item.year && (
-                    <div className="text-xs text-gray-500">{item.year}</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {items.length > showTop && (
-          <div className="border-t bg-gray-50 px-6 py-3">
-            <p className="text-center text-xs text-gray-500">
-              Viser top {showTop} af {items.length} virksomheder
-            </p>
-          </div>
-        )}
-
-        {items.length === 0 && (
+        {items.length === 0 ? (
           <div className="px-6 py-8 text-center">
-            <p className="text-sm text-gray-500">
+            <p className="text-muted-foreground text-sm">
               Ingen data tilgængelig for denne kategori
             </p>
           </div>
+        ) : (
+          <>
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b hover:bg-transparent">
+                  <TableHead className="w-16">
+                    <SortButton field="rank">Rang</SortButton>
+                  </TableHead>
+                  <TableHead>
+                    <SortButton field="company_name">Virksomhed</SortButton>
+                  </TableHead>
+                  <TableHead className="hidden md:table-cell">
+                    <SortButton field="municipality">Kommune</SortButton>
+                  </TableHead>
+                  <TableHead className="text-right">
+                    <SortButton field="value">Værdi</SortButton>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayItems.map((item) => {
+                  const isCached =
+                    getCompanyForDisplay(item.company_id) !== null;
+
+                  return (
+                    <TableRow
+                      key={`${item.company_id}-${item.rank}`}
+                      className="hover:bg-muted/50 cursor-pointer"
+                      onClick={() =>
+                        navigateToCompany(item.company_id, item.company_name)
+                      }
+                    >
+                      <TableCell className="font-medium">
+                        <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">
+                          {item.rank}
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2">
+                            <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+                            <span className="truncate font-medium">
+                              {item.company_name}
+                            </span>
+                            <ExternalLink className="text-muted-foreground h-3 w-3" />
+                            {isCached && (
+                              <Database className="text-primary h-3 w-3" />
+                            )}
+                          </div>
+                          <div className="text-muted-foreground font-mono text-xs">
+                            CVR: {item.cvr_number}
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      <TableCell className="hidden md:table-cell">
+                        {item.municipality && (
+                          <div className="text-muted-foreground flex items-center space-x-1 text-sm">
+                            <MapPin className="h-3 w-3" />
+                            <span>{item.municipality}</span>
+                          </div>
+                        )}
+                      </TableCell>
+
+                      <TableCell className="text-right">
+                        <div className="space-y-1">
+                          <div className="font-semibold">
+                            {item.formatted_value}
+                          </div>
+                          {item.year && (
+                            <div className="text-muted-foreground text-xs">
+                              {item.year}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+
+            {items.length > showTop && (
+              <div className="border-t p-4 text-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAll(!showAll)}
+                  className="w-full sm:w-auto"
+                >
+                  {showAll ? (
+                    <>
+                      Vis mindre
+                      <ChevronDown className="ml-2 h-4 w-4 rotate-180" />
+                    </>
+                  ) : (
+                    <>
+                      Vis alle {items.length} virksomheder
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+                <p className="text-muted-foreground mt-2 text-xs">
+                  Viser{' '}
+                  {showAll ? items.length : Math.min(showTop, items.length)} af{' '}
+                  {items.length} virksomheder
+                </p>
+              </div>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

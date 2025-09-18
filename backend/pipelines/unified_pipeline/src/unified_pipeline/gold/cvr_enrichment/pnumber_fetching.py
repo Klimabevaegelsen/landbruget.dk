@@ -9,7 +9,7 @@ address coverage for building matching.
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import Field
 
@@ -133,6 +133,9 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             # Step 1: Load company data and extract P-numbers
             pnumber_extraction = self._extract_pnumbers_from_companies()
 
+            # Step 1.5: Validate CVR consistency (CRITICAL for UUID consistency)
+            self._validate_cvr_consistency(pnumber_extraction["companies"])
+
             # Step 2: Fetch P-number data from CVR register
             pnumber_data = await self._fetch_pnumber_data(pnumber_extraction)
 
@@ -185,6 +188,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         all_pnumbers = set()
         pnumber_to_cvr = {}  # P-number -> CVR mapping
         cvr_to_pnumbers = {}  # CVR -> list of P-numbers mapping
+        companies_metadata = []  # For CVR consistency validation
         total_companies = 0
 
         # Process each company batch file
@@ -222,6 +226,17 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                         try:
                             company_data = json.loads(company_json)
                             extracted_pnumbers = company_data.get("extracted_pnumbers", [])
+
+                            # Collect company metadata for validation
+                            companies_metadata.append(
+                                {
+                                    "cvr_number": str(cvr_number),
+                                    "pipeline_run_id": company_data.get("pipeline_run_id"),
+                                    "processing_timestamp": company_data.get(
+                                        "processing_timestamp"
+                                    ),
+                                }
+                            )
 
                             if extracted_pnumbers:
                                 cvr_to_pnumbers[str(cvr_number)] = extracted_pnumbers
@@ -286,6 +301,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
             "pnumbers": batch_pnumbers,
             "pnumber_to_cvr": filtered_pnumber_to_cvr,
             "cvr_to_pnumbers": cvr_to_pnumbers,
+            "companies": companies_metadata,  # For CVR consistency validation
             "total_companies": total_companies,
             "total_pnumbers_found": len(all_pnumbers),
             "batch_pnumbers": len(batch_pnumbers),
@@ -298,6 +314,71 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         )
 
         return extraction_result
+
+    @timed(name="Validating CVR consistency")
+    def _validate_cvr_consistency(self, companies_metadata: List[Dict[str, Any]]) -> None:
+        """
+        Validate that this step is processing companies from the same pipeline run.
+
+        This is CRITICAL to prevent UUID consistency issues where P-number data
+        references companies that don't exist in the current companies table.
+
+        Args:
+            companies_metadata: List of company metadata from extraction
+
+        Raises:
+            ValueError: If CVR consistency validation fails
+        """
+        if not companies_metadata:
+            self.log.warning("No companies to validate - empty metadata")
+            return
+
+        # Extract pipeline run metadata from companies
+        pipeline_run_ids = set()
+        processing_timestamps = set()
+
+        for company in companies_metadata:
+            if company.get("pipeline_run_id"):
+                pipeline_run_ids.add(company["pipeline_run_id"])
+            if company.get("processing_timestamp"):
+                # Extract date part from timestamp for grouping
+                timestamp = company["processing_timestamp"][:10]  # YYYY-MM-DD
+                processing_timestamps.add(timestamp)
+
+        # Validation checks
+        if len(pipeline_run_ids) > 1:
+            self.log.error("=" * 80)
+            self.log.error("🚨 CVR CONSISTENCY VIOLATION DETECTED")
+            self.log.error("=" * 80)
+            self.log.error(
+                "P-number fetching step is processing companies from MULTIPLE pipeline runs:"
+            )
+            for run_id in sorted(pipeline_run_ids):
+                self.log.error(f"   • Pipeline run: {run_id}")
+            self.log.error("")
+            self.log.error("This will cause UUID consistency issues where P-number data")
+            self.log.error("references companies that don't exist in the current companies table.")
+            self.log.error("")
+            self.log.error("SOLUTION: Ensure enable_independent_execution=False in shared config")
+            self.log.error("=" * 80)
+            raise ValueError(
+                f"CVR consistency violation: P-number fetching processing companies from "
+                f"{len(pipeline_run_ids)} different pipeline runs: {sorted(pipeline_run_ids)}"
+            )
+
+        if len(processing_timestamps) > 2:  # Allow some flexibility for same-day runs
+            self.log.warning("Companies processed across multiple days:")
+            for timestamp in sorted(processing_timestamps):
+                self.log.warning(f"   • Processing date: {timestamp}")
+            self.log.warning("This may indicate independent execution mode is enabled")
+
+        # Log success
+        run_id = list(pipeline_run_ids)[0] if pipeline_run_ids else "unknown"
+        self.log.info("✅ CVR consistency validation passed:")
+        self.log.info(f"   • Companies from pipeline run: {run_id}")
+        self.log.info(f"   • Total companies: {len(companies_metadata)}")
+        self.log.info(f"   • Processing dates: {len(processing_timestamps)}")
+        self.log.info("   • All companies are from the same pipeline execution")
 
     @timed(name="Fetching P-number data")
     async def _fetch_pnumber_data(self, pnumber_extraction: Dict[str, Any]) -> Dict[str, Any]:
@@ -563,6 +644,41 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
         """
         self.log.info("Creating normalized P-number employment table from employment data")
 
+        # Set up crypto extension for UUID generation
+        try:
+            self.conn.execute("INSTALL crypto FROM community")
+            self.conn.execute("LOAD crypto")
+        except Exception as e:
+            self.log.warning(f"Crypto extension already loaded: {e}")
+
+        # Get the namespace from environment variable
+        namespace = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
+        if not namespace:
+            raise ValueError("LANDBRUGSDATA_UUID_NAMESPACE environment variable is required")
+
+        # Create company UUID function using namespace from environment
+        self.conn.execute(f"""
+            CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
+                SELECT CASE
+                    WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
+                         OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
+                    THEN NULL
+                    ELSE CONCAT(
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
+                        '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                      TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
+                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                               TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                    )
+                END
+            )
+        """)
+
         # Create single normalized P-number employment table
         employment_table = "cvr_pnumber_employment"
         self.conn.execute(f"DROP TABLE IF EXISTS {employment_table}")
@@ -683,7 +799,7 @@ class PNumberFetching(BaseSource[PNumberFetchingConfig], GoldJobInterface):
                                 ELSE ''
                             END, '')))::VARCHAR as pnumber_employment_uuid,
                 -- Generate company UUID for consistency with other tables
-                md5(ef.parent_cvr_number::VARCHAR)::VARCHAR as company_uuid,
+                company_uuid(ef.parent_cvr_number) as company_uuid,
                 ef.parent_cvr_number as cvr_number,
                 ef.p_number,
                 ef.unit_name,

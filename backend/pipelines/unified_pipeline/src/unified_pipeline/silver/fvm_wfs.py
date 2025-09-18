@@ -69,6 +69,12 @@ class FVMWFSSilverConfig(BaseJobConfig):
         smaabiotoper_years (List[int]): Years to process for Smaabiotoper (2023-2025)
         organic_areas_years (List[int]): Years to process for Organic Areas (2012-2024)
         column_mapping (Dict): Dictionary mapping raw field names to standardized names
+        kommune_boundaries_dataset (str): Name of municipality boundaries dataset
+            for spatial assignment
+        include_municipality_assignment (bool): Whether to perform municipality assignment
+            on marker data
+        municipality_assignment_method (str): Method for municipality assignment
+            ('spatial_with_fallback' or 'spatial_only')
     """
 
     name: str = "Danish FVM WFS Agricultural Data - Silver"
@@ -98,6 +104,11 @@ class FVMWFSSilverConfig(BaseJobConfig):
     # UUID generation configuration
     generate_field_uuid: bool = True
     uuid_namespace: str = "fvm-field-geometry"
+
+    # NEW: Municipality assignment configuration
+    kommune_boundaries_dataset: str = "dagi_kommuner"
+    include_municipality_assignment: bool = True
+    municipality_assignment_method: str = "spatial_with_fallback"  # or "spatial_only"
 
     # Year ranges based on FVM WFS capabilities
     markblokke_years: List[int] = list(range(2005, 2027))  # 2005-2026 (22 years)
@@ -355,7 +366,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
     2. Extracting GeoJSON features from each payload and converting to Geos
     3. Validating and transforming geometries
     4. Standardizing column names using the mapping from config
-    5. Saving processed data to GCS for each year
+    5. NEW: Municipality assignment for marker data
+       (spatial intersection + closest distance fallback)
+    6. Saving processed data to GCS for each year
     """
 
     def __init__(self, config: FVMWFSSilverConfig):
@@ -365,6 +378,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         Args:
             config: Configuration for the silver processing job"""
         super().__init__(config)
+        self._kommune_boundaries_loaded = False
 
     async def extract_geojson_from_wfs_payload(
         self, payload_json: str, column_mapping: Dict[str, str], table_suffix: str = ""
@@ -1069,6 +1083,14 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             # Add field UUID generation for marker data
             if layer_type == "Marker" and self.config.generate_field_uuid:
                 self._add_field_uuid_to_table(final_table_name, year)
+
+            # NEW: Add municipality assignment for marker data
+            if layer_type == "Marker":
+                await self._assign_municipalities_to_fields(final_table_name, year)
+
+            # NEW: Enrich early years with complete CVR numbers from fields data
+            if layer_type == "Marker":
+                await self._enrich_with_fields_data(final_table_name, year)
 
             # Clean up any remaining temporary tables to prevent accumulation
             for table in valid_relations:
@@ -2305,6 +2327,453 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
         except Exception as e:
             self.log.error(f"❌ Error extracting CVR numbers from FVM marker data: {e}")
             # Don't fail the entire pipeline if CVR extraction fails
+            pass
+
+    async def _load_kommune_boundaries(self) -> None:
+        """
+        Load municipality boundaries for spatial assignment.
+
+        This method loads the dagi_kommuner dataset and prepares it for spatial
+        operations with field geometries.
+        """
+        try:
+            self.log.info("Loading municipality boundaries for spatial assignment")
+
+            # Load kommune boundaries from silver storage using GCSDataAccess
+            try:
+                gcs_path = self._get_latest_silver_path(self.config.kommune_boundaries_dataset)
+                self.log.info(f"Loading municipality boundaries from: {gcs_path}")
+
+                # Use GCSDataAccess instead of direct DuckDB read_parquet for proper authentication
+                self.gcs_access.query_parquet_direct(gcs_path, "SELECT *", "kommune_boundaries_raw")
+            except Exception as e:
+                self.log.warning(f"Could not load municipality boundaries: {e}")
+                return
+
+            # Setup spatial processing with kommune boundaries
+            self.conn.execute("INSTALL spatial")
+            self.conn.execute("LOAD spatial")
+
+            # Apply coordinate transformation to municipality boundaries
+            # This ensures they are in the same coordinate system as the field data
+            # Note: DAGI pipeline now produces proper EPSG:4326 LAT/LON order, matching field data
+            validate_and_transform_geometries_duckdb(
+                self.conn, "kommune_boundaries_raw", "dagi_kommuner", geometry_column="geometry"
+            )
+
+            # Create processed kommune boundaries table
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE kommune_boundaries AS
+                SELECT
+                    name as kommune_name,
+                    geometry,
+                    ST_Centroid(geometry) as centroid
+                FROM kommune_boundaries_raw
+                WHERE name IS NOT NULL
+                  AND geometry IS NOT NULL
+            """)
+
+            # Validate data was loaded
+            count = self.conn.execute("SELECT COUNT(*) FROM kommune_boundaries").fetchone()[0]
+            if count == 0:
+                self.log.warning("No valid municipality boundaries loaded")
+                return
+
+            self.log.info(f"Loaded {count} municipality boundaries for spatial assignment")
+            self._kommune_boundaries_loaded = True
+
+        except Exception as e:
+            self.log.error(f"Error loading municipality boundaries: {e}")
+            self._kommune_boundaries_loaded = False
+
+    async def _assign_municipalities_to_fields(self, table_name: str, year: int) -> None:
+        """
+        Assign municipalities to fields using spatial intersection + closest distance fallback.
+
+        This logic is extracted from field_production.py to be reusable across all
+        FVM-consuming pipelines.
+
+        Args:
+            table_name: Name of the table containing field data
+            year: Year of the data being processed
+        """
+        if not self.config.include_municipality_assignment:
+            self.log.info("Municipality assignment disabled in configuration")
+            return
+
+        if not self._kommune_boundaries_loaded:
+            await self._load_kommune_boundaries()
+
+        if not self._kommune_boundaries_loaded:
+            self.log.warning("Municipality boundaries not available - skipping assignment")
+            return
+
+        try:
+            self.log.info(f"Assigning municipalities to fields for year {year}")
+
+            # Check if table has geometry column
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            column_names = [col[0] for col in columns_info]
+
+            if "geometry" not in column_names:
+                self.log.warning(
+                    f"No geometry column found in {table_name} - skipping municipality assignment"
+                )
+                return
+
+            # Get initial field count
+            total_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            self.log.info(f"Processing {total_count:,} fields for municipality assignment")
+
+            # Step 1: Spatial intersection assignment
+            self.log.info("  🏛️ Step 1: Municipality assignment via spatial intersection...")
+
+            # Add municipality columns to the table
+            self.conn.execute(f"""
+                ALTER TABLE {table_name}
+                ADD COLUMN IF NOT EXISTS municipality VARCHAR
+            """)
+            self.conn.execute(f"""
+                ALTER TABLE {table_name}
+                ADD COLUMN IF NOT EXISTS municipality_assignment_method VARCHAR
+            """)
+
+            # SPATIAL_JOIN COMPLIANCE (PR #545): Use clean table-to-table join structure
+            # Step 1: Create intersection assignments using SPATIAL_JOIN operator
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE municipality_intersections AS
+                SELECT DISTINCT ON (f.field_uuid)
+                    f.field_uuid,
+                    k.kommune_name,
+                    'intersection' as assignment_method
+                FROM {table_name} f
+                JOIN kommune_boundaries k ON ST_Intersects(f.geometry, k.geometry)
+                    ORDER BY f.field_uuid,
+                             ST_Distance(ST_Centroid(f.geometry), k.centroid)
+            """)
+
+            # Step 2: Update main table with intersection results
+            self.conn.execute(f"""
+                UPDATE {table_name} SET
+                    municipality = i.kommune_name,
+                    municipality_assignment_method = i.assignment_method
+                FROM municipality_intersections i
+                WHERE {table_name}.field_uuid = i.field_uuid
+                AND {table_name}.municipality IS NULL
+            """)
+
+            # Check intersection results
+            assigned_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE municipality IS NOT NULL
+            """).fetchone()[0]
+
+            unassigned_count = total_count - assigned_count
+
+            self.log.info(
+                f"  📊 Spatial intersection: {assigned_count}/{total_count} fields "
+                f"({assigned_count/total_count*100:.1f}%)"
+            )
+
+            # Step 2: Closest distance assignment for remaining fields
+            if (
+                unassigned_count > 0
+                and self.config.municipality_assignment_method == "spatial_with_fallback"
+            ):
+                self.log.info(
+                    f"  🎯 Step 2: Closest distance assignment for {unassigned_count} "
+                    f"unassigned fields..."
+                )
+
+                # SPATIAL_JOIN COMPLIANCE (PR #545):
+                # Use clean table-to-table structure for closest assignment
+                # Step 1: Create unassigned fields table for efficient processing
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE unassigned_fields AS
+                    SELECT field_uuid, geometry
+                    FROM {table_name}
+                    WHERE municipality IS NULL
+                """)
+
+                # Step 2: Find closest municipality for each unassigned field
+                self.conn.execute("""
+                    CREATE OR REPLACE TABLE closest_assignments AS
+                    SELECT DISTINCT ON (f.field_uuid)
+                        f.field_uuid,
+                        k.kommune_name,
+                        'closest_distance' as assignment_method
+                    FROM unassigned_fields f
+                    CROSS JOIN kommune_boundaries k
+                    ORDER BY f.field_uuid,
+                             ST_Distance(ST_Centroid(f.geometry), k.centroid)
+                """)
+
+                # Step 3: Update main table with closest assignments
+                self.conn.execute(f"""
+                    UPDATE {table_name} SET
+                        municipality = c.kommune_name,
+                        municipality_assignment_method = c.assignment_method
+                    FROM closest_assignments c
+                    WHERE {table_name}.field_uuid = c.field_uuid
+                    AND {table_name}.municipality IS NULL
+                """)
+
+                # Log final assignment stats
+                final_assigned = self.conn.execute(f"""
+                    SELECT COUNT(*) FROM {table_name}
+                    WHERE municipality IS NOT NULL
+                """).fetchone()[0]
+
+                self.log.info(
+                    f"  ✅ Final municipality assignment: {final_assigned}/{total_count} "
+                    f"fields ({final_assigned/total_count*100:.1f}%)"
+                )
+            else:
+                self.log.info(
+                    f"Municipality assignment complete: {assigned_count} by intersection only"
+                )
+
+            # Final validation
+            remaining_unassigned = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE municipality IS NULL
+            """).fetchone()[0]
+
+            if remaining_unassigned > 0:
+                self.log.warning(f"  🚨 {remaining_unassigned} fields remain unassigned")
+            else:
+                self.log.info("  ✅ All fields successfully assigned to municipalities")
+
+            # Clean up temporary tables for memory management
+            self.conn.execute("DROP TABLE IF EXISTS municipality_intersections")
+            self.conn.execute("DROP TABLE IF EXISTS unassigned_fields")
+            self.conn.execute("DROP TABLE IF EXISTS closest_assignments")
+
+        except Exception as e:
+            self.log.error(f"Error assigning municipalities to fields: {e}")
+            # Clean up temporary tables even on error
+            try:
+                self.conn.execute("DROP TABLE IF EXISTS municipality_intersections")
+                self.conn.execute("DROP TABLE IF EXISTS unassigned_fields")
+                self.conn.execute("DROP TABLE IF EXISTS closest_assignments")
+            except Exception:
+                pass
+            # Don't fail the entire pipeline, just log the error
+            pass
+
+    async def _discover_available_fields_years(self) -> List[int]:
+        """
+        Discover available years from fields data in GCS.
+
+        This method lists the fields data directory in GCS and extracts the years
+        from the MARKER_*.parquet filenames to determine which years have fields
+        data available for CVR enrichment.
+
+        Returns:
+            List[int]: List of years for which fields data is available
+        """
+        try:
+            # Use GCS data access to list files in the fields directory (same pattern as others)
+            fields_pattern = f"gs://{self.config.bucket}/silver/fields/*/MARKER_*.parquet"
+
+            # Find all MARKER files using GCSDataAccess
+            marker_files = self.gcs_access.list_files(fields_pattern)
+            if not marker_files:
+                self.log.warning("No fields data files found")
+                return []
+
+            # Extract years from MARKER_*.parquet filenames
+            available_years = []
+            for file_path in marker_files:
+                # Extract filename from full path
+                filename = file_path.split("/")[-1]  # Get just the filename
+                if filename.startswith("MARKER_") and filename.endswith(".parquet"):
+                    year_str = filename[7:-8]  # Remove "MARKER_" prefix and ".parquet" suffix
+                    if year_str.isdigit():
+                        available_years.append(int(year_str))
+
+            available_years = sorted(list(set(available_years)))  # Remove duplicates and sort
+            self.log.info(f"Discovered fields data for years: {available_years}")
+            return available_years
+
+        except Exception as e:
+            self.log.warning(f"Could not discover available fields years: {e}")
+            # Return empty list if discovery fails - don't use hardcoded fallback
+            self.log.info("No fields data discovery possible, skipping CVR enrichment")
+            return []
+
+    async def _get_fields_data_path(self, year: int) -> str:
+        """
+        Get the GCS path for fields data for a specific year.
+
+        This method discovers the latest timestamp directory and constructs
+        the full GCS path to the MARKER_{year}.parquet file.
+
+        Args:
+            year: Year for which to get the fields data path
+
+        Returns:
+            str: Full GCS path to the fields data file
+        """
+        try:
+            # Use GCS data access to find the latest file for this year (same pattern as others)
+            fields_pattern = f"gs://{self.config.bucket}/silver/fields/*/MARKER_{year}.parquet"
+
+            # Find all files for this year using GCSDataAccess
+            marker_files = self.gcs_access.list_files(fields_pattern)
+            if not marker_files:
+                raise Exception(f"No fields data files found for year {year}")
+
+            # Get the latest file (sorted by timestamp in path)
+            latest_fields_file = sorted(marker_files)[-1]  # Latest by timestamp
+            timestamp_only = latest_fields_file.split("/")[-2]  # Extract timestamp from path
+            self.log.debug(f"Using latest fields data timestamp: {timestamp_only}")
+
+            return latest_fields_file
+
+        except Exception as e:
+            self.log.warning(f"Could not discover fields data path for year {year}: {e}")
+            # Return None if discovery fails - don't use hardcoded fallback
+            return None
+
+    async def _enrich_with_fields_data(self, table_name: str, year: int) -> None:
+        """
+        Enrich FVM marker data with complete CVR numbers from fields data for early years.
+
+        This method joins FVM marker data with fields data (MARKER_*.parquet files) to
+        provide complete 8-digit CVR numbers for years 2008-2014 where fields data is available.
+
+        The FVM data often has truncated CVR numbers (4-6 digits), while the fields data
+        contains complete 8-digit CVR numbers that can be used for proper company identification.
+
+        Join strategy:
+        - FVM.block_id = Fields.markbloknr_c AND FVM.field_id = Fields.mark_nr
+        - Only enriches records where FVM CVR is incomplete (< 8 digits)
+        - Preserves existing complete CVR numbers
+
+        Args:
+            table_name: Name of the FVM marker table to enrich
+            year: Year of the data being processed
+        """
+        # Discover available years from fields data in GCS
+        fields_available_years = await self._discover_available_fields_years()
+
+        if year not in fields_available_years:
+            self.log.debug(f"No fields data available for year {year}, skipping CVR enrichment")
+            return
+
+        self.log.info(f"Starting CVR enrichment from fields data for year {year}")
+
+        try:
+            # Check if the table has the required columns for joining
+            columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+            column_names = [col[0] for col in columns_info]
+
+            required_cols = ["block_id", "field_id", "cvr_number"]
+            missing_cols = [col for col in required_cols if col not in column_names]
+
+            if missing_cols:
+                self.log.warning(
+                    f"Missing required columns for fields join: {missing_cols}. "
+                    f"Skipping enrichment."
+                )
+                return
+
+            # Check if we have any records that could benefit from enrichment
+            incomplete_cvr_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE cvr_number IS NULL
+                   OR cvr_number = ''
+                   OR cvr_number = '0'
+                   OR LENGTH(cvr_number) < 8
+            """).fetchone()[0]
+
+            if incomplete_cvr_count == 0:
+                self.log.info(f"All CVR numbers are complete for year {year}, skipping enrichment")
+                return
+
+            self.log.info(f"Found {incomplete_cvr_count:,} records with incomplete CVR numbers")
+
+            # Download fields data for this year using the latest available timestamp
+            fields_gcs_path = await self._get_fields_data_path(year)
+
+            if not fields_gcs_path:
+                self.log.warning(f"Could not determine fields data path for year {year}")
+                return
+
+            try:
+                # Load fields data using GCSDataAccess (same pattern as other parts of the pipeline)
+                self.gcs_access.query_parquet_direct(
+                    fields_gcs_path, "SELECT *", f"fields_data_{year}"
+                )
+
+                fields_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM fields_data_{year}"
+                ).fetchone()[0]
+                self.log.info(f"Loaded {fields_count:,} records from fields data for year {year}")
+
+            except Exception as e:
+                self.log.warning(f"Could not load fields data from {fields_gcs_path}: {e}")
+                return
+
+            # Perform the enrichment join
+            # Update FVM records with complete CVR numbers from fields data
+            update_query = f"""
+                UPDATE {table_name}
+                SET cvr_number = fields.cvr_number
+                FROM fields_data_{year} fields
+                WHERE {table_name}.block_id = fields.markbloknr_c
+                  AND {table_name}.field_id = fields.mark_nr
+                  AND fields.cvr_number IS NOT NULL
+                  AND LENGTH(fields.cvr_number) = 8
+                  AND ({table_name}.cvr_number IS NULL
+                       OR {table_name}.cvr_number = ''
+                       OR {table_name}.cvr_number = '0'
+                       OR LENGTH({table_name}.cvr_number) < 8)
+            """
+
+            self.conn.execute(update_query)
+
+            # Check how many records were enriched
+            enriched_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name} f
+                INNER JOIN fields_data_{year} fields
+                    ON f.block_id = fields.markbloknr_c
+                    AND f.field_id = fields.mark_nr
+                WHERE LENGTH(f.cvr_number) = 8
+                  AND fields.cvr_number IS NOT NULL
+                  AND LENGTH(fields.cvr_number) = 8
+            """).fetchone()[0]
+
+            # Final count of complete CVR numbers
+            complete_cvr_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {table_name}
+                WHERE cvr_number IS NOT NULL
+                  AND cvr_number != ''
+                  AND cvr_number != '0'
+                  AND LENGTH(cvr_number) = 8
+            """).fetchone()[0]
+
+            total_records = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+
+            self.log.info(
+                f"✅ CVR enrichment completed for year {year}: "
+                f"{enriched_count:,} records potentially enriched, "
+                f"{complete_cvr_count:,}/{total_records:,} "
+                f"({complete_cvr_count/total_records*100:.1f}%) now have complete CVR numbers"
+            )
+
+            # Clean up temporary table
+            self.conn.execute(f"DROP TABLE IF EXISTS fields_data_{year}")
+
+        except Exception as e:
+            self.log.error(f"Error during CVR enrichment for year {year}: {e}")
+            # Clean up on error
+            try:
+                self.conn.execute(f"DROP TABLE IF EXISTS fields_data_{year}")
+            except Exception:
+                pass
+            # Don't fail the entire pipeline, just log the error
             pass
 
     async def run(self, bronze_data: Optional[Any] = None) -> Optional[Dict[str, Any]]:

@@ -3,35 +3,53 @@
 export const COLOR_SCHEMES = {
   pesticide_load: {
     name: 'Pesticide Load',
-    colors: ['#f7fbff', '#deebf7', '#c6dbef', '#9ecae1', '#6baed6', '#4292c6', '#2171b5', '#084594'],
+    colors: [
+      '#f7fbff',
+      '#deebf7',
+      '#c6dbef',
+      '#9ecae1',
+      '#6baed6',
+      '#4292c6',
+      '#2171b5',
+      '#084594',
+    ],
     domain: [0, 1000], // kg/ha equivalent (standardized from pipeline)
     unit: 'kg/ha',
-    type: 'sequential'
+    type: 'sequential',
   },
   pfas_grams: {
     name: 'PFAS Mass',
-    colors: ['#fff5f0', '#fee0d2', '#fcbba1', '#fc9272', '#fb6a4a', '#ef3b2c', '#cb181d', '#99000d'],
+    colors: [
+      '#fff5f0',
+      '#fee0d2',
+      '#fcbba1',
+      '#fc9272',
+      '#fb6a4a',
+      '#ef3b2c',
+      '#cb181d',
+      '#99000d',
+    ],
     domain: [0, 50], // grams (actual PFAS active ingredient mass)
     unit: 'g',
-    type: 'sequential'
-  }
+    type: 'sequential',
+  },
 };
 
 export const BNBO_COLORS = {
-  'protected': '#2d8659',      // Dark green - fully protected
-  'buffer': '#52c878',         // Light green - buffer zone
-  'agricultural': '#ffd23f',   // Yellow - agricultural buffer
-  'transition': '#ff8c42',     // Orange - transition zone
-  'unprotected': '#e5e5e5'     // Gray - no protection
+  protected: '#2d8659', // Dark green - fully protected
+  buffer: '#52c878', // Light green - buffer zone
+  agricultural: '#ffd23f', // Yellow - agricultural buffer
+  transition: '#ff8c42', // Orange - transition zone
+  unprotected: '#e5e5e5', // Gray - no protection
 };
 
 export const BBR_COLORS = {
-  'Residential': '#4a90e2',    // Blue
-  'Agricultural': '#7ed321',   // Green
-  'Industrial': '#f5a623',     // Orange
-  'Commercial': '#d0021b',     // Red
-  'Public': '#9013fe',         // Purple
-  'Other': '#50e3c2'          // Teal
+  Residential: '#4a90e2', // Blue
+  Agricultural: '#7ed321', // Green
+  Industrial: '#f5a623', // Orange
+  Commercial: '#d0021b', // Red
+  Public: '#9013fe', // Purple
+  Other: '#50e3c2', // Teal
 };
 
 // Generate color scale configuration for Kepler.gl
@@ -44,7 +62,7 @@ export function generateColorScale(field: string) {
       type: 'quantile',
       field: field,
       domain: [0, 100],
-      range: ['#f7fbff', '#084594'] // Default blue scale
+      range: ['#f7fbff', '#084594'], // Default blue scale
     };
   }
 
@@ -53,36 +71,47 @@ export function generateColorScale(field: string) {
     field: field,
     domain: config.domain,
     range: config.colors,
-    scale: config.type
+    scale: config.type,
   };
 }
 
 // Get color for BNBO status
 export function getBNBOStatusColor(statusCode: string): string {
-  return BNBO_COLORS[statusCode as keyof typeof BNBO_COLORS] || BNBO_COLORS.unprotected;
+  return (
+    BNBO_COLORS[statusCode as keyof typeof BNBO_COLORS] ||
+    BNBO_COLORS.unprotected
+  );
 }
 
 // Get color for BBR building type
 export function getBBRTypeColor(buildingType: string): string {
-  return BBR_COLORS[buildingType as keyof typeof BBR_COLORS] || BBR_COLORS.Other;
+  return (
+    BBR_COLORS[buildingType as keyof typeof BBR_COLORS] || BBR_COLORS.Other
+  );
 }
 
 // Color utility functions
 export function hexToRgb(hex: string): [number, number, number] {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? [
-    parseInt(result[1], 16),
-    parseInt(result[2], 16),
-    parseInt(result[3], 16)
-  ] : [0, 0, 0];
+  return result
+    ? [
+        parseInt(result[1], 16),
+        parseInt(result[2], 16),
+        parseInt(result[3], 16),
+      ]
+    : [0, 0, 0];
 }
 
 export function rgbToHex(r: number, g: number, b: number): string {
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 }
 
 // Generate interpolated colors for smooth gradients
-export function interpolateColor(color1: string, color2: string, factor: number): string {
+export function interpolateColor(
+  color1: string,
+  color2: string,
+  factor: number
+): string {
   const rgb1 = hexToRgb(color1);
   const rgb2 = hexToRgb(color2);
 
@@ -94,13 +123,16 @@ export function interpolateColor(color1: string, color2: string, factor: number)
 }
 
 // Generate color palette for data visualization
-export function generateColorPalette(baseColor: string, steps: number): string[] {
+export function generateColorPalette(
+  baseColor: string,
+  steps: number
+): string[] {
   const palette: string[] = [];
   const rgb = hexToRgb(baseColor);
 
   for (let i = 0; i < steps; i++) {
     const factor = i / (steps - 1);
-    const lightness = 0.9 - (factor * 0.7); // From light to dark
+    const lightness = 0.9 - factor * 0.7; // From light to dark
 
     const r = Math.round(rgb[0] * lightness);
     const g = Math.round(rgb[1] * lightness);
@@ -127,7 +159,7 @@ export function getContrastRatio(color1: string, color2: string): number {
 }
 
 function getLuminance(rgb: [number, number, number]): number {
-  const [r, g, b] = rgb.map(c => {
+  const [r, g, b] = rgb.map((c) => {
     c = c / 255;
     return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
   });
@@ -145,7 +177,7 @@ export function getReadableTextColor(backgroundColor: string): string {
 
 // Color scheme validation
 export function validateColorScheme(colors: string[]): boolean {
-  return colors.every(color => /^#[0-9A-F]{6}$/i.test(color));
+  return colors.every((color) => /^#[0-9A-F]{6}$/i.test(color));
 }
 
 // Export color constants for easy access
@@ -159,7 +191,7 @@ export const COLORS = {
   LIGHT: '#f8f9fa',
   DARK: '#343a40',
   WHITE: '#ffffff',
-  BLACK: '#000000'
+  BLACK: '#000000',
 };
 
 // Tailwind CSS class mappings for colors
@@ -169,7 +201,7 @@ export const COLOR_CLASSES = {
     buffer: 'bg-green-500 text-white',
     agricultural: 'bg-yellow-400 text-black',
     transition: 'bg-orange-500 text-white',
-    unprotected: 'bg-gray-300 text-black'
+    unprotected: 'bg-gray-300 text-black',
   },
   BBR: {
     Residential: 'bg-blue-500 text-white',
@@ -177,6 +209,6 @@ export const COLOR_CLASSES = {
     Industrial: 'bg-orange-500 text-white',
     Commercial: 'bg-red-600 text-white',
     Public: 'bg-purple-600 text-white',
-    Other: 'bg-teal-500 text-white'
-  }
+    Other: 'bg-teal-500 text-white',
+  },
 };

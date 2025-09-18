@@ -1,14 +1,25 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+  memo,
+} from 'react';
+import { AlertTriangle } from 'lucide-react';
 import Map, {
   MapLayerMouseEvent,
   NavigationControl,
+  ViewState,
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { useMapTheme } from '@/hooks/useMapTheme';
 import { LayerVisibility, FilterState, FieldAnalysisData } from './types';
 import { getDecileBreakpoints, getColorScheme } from './colorUtils';
 import { SearchBar } from './SearchBar';
+import { ColorLegend } from './ColorLegend';
 
 // Type for MapLibre map instance
 interface MapInstance {
@@ -24,6 +35,18 @@ interface MapInstance {
     id: string,
     image: HTMLCanvasElement | ImageBitmap | ImageData
   ) => void;
+  setFilter: (id: string, filter: unknown) => void;
+}
+
+// Type for MapLibre layer with optional filter property
+interface MapLibreLayer {
+  id: string;
+  source: string;
+  'source-layer': string;
+  type: string;
+  paint: Record<string, unknown>;
+  layout: Record<string, unknown>;
+  filter?: unknown;
 }
 
 interface FieldAnalysisMapProps {
@@ -44,6 +67,9 @@ interface FieldAnalysisMapProps {
   }) => void;
   onMapClick?: (coordinates: { lat: number; lng: number }) => void;
   onMapReady?: () => void;
+  viewState?: Partial<ViewState>;
+  onViewStateChange?: (viewState: ViewState) => void;
+  hasRightPanel?: boolean; // New prop to indicate if right panel is open
 }
 
 interface TooltipInfo {
@@ -411,7 +437,7 @@ function MapTooltip({
 
   return (
     <div
-      className="absolute z-50 max-w-sm rounded-xl border border-gray-300 bg-white shadow-xl backdrop-blur-sm"
+      className="border-border bg-background absolute z-[60] max-w-sm rounded-xl border shadow-xl backdrop-blur-sm"
       style={{
         left: x,
         top: y,
@@ -420,12 +446,12 @@ function MapTooltip({
       }}
     >
       {/* Header with better typography */}
-      <div className="border-b border-gray-100 px-4 py-3">
-        <h3 className="text-base leading-tight font-semibold text-gray-900">
+      <div className="border-border border-b px-4 py-3">
+        <h3 className="text-foreground text-base leading-tight font-semibold">
           {layerName}
         </h3>
         {properties.site_name ? (
-          <p className="mt-1 text-sm font-medium text-gray-600">
+          <p className="text-muted-foreground mt-1 text-sm font-medium">
             {String(properties.site_name)}
           </p>
         ) : null}
@@ -439,10 +465,10 @@ function MapTooltip({
               key={index}
               className="flex items-baseline justify-between gap-3"
             >
-              <span className="text-sm leading-tight font-medium text-gray-600">
+              <span className="text-muted-foreground text-sm leading-tight font-medium">
                 {label}:
               </span>
-              <span className="text-right text-sm leading-tight font-semibold text-gray-900">
+              <span className="text-foreground text-right text-sm leading-tight font-semibold">
                 {formatValue(value, unit)}
               </span>
             </div>
@@ -453,7 +479,7 @@ function MapTooltip({
   );
 }
 
-export default function FieldAnalysisMap({
+const FieldAnalysisMap = memo(function FieldAnalysisMap({
   pmtilesUrls,
   layerVisibility,
   filterState,
@@ -461,13 +487,73 @@ export default function FieldAnalysisMap({
   onLocationSelect,
   onMapClick,
   onMapReady,
+  viewState: externalViewState,
+  onViewStateChange,
+  hasRightPanel,
 }: FieldAnalysisMapProps) {
+  const { mapStyle } = useMapTheme();
   const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadedSourcesRef = useRef<Set<string>>(new Set());
+
+  // Internal view state for controlled map
+  const [internalViewState, setInternalViewState] = useState<ViewState>({
+    longitude: 9.501785,
+    latitude: 56.26392,
+    zoom: 7,
+    pitch: 0,
+    bearing: 0,
+    padding: { top: 0, bottom: 0, left: 0, right: 0 },
+  });
+
+  // PROPERLY MERGE viewState - merge external with internal defaults
+  const currentViewState: ViewState = externalViewState
+    ? { ...internalViewState, ...externalViewState }
+    : internalViewState;
+
+  // Optimized throttling using requestAnimationFrame for smooth performance
+  const rafIdRef = useRef<number | null>(null);
+  const lastViewState = useRef<ViewState | null>(null);
+  const finalNotifyTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Handle view state changes - OPTIMIZED WITH RAF THROTTLING
+  const handleViewStateChange = useCallback(
+    (evt: { viewState: ViewState }) => {
+      const newViewState = evt.viewState;
+
+      // Always update internal state immediately for smooth map movement
+      if (!externalViewState) {
+        setInternalViewState(newViewState);
+      }
+
+      // Store the latest view state
+      lastViewState.current = newViewState;
+
+      // Use RAF throttling for smooth performance during interactions
+      if (onViewStateChange && !rafIdRef.current) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null;
+          if (lastViewState.current) {
+            onViewStateChange(lastViewState.current);
+          }
+        });
+      }
+
+      // Schedule final notification when movement stops
+      if (finalNotifyTimeout.current) {
+        clearTimeout(finalNotifyTimeout.current);
+      }
+      finalNotifyTimeout.current = setTimeout(() => {
+        if (onViewStateChange && lastViewState.current) {
+          onViewStateChange(lastViewState.current);
+        }
+      }, 150); // Send final position after 150ms of no movement
+    },
+    [onViewStateChange, externalViewState]
+  );
 
   // Handle location selection from search
   const handleLocationSelect = useCallback(
@@ -495,56 +581,63 @@ export default function FieldAnalysisMap({
     [onLocationSelect]
   );
 
-  // Set up loading timeout
+  // Stable callback refs to prevent excessive re-creation
+  const onMapReadyRef = useRef(onMapReady);
+  const pmtilesUrlsRef = useRef(pmtilesUrls);
+
+  // Update refs when props change
+  useEffect(() => {
+    onMapReadyRef.current = onMapReady;
+    pmtilesUrlsRef.current = pmtilesUrls;
+  });
+
+  // OPTIMIZED loading timeout with stable dependencies
   const startLoadingTimeout = useCallback(() => {
-    // Clear any existing timeout
     if (loadingTimeoutRef.current) {
       clearTimeout(loadingTimeoutRef.current);
     }
 
-    // Set a 10-second timeout for map loading
     loadingTimeoutRef.current = setTimeout(() => {
-      console.warn('⚠️ Map loading timeout - forcing loading state to false');
+      console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
-      onMapReady?.();
+      onMapReadyRef.current?.();
     }, 10000);
-  }, [onMapReady]);
+  }, []); // No dependencies - uses ref
 
-  // Clear loading timeout
-  const clearLoadingTimeout = useCallback(() => {
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-      loadingTimeoutRef.current = null;
-    }
-  }, []);
-
-  // Check if all required sources are loaded
+  // OPTIMIZED - Check if all required sources are loaded
   const checkAllSourcesLoaded = useCallback(() => {
-    const requiredSources = Object.keys(pmtilesUrls).filter(
-      (key) => pmtilesUrls[key as keyof typeof pmtilesUrls]
+    const requiredSources = Object.keys(pmtilesUrlsRef.current).filter(
+      (key) =>
+        pmtilesUrlsRef.current[key as keyof typeof pmtilesUrlsRef.current]
     );
     const allLoaded = requiredSources.every((source) =>
       loadedSourcesRef.current.has(source)
     );
 
     if (allLoaded && isLoading) {
-      console.log('✅ All PMTiles sources loaded successfully');
-      clearLoadingTimeout();
+      console.log('All PMTiles sources loaded successfully');
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       setIsLoading(false);
-      onMapReady?.();
+      onMapReadyRef.current?.();
     }
-  }, [pmtilesUrls, isLoading, clearLoadingTimeout, onMapReady]);
+  }, [isLoading]); // Only depend on isLoading state
 
   // Handle source data events to detect when PMTiles are loaded
   const handleSourceData = useCallback(
     (e: { sourceId: string; isSourceLoaded: boolean }) => {
-      if (e.isSourceLoaded && Object.keys(pmtilesUrls).includes(e.sourceId)) {
+      if (
+        e.isSourceLoaded &&
+        Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)
+      ) {
         loadedSourcesRef.current.add(e.sourceId);
-        console.log(`✅ PMTiles source loaded: ${e.sourceId}`);
+        console.log(`PMTiles source loaded: ${e.sourceId}`);
         checkAllSourcesLoaded();
       }
     },
-    [pmtilesUrls, checkAllSourcesLoaded]
+    [checkAllSourcesLoaded]
   );
 
   // Initialize PMTiles protocol with retry mechanism
@@ -563,7 +656,7 @@ export default function FieldAnalysisMap({
           import('pmtiles'),
         ]);
 
-        console.log('✅ MapLibre and PMTiles loaded successfully');
+        console.log('MapLibre and PMTiles loaded successfully');
 
         // Register PMTiles protocol with MapLibre (only once globally)
         if (
@@ -575,27 +668,30 @@ export default function FieldAnalysisMap({
           (
             window as unknown as { __pmtiles_protocol_registered?: boolean }
           ).__pmtiles_protocol_registered = true;
-          console.log('✅ PMTiles protocol registered');
+          console.log('PMTiles protocol registered');
         }
 
         // Don't set loading false here - let the map load callback handle it
       } catch (err) {
         console.error(
-          `❌ Failed to initialize PMTiles (attempt ${retryCount + 1}):`,
+          `Failed to initialize PMTiles (attempt ${retryCount + 1}):`,
           err
         );
         // Retry up to maxRetries times
         if (retryCount < maxRetries) {
           retryCount++;
           console.log(
-            `🔄 Retrying PMTiles initialization (${retryCount}/${maxRetries})...`
+            `Retrying PMTiles initialization (${retryCount}/${maxRetries})...`
           );
           setTimeout(initializePMTiles, 1000 * retryCount); // Exponential backoff
           return;
         }
 
         // Final failure after all retries
-        clearLoadingTimeout();
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
         setError(
           'Kunne ikke indlæse kortdata efter flere forsøg. Prøv at genindlæse siden.'
         );
@@ -607,14 +703,30 @@ export default function FieldAnalysisMap({
 
     // Cleanup timeout on unmount
     return () => {
-      clearLoadingTimeout();
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
     };
-  }, [startLoadingTimeout, clearLoadingTimeout]);
+  }, [startLoadingTimeout]); // Added missing dependency
 
-  // Cleanup event listeners on unmount
+  // Cleanup event listeners and RAF on unmount
   useEffect(() => {
     const currentMapRef = mapRef.current;
     return () => {
+      // Cleanup RAF
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+
+      // Cleanup final notify timeout
+      if (finalNotifyTimeout.current) {
+        clearTimeout(finalNotifyTimeout.current);
+        finalNotifyTimeout.current = null;
+      }
+
+      // Cleanup map event listeners
       if (currentMapRef) {
         const map = currentMapRef.getMap() as MapInstance & {
           off: (
@@ -627,8 +739,8 @@ export default function FieldAnalysisMap({
     };
   }, [handleSourceData]);
 
-  // Generate dynamic paint properties based on visualization mode
-  const generateFieldsPaint = useCallback(() => {
+  // Memoize paint properties to prevent expensive recalculations during drag/zoom
+  const fieldsPaintProps = useMemo(() => {
     const { visualizationMode, colorUnit, useDecileColoring } = filterState;
     const colorScheme = getColorScheme(visualizationMode);
 
@@ -666,7 +778,7 @@ export default function FieldAnalysisMap({
     };
 
     const fieldName = getFieldName(visualizationMode);
-    console.log('🎨 Color generation:', {
+    console.log('Color generation:', {
       visualizationMode,
       fieldName,
       colorScheme: colorScheme.name,
@@ -743,10 +855,53 @@ export default function FieldAnalysisMap({
   const addFieldsLayers = useCallback(
     (map: MapInstance) => {
       if (map.getSource('fields') && !map.getLayer('fields-fill')) {
-        const paintProps = generateFieldsPaint();
+        const paintProps = fieldsPaintProps;
+
+        // Create company filter if specified
+        const companyFilter: unknown = filterState.companyFilter
+          ? ['==', ['get', 'cvr_number'], parseInt(filterState.companyFilter)]
+          : null;
+
+        // Create partial coverage pattern - will be updated dynamically
+        const createPartialCoveragePattern = async (
+          color: string = '#374151'
+        ) => {
+          try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 32;
+            canvas.height = 32;
+
+            if (ctx) {
+              // Transparent background
+              ctx.clearRect(0, 0, 32, 32);
+
+              // Dynamic color diagonal hash pattern
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 2;
+              ctx.globalAlpha = 0.9;
+              ctx.beginPath();
+
+              // Diagonal lines going top-left to bottom-right
+              for (let i = -32; i <= 64; i += 6) {
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i + 32, 32);
+              }
+              ctx.stroke();
+
+              const bitmap = await createImageBitmap(canvas);
+              map.addImage('partial-coverage-pattern', bitmap);
+            }
+          } catch (error) {
+            console.warn('Failed to create partial coverage pattern:', error);
+          }
+        };
+
+        // Create initial pattern with default color
+        createPartialCoveragePattern();
 
         // Main fields layer
-        map.addLayer({
+        const fieldsLayer: MapLibreLayer = {
           id: 'fields-fill',
           source: 'fields',
           'source-layer': 'fields',
@@ -755,10 +910,61 @@ export default function FieldAnalysisMap({
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
+        };
+
+        // Only add filter if it exists (MapLibre expects array or undefined, not null)
+        if (companyFilter) {
+          fieldsLayer.filter = companyFilter;
+        }
+
+        map.addLayer(fieldsLayer);
+
+        // Partial coverage overlay layer - uses same colors as main layer but with hash pattern
+        const partialCoveragePaint = { ...paintProps };
+
+        // Add hash pattern overlay for partial coverage fields
+        map.addLayer({
+          id: 'fields-partial-coverage-base',
+          source: 'fields',
+          'source-layer': 'fields',
+          type: 'fill',
+          paint: partialCoveragePaint,
+          filter: companyFilter
+            ? [
+                'all',
+                companyFilter,
+                ['==', ['get', 'is_partial_coverage'], true],
+              ]
+            : ['==', ['get', 'is_partial_coverage'], true],
+          layout: {
+            visibility: layerVisibility.fields ? 'visible' : 'none',
+          },
+        });
+
+        // Add diagonal hash pattern on top for partial coverage indication
+        map.addLayer({
+          id: 'fields-partial-coverage-pattern',
+          source: 'fields',
+          'source-layer': 'fields',
+          type: 'fill',
+          paint: {
+            'fill-pattern': 'partial-coverage-pattern',
+            'fill-opacity': 0.7,
+          },
+          filter: companyFilter
+            ? [
+                'all',
+                companyFilter,
+                ['==', ['get', 'is_partial_coverage'], true],
+              ]
+            : ['==', ['get', 'is_partial_coverage'], true],
+          layout: {
+            visibility: layerVisibility.fields ? 'visible' : 'none',
+          },
         });
 
         // Fields outline
-        map.addLayer({
+        const fieldsOutlineLayer: MapLibreLayer = {
           id: 'fields-outline',
           source: 'fields',
           'source-layer': 'fields',
@@ -771,33 +977,40 @@ export default function FieldAnalysisMap({
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
-        });
+        };
 
-        // Add organic symbols layer
-        if (filterState.visualizationMode === 'organic_status') {
-          map.addLayer({
-            id: 'organic-symbols',
-            source: 'fields',
-            'source-layer': 'fields',
-            type: 'symbol',
-            filter: ['==', ['get', 'is_organic'], true],
-            paint: {
-              'text-color': '#16a34a',
-              'text-halo-color': '#ffffff',
-              'text-halo-width': 1,
-            },
-            layout: {
-              'text-field': '🌿',
-              'text-size': 16,
-              'text-allow-overlap': false,
-              'text-ignore-placement': false,
-              visibility: layerVisibility.fields ? 'visible' : 'none',
-            },
-          });
+        // Only add filter if it exists
+        if (companyFilter) {
+          fieldsOutlineLayer.filter = companyFilter;
         }
+
+        map.addLayer(fieldsOutlineLayer);
+
+        // Add organic borders layer - dashed green borders for organic fields
+        let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
+        if (companyFilter) {
+          organicFilter = ['all', companyFilter, organicFilter];
+        }
+
+        map.addLayer({
+          id: 'organic-borders',
+          source: 'fields',
+          'source-layer': 'fields',
+          type: 'line',
+          filter: organicFilter,
+          paint: {
+            'line-color': '#16a34a', // Green-600
+            'line-width': 3,
+            'line-opacity': 0.9,
+            'line-dasharray': [2, 2], // Dashed line pattern
+          },
+          layout: {
+            visibility: layerVisibility.fields ? 'visible' : 'none',
+          },
+        });
       }
     },
-    [layerVisibility.fields, generateFieldsPaint, filterState.visualizationMode]
+    [layerVisibility.fields, fieldsPaintProps, filterState.companyFilter]
   );
 
   // Add BNBO layers with cross-hatch pattern
@@ -1191,11 +1404,11 @@ export default function FieldAnalysisMap({
               type: 'vector',
               url: `pmtiles://${url}`,
             });
-            console.log(`✅ Added ${layerName} source:`, url);
+            console.log(`Added ${layerName} source:`, url);
             sourcesAdded++;
           } catch (error) {
             const errorMessage = `Failed to add ${layerName} source: ${error}`;
-            console.warn(`⚠️ ${errorMessage}`);
+            console.warn(`${errorMessage}`);
             sourceErrors.push(errorMessage);
           }
         }
@@ -1203,8 +1416,11 @@ export default function FieldAnalysisMap({
 
       // If no sources were added (all URLs empty or sources already exist)
       if (sourcesAdded === 0) {
-        console.log('ℹ️ No new sources to add, marking as ready');
-        clearLoadingTimeout();
+        console.log('No new sources to add, marking as ready');
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
         setIsLoading(false);
         onMapReady?.();
         return;
@@ -1212,7 +1428,7 @@ export default function FieldAnalysisMap({
 
       // If there are source errors, show a warning but continue
       if (sourceErrors.length > 0) {
-        console.warn('⚠️ Some map sources failed to load:', sourceErrors);
+        console.warn('Some map sources failed to load:', sourceErrors);
         // Don't set error state for source failures - the map can still work with partial data
       }
 
@@ -1224,10 +1440,13 @@ export default function FieldAnalysisMap({
       addBuildingsLayers(map);
 
       // Don't set loading to false here - wait for sourcedata events
-      console.log(`🔄 Waiting for ${sourcesAdded} PMTiles sources to load...`);
+      console.log(`Waiting for ${sourcesAdded} PMTiles sources to load...`);
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
-      clearLoadingTimeout();
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
       setError('Failed to load map data');
       setIsLoading(false);
     }
@@ -1239,11 +1458,10 @@ export default function FieldAnalysisMap({
     addWaterProjectsLayers,
     addBuildingsLayers,
     onMapReady,
-    clearLoadingTimeout,
     handleSourceData,
   ]);
 
-  // Handle PMTiles URL changes (e.g., year selection)
+  // Handle PMTiles URL changes (e.g., year selection) - optimized approach
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -1253,7 +1471,7 @@ export default function FieldAnalysisMap({
     const fieldsSource = map.getSource('fields');
     if (fieldsSource && pmtilesUrls.fields) {
       console.log(
-        `🔄 Updating fields source for year change:`,
+        `Optimized fields source update for year change:`,
         pmtilesUrls.fields
       );
 
@@ -1261,50 +1479,38 @@ export default function FieldAnalysisMap({
       startLoadingTimeout();
       setIsLoading(true);
 
-      // Remove existing fields layers
-      const layersToRemove = [
-        'fields-fill',
-        'fields-outline',
-        'organic-symbols',
-      ];
-      layersToRemove.forEach((layerId) => {
-        if (map.getLayer(layerId)) {
-          map.removeLayer(layerId);
-        }
-      });
-
-      // Remove existing fields source
-      map.removeSource('fields');
-
-      // Add new source with updated URL
       try {
+        // More efficient approach: Update the source URL directly instead of removing/re-adding
+        // This preserves the existing layers and only updates the data source
+        const newSource = {
+          type: 'vector' as const,
+          url: `pmtiles://${pmtilesUrls.fields}`,
+        };
+
         // Reset loaded sources tracking for fields
         loadedSourcesRef.current.delete('fields');
 
-        map.addSource('fields', {
-          type: 'vector',
-          url: `pmtiles://${pmtilesUrls.fields}`,
-        });
+        // Remove and re-add source (MapLibre doesn't support direct URL updates)
+        // But we do it more efficiently by only affecting the fields source
+        map.removeSource('fields');
+        map.addSource('fields', newSource);
 
-        // Re-add fields layers
+        // Re-add only the fields layers (other layers remain unaffected)
         addFieldsLayers(map);
 
         // Don't set loading to false here - wait for sourcedata event
-        console.log(`🔄 Waiting for updated fields source to load...`);
+        console.log(`Waiting for optimized fields source to load...`);
       } catch (error) {
-        console.error('Error loading PMTiles for year:', error);
-        clearLoadingTimeout();
+        console.error('Error updating PMTiles for year:', error);
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
         setError('Failed to load data for selected year');
         setIsLoading(false);
       }
     }
-  }, [
-    pmtilesUrls.fields,
-    addFieldsLayers,
-    onMapReady,
-    startLoadingTimeout,
-    clearLoadingTimeout,
-  ]);
+  }, [pmtilesUrls.fields, addFieldsLayers, onMapReady, startLoadingTimeout]);
 
   // Update layer visibility and styling when props change
   useEffect(() => {
@@ -1393,7 +1599,49 @@ export default function FieldAnalysisMap({
         layerVisibility.buildings ? 'visible' : 'none'
       );
     }
-  }, [layerVisibility, filterState.visualizationMode]);
+  }, [layerVisibility, filterState.visualizationMode]); // Only run when visibility or organic mode changes
+
+  // Update filters when company filter changes
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const map = mapRef.current.getMap();
+
+    // Create company filter if specified
+    const companyFilter: unknown = filterState.companyFilter
+      ? ['==', ['get', 'cvr_number'], parseInt(filterState.companyFilter)]
+      : null;
+
+    // Update filters on existing layers (only set filter if it exists)
+    if (map.getLayer('fields-fill')) {
+      if (companyFilter) {
+        map.setFilter('fields-fill', companyFilter);
+      } else {
+        map.setFilter('fields-fill', null); // Clear filter
+      }
+    }
+    if (map.getLayer('fields-outline')) {
+      if (companyFilter) {
+        map.setFilter('fields-outline', companyFilter);
+      } else {
+        map.setFilter('fields-outline', null); // Clear filter
+      }
+    }
+    if (map.getLayer('fields-partial-coverage-base')) {
+      const partialFilter = companyFilter
+        ? ['all', companyFilter, ['==', ['get', 'is_partial_coverage'], true]]
+        : ['==', ['get', 'is_partial_coverage'], true];
+      map.setFilter('fields-partial-coverage-base', partialFilter);
+      map.setFilter('fields-partial-coverage-pattern', partialFilter);
+    }
+    if (map.getLayer('organic-borders')) {
+      let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
+      if (companyFilter) {
+        organicFilter = ['all', companyFilter, organicFilter];
+      }
+      map.setFilter('organic-borders', organicFilter);
+    }
+  }, [filterState.companyFilter]);
 
   // Update field visualization when filterState changes
   useEffect(() => {
@@ -1402,7 +1650,7 @@ export default function FieldAnalysisMap({
     const map = mapRef.current.getMap();
 
     if (map.getLayer('fields-fill')) {
-      const paintProps = generateFieldsPaint();
+      const paintProps = fieldsPaintProps;
 
       // Update the fill color
       map.setPaintProperty(
@@ -1416,44 +1664,44 @@ export default function FieldAnalysisMap({
         paintProps['fill-opacity']
       );
 
-      // Handle organic symbols layer
-      if (filterState.visualizationMode === 'organic_status') {
-        // Add organic symbols if not exists
-        if (!map.getLayer('organic-symbols')) {
-          map.addLayer({
-            id: 'organic-symbols',
-            source: 'fields',
-            'source-layer': 'fields',
-            type: 'symbol',
-            filter: ['==', ['get', 'is_organic'], true],
-            paint: {
-              'text-color': '#16a34a',
-              'text-halo-color': '#ffffff',
-              'text-halo-width': 1,
-            },
-            layout: {
-              'text-field': '🌿',
-              'text-size': 16,
-              'text-allow-overlap': false,
-              'text-ignore-placement': false,
-              visibility: layerVisibility.fields ? 'visible' : 'none',
-            },
-          });
-        } else {
-          map.setLayoutProperty(
-            'organic-symbols',
-            'visibility',
-            layerVisibility.fields ? 'visible' : 'none'
-          );
-        }
-      } else {
-        // Hide organic symbols for other modes
-        if (map.getLayer('organic-symbols')) {
-          map.setLayoutProperty('organic-symbols', 'visibility', 'none');
-        }
+      // Update partial coverage base layer to match main field colors
+      if (map.getLayer('fields-partial-coverage-base')) {
+        map.setPaintProperty(
+          'fields-partial-coverage-base',
+          'fill-color',
+          paintProps['fill-color']
+        );
+        map.setPaintProperty(
+          'fields-partial-coverage-base',
+          'fill-opacity',
+          paintProps['fill-opacity']
+        );
+      }
+
+      // Handle organic borders layer visibility
+      if (map.getLayer('organic-borders')) {
+        map.setLayoutProperty(
+          'organic-borders',
+          'visibility',
+          layerVisibility.fields ? 'visible' : 'none'
+        );
+      }
+
+      // Handle partial coverage layers visibility
+      if (map.getLayer('fields-partial-coverage-base')) {
+        map.setLayoutProperty(
+          'fields-partial-coverage-base',
+          'visibility',
+          layerVisibility.fields ? 'visible' : 'none'
+        );
+        map.setLayoutProperty(
+          'fields-partial-coverage-pattern',
+          'visibility',
+          layerVisibility.fields ? 'visible' : 'none'
+        );
       }
     }
-  }, [filterState, layerVisibility.fields, generateFieldsPaint]);
+  }, [fieldsPaintProps, layerVisibility.fields]); // Use memoized paint props
 
   // Handle hover events
   const onHover = useCallback(
@@ -1511,10 +1759,13 @@ export default function FieldAnalysisMap({
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center bg-red-50">
+      <div className="bg-destructive/10 flex h-full items-center justify-center">
         <div className="text-center">
-          <div className="mb-2 text-xl text-red-600">⚠️ Fejl</div>
-          <div className="text-gray-700">{error}</div>
+          <div className="text-destructive mb-2 flex items-center justify-center text-xl">
+            <AlertTriangle className="mr-2 h-6 w-6" />
+            Fejl
+          </div>
+          <div className="text-foreground">{error}</div>
         </div>
       </div>
     );
@@ -1522,12 +1773,12 @@ export default function FieldAnalysisMap({
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center bg-gray-50">
+      <div className="bg-muted flex h-full items-center justify-center">
         <div className="text-center">
-          <div className="mb-2 text-lg font-medium text-gray-900">
+          <div className="text-foreground mb-2 text-lg font-medium">
             Indlæser kortdata...
           </div>
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"></div>
+          <div className="border-primary mx-auto h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
         </div>
       </div>
     );
@@ -1543,41 +1794,59 @@ export default function FieldAnalysisMap({
   ];
 
   return (
-    <div className="relative h-full w-full">
-      {/* Search Bar */}
+    <div
+      className="relative h-full w-full touch-manipulation"
+      style={{ touchAction: 'pan-x pan-y' }}
+    >
+      {/* Search Bar - positioned to avoid sidebar collision */}
       <div
-        className="absolute top-4 right-4 left-20 z-10 lg:right-auto lg:left-4 lg:w-80"
+        className={`pointer-events-auto absolute top-4 left-4 z-30 transition-all duration-200 md:w-80 lg:w-96 xl:w-[28rem] ${
+          hasRightPanel
+            ? 'right-[21rem] xl:right-[29rem]'
+            : 'right-4 md:right-auto'
+        }`}
         style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
       >
         <SearchBar
           onLocationSelect={handleLocationSelect}
-          placeholder="Søg adresser, byer, regioner..."
+          placeholder="Søg efter adresser, byer, regioner..."
           className="w-full"
         />
       </div>
 
       <Map
         ref={mapRef}
-        initialViewState={{
-          longitude: 9.501785,
-          latitude: 56.26392,
-          zoom: 7,
-        }}
+        viewState={currentViewState}
+        onMove={handleViewStateChange}
         style={{ width: '100%', height: '100%' }}
-        mapStyle="https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
+        mapStyle={mapStyle}
         interactiveLayerIds={interactiveLayerIds}
         onLoad={onMapLoad}
         onMouseMove={onHover}
         onMouseLeave={() => setHoverInfo(null)}
         onClick={onClick}
         cursor="default"
+        // Explicitly enable map interactions
+        dragPan={true}
+        scrollZoom={true}
+        touchZoom={true}
+        touchRotate={true}
+        doubleClickZoom={true}
+        keyboard={true}
       >
         <NavigationControl position="top-right" />
 
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
 
+      {/* Color Legend - positioned to avoid mobile controls */}
+      <div className="pointer-events-auto absolute bottom-4 left-4 z-30 md:bottom-6 md:left-6">
+        <ColorLegend filterState={filterState} />
+      </div>
+
       {hoverInfo && <MapTooltip {...hoverInfo} />}
     </div>
   );
-}
+});
+
+export default FieldAnalysisMap;

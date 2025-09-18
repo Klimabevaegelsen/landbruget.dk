@@ -183,10 +183,10 @@ class GoogleDriveFetcher:
         return mime_type in SUPPORTED_MIME_TYPES
 
     @retry_with_exponential_backoff(
-        max_attempts=5,
+        max_attempts=3,  # Reduce retries to avoid prolonged SSL issues
         retry_exceptions=(FileDownloadError, ssl.SSLError, TimeoutError, ConnectionError),
-        min_wait_seconds=2,
-        max_wait_seconds=120,
+        min_wait_seconds=5,  # Increase wait time between retries
+        max_wait_seconds=60,  # Reduce max wait to avoid timeouts
     )
     def download_file(self, file_id: str) -> tuple[bytes, dict[str, Any]]:
         """Download a file from Google Drive.
@@ -203,47 +203,26 @@ class GoogleDriveFetcher:
         set_context(file_id=file_id)
         logger.info(f"Downloading file: {file_id}")
 
+        # Add small delay to reduce API pressure and SSL connection issues
+        import time
+
+        time.sleep(1.0)  # 1 second delay between downloads
+
         try:
             # Get file metadata
             metadata = self._get_file_metadata(file_id)
+            file_size = int(metadata.get("size", 0))
 
-            # Create request to download the file
-            request = self.drive_service.files().get_media(fileId=file_id)
+            # Decide download strategy based on file size
+            # Use single request for files < 50MB, chunked for larger files
+            if file_size > 0 and file_size < 50 * 1024 * 1024:  # 50MB threshold
+                logger.info(f"Using single-request download for {file_size} byte file")
+                content = self._download_single_request(file_id)
+            else:
+                logger.info(f"Using chunked download for {file_size} byte file")
+                content = self._download_chunked(file_id)
 
-            # Use a BytesIO object to store the downloaded file
-            file_content = io.BytesIO()
-            downloader = MediaIoBaseDownload(file_content, request, chunksize=2 * 1024 * 1024)
-
-            # Download the file in chunks
-            done = False
-            progress = 0
-            chunk_count = 0
-            while not done:
-                try:
-                    status, done = downloader.next_chunk()
-                    chunk_count += 1
-
-                    if status:
-                        new_progress = int(status.progress() * 100)
-                        if (
-                            new_progress - progress >= 10
-                        ):  # Log every 10% progress for better feedback
-                            progress = new_progress
-                            logger.debug(f"Download progress: {progress}% (chunk {chunk_count})")
-
-                except Exception as chunk_error:
-                    # Log chunk-specific errors but let retry mechanism handle them
-                    logger.warning(
-                        f"Error downloading chunk {chunk_count} for file {file_id}: "
-                        f"{str(chunk_error)}"
-                    )
-                    raise
-
-            # Get the file content
-            file_content.seek(0)
-            content = file_content.read()
-
-            logger.info(f"Downloaded file {file_id} ({len(content)} bytes) in {chunk_count} chunks")
+            logger.info(f"Downloaded file {file_id} ({len(content)} bytes)")
             return content, metadata
 
         except ssl.SSLError as e:
@@ -254,6 +233,86 @@ class GoogleDriveFetcher:
             error_msg = f"Connection error downloading file {file_id}: {str(e)}"
             logger.error(error_msg)
             raise FileDownloadError(error_msg) from e
+        except Exception as e:
+            error_msg = f"Failed to download file {file_id}: {str(e)}"
+            logger.error(error_msg)
+            raise FileDownloadError(error_msg) from e
+
+    def _download_single_request(self, file_id: str) -> bytes:
+        """Download a file in a single HTTP request using the fastest method.
+
+        Uses files.get with alt=media parameter for maximum speed.
+        This is the fastest way according to Google Drive API docs.
+        """
+        import time
+
+        start_time = time.time()
+
+        # METHOD 1: Use the Google API client (more reliable than direct HTTP)
+        # The direct HTTP approach was causing SSL issues, so we'll optimize the API client instead
+        try:
+            request = self.drive_service.files().get_media(fileId=file_id)
+            content = request.execute()
+
+            download_time = time.time() - start_time
+            speed_mbps = (len(content) / (1024 * 1024)) / download_time if download_time > 0 else 0
+            logger.info(
+                f"API client download: {len(content)} bytes in {download_time:.2f}s "
+                f"({speed_mbps:.2f} MB/s)"
+            )
+
+            return content
+
+        except Exception as e:
+            error_msg = f"Failed to download file {file_id}: {str(e)}"
+            logger.error(error_msg)
+            raise FileDownloadError(error_msg) from e
+
+    def _download_chunked(self, file_id: str) -> bytes:
+        """Download a file using optimized chunked approach for large files."""
+        import time
+
+        start_time = time.time()
+
+        # Use optimized MediaIoBaseDownload with larger chunks (more reliable than direct HTTP)
+        try:
+            request = self.drive_service.files().get_media(fileId=file_id)
+            file_content = io.BytesIO()
+            downloader = MediaIoBaseDownload(file_content, request, chunksize=8 * 1024 * 1024)
+
+            done = False
+            progress = 0
+            chunk_count = 0
+            while not done:
+                try:
+                    status, done = downloader.next_chunk()
+                    chunk_count += 1
+
+                    if status:
+                        new_progress = int(status.progress() * 100)
+                        if new_progress - progress >= 10:
+                            progress = new_progress
+                            logger.debug(f"Download progress: {progress}% (chunk {chunk_count})")
+
+                except Exception as chunk_error:
+                    logger.warning(
+                        f"Error downloading chunk {chunk_count} for file {file_id}: "
+                        f"{str(chunk_error)}"
+                    )
+                    raise
+
+            file_content.seek(0)
+            content = file_content.read()
+
+            download_time = time.time() - start_time
+            speed_mbps = (len(content) / (1024 * 1024)) / download_time if download_time > 0 else 0
+            logger.info(
+                f"MediaIoBaseDownload: {len(content)} bytes in {chunk_count} chunks, "
+                f"{download_time:.2f}s ({speed_mbps:.2f} MB/s)"
+            )
+
+            return content
+
         except Exception as e:
             error_msg = f"Failed to download file {file_id}: {str(e)}"
             logger.error(error_msg)

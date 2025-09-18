@@ -50,7 +50,8 @@ export const useUIStore = create<UIState>()(
       setShowDataPanel: (show: boolean) => set({ showDataPanel: show }),
       setShowMobilePanel: (show: boolean) => set({ showMobilePanel: show }),
       setReduceMotion: (reduce: boolean) => set({ reduceMotion: reduce }),
-      setPerformanceMode: (enabled: boolean) => set({ performanceMode: enabled }),
+      setPerformanceMode: (enabled: boolean) =>
+        set({ performanceMode: enabled }),
     }),
     {
       name: 'ui-store',

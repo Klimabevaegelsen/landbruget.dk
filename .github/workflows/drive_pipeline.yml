@@ -37,6 +37,10 @@ on:
           - WARNING
           - ERROR
         default: 'INFO'
+      max_workers:
+        description: 'Number of parallel workers for file downloads'
+        type: string
+        default: '4'
 
 jobs:
   discover-folders:
@@ -103,6 +107,7 @@ jobs:
         echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        echo "MAX_WORKERS=${{ inputs.max_workers || '4' }}" >> .env
 
     - name: Discover top-level folders
       id: get-folders
@@ -267,6 +272,7 @@ jobs:
         echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        echo "MAX_WORKERS=${{ inputs.max_workers || '4' }}" >> .env
 
     - name: Run pipeline for folder - ${{ matrix.folder }}
       working-directory: backend/pipelines/drive_data_pipeline
@@ -367,6 +373,7 @@ jobs:
         echo "GOOGLE_DRIVE_FOLDER_ID=$GOOGLE_DRIVE_FOLDER_ID" >> .env
         echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
         echo "LOG_LEVEL=${{ inputs.log_level || 'INFO' }}" >> .env
+        echo "MAX_WORKERS=${{ inputs.max_workers || '4' }}" >> .env
 
     - name: Run Google Drive Pipeline (Single Mode)
       working-directory: backend/pipelines/drive_data_pipeline

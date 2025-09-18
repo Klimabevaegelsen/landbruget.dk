@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import duckdb
 from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to enable imports
@@ -47,6 +48,79 @@ if not os.path.exists(env_path):
     # Try parent directory
     env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 load_dotenv(env_path)
+
+
+def _extract_cvr_numbers_flexible(
+    table_name: str, connection: duckdb.DuckDBPyConnection, logger: logging.Logger
+) -> list[str]:
+    """
+    Extract CVR numbers from a table using flexible column detection.
+
+    Tries multiple possible column names that might contain CVR numbers.
+    """
+    # Common column names that might contain CVR numbers
+    possible_cvr_columns = [
+        "cvr_number",
+        "cvr",
+        "cvr_nr",
+        "company_cvr",
+        "virksomhed_cvr",
+        "cvr_nummer",
+        "cvrnummer",
+        "cvr_no",
+        "company_registration",
+        "virksomhedsregistrering",
+        "company_id",
+        "virksomhed_id",
+    ]
+
+    try:
+        # Get table columns
+        columns_info = connection.execute(f"DESCRIBE {table_name}").fetchall()
+        available_columns = [col[0].lower() for col in columns_info]
+
+        logger.debug(f"Table {table_name} has columns: {available_columns}")
+
+        # Try to find a CVR column
+        cvr_column = None
+        for possible_col in possible_cvr_columns:
+            if possible_col.lower() in available_columns:
+                cvr_column = possible_col
+                break
+
+        if not cvr_column:
+            # Try to find columns that might contain CVR-like data (8-digit numbers)
+            for col_name in available_columns:
+                if any(keyword in col_name for keyword in ["cvr", "company", "virksomhed", "reg"]):
+                    cvr_column = col_name
+                    break
+
+        if not cvr_column:
+            logger.debug(f"No CVR column found in table {table_name}")
+            return []
+
+        # Extract CVR numbers using the found column
+        query = f"""
+        SELECT DISTINCT {cvr_column}
+        FROM {table_name}
+        WHERE {cvr_column} IS NOT NULL
+        AND {cvr_column} != ''
+        AND LENGTH(TRIM(CAST({cvr_column} AS VARCHAR))) = 8
+        AND TRIM(CAST({cvr_column} AS VARCHAR)) ~ '^[1-9][0-9]{{7}}$'
+        ORDER BY {cvr_column}
+        """
+
+        result = connection.execute(query).fetchall()
+        cvr_numbers = [str(row[0]).strip() for row in result]
+
+        if cvr_numbers:
+            logger.info(f"Extracted {len(cvr_numbers)} CVR numbers from column '{cvr_column}'")
+
+        return cvr_numbers
+
+    except Exception as e:
+        logger.debug(f"Error extracting CVR numbers from {table_name}: {e}")
+        return []
 
 
 def _save_discovered_cvr_numbers(
@@ -139,11 +213,11 @@ def _save_discovered_cvr_numbers(
                     try:
                         # Use GCS access connection for table creation and CVR extraction
                         gcs_access.query_parquet_native(file_path, "SELECT *", table_name)
-                        # Extract CVR numbers using the GCS connection
-                        cvr_numbers = extract_cvr_numbers_from_table(
+                        # Extract CVR numbers using flexible column detection
+                        cvr_numbers = _extract_cvr_numbers_flexible(
                             table_name=table_name,
                             connection=gcs_access.duckdb_conn,
-                            cvr_column="cvr_number",  # Standardized column name
+                            logger=logger,
                         )
                     except Exception as e:
                         logger.warning(f"Native loading failed, using fallback: {e}")
@@ -153,22 +227,22 @@ def _save_discovered_cvr_numbers(
                                 f"CREATE TABLE {table_name} AS "
                                 f"SELECT * FROM read_parquet('{temp_file}')"
                             )
-                        # Extract CVR numbers using the main connection for fallback
-                        cvr_numbers = extract_cvr_numbers_from_table(
+                        # Extract CVR numbers using flexible column detection
+                        cvr_numbers = _extract_cvr_numbers_flexible(
                             table_name=table_name,
                             connection=conn,
-                            cvr_column="cvr_number",  # Standardized column name
+                            logger=logger,
                         )
                 else:
                     # Local file - use directly
                     conn.execute(
                         f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
                     )
-                    # Extract CVR numbers from this table
-                    cvr_numbers = extract_cvr_numbers_from_table(
+                    # Extract CVR numbers using flexible column detection
+                    cvr_numbers = _extract_cvr_numbers_flexible(
                         table_name=table_name,
                         connection=conn,
-                        cvr_column="cvr_number",  # Standardized column name
+                        logger=logger,
                     )
 
                 if cvr_numbers:
@@ -497,9 +571,51 @@ def main() -> int:
 
             # If no bronze_run_path (silver_only mode), find the latest bronze run
             if args.silver_only and not bronze_run_path:
-                # Find the latest bronze run directory
+                # Find the latest bronze run directory across all dataset directories
+                # After migration, bronze data is organized as: bronze/{dataset}/{timestamp}/
+                bronze_runs = []
+
+                # Look for dataset directories in bronze path
+                # Handle both local and GCS storage
+                if settings.storage_type.value == "gcs":
+                    # For GCS, use the storage manager to list directories
+                    try:
+                        # List dataset directories (fertiliser, work_permits, etc.)
+                        dataset_dirs = storage_manager.list_directories(settings.bronze_path)
+                        for dataset_dir in dataset_dirs:
+                            # List timestamp directories within each dataset
+                            timestamp_dirs = storage_manager.list_directories(dataset_dir)
+                            bronze_runs.extend(timestamp_dirs)
+                    except Exception as e:
+                        logger.warning(f"Failed to list GCS bronze directories: {e}")
+                        # Fallback: try to list specific known datasets
+                        dataset_names = [
+                            "fertiliser",
+                            "work_permits",
+                            "efterafgroeder",
+                            "goedning_data",
+                        ]
+                        for dataset_name in dataset_names:
+                            try:
+                                dataset_path = Path(settings.bronze_path) / dataset_name
+                                timestamp_dirs = storage_manager.list_directories(dataset_path)
+                                bronze_runs.extend(timestamp_dirs)
+                            except Exception:
+                                continue
+                else:
+                    # For local storage, use filesystem operations
+                    bronze_base_path = Path(settings.bronze_path)
+                    if bronze_base_path.exists():
+                        for dataset_dir in bronze_base_path.iterdir():
+                            if dataset_dir.is_dir():
+                                # Look for timestamp directories within each dataset
+                                for timestamp_dir in dataset_dir.iterdir():
+                                    if timestamp_dir.is_dir():
+                                        bronze_runs.append(timestamp_dir)
+
+                # Sort by modification time and get the latest
                 bronze_runs = sorted(
-                    Path(settings.bronze_path).glob("*"),
+                    bronze_runs,
                     key=lambda p: p.stat().st_mtime if p.is_dir() else 0,
                     reverse=True,
                 )
@@ -510,6 +626,11 @@ def main() -> int:
                     if not args.quiet:
                         print(f"Error: {error_msg}")
                     return 1
+
+                # Log all available bronze runs for debugging
+                logger.info(f"Found {len(bronze_runs)} bronze runs:")
+                for i, run_path in enumerate(bronze_runs[:5]):  # Show top 5
+                    logger.info(f"  {i+1}. {run_path}")
 
                 bronze_run_path = bronze_runs[0]
                 logger.info(f"Using latest Bronze run for Silver processing: {bronze_run_path}")
@@ -536,8 +657,24 @@ def main() -> int:
                                 continue
 
                         # Filter by subfolder if specified
-                        if subfolders and file_info.get("folder_name") not in subfolders:
-                            continue
+                        if subfolders:
+                            folder_name = file_info.get("folder_name", "")
+                            file_path = file_info.get("file_path", "")
+
+                            # Check if any of the specified subfolders match
+                            # Either exact match or if the file path contains the subfolder
+                            matches_subfolder = False
+                            for subfolder in subfolders:
+                                if (
+                                    folder_name == subfolder
+                                    or subfolder.lower() in file_path.lower()
+                                    or folder_name.lower().startswith(subfolder.lower())
+                                ):
+                                    matches_subfolder = True
+                                    break
+
+                            if not matches_subfolder:
+                                continue
 
                         filtered_count += 1
                     files_to_process_count = filtered_count

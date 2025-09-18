@@ -29,6 +29,27 @@ repos:
       - id: ruff-format
         types_or: [python, pyi]
 
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            .*\.lock$|
+            package-lock\.json$|
+            .*\.min\.js$|
+            .*\.min\.css$|
+            .*/test_.*\.py$|
+            .*/tests/.*\.py$|
+            .*\.md$|
+            .*\.example$|
+            .*config\.toml$|
+            .*\.parquet$|
+            .*\.json$
+          )$
+
   - repo: local
     hooks:
       # Prettier for frontend projects
@@ -48,21 +69,30 @@ repos:
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
 
-      # ESLint for frontend (restored original)
-      - id: eslint
-        name: ESLint
+      # Oxlint for frontend (much faster than ESLint)
+      - id: oxlint
+        name: Oxlint (Frontend)
         entry: bash
         args: [-c, "cd frontend && npm run lint"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
-      - id: eslint-frontend-pesticide
-        name: ESLint (Frontend Pesticide)
+      - id: oxlint-frontend-pesticide
+        name: Oxlint (Frontend Pesticide)
         entry: bash
         args: [-c, "cd frontend-pesticide && npm run lint"]
         language: system
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx)$'
+        pass_filenames: false
+
+      # Playwright tests for frontend changes
+      - id: playwright-smoke-test
+        name: Playwright Smoke Test
+        entry: bash
+        args: [-c, "cd frontend && npm run test:smoke || echo 'Warning: Playwright smoke tests failed. Run npm run test:debug to investigate.'"]
+        language: system
+        files: '^frontend/src/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
       # Custom hook to prevent committing to data directories

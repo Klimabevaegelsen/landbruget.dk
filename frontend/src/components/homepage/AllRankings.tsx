@@ -183,8 +183,8 @@ export default function AllRankings() {
       </div>
 
       {/* Footer */}
-      <div className="border-t border-gray-200 pt-8 text-center">
-        <p className="text-xs text-gray-500">
+      <div className="border-border border-t pt-8 text-center">
+        <p className="text-muted-foreground text-xs">
           Data opdateret: {new Date().toLocaleDateString('da-DK')} • 23
           ranglister baseret på officielle data fra 2023-2024
         </p>

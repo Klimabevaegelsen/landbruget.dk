@@ -297,6 +297,15 @@ class CVRAPIClient:
         Returns:
             Parsed and structured company data
         """
+        # Handle None or invalid input
+        if raw_data is None:
+            self.log.warning("Received None as raw_data in _parse_company_data")
+            return {}
+
+        if not isinstance(raw_data, dict):
+            self.log.warning(f"Expected dict but got {type(raw_data)} in _parse_company_data")
+            return {}
+
         if not raw_data or "hits" not in raw_data or not raw_data["hits"]["hits"]:
             return {}
 
@@ -1163,6 +1172,14 @@ class CVRAPIClient:
 
             for hit in hits:
                 try:
+                    # Skip null hits or hits without proper structure
+                    if hit is None or not isinstance(hit, dict) or "_source" not in hit:
+                        continue
+
+                    # Additional safety check for _source content
+                    if hit["_source"] is None or not isinstance(hit["_source"], dict):
+                        continue
+
                     # Parse each company's data using the same format as individual calls
                     fake_response = {"hits": {"hits": [hit]}}
                     parsed_data = self._parse_company_data(fake_response)

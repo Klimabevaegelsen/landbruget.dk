@@ -133,6 +133,9 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
             # Step 1: Load company data from company fetching step
             company_batch = self._load_company_batch()
 
+            # Step 1.5: Validate CVR consistency (CRITICAL for UUID consistency)
+            self._validate_cvr_consistency(company_batch)
+
             # Step 2: Fetch financial documents for companies
             financial_data = await self._fetch_financial_documents(company_batch)
 
@@ -278,6 +281,71 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         self.log.info(f"Loaded {len(company_batch)} companies from all batches")
 
         return company_batch
+
+    @timed(name="Validating CVR consistency")
+    def _validate_cvr_consistency(self, company_batch: List[Dict[str, Any]]) -> None:
+        """
+        Validate that this step is processing companies from the same pipeline run.
+
+        This is CRITICAL to prevent UUID consistency issues where financial data
+        references companies that don't exist in the current companies table.
+
+        Args:
+            company_batch: List of company data loaded from previous step
+
+        Raises:
+            ValueError: If CVR consistency validation fails
+        """
+        if not company_batch:
+            self.log.warning("No companies to validate - empty batch")
+            return
+
+        # Extract pipeline run metadata from companies
+        pipeline_run_ids = set()
+        processing_timestamps = set()
+
+        for company in company_batch:
+            if "pipeline_run_id" in company:
+                pipeline_run_ids.add(company["pipeline_run_id"])
+            if "processing_timestamp" in company:
+                # Extract date part from timestamp for grouping
+                timestamp = company["processing_timestamp"][:10]  # YYYY-MM-DD
+                processing_timestamps.add(timestamp)
+
+        # Validation checks
+        if len(pipeline_run_ids) > 1:
+            self.log.error("=" * 80)
+            self.log.error("🚨 CVR CONSISTENCY VIOLATION DETECTED")
+            self.log.error("=" * 80)
+            self.log.error(
+                "Financial documents step is processing companies from MULTIPLE pipeline runs:"
+            )
+            for run_id in sorted(pipeline_run_ids):
+                self.log.error(f"   • Pipeline run: {run_id}")
+            self.log.error("")
+            self.log.error("This will cause UUID consistency issues where financial data")
+            self.log.error("references companies that don't exist in the current companies table.")
+            self.log.error("")
+            self.log.error("SOLUTION: Ensure enable_independent_execution=False in shared config")
+            self.log.error("=" * 80)
+            raise ValueError(
+                f"CVR consistency violation: Financial documents processing companies from "
+                f"{len(pipeline_run_ids)} different pipeline runs: {sorted(pipeline_run_ids)}"
+            )
+
+        if len(processing_timestamps) > 2:  # Allow some flexibility for same-day runs
+            self.log.warning("Companies processed across multiple days:")
+            for timestamp in sorted(processing_timestamps):
+                self.log.warning(f"   • Processing date: {timestamp}")
+            self.log.warning("This may indicate independent execution mode is enabled")
+
+        # Log success
+        run_id = list(pipeline_run_ids)[0] if pipeline_run_ids else "unknown"
+        self.log.info("✅ CVR consistency validation passed:")
+        self.log.info(f"   • Companies from pipeline run: {run_id}")
+        self.log.info(f"   • Total companies: {len(company_batch)}")
+        self.log.info(f"   • Processing dates: {len(processing_timestamps)}")
+        self.log.info("   • All companies are from the same pipeline execution")
 
     @timed(name="Fetching financial documents")
     async def _fetch_financial_documents(
@@ -1398,23 +1466,28 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         except Exception as e:
             self.log.warning(f"Crypto extension already loaded: {e}")
 
-        # Create company UUID function
-        self.conn.execute("""
+        # Get the namespace from environment variable
+        namespace = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
+        if not namespace:
+            raise ValueError("LANDBRUGSDATA_UUID_NAMESPACE environment variable is required")
+
+        # Create company UUID function using namespace from environment
+        self.conn.execute(f"""
             CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
                 SELECT CASE
                     WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
                          OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{7}$')
                     THEN NULL
                     ELSE CONCAT(
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                       TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                                TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
-                        SUBSTR(crypto_hash('sha1', CONCAT('landbrugsdata-company-cvr',
+                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
                                TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
                     )
                 END

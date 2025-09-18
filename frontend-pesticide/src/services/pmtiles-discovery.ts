@@ -22,7 +22,10 @@ class PMTilesDiscoveryService {
   private readonly baseUrl = 'https://data.pesticidkortet.dk';
 
   constructor() {
-    console.log('🔧 PMTilesDiscoveryService initialized with baseUrl:', this.baseUrl);
+    console.log(
+      '🔧 PMTilesDiscoveryService initialized with baseUrl:',
+      this.baseUrl
+    );
   }
 
   // Discover available data by checking GCS bucket structure
@@ -39,19 +42,22 @@ class PMTilesDiscoveryService {
         years: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023],
         resolutions: [8, 10], // Only res8 and res10 for H3
         latestYear: 2023,
-        latestResolution: 10
+        latestResolution: 10,
       };
 
       this.cache.set(cacheKey, availability);
       return availability;
     } catch (error) {
-      console.warn('Failed to discover data availability, using fallback:', error);
+      console.warn(
+        'Failed to discover data availability, using fallback:',
+        error
+      );
       // Fallback to known structure
       const fallback: DataAvailability = {
         years: [2023],
         resolutions: [8, 10], // Only res8 and res10 for H3
         latestYear: 2023,
-        latestResolution: 10
+        latestResolution: 10,
       };
       return fallback;
     }
@@ -65,7 +71,10 @@ class PMTilesDiscoveryService {
     return `${this.baseUrl}/pmtiles/bnbo_areas.pmtiles`;
   }
 
-  async discoverLatestH3Tiles(year: YearSelection, resolution: number): Promise<string> {
+  async discoverLatestH3Tiles(
+    year: YearSelection,
+    resolution: number
+  ): Promise<string> {
     const cacheKey = `h3_${year}_${resolution}`;
 
     if (this.cache.has(cacheKey)) {
@@ -157,7 +166,7 @@ class PMTilesDiscoveryService {
   async getYearUrls(year: YearSelection): Promise<PMTilesUrls> {
     const [basemap, bnbo] = await Promise.all([
       this.discoverBasemapTiles(),
-      this.discoverLatestBNBOTiles()
+      this.discoverLatestBNBOTiles(),
     ]);
 
     // Get H3 URLs for all resolutions
@@ -169,14 +178,18 @@ class PMTilesDiscoveryService {
       try {
         h3Urls[key] = await this.discoverLatestH3Tiles(year, resolution);
       } catch (error) {
-        console.warn(`Failed to get H3 URL for ${year} res${resolution}:`, error);
+        console.warn(
+          `Failed to get H3 URL for ${year} res${resolution}:`,
+          error
+        );
       }
     }
 
     // Get kommune URL
     const kommuneUrls: Record<string, string> = {};
     try {
-      kommuneUrls[year.toString()] = await this.discoverLatestKommuneTiles(year);
+      kommuneUrls[year.toString()] =
+        await this.discoverLatestKommuneTiles(year);
     } catch (error) {
       console.warn(`Failed to get kommune URL for ${year}:`, error);
     }
@@ -185,7 +198,7 @@ class PMTilesDiscoveryService {
       basemap,
       h3: h3Urls,
       kommune: kommuneUrls,
-      bnbo
+      bnbo,
     };
   }
 
@@ -206,7 +219,10 @@ class PMTilesDiscoveryService {
   }
 
   // Get URLs directly without validation
-  async discoverAndValidateUrls(year: YearSelection, resolution: number): Promise<{
+  async discoverAndValidateUrls(
+    year: YearSelection,
+    resolution: number
+  ): Promise<{
     h3: string | null;
     kommune: string | null;
     basemap: string | null;
@@ -217,14 +233,14 @@ class PMTilesDiscoveryService {
         this.discoverBasemapTiles(),
         this.discoverLatestBNBOTiles(),
         this.discoverLatestH3Tiles(year, resolution),
-        this.discoverLatestKommuneTiles(year)
+        this.discoverLatestKommuneTiles(year),
       ]);
 
       return {
         basemap: basemapUrl,
         bnbo: bnboUrl,
         h3: h3Url,
-        kommune: kommuneUrl
+        kommune: kommuneUrl,
       };
     } catch (error) {
       console.error('URL discovery failed:', error);
@@ -232,7 +248,7 @@ class PMTilesDiscoveryService {
         h3: null,
         kommune: null,
         basemap: null,
-        bnbo: null
+        bnbo: null,
       };
     }
   }

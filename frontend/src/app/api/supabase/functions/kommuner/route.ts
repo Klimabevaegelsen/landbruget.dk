@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// Revalidate this route every 7 days (server-side caching)
+// Data updates weekly on Tuesdays - use POST /api/revalidate-cache after data updates
+export const revalidate = 604800; // 7 days in seconds
+
+// Static cache headers for 7-day caching strategy
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, max-age=604800, stale-while-revalidate=604800',
+  'CDN-Cache-Control': 'public, max-age=604800',
+  'Vercel-CDN-Cache-Control': 'public, max-age=604800',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -60,14 +74,9 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    // Return the data with proper CORS headers
+    // Return the data with proper CORS and cache headers
     return NextResponse.json(data, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Cache-Control': 'public, max-age=300', // Cache for 5 minutes
-      },
+      headers: CACHE_HEADERS,
     });
   } catch (error) {
     console.error('Municipality rankings API error:', error);

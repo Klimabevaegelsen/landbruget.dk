@@ -7,6 +7,18 @@ import {
   generateSkraafotoUrl,
   copyCoordinatesToClipboard,
 } from './coordinateUtils';
+import {
+  MapPin,
+  Copy,
+  Check,
+  Plane,
+  Map,
+  TestTube,
+  Leaf,
+  AlertTriangle,
+  Home,
+  School,
+} from 'lucide-react';
 
 interface FieldDetailsPanelProps {
   fieldData: FieldAnalysisData;
@@ -102,18 +114,18 @@ export function FieldDetailsPanel({
     if (belastning < 10)
       return {
         level: 'Lav',
-        color: 'text-yellow-600',
+        color: 'text-conventional',
         description: 'Lav pesticidbelastning',
       };
     if (belastning < 50)
       return {
         level: 'Moderat',
-        color: 'text-orange-600',
+        color: 'text-conventional',
         description: 'Moderat pesticidbelastning',
       };
     return {
       level: 'Høj',
-      color: 'text-red-600',
+      color: 'text-destructive',
       description: 'Høj pesticidbelastning',
     };
   };
@@ -126,16 +138,16 @@ export function FieldDetailsPanel({
       onTouchStart={handleTouchStart}
     >
       {/* Mobile swipe indicator */}
-      <div className="mx-auto mb-4 h-1 w-12 rounded-full bg-gray-300 lg:hidden"></div>
+      <div className="bg-border mx-auto mb-4 h-1 w-12 rounded-full lg:hidden"></div>
 
       {/* Header */}
       <div className="mb-4 flex items-center justify-between lg:mb-6">
-        <h2 className="text-lg font-bold text-gray-900 lg:text-xl">
+        <h2 className="text-foreground text-lg font-bold lg:text-xl">
           Markdetaljer
         </h2>
         <button
           onClick={onClose}
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors hover:bg-gray-100 active:bg-gray-200"
+          className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
           aria-label="Luk panel"
         >
           <svg
@@ -156,34 +168,34 @@ export function FieldDetailsPanel({
 
       {/* Basic Information */}
       <div className="mb-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">
+        <h3 className="text-foreground mb-2 text-base font-semibold">
           Grundoplysninger
         </h3>
         <div className="space-y-1 text-sm">
           <div className="flex justify-between">
-            <span className="text-gray-600">Kommune:</span>
+            <span className="text-muted-foreground">Kommune:</span>
             <span className="font-medium">{fieldData.kommune}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">CVR:</span>
+            <span className="text-muted-foreground">CVR:</span>
             <span className="font-mono text-xs">{fieldData.cvr_number}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Areal:</span>
+            <span className="text-muted-foreground">Areal:</span>
             <span className="font-medium">
               {formatNumber(fieldData.area_hectares)} ha
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Afgrøde:</span>
+            <span className="text-muted-foreground">Afgrøde:</span>
             <span className="font-medium">
               {fieldData.crop_name || 'Ukendt'}
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Økologisk:</span>
+            <span className="text-muted-foreground">Økologisk:</span>
             <span
-              className={`font-medium ${fieldData.is_organic ? 'text-green-600' : 'text-gray-500'}`}
+              className={`font-medium ${fieldData.is_organic ? 'text-accent-foreground' : 'text-muted-foreground'}`}
             >
               {fieldData.is_organic ? 'Ja' : 'Nej'}
             </span>
@@ -194,23 +206,34 @@ export function FieldDetailsPanel({
       {/* GPS Coordinates and Skråfoto */}
       {fieldData.click_coordinates && (
         <div className="mb-4">
-          <h3 className="mb-2 text-base font-semibold text-gray-900">
+          <h3 className="text-foreground mb-2 text-base font-semibold">
             Koordinater
           </h3>
-          <div className="rounded-lg bg-blue-50 p-3">
+          <div className="bg-primary/10 rounded-lg p-3">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium text-blue-800">
-                📍 GPS Position
+              <span className="text-primary flex items-center text-sm font-medium">
+                <MapPin className="mr-1 h-4 w-4" />
+                GPS Position
               </span>
               <button
                 onClick={handleCopyCoordinates}
-                className="flex min-h-[32px] items-center rounded bg-blue-100 px-2 py-1 text-xs text-blue-700 transition-colors hover:bg-blue-200 active:bg-blue-300"
+                className="bg-primary/20 text-primary hover:bg-primary/30 active:bg-primary/40 flex min-h-[32px] items-center rounded px-2 py-1 text-xs transition-colors"
                 title="Kopier koordinater"
               >
-                {copiedCoordinates ? '✓ Kopieret!' : '📋 Kopier'}
+                {copiedCoordinates ? (
+                  <>
+                    <Check className="mr-1 h-3 w-3" />
+                    Kopieret!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="mr-1 h-3 w-3" />
+                    Kopier
+                  </>
+                )}
               </button>
             </div>
-            <div className="mb-2 font-mono text-xs text-blue-700">
+            <div className="text-primary/80 mb-2 font-mono text-xs">
               {formatWgs84Coordinates(
                 fieldData.click_coordinates.lat,
                 fieldData.click_coordinates.lng
@@ -224,9 +247,10 @@ export function FieldDetailsPanel({
                 )}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex min-h-[36px] flex-1 items-center justify-center rounded bg-blue-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-blue-700 active:bg-blue-800"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex min-h-[36px] flex-1 items-center justify-center rounded px-3 py-2 text-center text-xs font-medium transition-colors"
               >
-                🛩️ Åbn i Skråfoto
+                <Plane className="mr-1 h-3 w-3" />
+                Åbn i Skråfoto
               </a>
               <button
                 onClick={() => {
@@ -234,9 +258,10 @@ export function FieldDetailsPanel({
                   const googleMapsUrl = `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
                   window.open(googleMapsUrl, '_blank');
                 }}
-                className="flex min-h-[36px] flex-1 items-center justify-center rounded bg-green-600 px-3 py-2 text-center text-xs font-medium text-white transition-colors hover:bg-green-700 active:bg-green-800"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex min-h-[36px] flex-1 items-center justify-center rounded px-3 py-2 text-center text-xs font-medium transition-colors"
               >
-                🗺️ Google Maps
+                <Map className="mr-1 h-3 w-3" />
+                Google Maps
               </button>
             </div>
           </div>
@@ -245,10 +270,10 @@ export function FieldDetailsPanel({
 
       {/* Pesticide Information */}
       <div className="mb-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">
+        <h3 className="text-foreground mb-2 text-base font-semibold">
           Pesticidforbrug
         </h3>
-        <div className="mb-2 rounded-lg bg-gray-50 p-3">
+        <div className="bg-muted mb-2 rounded-lg p-3">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-sm font-medium">Samlet belastning</span>
             <span className={`font-bold ${riskLevel.color}`}>
@@ -256,7 +281,7 @@ export function FieldDetailsPanel({
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-600">Risikoniveau</span>
+            <span className="text-muted-foreground text-xs">Risikoniveau</span>
             <span className={`text-xs font-medium ${riskLevel.color}`}>
               {riskLevel.level}
             </span>
@@ -266,22 +291,22 @@ export function FieldDetailsPanel({
         {/* Pesticide Products Summary */}
         {fieldData.unique_pesticide_products &&
           fieldData.unique_pesticide_products > 0 && (
-            <div className="mb-2 rounded-lg bg-blue-50 p-3">
+            <div className="bg-primary/10 mb-2 rounded-lg p-3">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-800">
+                <span className="text-primary text-sm font-medium">
                   Produkter anvendt
                 </span>
-                <span className="font-bold text-blue-800">
+                <span className="text-primary font-bold">
                   {fieldData.unique_pesticide_products}
                 </span>
               </div>
               {fieldData.total_pesticide_applications &&
                 fieldData.total_pesticide_applications > 0 && (
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-blue-600">
+                    <span className="text-primary/80 text-xs">
                       Total applikationer
                     </span>
-                    <span className="text-xs font-medium text-blue-800">
+                    <span className="text-primary text-xs font-medium">
                       {fieldData.total_pesticide_applications}
                     </span>
                   </div>
@@ -301,7 +326,9 @@ export function FieldDetailsPanel({
             {/* Show available dosage units */}
             {fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Total dosering (kg):</span>
+                <span className="text-muted-foreground">
+                  Total dosering (kg):
+                </span>
                 <span className="font-medium">
                   {formatNumber(fieldData.total_dosage_kg, 2)} kg
                 </span>
@@ -310,7 +337,9 @@ export function FieldDetailsPanel({
             {fieldData.total_dosage_liters &&
               fieldData.total_dosage_liters > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Total dosering (L):</span>
+                  <span className="text-muted-foreground">
+                    Total dosering (L):
+                  </span>
                   <span className="font-medium">
                     {formatNumber(fieldData.total_dosage_liters, 1)} L
                   </span>
@@ -319,7 +348,9 @@ export function FieldDetailsPanel({
             {fieldData.total_dosage_grams &&
               fieldData.total_dosage_grams > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Total dosering (g):</span>
+                  <span className="text-muted-foreground">
+                    Total dosering (g):
+                  </span>
                   <span className="font-medium">
                     {formatNumber(fieldData.total_dosage_grams, 0)} g
                   </span>
@@ -327,7 +358,9 @@ export function FieldDetailsPanel({
               )}
             {fieldData.total_dosage_ml && fieldData.total_dosage_ml > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">Total dosering (ml):</span>
+                <span className="text-muted-foreground">
+                  Total dosering (ml):
+                </span>
                 <span className="font-medium">
                   {formatNumber(fieldData.total_dosage_ml, 0)} ml
                 </span>
@@ -336,7 +369,7 @@ export function FieldDetailsPanel({
             {fieldData.total_dosage_tablets &&
               fieldData.total_dosage_tablets > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Total dosering:</span>
+                  <span className="text-muted-foreground">Total dosering:</span>
                   <span className="font-medium">
                     {fieldData.total_dosage_tablets} tabletter
                   </span>
@@ -352,7 +385,7 @@ export function FieldDetailsPanel({
           fieldData.pesticides_ml_detail ||
           fieldData.pesticides_tons_detail) && (
           <div className="mt-3">
-            <h4 className="mb-2 text-sm font-medium text-gray-900">
+            <h4 className="text-foreground mb-2 text-sm font-medium">
               Anvendte produkter
             </h4>
             <div className="max-h-32 space-y-2 overflow-y-auto">
@@ -361,12 +394,12 @@ export function FieldDetailsPanel({
                 (product, index) => (
                   <div
                     key={`kg-${index}`}
-                    className="flex items-center justify-between rounded bg-gray-50 p-2 text-xs"
+                    className="bg-muted flex items-center justify-between rounded p-2 text-xs"
                   >
-                    <span className="truncate font-medium text-gray-800">
+                    <span className="text-foreground truncate font-medium">
                       {product.name}
                     </span>
-                    <span className="ml-2 flex-shrink-0 text-gray-600">
+                    <span className="text-muted-foreground ml-2 flex-shrink-0">
                       {formatNumber(product.dosage, 2)} kg
                     </span>
                   </div>
@@ -378,12 +411,12 @@ export function FieldDetailsPanel({
                 (product, index) => (
                   <div
                     key={`l-${index}`}
-                    className="flex items-center justify-between rounded bg-blue-50 p-2 text-xs"
+                    className="bg-primary/10 flex items-center justify-between rounded p-2 text-xs"
                   >
-                    <span className="truncate font-medium text-blue-800">
+                    <span className="text-primary truncate font-medium">
                       {product.name}
                     </span>
-                    <span className="ml-2 flex-shrink-0 text-blue-600">
+                    <span className="text-primary/80 ml-2 flex-shrink-0">
                       {formatNumber(product.dosage, 1)} L
                     </span>
                   </div>
@@ -395,7 +428,7 @@ export function FieldDetailsPanel({
                 (product, index) => (
                   <div
                     key={`g-${index}`}
-                    className="flex items-center justify-between rounded bg-green-50 p-2 text-xs"
+                    className="bg-muted/50 flex items-center justify-between rounded p-2 text-xs"
                   >
                     <span className="truncate font-medium text-green-800">
                       {product.name}
@@ -412,12 +445,12 @@ export function FieldDetailsPanel({
                 (product, index) => (
                   <div
                     key={`ml-${index}`}
-                    className="flex items-center justify-between rounded bg-purple-50 p-2 text-xs"
+                    className="bg-bnbo/10 flex items-center justify-between rounded p-2 text-xs"
                   >
-                    <span className="truncate font-medium text-purple-800">
+                    <span className="text-bnbo truncate font-medium">
                       {product.name}
                     </span>
-                    <span className="ml-2 flex-shrink-0 text-purple-600">
+                    <span className="text-bnbo/80 ml-2 flex-shrink-0">
                       {formatNumber(product.dosage, 0)} ml
                     </span>
                   </div>
@@ -429,12 +462,12 @@ export function FieldDetailsPanel({
                 (product, index) => (
                   <div
                     key={`t-${index}`}
-                    className="flex items-center justify-between rounded bg-orange-50 p-2 text-xs"
+                    className="bg-conventional/10 flex items-center justify-between rounded p-2 text-xs"
                   >
-                    <span className="truncate font-medium text-orange-800">
+                    <span className="text-conventional truncate font-medium">
                       {product.name}
                     </span>
-                    <span className="ml-2 flex-shrink-0 text-orange-600">
+                    <span className="text-conventional/80 ml-2 flex-shrink-0">
                       {formatNumber(product.dosage, 3)} t
                     </span>
                   </div>
@@ -450,14 +483,15 @@ export function FieldDetailsPanel({
           {fieldData.pfas_applications && fieldData.pfas_applications > 0 && (
             <div className="rounded-lg bg-red-50 p-2">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-sm font-medium text-red-800">
-                  🧪 PFAS
+                <span className="text-destructive flex items-center text-sm font-medium">
+                  <TestTube className="mr-1 h-4 w-4" />
+                  PFAS
                 </span>
-                <span className="text-sm font-bold text-red-800">
+                <span className="text-destructive text-sm font-bold">
                   {fieldData.pfas_applications} apps
                 </span>
               </div>
-              <div className="space-y-1 text-xs text-red-700">
+              <div className="text-destructive/80 space-y-1 text-xs">
                 {fieldData.total_pfas_active_ingredient_kg &&
                   fieldData.total_pfas_active_ingredient_kg > 0 && (
                     <div className="flex justify-between">
@@ -487,18 +521,18 @@ export function FieldDetailsPanel({
           {/* Diquat Information */}
           {fieldData.diquat_applications &&
             fieldData.diquat_applications > 0 && (
-              <div className="rounded-lg bg-blue-50 p-2">
+              <div className="bg-primary/10 rounded-lg p-2">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-sm font-medium text-blue-800">
+                  <span className="text-primary text-sm font-medium">
                     💧 Diquat
                   </span>
-                  <span className="text-sm font-bold text-blue-800">
+                  <span className="text-primary text-sm font-bold">
                     {fieldData.diquat_applications} apps
                   </span>
                 </div>
                 {fieldData.total_diquat_belastning &&
                   fieldData.total_diquat_belastning > 0 && (
-                    <div className="flex justify-between text-xs text-blue-700">
+                    <div className="text-primary/80 flex justify-between text-xs">
                       <span>Belastning:</span>
                       <span className="font-medium">
                         {formatNumber(fieldData.total_diquat_belastning)}
@@ -511,10 +545,11 @@ export function FieldDetailsPanel({
           {/* Glyphosate Information */}
           {fieldData.glyphosate_applications &&
             fieldData.glyphosate_applications > 0 && (
-              <div className="rounded-lg bg-green-50 p-2">
+              <div className="bg-muted/50 rounded-lg p-2">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-sm font-medium text-green-800">
-                    🌿 Glyphosate
+                  <span className="flex items-center text-sm font-medium text-green-800">
+                    <Leaf className="mr-1 h-4 w-4" />
+                    Glyphosate
                   </span>
                   <span className="text-sm font-bold text-green-800">
                     {fieldData.glyphosate_applications} apps
@@ -549,9 +584,9 @@ export function FieldDetailsPanel({
 
           {/* Partial coverage warning */}
           {fieldData.is_partial_coverage && (
-            <div className="flex items-center space-x-2 rounded-lg bg-orange-50 p-2">
-              <span className="text-orange-600">⚠️</span>
-              <span className="text-xs text-orange-700">
+            <div className="bg-conventional/10 flex items-center space-x-2 rounded-lg p-2">
+              <AlertTriangle className="text-conventional h-4 w-4" />
+              <span className="text-conventional/80 text-xs">
                 Delvis markdækning
               </span>
             </div>
@@ -561,17 +596,17 @@ export function FieldDetailsPanel({
 
       {/* Environmental Areas */}
       <div className="mb-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">
+        <h3 className="text-foreground mb-2 text-base font-semibold">
           Miljøområder
         </h3>
         <div className="space-y-2">
           {fieldData.bnbo_area_hectares > 0 && (
-            <div className="rounded-lg bg-blue-50 p-2">
+            <div className="bg-primary/10 rounded-lg p-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-800">
+                <span className="text-primary text-sm font-medium">
                   💧 BNBO
                 </span>
-                <span className="text-sm font-bold text-blue-800">
+                <span className="text-primary text-sm font-bold">
                   {formatNumber(fieldData.bnbo_area_hectares)} ha
                 </span>
               </div>
@@ -579,12 +614,12 @@ export function FieldDetailsPanel({
           )}
 
           {fieldData.wetland_area_hectares > 0 && (
-            <div className="rounded-lg bg-gray-100 p-2">
+            <div className="bg-muted rounded-lg p-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-800">
+                <span className="text-foreground text-sm font-medium">
                   💨 Lavbund
                 </span>
-                <span className="text-sm font-bold text-gray-800">
+                <span className="text-foreground text-sm font-bold">
                   {formatNumber(fieldData.wetland_area_hectares)} ha
                 </span>
               </div>
@@ -593,7 +628,7 @@ export function FieldDetailsPanel({
 
           {fieldData.bnbo_area_hectares === 0 &&
             fieldData.wetland_area_hectares === 0 && (
-              <div className="p-2 text-xs text-gray-500 italic">
+              <div className="text-muted-foreground p-2 text-xs italic">
                 Ingen registrerede miljøområder
               </div>
             )}
@@ -602,13 +637,16 @@ export function FieldDetailsPanel({
 
       {/* Proximity Information */}
       <div className="mb-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">
+        <h3 className="text-foreground mb-2 text-base font-semibold">
           Nærhedsanalyse
         </h3>
         <div className="space-y-1 text-sm">
           {fieldData.residential_buildings_proximity && (
             <div className="flex justify-between">
-              <span className="text-gray-600">🏠 Boliger:</span>
+              <span className="text-muted-foreground flex items-center">
+                <Home className="mr-1 h-4 w-4" />
+                Boliger:
+              </span>
               <span className="text-xs font-medium">
                 {fieldData.residential_buildings_proximity}
               </span>
@@ -617,7 +655,10 @@ export function FieldDetailsPanel({
 
           {fieldData.educational_facilities_proximity && (
             <div className="flex justify-between">
-              <span className="text-gray-600">🏫 Skoler:</span>
+              <span className="text-muted-foreground flex items-center">
+                <School className="mr-1 h-4 w-4" />
+                Skoler:
+              </span>
               <span className="text-xs font-medium">
                 {fieldData.educational_facilities_proximity}
               </span>
@@ -626,7 +667,7 @@ export function FieldDetailsPanel({
 
           {fieldData.water_distance_proximity && (
             <div className="flex justify-between">
-              <span className="text-gray-600">🌊 Vand:</span>
+              <span className="text-muted-foreground">🌊 Vand:</span>
               <span className="text-xs font-medium">
                 {fieldData.water_distance_proximity}
               </span>
@@ -636,7 +677,7 @@ export function FieldDetailsPanel({
           {!fieldData.residential_buildings_proximity &&
             !fieldData.educational_facilities_proximity &&
             !fieldData.water_distance_proximity && (
-              <div className="text-xs text-gray-500 italic">
+              <div className="text-muted-foreground text-xs italic">
                 Ingen nærhedsdata tilgængelig
               </div>
             )}

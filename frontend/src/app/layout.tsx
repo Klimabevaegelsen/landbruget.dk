@@ -1,8 +1,9 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import PasswordProtection from '@/components/PasswordProtection';
 import { ToastProvider_ } from '@/components/ui/toast';
+import { ThemeProvider } from '@/components/theme/theme-provider';
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: '--font-plus-jakarta-sans',
@@ -12,8 +13,13 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: 'Landbruget.dk',
   description: 'Dansk landbrugsdata - samlet ét sted',
-  viewport:
-    'width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({
@@ -22,12 +28,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="da" className="bg-primary-foreground">
+    <html lang="da" suppressHydrationWarning>
       <body className={`${plusJakartaSans.variable} antialiased`}>
-        <ToastProvider_>
-          {process.env.NODE_ENV === 'production' && <PasswordProtection />}
-          {children}
-        </ToastProvider_>
+        <ThemeProvider defaultTheme="system" storageKey="landbruget-theme">
+          <ToastProvider_>
+            {process.env.NODE_ENV === 'production' && <PasswordProtection />}
+            {children}
+          </ToastProvider_>
+        </ThemeProvider>
       </body>
     </html>
   );

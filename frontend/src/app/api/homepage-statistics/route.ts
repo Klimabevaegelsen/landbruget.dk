@@ -1,28 +1,31 @@
 import { NextResponse } from 'next/server';
+import { getCachedHomepageStatistics } from '@/lib/server-cache';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Revalidate this route every 7 days (server-side caching)
+// Data updates weekly on Tuesdays - use POST /api/revalidate-cache after data updates
+export const revalidate = 604800; // 7 days in seconds
+
+// Static cache headers for 7-day caching strategy
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, max-age=604800, stale-while-revalidate=604800',
+  'CDN-Cache-Control': 'public, max-age=604800',
+  'Vercel-CDN-Cache-Control': 'public, max-age=604800',
+};
 
 export async function GET() {
   try {
-    // Call the Supabase Edge Function
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/homepage-statistics`,
+    // Use server-side cached data (revalidates automatically every 7 days)
+    const data = await getCachedHomepageStatistics();
+
+    return NextResponse.json(data, {
+      headers: CACHE_HEADERS,
+    });
+  } catch (error) {
+    console.error('API route error:', error);
+
+    // Return fallback data based on our database analysis
+    return NextResponse.json(
       {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Supabase function error:', errorText);
-
-      // Return fallback data based on our database analysis
-      return NextResponse.json({
         total_data_points: 29104178,
         total_companies: 46126,
         last_updated: new Date().toISOString(),
@@ -31,24 +34,10 @@ export async function GET() {
           companies: '46.126',
         },
         fallback: true,
-      });
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('API route error:', error);
-
-    // Return fallback data based on our database analysis
-    return NextResponse.json({
-      total_data_points: 29104178,
-      total_companies: 46126,
-      last_updated: new Date().toISOString(),
-      formatted: {
-        data_points: '29.104.178',
-        companies: '46.126',
       },
-      fallback: true,
-    });
+      {
+        headers: CACHE_HEADERS,
+      }
+    );
   }
 }

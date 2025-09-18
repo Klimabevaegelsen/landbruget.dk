@@ -184,8 +184,13 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         self.conn.execute("INSTALL crypto FROM community")
         self.conn.execute("LOAD crypto")
 
-        # Create company UUID function using UUID5 with consistent namespace
-        self.conn.execute("""
+        # Get the namespace from environment variable
+        namespace = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
+        if not namespace:
+            raise ValueError("LANDBRUGSDATA_UUID_NAMESPACE environment variable is required")
+
+        # Create company UUID function using UUID5 with consistent namespace from environment
+        self.conn.execute(f"""
             CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
                 SELECT CASE
                     WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
@@ -193,32 +198,32 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     THEN NULL
                     ELSE CONCAT(
                         SUBSTR(
-                            crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr',
+                            crypto_hash('md5',
+                                CONCAT('{namespace}', 'company-cvr-',
                                     TRIM(CAST(cvr_number AS VARCHAR)))),
                             1, 8
                         ), '-',
                         SUBSTR(
-                            crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr',
+                            crypto_hash('md5',
+                                CONCAT('{namespace}', 'company-cvr-',
                                     TRIM(CAST(cvr_number AS VARCHAR)))),
                             9, 4
                         ), '-',
                         '5', SUBSTR(
-                            crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr',
+                            crypto_hash('md5',
+                                CONCAT('{namespace}', 'company-cvr-',
                                     TRIM(CAST(cvr_number AS VARCHAR)))),
                             13, 3
                         ), '-',
                         CONCAT('8', SUBSTR(
-                            crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr',
+                            crypto_hash('md5',
+                                CONCAT('{namespace}', 'company-cvr-',
                                     TRIM(CAST(cvr_number AS VARCHAR)))),
                             17, 3
                         )), '-',
                         SUBSTR(
-                            crypto_hash('sha1',
-                                CONCAT('landbrugsdata-company-cvr',
+                            crypto_hash('md5',
+                                CONCAT('{namespace}', 'company-cvr-',
                                     TRIM(CAST(cvr_number AS VARCHAR)))),
                             21, 12
                         )
@@ -226,7 +231,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 END
             )
         """)
-        self.log.info("✅ Company UUID function created using crypto extension SHA-1")
+        self.log.info(f"✅ Company UUID function created using namespace: {namespace[:8]}...")
 
     def _apply_memory_optimizations(self):
         """

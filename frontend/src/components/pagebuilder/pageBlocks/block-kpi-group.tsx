@@ -3,7 +3,7 @@ import { shouldShowPlaceholder } from './chart-utils';
 import { PlaceholderChart } from './placeholder-chart';
 import { useCategoryDataContext } from './CategoryDataContext';
 import { NoDataPlaceholder } from './no-data-placeholder';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import { DocumentationAccordion } from '@/components/chart';
 
 export function BlockKpiGroup({ kpiGroup }: { kpiGroup: KPIGroup }) {
   const { isInCategoryWithData } = useCategoryDataContext();
@@ -19,11 +19,8 @@ export function BlockKpiGroup({ kpiGroup }: { kpiGroup: KPIGroup }) {
     if (!isInCategoryWithData) {
       return <NoDataPlaceholder />;
     } else {
-      return (
-        <div className="py-8 text-center text-gray-500">
-          Ingen KPI data tilgængelig
-        </div>
-      );
+      // If we're in a category with data, render nothing instead of individual message
+      return null;
     }
   }
 

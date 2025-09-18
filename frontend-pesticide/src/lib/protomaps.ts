@@ -15,7 +15,7 @@ export class ProtomapsManager {
   constructor(config: ProtomapsConfig) {
     this.config = {
       attribution: '© Protomaps © OpenStreetMap',
-      ...config
+      ...config,
     };
   }
 
@@ -45,18 +45,19 @@ export class ProtomapsManager {
       name: 'Denmark Base Map',
       metadata: {
         'mapbox:autocomposite': false,
-        'mapbox:type': 'template'
+        'mapbox:type': 'template',
       },
       sources: {
-        'protomaps': {
+        protomaps: {
           type: 'vector',
           url: `pmtiles://${this.config.pmtilesUrl}`,
-          attribution: this.config.attribution
-        }
+          attribution: this.config.attribution,
+        },
       },
       sprite: 'https://protomaps.github.io/basemaps-assets/sprites/v2/light',
-      glyphs: 'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
-      layers: this.getDenmarkStyleLayers()
+      glyphs:
+        'https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf',
+      layers: this.getDenmarkStyleLayers(),
     };
   }
 
@@ -67,8 +68,8 @@ export class ProtomapsManager {
         id: 'background',
         type: 'background',
         paint: {
-          'background-color': '#f8f9fa'
-        }
+          'background-color': '#f8f9fa',
+        },
       },
 
       // Water bodies
@@ -79,8 +80,8 @@ export class ProtomapsManager {
         type: 'fill',
         paint: {
           'fill-color': '#a8d5e5',
-          'fill-opacity': 0.8
-        }
+          'fill-opacity': 0.8,
+        },
       },
 
       // Natural areas
@@ -94,12 +95,14 @@ export class ProtomapsManager {
           'fill-color': [
             'match',
             ['get', 'class'],
-            ['wood', 'forest'], '#d4e5d4',
-            ['grass', 'scrub'], '#e8f5e8',
-            '#f0f8e8'
+            ['wood', 'forest'],
+            '#d4e5d4',
+            ['grass', 'scrub'],
+            '#e8f5e8',
+            '#f0f8e8',
           ],
-          'fill-opacity': 0.6
-        }
+          'fill-opacity': 0.6,
+        },
       },
 
       // Agricultural areas
@@ -111,8 +114,8 @@ export class ProtomapsManager {
         filter: ['in', 'class', 'farmland', 'crop', 'orchard'],
         paint: {
           'fill-color': '#f0f8e8',
-          'fill-opacity': 0.4
-        }
+          'fill-opacity': 0.4,
+        },
       },
 
       // Built-up areas
@@ -126,13 +129,16 @@ export class ProtomapsManager {
           'fill-color': [
             'match',
             ['get', 'class'],
-            'residential', '#f5f5f5',
-            'commercial', '#eeeeee',
-            'industrial', '#e8e8e8',
-            '#f0f0f0'
+            'residential',
+            '#f5f5f5',
+            'commercial',
+            '#eeeeee',
+            'industrial',
+            '#e8e8e8',
+            '#f0f0f0',
           ],
-          'fill-opacity': 0.5
-        }
+          'fill-opacity': 0.5,
+        },
       },
 
       // Buildings
@@ -148,11 +154,14 @@ export class ProtomapsManager {
             'interpolate',
             ['linear'],
             ['zoom'],
-            12, 0,
-            13, 0.3,
-            16, 0.6
-          ]
-        }
+            12,
+            0,
+            13,
+            0.3,
+            16,
+            0.6,
+          ],
+        },
       },
 
       // Roads - Major highways
@@ -168,12 +177,15 @@ export class ProtomapsManager {
             'interpolate',
             ['linear'],
             ['zoom'],
-            5, 1,
-            10, 2,
-            15, 8
+            5,
+            1,
+            10,
+            2,
+            15,
+            8,
           ],
-          'line-opacity': 0.9
-        }
+          'line-opacity': 0.9,
+        },
       },
 
       // Roads - Primary roads
@@ -189,12 +201,15 @@ export class ProtomapsManager {
             'interpolate',
             ['linear'],
             ['zoom'],
-            7, 0.5,
-            10, 1,
-            15, 4
+            7,
+            0.5,
+            10,
+            1,
+            15,
+            4,
           ],
-          'line-opacity': 0.8
-        }
+          'line-opacity': 0.8,
+        },
       },
 
       // Roads - Local roads
@@ -207,15 +222,9 @@ export class ProtomapsManager {
         minzoom: 10,
         paint: {
           'line-color': '#ffffff',
-          'line-width': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            10, 0.5,
-            15, 2
-          ],
-          'line-opacity': 0.6
-        }
+          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 15, 2],
+          'line-opacity': 0.6,
+        },
       },
 
       // Administrative boundaries
@@ -231,13 +240,16 @@ export class ProtomapsManager {
             'interpolate',
             ['linear'],
             ['zoom'],
-            4, 0.5,
-            8, 1,
-            12, 2
+            4,
+            0.5,
+            8,
+            1,
+            12,
+            2,
           ],
           'line-dasharray': [2, 2],
-          'line-opacity': 0.5
-        }
+          'line-opacity': 0.5,
+        },
       },
 
       // Place labels - Cities
@@ -254,18 +266,21 @@ export class ProtomapsManager {
             'interpolate',
             ['linear'],
             ['zoom'],
-            4, 10,
-            8, 14,
-            12, 18
+            4,
+            10,
+            8,
+            14,
+            12,
+            18,
           ],
           'text-anchor': 'center',
-          'text-offset': [0, 0]
+          'text-offset': [0, 0],
         },
         paint: {
           'text-color': '#333333',
           'text-halo-color': '#ffffff',
-          'text-halo-width': 1
-        }
+          'text-halo-width': 1,
+        },
       },
 
       // Place labels - Towns
@@ -279,20 +294,14 @@ export class ProtomapsManager {
         layout: {
           'text-field': '{name}',
           'text-font': ['Noto Sans Regular'],
-          'text-size': [
-            'interpolate',
-            ['linear'],
-            ['zoom'],
-            8, 10,
-            12, 14
-          ],
-          'text-anchor': 'center'
+          'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 12, 14],
+          'text-anchor': 'center',
         },
         paint: {
           'text-color': '#555555',
           'text-halo-color': '#ffffff',
-          'text-halo-width': 1
-        }
+          'text-halo-width': 1,
+        },
       },
 
       // Road labels
@@ -308,14 +317,14 @@ export class ProtomapsManager {
           'text-font': ['Noto Sans Regular'],
           'text-size': 11,
           'symbol-placement': 'line',
-          'text-rotation-alignment': 'map'
+          'text-rotation-alignment': 'map',
         },
         paint: {
           'text-color': '#666666',
           'text-halo-color': '#ffffff',
-          'text-halo-width': 1
-        }
-      }
+          'text-halo-width': 1,
+        },
+      },
     ];
   }
 
@@ -326,14 +335,19 @@ export class ProtomapsManager {
     // Optimize layers based on zoom level
     if (zoom < 8) {
       // Country/region level - hide detailed features
-      (baseStyle.layers as Array<Record<string, unknown>>) = (baseStyle.layers as Array<Record<string, unknown>>).filter((layer: Record<string, unknown>) =>
-        !['buildings', 'roads-local', 'road-labels'].includes(layer.id as string)
+      (baseStyle.layers as Array<Record<string, unknown>>) = (
+        baseStyle.layers as Array<Record<string, unknown>>
+      ).filter(
+        (layer: Record<string, unknown>) =>
+          !['buildings', 'roads-local', 'road-labels'].includes(
+            layer.id as string
+          )
       );
     } else if (zoom < 12) {
       // County level - show more detail but hide buildings
-      (baseStyle.layers as Array<Record<string, unknown>>) = (baseStyle.layers as Array<Record<string, unknown>>).filter((layer: Record<string, unknown>) =>
-        layer.id !== 'buildings'
-      );
+      (baseStyle.layers as Array<Record<string, unknown>>) = (
+        baseStyle.layers as Array<Record<string, unknown>>
+      ).filter((layer: Record<string, unknown>) => layer.id !== 'buildings');
     }
 
     return baseStyle;
@@ -344,13 +358,21 @@ export class ProtomapsManager {
     const baseStyle = this.getMapStyle();
 
     // Enhance agricultural areas visibility
-    const agriculturalLayer = (baseStyle.layers as Array<Record<string, unknown>>).find((layer: Record<string, unknown>) =>
-      layer.id === 'landuse-agricultural'
+    const agriculturalLayer = (
+      baseStyle.layers as Array<Record<string, unknown>>
+    ).find(
+      (layer: Record<string, unknown>) => layer.id === 'landuse-agricultural'
     );
 
-    if (agriculturalLayer && agriculturalLayer.paint && typeof agriculturalLayer.paint === 'object') {
-      (agriculturalLayer.paint as Record<string, unknown>)['fill-opacity'] = 0.7;
-      (agriculturalLayer.paint as Record<string, unknown>)['fill-color'] = '#e8f5e8';
+    if (
+      agriculturalLayer &&
+      agriculturalLayer.paint &&
+      typeof agriculturalLayer.paint === 'object'
+    ) {
+      (agriculturalLayer.paint as Record<string, unknown>)['fill-opacity'] =
+        0.7;
+      (agriculturalLayer.paint as Record<string, unknown>)['fill-color'] =
+        '#e8f5e8';
     }
 
     return baseStyle;
@@ -373,14 +395,16 @@ export class ProtomapsManager {
 // Default configuration for Denmark
 export const DENMARK_PROTOMAPS_CONFIG: ProtomapsConfig = {
   pmtilesUrl: '/protomaps/denmark.pmtiles',
-  attribution: '© Protomaps © OpenStreetMap contributors'
+  attribution: '© Protomaps © OpenStreetMap contributors',
 };
 
 // Utility functions
-export function createProtomapsManager(config?: Partial<ProtomapsConfig>): ProtomapsManager {
+export function createProtomapsManager(
+  config?: Partial<ProtomapsConfig>
+): ProtomapsManager {
   return new ProtomapsManager({
     ...DENMARK_PROTOMAPS_CONFIG,
-    ...config
+    ...config,
   });
 }
 

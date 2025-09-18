@@ -13,7 +13,10 @@ import { VizColors } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useCategoryDataContext } from './CategoryDataContext';
 import { NoDataPlaceholder } from './no-data-placeholder';
-import { DocumentationAccordion } from '@/components/chart/documentation-accordion';
+import {
+  DocumentationAccordion,
+  TimelineCSVDownloadButton,
+} from '@/components/chart';
 
 type TimelineEvent = {
   date: string;
@@ -46,8 +49,8 @@ function translateEventType(eventType: string): string {
     control_inspection: 'Kontrolbesøg',
     disease_status: 'Sygdomsstatus',
     disease_status_change: 'Ændring i sygdomsstatus',
-    intervention_end: 'Intervention afsluttet',
-    intervention_start: 'Intervention startet',
+    intervention_end: 'Indsatsområde med dyrlæge afsluttet',
+    intervention_start: 'Indsatsområde med dyrlæge startet',
     sanitation_process: 'Sanering',
     stable_fire: 'Staldbrand',
     under_approval: 'Under godkendelse',
@@ -88,23 +91,51 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
   });
 
   const filteredEvents = useMemo(() => {
+    let events: TimelineEvent[];
+
     if (!timeline.config?.filterColumns?.length) {
-      return timeline.events.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      events = timeline.events.filter(isValidEvent);
+    } else {
+      const validEvents = timeline.events.filter(isValidEvent);
+      events = validEvents.filter((event) =>
+        selectedTypes.has(event.event_type)
       );
     }
 
-    const validEvents = timeline.events.filter(isValidEvent);
-    // If no filterColumns, return all valid events
-    if (!timeline.config?.filterColumns?.length) {
-      return validEvents.sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-    }
-    return validEvents
-      .filter((event) => selectedTypes.has(event.event_type))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return events.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
   }, [timeline.events, selectedTypes, timeline.config?.filterColumns]);
+
+  // Group events by date
+  const groupedEvents = useMemo(() => {
+    const grouped = new Map<string, TimelineEvent[]>();
+
+    filteredEvents.forEach((event) => {
+      const dateKey = format(new Date(event.date), 'yyyy-MM-dd');
+      if (!grouped.has(dateKey)) {
+        grouped.set(dateKey, []);
+      }
+      grouped.get(dateKey)!.push(event);
+    });
+
+    // Convert to array and sort by date (newest first)
+    return Array.from(grouped.entries())
+      .sort(
+        ([dateA], [dateB]) =>
+          new Date(dateB).getTime() - new Date(dateA).getTime()
+      )
+      .map(([date, events]) => ({
+        date,
+        events: events.sort((a, b) => {
+          // Within the same date, sort by event type for consistency
+          if (a.event_type && b.event_type) {
+            return a.event_type.localeCompare(b.event_type);
+          }
+          return 0;
+        }),
+      }));
+  }, [filteredEvents]);
 
   const toggleEventType = (type: string) => {
     const newSelected = new Set(selectedTypes);
@@ -134,42 +165,50 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
     if (!isInCategoryWithData) {
       return <NoDataPlaceholder />;
     } else {
-      return (
-        <div className="py-8 text-center text-gray-500">
-          Ingen tidslinje data tilgængelig
-        </div>
-      );
+      // If we're in a category with data, render nothing instead of individual message
+      return null;
     }
   }
 
   return (
     <div>
       <div className="mx-auto w-full max-w-6xl py-4">
-        {/* Filter buttons - only show if we have filterColumns */}
-        {timeline.config?.filterColumns?.length > 0 && (
-          <div className="mb-8 flex flex-wrap gap-2">
-            {Object.entries(eventTypes).map(([type, color]) => (
-              <Button
-                size="sm"
-                key={type}
-                onClick={() => toggleEventType(type)}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                  selectedTypes.has(type)
-                    ? 'text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-                style={{
-                  backgroundColor: selectedTypes.has(type)
-                    ? color
-                    : 'transparent',
-                  border: `1px solid ${color}`,
-                }}
-              >
-                {translateEventType(type)}
-              </Button>
-            ))}
+        {/* Header with filters and download button */}
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex-1">
+            {/* Filter buttons - only show if we have filterColumns */}
+            {timeline.config?.filterColumns?.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(eventTypes).map(([type, color]) => (
+                  <Button
+                    size="sm"
+                    key={type}
+                    onClick={() => toggleEventType(type)}
+                    className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                      selectedTypes.has(type)
+                        ? 'text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-muted/50'
+                    }`}
+                    style={{
+                      backgroundColor: selectedTypes.has(type)
+                        ? color
+                        : 'transparent',
+                      border: `1px solid ${color}`,
+                    }}
+                  >
+                    {translateEventType(type)}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+          <TimelineCSVDownloadButton
+            timeline={timeline}
+            chartTitle={timeline.title}
+            chartKey={timeline._key}
+            className="self-start sm:ml-4"
+          />
+        </div>
 
         {/* Timeline */}
         <VerticalTimeline
@@ -177,42 +216,86 @@ export function BlockTimeline({ timeline }: { timeline: Timeline }) {
           animate={false}
           layout="2-columns"
         >
-          {filteredEvents.map((event, index) => {
-            const color = eventTypes[event.event_type ?? ''] ?? VizColors[0];
+          {groupedEvents.map(({ date, events }, groupIndex) => {
+            // Use the first event's type color for the icon, or create a gradient for multiple types
+            const uniqueTypes = Array.from(
+              new Set(events.map((e) => e.event_type).filter(Boolean))
+            );
+            const primaryColor =
+              uniqueTypes.length > 0
+                ? (eventTypes[uniqueTypes[0]] ?? VizColors[0])
+                : VizColors[0];
+
+            // Create gradient background if multiple event types
+            const iconStyle =
+              uniqueTypes.length > 1
+                ? {
+                    background: `linear-gradient(45deg, ${uniqueTypes
+                      .slice(0, 3)
+                      .map((type) => eventTypes[type] ?? VizColors[0])
+                      .join(', ')})`,
+                    color: primaryColor,
+                    border: '2px solid white',
+                    boxShadow: '0 0 0 1px white',
+                    width: events.length > 1 ? '24px' : '20px',
+                    height: events.length > 1 ? '24px' : '20px',
+                  }
+                : {
+                    background: primaryColor,
+                    color: primaryColor,
+                    border: '2px solid white',
+                    boxShadow: '0 0 0 1px white',
+                    width: '20px',
+                    height: '20px',
+                  };
 
             return (
               <VerticalTimelineElement
-                key={`${event.date}-${index}`}
+                key={`${date}-${groupIndex}`}
                 className="vertical-timeline-element"
                 contentStyle={{
-                  background: '#eef8f2',
-                  boxShadow: '0 0 0 1px #eef8f2',
+                  background: 'var(--color-card)',
+                  boxShadow: '0 0 0 1px var(--color-border)',
                   border: 'none',
                   borderRadius: '0.25rem',
                 }}
-                contentArrowStyle={{ borderRight: '7px solid #eef8f2' }}
-                date={format(new Date(event.date), 'd. MMMM yyyy', {
+                contentArrowStyle={{
+                  borderRight: '7px solid var(--color-card)',
+                }}
+                date={format(new Date(date), 'd. MMMM yyyy', {
                   locale: da,
                 })}
-                dateClassName="text-gray-600 font-medium min-[1170px]:mx-4 font-bold"
-                iconStyle={{
-                  background: color,
-                  color: color,
-                  border: '2px solid white',
-                  boxShadow: '0 0 0 1px white',
-                  width: '20px',
-                  height: '20px',
-                }}
-                iconClassName="!ml-2.5 !top-3   min-[1170px]:!-ml-2.5 min-[1170px]:!top-5"
+                dateClassName="text-muted-foreground font-medium min-[1170px]:mx-4 font-bold"
+                iconStyle={iconStyle}
+                iconClassName={`!ml-2.5 !top-3 min-[1170px]:!-ml-2.5 min-[1170px]:!top-5 ${events.length > 1 ? '!-ml-3.5 min-[1170px]:!-ml-3' : ''}`}
               >
-                <div className="flex flex-col gap-1">
-                  <div className="text-sm font-semibold" style={{ color }}>
-                    {translateEventType(event.event_type || '')}
-                  </div>
-                  <div className="p-0 text-gray-700">{event.description}</div>
-                  {/* <span className="text-sm text-gray-500">
-                    {format(new Date(event.date), "d. MMMM yyyy", { locale: da })}
-                  </span> */}
+                <div className="flex flex-col gap-2">
+                  {events.length > 1 && (
+                    <div className="bg-muted text-muted-foreground mb-1 inline-block rounded-md px-2 py-1 text-xs font-medium">
+                      {events.length} begivenheder på samme dag
+                    </div>
+                  )}
+                  {events.map((event, eventIndex) => {
+                    const color =
+                      eventTypes[event.event_type ?? ''] ?? VizColors[0];
+                    const isLastEvent = eventIndex === events.length - 1;
+                    return (
+                      <div
+                        key={`${date}-${eventIndex}`}
+                        className={`flex flex-col gap-1 ${!isLastEvent && events.length > 1 ? 'border-b border-gray-200 pb-2' : ''}`}
+                      >
+                        <div
+                          className="text-sm font-semibold"
+                          style={{ color }}
+                        >
+                          {translateEventType(event.event_type || '')}
+                        </div>
+                        <div className="text-foreground p-0">
+                          {event.description}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </VerticalTimelineElement>
             );
