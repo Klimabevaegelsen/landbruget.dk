@@ -171,9 +171,31 @@ service-account*.json
 /cvr_analysis_31373077/
 /scripts/
 
+# Devenv (devenv.sh)
+.devenv.flake.nix
+.devenv
+devenv.nix
+devenv.yaml
+devenv.lock
+.direnv
+
 # PMTiles (generated files, should be stored in GCS)
 pmtiles/
 *.pmtiles
+
+# Caching
+.pytest_cache/
+.ruff_cache/
+data_cache/
+
+.devenv*
+devenv.local.nix
+
+# direnv
+.direnv
+
+# Data samples directory (contains large analysis files)
+data_samples/
 
 # Root level files that shouldn't be committed
 /Landbrugsstoette_2023.xlsx
