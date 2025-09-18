@@ -93,6 +93,7 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
   return (
     <div
       className={`bg-background/95 border-border max-w-xs rounded-lg border p-3 shadow-lg backdrop-blur-sm ${className}`}
+      data-testid="color-legend"
     >
       <div className="mb-2">
         <h4 className="text-foreground text-sm font-semibold">
