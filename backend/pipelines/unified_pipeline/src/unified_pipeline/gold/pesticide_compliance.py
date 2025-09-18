@@ -248,6 +248,11 @@ class PesticideComplianceGold(BaseSource[PesticideComplianceGoldConfig], GoldJob
         # Agricultural year mappings (August 1 - July 31)
         # Includes years where we have pesticide application data available
         self.agricultural_years = {
+            "2010_2011": {"start": "2010-08-01", "end": "2011-07-31", "year": 2010},
+            "2011_2012": {"start": "2011-08-01", "end": "2012-07-31", "year": 2011},
+            "2012_2013": {"start": "2012-08-01", "end": "2013-07-31", "year": 2012},
+            "2013_2014": {"start": "2013-08-01", "end": "2014-07-31", "year": 2013},
+            "2014_2015": {"start": "2014-08-01", "end": "2015-07-31", "year": 2014},
             "2015_2016": {"start": "2015-08-01", "end": "2016-07-31", "year": 2015},
             "2016_2017": {"start": "2016-08-01", "end": "2017-07-31", "year": 2016},
             "2017_2018": {"start": "2017-08-01", "end": "2018-07-31", "year": 2017},
