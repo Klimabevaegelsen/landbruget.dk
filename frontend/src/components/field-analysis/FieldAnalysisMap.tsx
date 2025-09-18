@@ -1750,23 +1750,80 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     [filterState.visualizationMode, filterState.colorUnit]
   );
 
+  // Track drag state to prevent clicks during drag operations
+  const isDraggingRef = useRef(false);
+  const dragStartTimeRef = useRef<number>(0);
+  const mouseDownPositionRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Handle mouse down to start tracking potential drag
+  const onMouseDown = useCallback((event: MapLayerMouseEvent) => {
+    mouseDownPositionRef.current = {
+      x: event.point.x,
+      y: event.point.y,
+    };
+    // Don't set drag start time yet - only when we detect actual dragging
+  }, []);
+
+  // Handle mouse move to detect dragging
+  const onMouseMove = useCallback(
+    (event: MapLayerMouseEvent) => {
+      if (mouseDownPositionRef.current) {
+        const deltaX = Math.abs(event.point.x - mouseDownPositionRef.current.x);
+        const deltaY = Math.abs(event.point.y - mouseDownPositionRef.current.y);
+
+        // If mouse moved more than 5 pixels, consider it a drag
+        if (deltaX > 5 || deltaY > 5) {
+          if (!isDraggingRef.current) {
+            // First time detecting drag - set the drag start time
+            isDraggingRef.current = true;
+            dragStartTimeRef.current = Date.now();
+          }
+        }
+      }
+
+      // Call the original hover handler
+      onHover(event);
+    },
+    [onHover]
+  );
+
+  // Handle mouse up to end drag tracking
+  const onMouseUp = useCallback(() => {
+    // Reset drag tracking after a small delay
+    setTimeout(() => {
+      isDraggingRef.current = false;
+      mouseDownPositionRef.current = null;
+    }, 100);
+  }, []);
+
   // Handle click events for field selection and coordinate capture
   const onClick = useCallback(
     (event: MapLayerMouseEvent) => {
+      // Prevent clicks during or immediately after drag operations
+      if (isDraggingRef.current) {
+        return;
+      }
+
+      // Prevent clicks if we just finished dragging (within 200ms)
+      const timeSinceDragStart = Date.now() - dragStartTimeRef.current;
+      if (timeSinceDragStart < 200) {
+        return;
+      }
+
       const coordinates = {
         lat: event.lngLat.lat,
         lng: event.lngLat.lng,
       };
 
-      // Always call onMapClick to capture coordinates
-      onMapClick?.(coordinates);
-
       const feature = event.features && event.features[0];
       if (feature && feature.layer.id.startsWith('fields-')) {
-        // Add click coordinates to the field data
+        // Field click - add coordinates and select field
         const fieldData = feature.properties as FieldAnalysisData;
         fieldData.click_coordinates = coordinates;
         onFieldSelect(fieldData);
+      } else {
+        // Empty area click - only show coordinates if no field is selected
+        onMapClick?.(coordinates);
       }
     },
     [onFieldSelect, onMapClick]
@@ -1855,7 +1912,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         mapStyle={mapStyle}
         interactiveLayerIds={interactiveLayerIds}
         onLoad={onMapLoad}
-        onMouseMove={onHover}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
         onMouseLeave={() => setHoverInfo(null)}
         onClick={onClick}
         cursor="grab"
