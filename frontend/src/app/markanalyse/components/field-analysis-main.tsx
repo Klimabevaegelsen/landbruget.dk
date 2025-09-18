@@ -257,7 +257,7 @@ export default function FieldAnalysisMain() {
       className={`bg-background relative ${
         isMobile
           ? 'min-h-[calc(100vh-120px)]' // Mobile: flexible height
-          : 'h-[calc(100vh-120px)]' // Desktop: fixed height
+          : 'h-[calc(100vh-120px)] overflow-hidden' // Desktop: fixed height with overflow control
       }`}
     >
       {/* Desktop Sidebar */}
