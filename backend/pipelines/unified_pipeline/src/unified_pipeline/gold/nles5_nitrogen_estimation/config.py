@@ -71,7 +71,8 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # Example: target_years = [2021, 2022, 2023] → loads [2019, 2020, 2021, 2022, 2023] (5 years instead of 18 years)
     # target_years: Optional[List[int]] = None  
     # NOTE: Updated analysis shows 2023 agricultural fields data IS available in GCS (fvm_marker_2023)
-    target_years: Optional[List[int]] = [2021, 2022] #, 2023]
+    # TEMPORAL EXTENSION: Added 2023 support based on confirmed GCS data availability
+    target_years: Optional[List[int]] = [2021, 2022, 2023]
 
     # MEMORY OPTIMIZATION: Limits target calculation years (auto-discovery with memory management)
     # NLES5 requires 3-year windows: current + previous + year before previous
@@ -81,10 +82,11 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
 
     # PIPELINE-LEVEL BATCHING: Run entire pipeline for batches of target years
     # This provides maximum memory efficiency by completely isolating each batch
-    # Example: target_year_batch_size = 2 → Process years [2021,2022], then [2023,2024], etc.
+    # Example: target_year_batch_size = 1 → Process years [2021], then [2022], then [2023], etc.
     # Each batch runs the complete pipeline (phases 1-8) independently
+    # One year at a time makes it easier to add new years and provides better modularity
     enable_pipeline_batching: bool = bool(os.getenv('ENABLE_PIPELINE_BATCHING', 'true').lower() == 'true')
-    target_year_batch_size: int = int(os.getenv('TARGET_YEAR_BATCH_SIZE', '2'))  # Years per pipeline batch
+    target_year_batch_size: int = int(os.getenv('TARGET_YEAR_BATCH_SIZE', '1'))  # Years per pipeline batch (1 for modularity)
 
     # Geographic bounds for testing (WGS84 coordinates: [min_lon, min_lat, max_lon, max_lat])
     # Set to None to process entire Denmark, or specify bounds for testing
