@@ -13,7 +13,8 @@ import Map, {
   MapLayerMouseEvent,
   NavigationControl,
   ViewState,
-} from 'react-map-gl/maplibre';
+  MapRef,
+} from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { LayerVisibility, FilterState, FieldAnalysisData } from './types';
@@ -21,11 +22,11 @@ import { getDecileBreakpoints, getColorScheme } from './colorUtils';
 import { SearchBar } from './SearchBar';
 import { ColorLegend } from './ColorLegend';
 
-// Type for MapLibre map instance
+// Type for MapLibre map instance - updated for @vis.gl/react-maplibre
 interface MapInstance {
   getSource: (id: string) => unknown;
   getLayer: (id: string) => unknown;
-  addLayer: (layer: unknown) => void;
+  addLayer: (layer: unknown, beforeId?: string) => unknown;
   removeLayer: (id: string) => void;
   removeSource: (id: string) => void;
   setLayoutProperty: (id: string, prop: string, value: string) => void;
@@ -492,27 +493,56 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   hasRightPanel,
 }: FieldAnalysisMapProps) {
   const { mapStyle } = useMapTheme();
-  const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
+
+  // Fallback map style in case external style fails
+  const fallbackMapStyle = {
+    version: 8 as const,
+    sources: {},
+    layers: [
+      {
+        id: 'background',
+        type: 'background' as const,
+        paint: {
+          'background-color': '#f8f9fa',
+        },
+      },
+    ],
+  };
+  const mapRef = useRef<MapRef | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadedSourcesRef = useRef<Set<string>>(new Set());
+  const [styleLoadFailed, setStyleLoadFailed] = useState(false);
+  const [currentMapStyle, setCurrentMapStyle] = useState(mapStyle);
 
   // Internal view state for controlled map
-  const [internalViewState, setInternalViewState] = useState<ViewState>({
+  const [internalViewState, setInternalViewState] = useState<
+    ViewState & { width: number; height: number }
+  >({
     longitude: 9.501785,
     latitude: 56.26392,
     zoom: 7,
     pitch: 0,
     bearing: 0,
     padding: { top: 0, bottom: 0, left: 0, right: 0 },
+    width: 800,
+    height: 600,
   });
 
+  // Handle map style changes and fallback
+  useEffect(() => {
+    if (!styleLoadFailed) {
+      setCurrentMapStyle(mapStyle);
+    }
+  }, [mapStyle, styleLoadFailed]);
+
   // PROPERLY MERGE viewState - merge external with internal defaults
-  const currentViewState: ViewState = externalViewState
-    ? { ...internalViewState, ...externalViewState }
-    : internalViewState;
+  const currentViewState: ViewState & { width: number; height: number } =
+    externalViewState
+      ? { ...internalViewState, ...externalViewState }
+      : internalViewState;
 
   // Optimized throttling using requestAnimationFrame for smooth performance
   const rafIdRef = useRef<number | null>(null);
@@ -528,10 +558,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       // Only track movement time if the view actually changed significantly
       const hasSignificantChange =
         !currentViewState ||
-        Math.abs(newViewState.longitude - currentViewState.longitude) >
+        Math.abs(newViewState.longitude - (currentViewState.longitude ?? 0)) >
           0.0001 ||
-        Math.abs(newViewState.latitude - currentViewState.latitude) > 0.0001 ||
-        Math.abs(newViewState.zoom - currentViewState.zoom) > 0.01;
+        Math.abs(newViewState.latitude - (currentViewState.latitude ?? 0)) >
+          0.0001 ||
+        Math.abs(newViewState.zoom - (currentViewState.zoom ?? 0)) > 0.01;
 
       if (hasSignificantChange) {
         lastMapMoveTimeRef.current = Date.now();
@@ -540,7 +571,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
 
       // Always update internal state immediately for smooth map movement
       if (!externalViewState) {
-        setInternalViewState(newViewState);
+        setInternalViewState({
+          ...newViewState,
+          width: internalViewState.width,
+          height: internalViewState.height,
+        });
       }
 
       // Store the latest view state
@@ -1411,7 +1446,8 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const onMapLoad = useCallback(() => {
     if (!mapRef.current) return;
 
-    const map = mapRef.current.getMap();
+    const map = mapRef.current.getMap() as MapInstance;
+    if (!map) return;
 
     try {
       // Reset loaded sources tracking
@@ -1466,11 +1502,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       }
 
       // Add layers
-      addFieldsLayers(map);
-      addBNBOLayers(map);
-      addWetlandsLayers(map);
-      addWaterProjectsLayers(map);
-      addBuildingsLayers(map);
+      addFieldsLayers(map as unknown as MapInstance);
+      addBNBOLayers(map as unknown as MapInstance);
+      addWetlandsLayers(map as unknown as MapInstance);
+      addWaterProjectsLayers(map as unknown as MapInstance);
+      addBuildingsLayers(map as unknown as MapInstance);
 
       // Don't set loading to false here - wait for sourcedata events
       console.log(`Waiting for ${sourcesAdded} PMTiles sources to load...`);
@@ -1526,12 +1562,12 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         // Remove and re-add source (MapLibre doesn't support direct URL updates)
         // But we do it more efficiently by only affecting the fields source
         // First remove all field layers that depend on the source
-        removeFieldsLayers(map);
+        removeFieldsLayers(map as unknown as MapInstance);
         map.removeSource('fields');
         map.addSource('fields', newSource);
 
         // Re-add only the fields layers (other layers remain unaffected)
-        addFieldsLayers(map);
+        addFieldsLayers(map as unknown as MapInstance);
 
         // Don't set loading to false here - wait for sourcedata event
         console.log(`Waiting for optimized fields source to load...`);
@@ -1656,14 +1692,14 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     // Update filters on existing layers (only set filter if it exists)
     if (map.getLayer('fields-fill')) {
       if (companyFilter) {
-        map.setFilter('fields-fill', companyFilter);
+        map.setFilter('fields-fill', companyFilter as never);
       } else {
         map.setFilter('fields-fill', null); // Clear filter
       }
     }
     if (map.getLayer('fields-outline')) {
       if (companyFilter) {
-        map.setFilter('fields-outline', companyFilter);
+        map.setFilter('fields-outline', companyFilter as never);
       } else {
         map.setFilter('fields-outline', null); // Clear filter
       }
@@ -1672,15 +1708,15 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       const partialFilter = companyFilter
         ? ['all', companyFilter, ['==', ['get', 'is_partial_coverage'], true]]
         : ['==', ['get', 'is_partial_coverage'], true];
-      map.setFilter('fields-partial-coverage-base', partialFilter);
-      map.setFilter('fields-partial-coverage-pattern', partialFilter);
+      map.setFilter('fields-partial-coverage-base', partialFilter as never);
+      map.setFilter('fields-partial-coverage-pattern', partialFilter as never);
     }
     if (map.getLayer('organic-borders')) {
       let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
       if (companyFilter) {
         organicFilter = ['all', companyFilter, organicFilter];
       }
-      map.setFilter('organic-borders', organicFilter);
+      map.setFilter('organic-borders', organicFilter as never);
     }
   }, [filterState.companyFilter]);
 
@@ -1879,7 +1915,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         viewState={currentViewState}
         onMove={handleViewStateChange}
         style={{ width: '100%', height: '100%' }}
-        mapStyle={mapStyle}
+        mapStyle={styleLoadFailed ? fallbackMapStyle : currentMapStyle}
         interactiveLayerIds={interactiveLayerIds}
         onLoad={onMapLoad}
         onMouseMove={onHover}
@@ -1889,12 +1925,32 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         // Explicitly enable map interactions
         dragPan={true}
         scrollZoom={true}
-        touchZoom={true}
-        touchRotate={false} // Disable rotation to avoid conflicts with pan
         doubleClickZoom={true}
         keyboard={true}
         // Ensure proper touch handling
         touchPitch={false}
+        // Add debug logging for initialization
+        onError={(error: unknown) => {
+          console.error('🚨 Map error:', error);
+          // If it's a style loading error, try fallback
+          const errorMessage =
+            (error as { error?: { message?: string } })?.error?.message || '';
+          if (
+            errorMessage.includes('style') ||
+            errorMessage.includes('fetch')
+          ) {
+            console.warn('🔄 Style loading failed, trying fallback style');
+            setStyleLoadFailed(true);
+          }
+        }}
+        onStyleData={() => {
+          // Style loaded successfully
+        }}
+        onSourceData={() => {
+          // Source data loaded
+        }}
+        // Try to ensure the map is properly initialized
+        reuseMaps={false}
       >
         <NavigationControl position="top-right" />
 
