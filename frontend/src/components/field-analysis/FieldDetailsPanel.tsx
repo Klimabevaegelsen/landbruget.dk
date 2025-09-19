@@ -32,6 +32,14 @@ export function FieldDetailsPanel({
   const [copiedCoordinates, setCopiedCoordinates] = useState(false);
 
   const formatNumber = (num: number, decimals: number = 2): string => {
+    // Don't display if the value is effectively zero
+    if (num < 0.001) return '< 0,001';
+
+    // For very small values, show more precision
+    if (num < 1 && decimals === 0) {
+      return num.toLocaleString('da-DK', { maximumFractionDigits: 3 });
+    }
+
     return num.toLocaleString('da-DK', { maximumFractionDigits: decimals });
   };
 
@@ -314,17 +322,18 @@ export function FieldDetailsPanel({
             </div>
           )}
 
-        {/* Dosage Information - only show if there are any non-zero values */}
-        {((fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0) ||
+        {/* Dosage Information - only show if there are meaningful values */}
+        {((fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0.001) ||
           (fieldData.total_dosage_liters &&
-            fieldData.total_dosage_liters > 0) ||
-          (fieldData.total_dosage_grams && fieldData.total_dosage_grams > 0) ||
-          (fieldData.total_dosage_ml && fieldData.total_dosage_ml > 0) ||
+            fieldData.total_dosage_liters > 0.001) ||
+          (fieldData.total_dosage_grams &&
+            fieldData.total_dosage_grams > 0.001) ||
+          (fieldData.total_dosage_ml && fieldData.total_dosage_ml > 0.001) ||
           (fieldData.total_dosage_tablets &&
             fieldData.total_dosage_tablets > 0)) && (
           <div className="space-y-2">
             {/* Show available dosage units */}
-            {fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0 && (
+            {fieldData.total_dosage_kg && fieldData.total_dosage_kg > 0.001 && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
                   Total dosering (kg):
@@ -335,7 +344,7 @@ export function FieldDetailsPanel({
               </div>
             )}
             {fieldData.total_dosage_liters &&
-              fieldData.total_dosage_liters > 0 && (
+              fieldData.total_dosage_liters > 0.001 && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">
                     Total dosering (L):
@@ -346,7 +355,7 @@ export function FieldDetailsPanel({
                 </div>
               )}
             {fieldData.total_dosage_grams &&
-              fieldData.total_dosage_grams > 0 && (
+              fieldData.total_dosage_grams > 0.001 && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">
                     Total dosering (g):
@@ -356,7 +365,7 @@ export function FieldDetailsPanel({
                   </span>
                 </div>
               )}
-            {fieldData.total_dosage_ml && fieldData.total_dosage_ml > 0 && (
+            {fieldData.total_dosage_ml && fieldData.total_dosage_ml > 0.001 && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
                   Total dosering (ml):
@@ -481,17 +490,17 @@ export function FieldDetailsPanel({
         <div className="space-y-2">
           {/* PFAS Information */}
           {fieldData.pfas_applications && fieldData.pfas_applications > 0 && (
-            <div className="rounded-lg bg-red-50 p-2">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 dark:border-amber-800 dark:bg-amber-950/20">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-destructive flex items-center text-sm font-medium">
+                <span className="flex items-center text-sm font-medium text-amber-700 dark:text-amber-300">
                   <TestTube className="mr-1 h-4 w-4" />
                   PFAS
                 </span>
-                <span className="text-destructive text-sm font-bold">
+                <span className="text-sm font-bold text-amber-800 dark:text-amber-200">
                   {fieldData.pfas_applications} apps
                 </span>
               </div>
-              <div className="text-destructive/80 space-y-1 text-xs">
+              <div className="space-y-1 text-xs text-amber-700/80 dark:text-amber-300/80">
                 {fieldData.total_pfas_active_ingredient_kg &&
                   fieldData.total_pfas_active_ingredient_kg > 0 && (
                     <div className="flex justify-between">
@@ -521,18 +530,18 @@ export function FieldDetailsPanel({
           {/* Diquat Information */}
           {fieldData.diquat_applications &&
             fieldData.diquat_applications > 0 && (
-              <div className="bg-primary/10 rounded-lg p-2">
+              <div className="rounded-lg border border-purple-200 bg-purple-50 p-2 dark:border-purple-800 dark:bg-purple-950/20">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-primary text-sm font-medium">
+                  <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
                     💧 Diquat
                   </span>
-                  <span className="text-primary text-sm font-bold">
+                  <span className="text-sm font-bold text-purple-800 dark:text-purple-200">
                     {fieldData.diquat_applications} apps
                   </span>
                 </div>
                 {fieldData.total_diquat_belastning &&
                   fieldData.total_diquat_belastning > 0 && (
-                    <div className="text-primary/80 flex justify-between text-xs">
+                    <div className="flex justify-between text-xs text-purple-700/80 dark:text-purple-300/80">
                       <span>Belastning:</span>
                       <span className="font-medium">
                         {formatNumber(fieldData.total_diquat_belastning)}

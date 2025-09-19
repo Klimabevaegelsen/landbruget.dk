@@ -172,15 +172,15 @@ export function MobileBottomPanel({
 
               {/* PFAS - only show if there are PFAS values > 0 */}
               {pfasGrams > 0 && (
-                <div className="rounded-lg border border-red-400/30 bg-black/40 p-3 backdrop-blur-sm">
+                <div className="rounded-lg border border-amber-400/30 bg-black/40 p-3 backdrop-blur-sm">
                   <div className="text-center">
-                    <div className="font-mono text-base font-bold text-red-300">
+                    <div className="font-mono text-base font-bold text-amber-300">
                       {formatNumber(pfasGrams, 1)}
                     </div>
-                    <div className="text-xs tracking-wide text-red-400/80 uppercase">
+                    <div className="text-xs tracking-wide text-amber-400/80 uppercase">
                       PFAS (g)
                     </div>
-                    <div className="mt-1 font-mono text-xs text-red-300/70">
+                    <div className="mt-1 font-mono text-xs text-amber-300/70">
                       {formatNumber(pfasIntensity, 1)} g/ha
                     </div>
                   </div>
@@ -213,15 +213,15 @@ export function MobileBottomPanel({
 
                     {/* Diquat - only show if there are diquat values > 0 */}
                     {diquatGrams > 0 && (
-                      <div className="rounded-lg border border-amber-400/30 bg-black/40 p-3 backdrop-blur-sm">
+                      <div className="rounded-lg border border-purple-400/30 bg-black/40 p-3 backdrop-blur-sm">
                         <div className="text-center">
-                          <div className="font-mono text-base font-bold text-amber-300">
+                          <div className="font-mono text-base font-bold text-purple-300">
                             {formatNumber(diquatGrams, 1)}
                           </div>
-                          <div className="text-xs tracking-wide text-amber-400/80 uppercase">
+                          <div className="text-xs tracking-wide text-purple-400/80 uppercase">
                             Diquat (g)
                           </div>
-                          <div className="mt-1 font-mono text-xs text-amber-300/70">
+                          <div className="mt-1 font-mono text-xs text-purple-300/70">
                             {formatNumber(diquatIntensity, 1)} g/ha
                           </div>
                         </div>
