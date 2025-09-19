@@ -8,7 +8,7 @@ import React, {
   useMemo,
 } from 'react';
 import dynamic from 'next/dynamic';
-import { ViewState } from 'react-map-gl/maplibre';
+import { ViewState } from '@vis.gl/react-maplibre';
 import { useMobileDetection } from '@/hooks/use-mobile-detection';
 import { FieldSidebar } from './sidebar/field-sidebar';
 import { MobileFieldMenu } from './sidebar/mobile-menu';
