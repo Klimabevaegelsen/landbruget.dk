@@ -523,6 +523,20 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const handleViewStateChange = useCallback(
     (evt: { viewState: ViewState }) => {
       const newViewState = evt.viewState;
+      const currentViewState = externalViewState || internalViewState;
+
+      // Only track movement time if the view actually changed significantly
+      const hasSignificantChange =
+        !currentViewState ||
+        Math.abs(newViewState.longitude - currentViewState.longitude) >
+          0.0001 ||
+        Math.abs(newViewState.latitude - currentViewState.latitude) > 0.0001 ||
+        Math.abs(newViewState.zoom - currentViewState.zoom) > 0.01;
+
+      if (hasSignificantChange) {
+        lastMapMoveTimeRef.current = Date.now();
+        isMapDraggingRef.current = true;
+      }
 
       // Always update internal state immediately for smooth map movement
       if (!externalViewState) {
@@ -550,9 +564,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         if (onViewStateChange && lastViewState.current) {
           onViewStateChange(lastViewState.current);
         }
+        // Reset dragging state after movement stops
+        isMapDraggingRef.current = false;
       }, 150); // Send final position after 150ms of no movement
     },
-    [onViewStateChange, externalViewState]
+    [onViewStateChange, externalViewState, internalViewState]
   );
 
   // Handle location selection from search
@@ -1750,63 +1766,17 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     [filterState.visualizationMode, filterState.colorUnit]
   );
 
-  // Track drag state to prevent clicks during drag operations
-  const isDraggingRef = useRef(false);
-  const dragStartTimeRef = useRef<number>(0);
-  const mouseDownPositionRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Handle mouse down to start tracking potential drag
-  const onMouseDown = useCallback((event: MapLayerMouseEvent) => {
-    mouseDownPositionRef.current = {
-      x: event.point.x,
-      y: event.point.y,
-    };
-    // Don't set drag start time yet - only when we detect actual dragging
-  }, []);
-
-  // Handle mouse move to detect dragging
-  const onMouseMove = useCallback(
-    (event: MapLayerMouseEvent) => {
-      if (mouseDownPositionRef.current) {
-        const deltaX = Math.abs(event.point.x - mouseDownPositionRef.current.x);
-        const deltaY = Math.abs(event.point.y - mouseDownPositionRef.current.y);
-
-        // If mouse moved more than 5 pixels, consider it a drag
-        if (deltaX > 5 || deltaY > 5) {
-          if (!isDraggingRef.current) {
-            // First time detecting drag - set the drag start time
-            isDraggingRef.current = true;
-            dragStartTimeRef.current = Date.now();
-          }
-        }
-      }
-
-      // Call the original hover handler
-      onHover(event);
-    },
-    [onHover]
-  );
-
-  // Handle mouse up to end drag tracking
-  const onMouseUp = useCallback(() => {
-    // Reset drag tracking after a small delay
-    setTimeout(() => {
-      isDraggingRef.current = false;
-      mouseDownPositionRef.current = null;
-    }, 100);
-  }, []);
+  // Track map interactions to prevent clicks during dragging
+  const isMapDraggingRef = useRef(false);
+  const lastMapMoveTimeRef = useRef<number>(0);
 
   // Handle click events for field selection and coordinate capture
   const onClick = useCallback(
     (event: MapLayerMouseEvent) => {
-      // Prevent clicks during or immediately after drag operations
-      if (isDraggingRef.current) {
-        return;
-      }
+      const now = Date.now();
 
-      // Prevent clicks if we just finished dragging (within 200ms)
-      const timeSinceDragStart = Date.now() - dragStartTimeRef.current;
-      if (timeSinceDragStart < 200) {
+      // If the map was moving recently (within 50ms), consider this a drag end, not a click
+      if (now - lastMapMoveTimeRef.current < 50) {
         return;
       }
 
@@ -1912,9 +1882,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         mapStyle={mapStyle}
         interactiveLayerIds={interactiveLayerIds}
         onLoad={onMapLoad}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
+        onMouseMove={onHover}
         onMouseLeave={() => setHoverInfo(null)}
         onClick={onClick}
         cursor="grab"
