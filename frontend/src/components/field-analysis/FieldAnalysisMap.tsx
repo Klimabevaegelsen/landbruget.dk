@@ -1912,7 +1912,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
 
       <Map
         ref={mapRef}
-        viewState={currentViewState}
+        initialViewState={currentViewState}
         onMove={handleViewStateChange}
         style={{ width: '100%', height: '100%' }}
         mapStyle={styleLoadFailed ? fallbackMapStyle : currentMapStyle}
@@ -1922,12 +1922,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         onMouseLeave={() => setHoverInfo(null)}
         onClick={onClick}
         cursor="grab"
-        // Explicitly enable map interactions
+        // Explicitly enable map interactions - try different approach
         dragPan={true}
         scrollZoom={true}
         doubleClickZoom={true}
         keyboard={true}
-        // Ensure proper touch handling
         touchPitch={false}
         // Add debug logging for initialization
         onError={(error: unknown) => {

@@ -6,7 +6,7 @@ import Map, {
   Source,
   MapLayerMouseEvent,
   NavigationControl,
-} from 'react-map-gl/maplibre';
+} from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { MapChart, GeoJSONLayer } from '@/services/supabase/types';

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { ViewState } from 'react-map-gl/maplibre';
+import { ViewState } from '@vis.gl/react-maplibre';
 import { LayerControlPanelEnhanced as LayerControlPanel } from './LayerControlPanel';
 import { FieldDetailsPanel } from './FieldDetailsPanel';
 import { CoordinatePanel } from './CoordinatePanel';
