@@ -112,27 +112,29 @@ export function DataSidebar({
 
           {/* PFAS - only show if there are PFAS values > 0 */}
           {pfasGrams > 0 && (
-            <div className="rounded-lg border-l-4 border-red-400 bg-slate-800 p-3">
+            <div className="rounded-lg border-l-4 border-amber-400 bg-slate-800 p-3">
               <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-sm font-medium text-red-300">
+                <h4 className="text-sm font-medium text-amber-300">
                   PFAS Active Ingredients
                 </h4>
-                <span className="rounded-full border border-red-700 bg-red-900/50 px-1.5 py-0.5 text-xs font-medium text-red-300">
+                <span className="rounded-full border border-amber-700 bg-amber-900/50 px-1.5 py-0.5 text-xs font-medium text-amber-300">
                   Persistent
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center">
-                  <div className="text-lg font-bold text-red-200">
+                  <div className="text-lg font-bold text-amber-200">
                     {formatNumber(pfasGrams, 2)}
                   </div>
-                  <div className="text-xs text-red-400">grams total</div>
+                  <div className="text-xs text-amber-400">grams total</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-bold text-red-200">
+                  <div className="text-lg font-bold text-amber-200">
                     {formatNumber(pfasIntensity, 2)}
                   </div>
-                  <div className="text-xs text-red-400">grams per hectare</div>
+                  <div className="text-xs text-amber-400">
+                    grams per hectare
+                  </div>
                 </div>
               </div>
             </div>
@@ -167,24 +169,24 @@ export function DataSidebar({
 
           {/* Diquat - only show if there are diquat values > 0 */}
           {diquatGrams > 0 && (
-            <div className="rounded-lg border-l-4 border-amber-400 bg-slate-800 p-3">
+            <div className="rounded-lg border-l-4 border-purple-400 bg-slate-800 p-3">
               <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-sm font-medium text-amber-300">
+                <h4 className="text-sm font-medium text-purple-300">
                   Diquat Active Ingredients
                 </h4>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center">
-                  <div className="text-lg font-bold text-amber-200">
+                  <div className="text-lg font-bold text-purple-200">
                     {formatNumber(diquatGrams, 2)}
                   </div>
-                  <div className="text-xs text-amber-400">grams total</div>
+                  <div className="text-xs text-purple-400">grams total</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-lg font-bold text-amber-200">
+                  <div className="text-lg font-bold text-purple-200">
                     {formatNumber(diquatIntensity, 2)}
                   </div>
-                  <div className="text-xs text-amber-400">
+                  <div className="text-xs text-purple-400">
                     grams per hectare
                   </div>
                 </div>
