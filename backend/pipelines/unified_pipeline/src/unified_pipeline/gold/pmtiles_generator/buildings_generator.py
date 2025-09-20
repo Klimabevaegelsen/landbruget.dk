@@ -1,16 +1,14 @@
 """Buildings Proximity PMTiles Generator."""
 
-import os
-import asyncio
 import logging
-from typing import Dict, Optional, List
-from pathlib import Path
+import os
+from typing import Dict, List, Optional
 
 import duckdb
 
 from .config import PMTilesGeneratorConfig
 from .data_loader import PMTilesDataLoader
-from .utils import TippecanoeRunner, GeoJSONWriter, FileManager
+from .utils import FileManager, GeoJSONWriter, TippecanoeRunner
 
 logger = logging.getLogger(__name__)
 
