@@ -9,7 +9,7 @@ const WARMUP_FILES = [
   'field_analysis_2024.pmtiles',
 
   // Background layers (used by all users)
-  'bnbo_areas.pmtiles',
+  'bnbo_areas.pmtiles', // Original filename - both exist in R2
   'buildings_proximity_2024.pmtiles',
 
   // Historical years (medium priority)

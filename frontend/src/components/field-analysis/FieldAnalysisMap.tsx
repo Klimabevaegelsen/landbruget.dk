@@ -1084,7 +1084,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   // Add BNBO layers with cross-hatch pattern
   const addBNBOLayers = useCallback(
     (map: MapInstance) => {
+      console.log('🔍 addBNBOLayers called');
+      console.log('🔍 BNBO source exists:', !!map.getSource('bnbo'));
+      console.log('🔍 BNBO layer exists:', !!map.getLayer('bnbo-fill'));
       if (map.getSource('bnbo') && !map.getLayer('bnbo-fill')) {
+        console.log('✅ Adding BNBO layers...');
         // Create status-based patterns for BNBO
         const createBNBOPatterns = async () => {
           try {
@@ -1140,29 +1144,34 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           }
         };
 
-        map.addLayer({
-          id: 'bnbo-fill',
-          source: 'bnbo',
-          'source-layer': 'bnbo',
-          type: 'fill',
-          paint: {
-            'fill-color': [
-              'case',
-              // If action is required (yellow)
-              ['==', ['get', 'status_category'], 'Action Required'],
-              '#EAB308',
-              // If completed (green)
-              ['==', ['get', 'status_category'], 'Completed'],
-              '#10B981',
-              // Default blue for general BNBO areas
-              '#2563EB',
-            ],
-            'fill-opacity': 0.6,
-          },
-          layout: {
-            visibility: layerVisibility.bnbo ? 'visible' : 'none',
-          },
-        });
+        try {
+          map.addLayer({
+            id: 'bnbo-fill',
+            source: 'bnbo',
+            'source-layer': 'bnbo',
+            type: 'fill',
+            paint: {
+              'fill-color': [
+                'case',
+                // If action is required (yellow)
+                ['==', ['get', 'status_category'], 'Action Required'],
+                '#EAB308',
+                // If completed (green)
+                ['==', ['get', 'status_category'], 'Completed'],
+                '#10B981',
+                // Default blue for general BNBO areas
+                '#2563EB',
+              ],
+              'fill-opacity': 0.6,
+            },
+            layout: {
+              visibility: layerVisibility.bnbo ? 'visible' : 'none',
+            },
+          });
+          console.log('✅ BNBO fill layer added successfully');
+        } catch (error) {
+          console.error('🚨 Failed to add BNBO fill layer:', error);
+        }
 
         // Create patterns after layer is added
         createBNBOPatterns().then(() => {
@@ -1179,27 +1188,32 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           }
         });
 
-        map.addLayer({
-          id: 'bnbo-outline',
-          source: 'bnbo',
-          'source-layer': 'bnbo',
-          type: 'line',
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['get', 'status_category'], 'Action Required'],
-              '#DC2626', // Darker red outline
-              ['==', ['get', 'status_category'], 'Completed'],
-              '#059669', // Darker green outline
-              '#1D4ED8', // Darker blue outline
-            ],
-            'line-width': 1.5,
-            'line-opacity': 0.9,
-          },
-          layout: {
-            visibility: layerVisibility.bnbo ? 'visible' : 'none',
-          },
-        });
+        try {
+          map.addLayer({
+            id: 'bnbo-outline',
+            source: 'bnbo',
+            'source-layer': 'bnbo',
+            type: 'line',
+            paint: {
+              'line-color': [
+                'case',
+                ['==', ['get', 'status_category'], 'Action Required'],
+                '#DC2626', // Darker red outline
+                ['==', ['get', 'status_category'], 'Completed'],
+                '#059669', // Darker green outline
+                '#1D4ED8', // Darker blue outline
+              ],
+              'line-width': 1.5,
+              'line-opacity': 0.9,
+            },
+            layout: {
+              visibility: layerVisibility.bnbo ? 'visible' : 'none',
+            },
+          });
+          console.log('✅ BNBO outline layer added successfully');
+        } catch (error) {
+          console.error('🚨 Failed to add BNBO outline layer:', error);
+        }
       }
     },
     [layerVisibility.bnbo]
@@ -1473,13 +1487,28 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               type: 'vector',
               url: `pmtiles://${url}`,
             });
-            console.log(`Added ${layerName} source:`, url);
+            console.log(`✅ Added ${layerName} source:`, url);
             sourcesAdded++;
+
+            // Special debugging for BNBO
+            if (layerName === 'bnbo') {
+              console.log('🔍 BNBO source added - URL:', url);
+              console.log('🔍 BNBO layer visibility:', layerVisibility.bnbo);
+            }
           } catch (error) {
             const errorMessage = `Failed to add ${layerName} source: ${error}`;
-            console.warn(`${errorMessage}`);
+            console.warn(`❌ ${errorMessage}`);
             sourceErrors.push(errorMessage);
+
+            // Special debugging for BNBO
+            if (layerName === 'bnbo') {
+              console.error('🚨 BNBO source failed to load:', error);
+            }
           }
+        } else if (!url) {
+          console.warn(`⚠️ Empty URL for ${layerName} layer`);
+        } else if (map.getSource(layerName)) {
+          console.log(`ℹ️ ${layerName} source already exists`);
         }
       });
 
@@ -1528,6 +1557,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     addBuildingsLayers,
     onMapReady,
     handleSourceData,
+    layerVisibility.bnbo,
   ]);
 
   // Handle PMTiles URL changes (e.g., year selection) - optimized approach
