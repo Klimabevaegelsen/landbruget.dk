@@ -158,7 +158,7 @@ class EnvironmentalLayersPMTilesGenerator:
                     WHEN status_category = 'Completed' THEN 'Gennemført'
                     ELSE 'Ukendt status'
                 END as status_danish,
-                geometry
+                ST_AsGeoJSON(geometry) as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             """
@@ -227,7 +227,8 @@ class EnvironmentalLayersPMTilesGenerator:
 
                     if size_mb > self.config.max_environmental_layer_size_mb:
                         logger.warning(
-                            f"Wetlands PMTiles size ({size_mb:.1f} MB) exceeds target ({self.config.max_environmental_layer_size_mb} MB)"
+                            f"Wetlands PMTiles size ({size_mb:.1f} MB) exceeds target "
+                            f"({self.config.max_environmental_layer_size_mb} MB)"
                         )
 
                 return final_path
@@ -265,7 +266,7 @@ class EnvironmentalLayersPMTilesGenerator:
                     WHEN toerv_pct = '<3' THEN 'Lav tørv (<3%)'
                     ELSE 'Ukendt tørv indhold'
                 END as toerv_description,
-                geometry
+                ST_AsGeoJSON(geometry) as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             ORDER BY wetland_id
@@ -361,10 +362,10 @@ class EnvironmentalLayersPMTilesGenerator:
             SELECT
                 project_id,
                 feature_count,
-                dissolved_at,
+                dissolved_at::varchar as dissolved_at,
                 '#4a90e2' as color,
                 'Vandprojekt' as project_type_danish,
-                geometry
+                ST_AsGeoJSON(geometry) as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             """
