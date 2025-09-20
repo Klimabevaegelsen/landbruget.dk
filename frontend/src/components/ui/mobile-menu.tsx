@@ -21,13 +21,17 @@ const MobileMenu = React.forwardRef<HTMLDivElement, MobileMenuProps>(
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger
             className={cn(
-              'touch-target fixed top-4 left-4 z-50',
+              'touch-target fixed z-50',
               'mobile-header h-12 w-12 rounded-full shadow-lg',
               'bg-background/95 border-border border backdrop-blur-sm',
               'hover:bg-accent hover:text-accent-foreground',
               'focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-none',
               triggerClassName
             )}
+            style={{
+              top: 'max(1rem, env(safe-area-inset-top))',
+              left: 'max(1rem, env(safe-area-inset-left))',
+            }}
             aria-label="Åbn menu"
           >
             <Menu size={20} />

@@ -248,9 +248,10 @@ export default function FieldAnalysisMain() {
     <div
       className={`bg-background relative ${
         isMobile
-          ? 'min-h-[calc(100vh-120px)]' // Mobile: flexible height
+          ? 'min-h-screen overflow-hidden' // Mobile: full screen height, no overflow
           : 'h-[calc(100vh-120px)] overflow-hidden' // Desktop: fixed height with overflow control
       }`}
+      style={isMobile ? { height: '100vh', maxHeight: '100vh' } : undefined}
     >
       {/* Desktop Sidebar */}
       {!isMobile && (
@@ -284,7 +285,7 @@ export default function FieldAnalysisMain() {
             ? sidebarExpanded
               ? 'ml-[280px] h-full w-[calc(100%-280px)]' // Desktop: fixed height, sidebar margins
               : 'ml-[70px] h-full w-[calc(100%-70px)]'
-            : 'min-h-[calc(100vh-120px)] w-full' // Mobile: full width, flexible height
+            : 'h-full w-full' // Mobile: full dimensions, no extra margins
         }`}
       >
         {/* Year Slider - positioned to avoid sidebar and panel collision */}
@@ -314,11 +315,7 @@ export default function FieldAnalysisMain() {
         </div>
 
         <div
-          className={`absolute inset-0 w-full ${
-            isMobile
-              ? 'min-h-[calc(100vh-160px)]' // Mobile: account for mobile menu
-              : 'h-full' // Desktop: use parent height
-          }`}
+          className="absolute inset-0 h-full w-full"
           style={{ touchAction: 'pan-x pan-y' }}
         >
           {isLoading ? (

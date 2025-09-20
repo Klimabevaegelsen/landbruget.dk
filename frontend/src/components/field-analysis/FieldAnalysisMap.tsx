@@ -1944,12 +1944,16 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     >
       {/* Search Bar - positioned to avoid sidebar collision */}
       <div
-        className={`pointer-events-auto absolute top-4 left-4 z-30 transition-all duration-200 md:left-[90px] md:w-80 lg:w-96 xl:w-[28rem] ${
-          hasRightPanel
-            ? 'right-[21rem] xl:right-[29rem]'
-            : 'right-4 md:right-auto'
+        className={`pointer-events-auto absolute z-30 transition-all duration-200 ${
+          // Mobile positioning - below hamburger menu with proper spacing
+          'top-[5rem] right-4 left-4 md:top-4 md:right-auto md:left-[90px] md:w-80 lg:w-96 xl:w-[28rem]'
+        } ${
+          hasRightPanel ? 'md:right-[21rem] xl:right-[29rem]' : 'md:right-4'
         }`}
-        style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
+        style={{
+          // Mobile: position below hamburger menu with proper spacing
+          top: 'max(4rem, calc(env(safe-area-inset-top) + 3rem))',
+        }}
       >
         <SearchBar
           onLocationSelect={handleLocationSelect}
@@ -2004,9 +2008,13 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
 
-      {/* Color Legend - positioned to ensure visibility above the fold on desktop */}
+      {/* Color Legend - positioned for mobile visibility and desktop sidebar avoidance */}
       <div
-        className="pointer-events-auto absolute bottom-4 left-4 z-30 max-h-48 max-w-[calc(100vw-2rem)] overflow-auto md:top-20 md:bottom-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs"
+        className="pointer-events-auto absolute right-4 left-4 z-30 max-h-[40vh] max-w-[calc(100vw-2rem)] overflow-auto md:top-20 md:right-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs"
+        style={{
+          // Mobile: position below search bar, accounting for safe areas
+          top: 'max(8rem, calc(env(safe-area-inset-top) + 7rem))',
+        }}
         data-testid="color-legend-container"
       >
         <ColorLegend filterState={filterState} />
