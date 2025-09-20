@@ -1824,21 +1824,27 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       const feature = event.features && event.features[0];
       if (feature && feature.layer.id.startsWith('fields-')) {
         // Field click - add coordinates and select field
-        console.log('🔍 PMTiles feature properties:', feature.properties);
-        console.log(
-          '🔍 Available property keys:',
-          Object.keys(feature.properties || {})
-        );
-        console.log('🔍 Dosage values:', {
-          total_dosage_kg: feature.properties?.total_dosage_kg,
-          total_dosage_liters: feature.properties?.total_dosage_liters,
-          total_dosage_grams: feature.properties?.total_dosage_grams,
-          total_dosage_ml: feature.properties?.total_dosage_ml,
-          total_dosage_tablets: feature.properties?.total_dosage_tablets,
+        console.log('🔍 Field layer clicked:', feature.layer.id);
+        console.log('🔍 Environmental data check:', {
+          bnbo_area_hectares: feature.properties?.bnbo_area_hectares,
+          wetland_area_hectares: feature.properties?.wetland_area_hectares,
+          unique_pesticide_products:
+            feature.properties?.unique_pesticide_products,
+          pesticides_kg_detail: feature.properties?.pesticides_kg_detail,
+          pesticides_liters_detail:
+            feature.properties?.pesticides_liters_detail,
         });
         const fieldData = feature.properties as FieldAnalysisData;
         fieldData.click_coordinates = coordinates;
         onFieldSelect(fieldData);
+      } else if (feature) {
+        // Other layer click - log for debugging
+        console.log(
+          '🔍 Non-field layer clicked:',
+          feature.layer.id,
+          feature.properties
+        );
+        onMapClick?.(coordinates);
       } else {
         // Empty area click - only show coordinates if no field is selected
         onMapClick?.(coordinates);
