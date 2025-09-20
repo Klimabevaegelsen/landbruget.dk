@@ -183,19 +183,10 @@ export default function FieldAnalysisVisualization() {
     (coordinates: { lat: number; lng: number }) => {
       setClickedCoordinates(coordinates);
 
-      // If a field is currently selected, update its click coordinates
-      if (selectedField) {
-        setSelectedField((prev) =>
-          prev
-            ? {
-                ...prev,
-                click_coordinates: coordinates,
-              }
-            : null
-        );
-      }
+      // Clear field selection when clicking on empty areas
+      setSelectedField(null);
     },
-    [selectedField]
+    []
   );
 
   // Handle map view state changes
