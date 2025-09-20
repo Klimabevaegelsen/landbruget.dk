@@ -254,7 +254,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        year: [2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+        year:
+          [
+            2010,
+            2011,
+            2012,
+            2013,
+            2014,
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+          ]
     name: Pesticide Processing Year ${{ matrix.year }}
     env:
       ENVIRONMENT: production
