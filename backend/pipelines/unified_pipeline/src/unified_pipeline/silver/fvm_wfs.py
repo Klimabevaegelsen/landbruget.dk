@@ -1009,8 +1009,17 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                         f"skipping crop_code filter"
                     )
 
+            # For Marker data, always ensure cvr_number column exists (even if NULL)
+            # This is required for the CVR enrichment process to work
+            extra_columns = ""
+            if layer_type == "Marker":
+                has_cvr_number = "cvr_number" in columns
+                if not has_cvr_number:
+                    extra_columns = ", NULL as cvr_number"
+                    self.log.info(f"Adding NULL cvr_number column for Marker data in {year}")
+
             final_query = f"""
-                SELECT {column_renames},
+                SELECT {column_renames}{extra_columns},
                     {year} as year,
                     '{layer_type}' as layer_type,
                     '{current_timestamp}' as processed_at
@@ -1023,7 +1032,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             final_table_name = f"final_processed_{layer_type.lower()}_{year}"
 
             # For Marker data, log the filtering impact
-            if layer_type == "Marker" and has_crop_code:
+            if layer_type == "Marker" and "has_crop_code" in locals() and has_crop_code:
                 total_before_filter = self.conn.execute(
                     "SELECT COUNT(*) FROM combined_temp"
                 ).fetchone()[0]
@@ -2683,9 +2692,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             incomplete_cvr_count = self.conn.execute(f"""
                 SELECT COUNT(*) FROM {table_name}
                 WHERE cvr_number IS NULL
-                   OR cvr_number = ''
-                   OR cvr_number = '0'
-                   OR LENGTH(cvr_number) < 8
+                   OR CAST(cvr_number AS VARCHAR) = ''
+                   OR CAST(cvr_number AS VARCHAR) = '0'
+                   OR LENGTH(CAST(cvr_number AS VARCHAR)) < 8
             """).fetchone()[0]
 
             if incomplete_cvr_count == 0:
@@ -2727,9 +2736,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                   AND fields.cvr_number IS NOT NULL
                   AND LENGTH(fields.cvr_number) = 8
                   AND ({table_name}.cvr_number IS NULL
-                       OR {table_name}.cvr_number = ''
-                       OR {table_name}.cvr_number = '0'
-                       OR LENGTH({table_name}.cvr_number) < 8)
+                       OR CAST({table_name}.cvr_number AS VARCHAR) = ''
+                       OR CAST({table_name}.cvr_number AS VARCHAR) = '0'
+                       OR LENGTH(CAST({table_name}.cvr_number AS VARCHAR)) < 8)
             """
 
             self.conn.execute(update_query)
@@ -2749,9 +2758,9 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             complete_cvr_count = self.conn.execute(f"""
                 SELECT COUNT(*) FROM {table_name}
                 WHERE cvr_number IS NOT NULL
-                  AND cvr_number != ''
-                  AND cvr_number != '0'
-                  AND LENGTH(cvr_number) = 8
+                  AND CAST(cvr_number AS VARCHAR) != ''
+                  AND CAST(cvr_number AS VARCHAR) != '0'
+                  AND LENGTH(CAST(cvr_number AS VARCHAR)) = 8
             """).fetchone()[0]
 
             total_records = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
