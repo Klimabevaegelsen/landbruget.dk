@@ -185,19 +185,10 @@ export default function FieldAnalysisMain() {
       setClickedCoordinates(coordinates);
       setIsPanelCollapsed(false); // Expand panel when coordinates are clicked
 
-      // If a field is currently selected, update its click coordinates
-      if (selectedField) {
-        setSelectedField((prev) =>
-          prev
-            ? {
-                ...prev,
-                click_coordinates: coordinates,
-              }
-            : null
-        );
-      }
+      // Clear field selection when clicking on empty areas
+      setSelectedField(null);
     },
-    [selectedField]
+    []
   );
 
   // Handle map view state changes
