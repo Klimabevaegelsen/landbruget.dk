@@ -1015,8 +1015,10 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             if layer_type == "Marker":
                 has_cvr_number = "cvr_number" in columns
                 if not has_cvr_number:
-                    extra_columns = ", NULL as cvr_number"
-                    self.log.info(f"Adding NULL cvr_number column for Marker data in {year}")
+                    extra_columns = ", CAST(NULL AS VARCHAR) as cvr_number"
+                    self.log.info(
+                        f"Adding NULL cvr_number column (VARCHAR type) for Marker data in {year}"
+                    )
 
             final_query = f"""
                 SELECT {column_renames}{extra_columns},
@@ -2734,7 +2736,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 WHERE {table_name}.block_id = fields.markbloknr_c
                   AND {table_name}.field_id = fields.mark_nr
                   AND fields.cvr_number IS NOT NULL
-                  AND LENGTH(fields.cvr_number) = 8
+                  AND LENGTH(CAST(fields.cvr_number AS VARCHAR)) = 8
                   AND ({table_name}.cvr_number IS NULL
                        OR CAST({table_name}.cvr_number AS VARCHAR) = ''
                        OR CAST({table_name}.cvr_number AS VARCHAR) = '0'
@@ -2751,7 +2753,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                     AND f.field_id = fields.mark_nr
                 WHERE LENGTH(f.cvr_number) = 8
                   AND fields.cvr_number IS NOT NULL
-                  AND LENGTH(fields.cvr_number) = 8
+                  AND LENGTH(CAST(fields.cvr_number AS VARCHAR)) = 8
             """).fetchone()[0]
 
             # Final count of complete CVR numbers
