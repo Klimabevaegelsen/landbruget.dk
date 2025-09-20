@@ -91,7 +91,9 @@ class DataSourceYearDetector:
                 parent_dir = ""
 
             # List all paths that match the pattern
-            all_paths = await self.gcs.list_paths(f"gs://{self.config.gcs_bucket}/{parent_dir}")
+            all_paths = await asyncio.to_thread(
+                self.gcs.list_files, f"gs://{self.config.gcs_bucket}/{parent_dir}*"
+            )
 
             # Extract years from paths
             years = set()
@@ -124,7 +126,9 @@ class DataSourceYearDetector:
         """
         try:
             # List all pesticide proximity directories
-            all_paths = await self.gcs.list_paths(f"gs://{self.config.gcs_bucket}/gold/")
+            all_paths = await asyncio.to_thread(
+                self.gcs.list_files, f"gs://{self.config.gcs_bucket}/gold/*"
+            )
 
             years = set()
             # Pattern: pesticide_proximity_YYYY_YYYY+1
@@ -161,7 +165,7 @@ class DataSourceYearDetector:
             nles5_path = f"gs://{self.config.gcs_bucket}/gold/nles5_nitrogen_estimation/latest/"
 
             # Check if the path exists
-            paths = await self.gcs.list_paths(nles5_path)
+            paths = await asyncio.to_thread(self.gcs.list_files, f"{nles5_path}*")
             if not paths:
                 logger.warning("NLES5 data path not found")
                 return []
