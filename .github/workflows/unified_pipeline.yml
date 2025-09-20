@@ -35,7 +35,6 @@ on:
           - property_cadastral_merge
           - field_production
           - field_area_analysis
-          - pesticide_disaggregation
           - nles5_nitrogen_estimation
           - pesticide_compliance
           - arbejdstilsynet_inspections
