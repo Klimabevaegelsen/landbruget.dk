@@ -1,6 +1,7 @@
 """Configuration for PMTiles Generator Gold Pipeline."""
 
 from typing import List, Optional
+
 from pydantic import Field
 
 from unified_pipeline.common.base import BaseJobConfig
