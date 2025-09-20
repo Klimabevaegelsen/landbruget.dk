@@ -553,18 +553,20 @@ class PMTilesDataLoader:
     async def _load_bnbo_status(self) -> Optional[str]:
         """Load BNBO status dissolved data."""
         try:
-            gcs_path = f"gs://{self.config.gcs_bucket}/{self.config.bnbo_status_path}"
+            base_path = f"gs://{self.config.gcs_bucket}/{self.config.bnbo_status_path}"
+            gcs_path = await self._find_latest_timestamped_path(base_path)
 
-            if not await asyncio.to_thread(self.gcs.file_exists, gcs_path):
-                logger.warning(f"BNBO status data not found: {gcs_path}")
+            if not gcs_path:
+                logger.warning(f"BNBO status data not found in: {base_path}")
                 return None
 
             table_name = "bnbo_status_dissolved"
+            logger.info(f"Found latest timestamped directory: {gcs_path}")
 
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
+            FROM read_parquet('{gcs_path}*.parquet')
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -584,18 +586,20 @@ class PMTilesDataLoader:
     async def _load_wetlands(self) -> Optional[str]:
         """Load wetlands dissolved data."""
         try:
-            gcs_path = f"gs://{self.config.gcs_bucket}/{self.config.wetlands_path}"
+            base_path = f"gs://{self.config.gcs_bucket}/{self.config.wetlands_path}"
+            gcs_path = await self._find_latest_timestamped_path(base_path)
 
-            if not await asyncio.to_thread(self.gcs.file_exists, gcs_path):
-                logger.warning(f"Wetlands data not found: {gcs_path}")
+            if not gcs_path:
+                logger.warning(f"Wetlands data not found in: {base_path}")
                 return None
 
             table_name = "wetlands_dissolved"
+            logger.info(f"Found latest timestamped directory: {gcs_path}")
 
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
+            FROM read_parquet('{gcs_path}*.parquet')
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -615,18 +619,20 @@ class PMTilesDataLoader:
     async def _load_water_projects(self) -> Optional[str]:
         """Load water projects dissolved data."""
         try:
-            gcs_path = f"gs://{self.config.gcs_bucket}/{self.config.water_projects_path}"
+            base_path = f"gs://{self.config.gcs_bucket}/{self.config.water_projects_path}"
+            gcs_path = await self._find_latest_timestamped_path(base_path)
 
-            if not await asyncio.to_thread(self.gcs.file_exists, gcs_path):
-                logger.warning(f"Water projects data not found: {gcs_path}")
+            if not gcs_path:
+                logger.warning(f"Water projects data not found in: {base_path}")
                 return None
 
             table_name = "water_projects_dissolved"
+            logger.info(f"Found latest timestamped directory: {gcs_path}")
 
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
+            FROM read_parquet('{gcs_path}*.parquet')
             """
 
             await asyncio.to_thread(self.conn.execute, query)
