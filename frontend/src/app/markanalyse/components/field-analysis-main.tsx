@@ -14,6 +14,7 @@ import { FieldSidebar } from './sidebar/field-sidebar';
 import { MobileFieldMenu } from './sidebar/mobile-menu';
 import { FieldDetailsSheet } from './sheets/field-details-sheet';
 import { FieldDetailsContent } from './shared/field-details-content';
+import { FieldDetailsPanel } from '@/components/field-analysis/FieldDetailsPanel';
 import { LoadingState } from '@/components/field-analysis/LoadingState';
 import { YearSlider } from '@/components/field-analysis/YearSlider';
 import { pmtilesCacheService } from '@/services/pmtiles-cache-service';
@@ -486,93 +487,36 @@ export default function FieldAnalysisMain() {
               </button>
             </div>
           ) : (
-            /* Expanded State - Show full content */
-            <div className="p-6">
-              <div className="mb-6 flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-lg font-semibold">GPS Koordinater</h3>
-                  <p className="text-muted-foreground mt-1 truncate text-sm">
-                    Klik på en mark for detaljerede oplysninger
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Collapse Button */}
-                  <button
-                    onClick={() => setIsPanelCollapsed(true)}
-                    className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
-                    aria-label="Skjul panel"
-                    title="Skjul panel for bedre kortoversigt"
+            /* Expanded State - Use unified FieldDetailsPanel */
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b p-4">
+                <h3 className="text-lg font-semibold">GPS Koordinater</h3>
+                <button
+                  onClick={() => setIsPanelCollapsed(true)}
+                  className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                  aria-label="Skjul panel"
+                  title="Skjul GPS koordinater"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                  {/* Close Button */}
-                  <button
-                    onClick={() => setClickedCoordinates(null)}
-                    className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
-                    aria-label="Luk panel"
-                  >
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
               </div>
-              <div className="bg-primary/10 rounded-lg p-4">
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Latitude:</span>
-                    <span className="font-mono font-medium">
-                      {clickedCoordinates.lat.toFixed(5)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Longitude:</span>
-                    <span className="font-mono font-medium">
-                      {clickedCoordinates.lng.toFixed(5)}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2">
-                  <a
-                    href={`https://skraafoto.kortforsyningen.dk/?x=${clickedCoordinates.lng}&y=${clickedCoordinates.lat}&zoom=15`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex w-full items-center justify-center rounded px-3 py-2 text-center text-sm font-medium transition-colors"
-                  >
-                    Se Skråfoto
-                  </a>
-                  <button
-                    onClick={() => {
-                      const googleMapsUrl = `https://www.google.com/maps?q=${clickedCoordinates.lat},${clickedCoordinates.lng}`;
-                      window.open(googleMapsUrl, '_blank');
-                    }}
-                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 active:bg-secondary/80 flex w-full items-center justify-center rounded px-3 py-2 text-center text-sm font-medium transition-colors"
-                  >
-                    Åbn i Google Maps
-                  </button>
-                </div>
+              <div className="flex-1 overflow-y-auto">
+                <FieldDetailsPanel
+                  coordinates={clickedCoordinates}
+                  onClose={() => setClickedCoordinates(null)}
+                />
               </div>
             </div>
           )}

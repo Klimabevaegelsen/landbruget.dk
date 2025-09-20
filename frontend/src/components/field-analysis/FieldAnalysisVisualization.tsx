@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 import { ViewState } from '@vis.gl/react-maplibre';
 import { LayerControlPanelEnhanced as LayerControlPanel } from './LayerControlPanel';
 import { FieldDetailsPanel } from './FieldDetailsPanel';
-import { CoordinatePanel } from './CoordinatePanel';
 import { LoadingState } from './LoadingState';
 import { YearSlider } from './YearSlider';
 import { pmtilesCacheService } from '@/services/pmtiles-cache-service';
@@ -431,7 +430,7 @@ export default function FieldAnalysisVisualization() {
               paddingBottom: 'env(safe-area-inset-bottom)',
             }}
           >
-            <CoordinatePanel
+            <FieldDetailsPanel
               coordinates={clickedCoordinates}
               onClose={() => setClickedCoordinates(null)}
             />

@@ -1824,6 +1824,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       const feature = event.features && event.features[0];
       if (feature && feature.layer.id.startsWith('fields-')) {
         // Field click - add coordinates and select field
+        console.log('🔍 PMTiles feature properties:', feature.properties);
+        console.log(
+          '🔍 Available property keys:',
+          Object.keys(feature.properties || {})
+        );
         const fieldData = feature.properties as FieldAnalysisData;
         fieldData.click_coordinates = coordinates;
         onFieldSelect(fieldData);
@@ -1956,20 +1961,12 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
 
-      {/* Color Legend - positioned to avoid mobile controls and sidebar collision */}
+      {/* Color Legend - positioned to ensure visibility above the fold on desktop */}
       <div
-        className="pointer-events-auto absolute left-4 z-30 max-w-[calc(100vw-2rem)] md:left-[90px] md:max-w-xs"
+        className="pointer-events-auto absolute bottom-4 left-4 z-30 max-h-48 max-w-[calc(100vw-2rem)] overflow-auto md:top-20 md:bottom-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs"
         data-testid="color-legend-container"
-        style={{
-          // Position from bottom, but limit height to ensure it fits
-          bottom: '1rem',
-          maxHeight: 'calc(100vh - 8rem)', // Ensure it fits within viewport
-          overflow: 'auto', // Allow scrolling if content is too tall
-        }}
       >
-        <div style={{ maxHeight: '12rem', overflow: 'auto' }}>
-          <ColorLegend filterState={filterState} />
-        </div>
+        <ColorLegend filterState={filterState} />
       </div>
 
       {hoverInfo && <MapTooltip {...hoverInfo} />}
