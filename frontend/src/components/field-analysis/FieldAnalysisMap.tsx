@@ -1829,6 +1829,13 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           '🔍 Available property keys:',
           Object.keys(feature.properties || {})
         );
+        console.log('🔍 Dosage values:', {
+          total_dosage_kg: feature.properties?.total_dosage_kg,
+          total_dosage_liters: feature.properties?.total_dosage_liters,
+          total_dosage_grams: feature.properties?.total_dosage_grams,
+          total_dosage_ml: feature.properties?.total_dosage_ml,
+          total_dosage_tablets: feature.properties?.total_dosage_tablets,
+        });
         const fieldData = feature.properties as FieldAnalysisData;
         fieldData.click_coordinates = coordinates;
         onFieldSelect(fieldData);
