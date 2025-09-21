@@ -751,8 +751,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Force garbage collection
         collected = gc.collect()
 
-        # DuckDB cleanup
-        self.conn.execute("CHECKPOINT")
+        # NOTE: CHECKPOINT not supported for in-memory databases
+        # DuckDB handles memory management automatically for in-memory mode
 
         self.log.debug(f"Memory cleanup: collected {collected} objects")
 
