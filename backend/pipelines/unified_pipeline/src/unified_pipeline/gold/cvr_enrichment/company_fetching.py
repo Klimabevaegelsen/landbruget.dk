@@ -144,9 +144,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.conn.execute("SET temp_directory = '/tmp/duckdb_cvr_company'")
             self.conn.execute("SET max_temp_directory_size = '3GB'")  # Conservative limit
 
-            # CRITICAL: More frequent checkpoints to clear memory
-            self.conn.execute("SET checkpoint_threshold = '128MB'")  # More frequent than default
-            self.conn.execute("SET wal_autocheckpoint = 50")  # More frequent WAL checkpoints
+            # NOTE: Checkpoint settings don't apply to in-memory databases
+            # DuckDB handles memory management automatically for in-memory mode
 
             # ADDITIONAL: Disable object cache to reduce memory usage
             self.conn.execute("SET enable_object_cache = false")  # Prioritize memory over speed
@@ -155,7 +154,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.log.info("   • Memory limit: 8GB (reduced from 12GB)")
             self.log.info("   • Threads: 2 (reduced from 4)")
             self.log.info("   • Temp directory size: 3GB")
-            self.log.info("   • Checkpoint threshold: 128MB")
+            self.log.info("   • Database: In-memory (no checkpointing needed)")
 
         except Exception as e:
             self.log.warning(f"Failed to apply memory optimizations: {e}")
@@ -174,10 +173,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         try:
             self.log.debug("🧹 Starting batch memory cleanup (data already persisted)...")
 
-            # CRITICAL: Force DuckDB checkpoint to flush all data to disk and clear WAL
-            # This ensures all batch data is permanently written before memory cleanup
-            self.conn.execute("CHECKPOINT")
-            self.log.debug("   ✓ DuckDB checkpoint completed - all data flushed to disk")
+            # NOTE: CHECKPOINT is not supported in in-memory databases
+            # Data is already safely stored in DuckDB in-memory tables
+            # We rely on DuckDB's internal memory management instead
 
             # CRITICAL: Force DuckDB to optimize and free internal structures
             self.conn.execute("PRAGMA optimize")
