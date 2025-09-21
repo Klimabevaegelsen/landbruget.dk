@@ -110,12 +110,12 @@ serve(async (req) => {
           unit: "DKK",
           company_count: profitCount || 0,
           items: profitData.map((item, index) => ({
-              company_id: item.company_id,
+            company_id: item.company_id,
             cvr_number: item.cvr_number?.toString() || "N/A",
             company_name: item.companies?.company_name || "Ukendt virksomhed",
             municipality: item.companies?.municipality || "Ukendt kommune",
-              rank: index + 1,
-              value: item.net_profit_loss,
+            rank: index + 1,
+            value: item.net_profit_loss,
             formatted_value: `${(item.net_profit_loss / 1000000).toFixed(
               1
             )}M kr`,
@@ -227,19 +227,18 @@ serve(async (req) => {
           `
           company_id,
           total_area_ha,
-          rank_dk_total_area,
           year
         `
         )
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("total_area_ha", 0) // Only include companies with actual land area
-        .order("rank_dk_total_area", { ascending: true })
+        .order("total_area_ha", { ascending: false })
         .limit(limit);
 
       const { count: landAreaCount } = await supabase
         .from("land_use_summary")
         .select("company_id", { count: "exact" })
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("total_area_ha", 0);
 
       if (landAreaData?.length) {
@@ -289,7 +288,7 @@ serve(async (req) => {
           year
         `
         )
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("organic_area_ha", 0)
         .order("organic_area_ha", { ascending: false })
         .limit(limit);
@@ -297,7 +296,7 @@ serve(async (req) => {
       const { count: organicAreaCount } = await supabase
         .from("land_use_summary")
         .select("company_id", { count: "exact" })
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("organic_area_ha", 0);
 
       if (organicAreaData?.length) {
@@ -350,7 +349,7 @@ serve(async (req) => {
           year
         `
         )
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("total_area_ha", 50) // Only companies with substantial land
         .gt("organic_percentage", 0)
         .order("organic_percentage", { ascending: false })
@@ -360,7 +359,7 @@ serve(async (req) => {
       const { count: organicPercentCount } = await supabase
         .from("land_use_summary")
         .select("company_id", { count: "exact" })
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("total_area_ha", 50)
         .gt("organic_percentage", 0);
 
@@ -411,7 +410,7 @@ serve(async (req) => {
           year
         `
         )
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("total_fields", 0) // Only include companies with actual fields
         .order("total_fields", { ascending: false })
         .limit(limit);
@@ -419,7 +418,7 @@ serve(async (req) => {
       const { count: fieldsCount } = await supabase
         .from("land_use_summary")
         .select("company_id", { count: "exact" })
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("total_fields", 0);
 
       if (fieldsData?.length) {
@@ -645,33 +644,31 @@ serve(async (req) => {
       // 12. Most BNBO Area Not Completed AND Not Covered by Projects
       console.log("🔍 Querying BNBO Action Required data...");
       const { data: bnboNotDealtData, error: bnboError1 } = await supabase
-        .from("bnbo_summary")
+        .from("bnbo_environmental_status")
         .select(
           `
           company_id,
-          area_ha,
+          action_required_hectares,
           year
         `
         )
         .eq("year", 2025)
-        .eq("status", "Action Required")
-        .gt("area_ha", 0)
-        .order("area_ha", { ascending: false })
+        .gt("action_required_hectares", 0)
+        .order("action_required_hectares", { ascending: false })
         .limit(limit);
 
       const { count: bnboNotDealtCount } = await supabase
-        .from("bnbo_summary")
+        .from("bnbo_environmental_status")
         .select("company_id", { count: "exact" })
         .eq("year", 2025)
-        .eq("status", "Action Required")
-        .gt("area_ha", 0);
+        .gt("action_required_hectares", 0);
 
       console.log("BNBO Action Required result:", {
         data: bnboNotDealtData?.length || 0,
         error: bnboError1,
       });
 
-      if (bnboNotDealtData?.length) {
+      if (bnboNotDealtData && bnboNotDealtData.length > 0) {
         // Step 2: Get company details for the BNBO data
         const companyIds = bnboNotDealtData.map((item) => item.company_id);
         const { data: bnboCompanies } = await supabase
@@ -700,8 +697,8 @@ serve(async (req) => {
               company_name: company?.company_name || "Ukendt virksomhed",
               municipality: company?.municipality || "Ukendt kommune",
               rank: index + 1,
-              value: item.area_ha,
-              formatted_value: `${item.area_ha.toFixed(1)} ha`,
+              value: item.action_required_hectares,
+              formatted_value: `${item.action_required_hectares.toFixed(1)} ha`,
               year: item.year,
             };
           }),
@@ -711,26 +708,24 @@ serve(async (req) => {
       // 13. Most BNBO Area Dealt With OR Covered by Projects
       console.log("🔍 Querying BNBO Completed data...");
       const { data: bnboCompletedData, error: bnboError2 } = await supabase
-        .from("bnbo_summary")
+        .from("bnbo_environmental_status")
         .select(
           `
           company_id,
-          area_ha,
+          completed_hectares,
           year
         `
         )
         .eq("year", 2025)
-        .in("status", ["Completed", "Action Required, Completed"])
-        .gt("area_ha", 0)
-        .order("area_ha", { ascending: false })
+        .gt("completed_hectares", 0)
+        .order("completed_hectares", { ascending: false })
         .limit(limit);
 
       const { count: bnboCompletedCount } = await supabase
-        .from("bnbo_summary")
+        .from("bnbo_environmental_status")
         .select("company_id", { count: "exact" })
         .eq("year", 2025)
-        .in("status", ["Completed", "Action Required, Completed"])
-        .gt("area_ha", 0);
+        .gt("completed_hectares", 0);
 
       console.log("BNBO Completed result:", {
         data: bnboCompletedData?.length || 0,
@@ -766,8 +761,8 @@ serve(async (req) => {
               company_name: company?.company_name || "Ukendt virksomhed",
               municipality: company?.municipality || "Ukendt kommune",
               rank: index + 1,
-              value: item.area_ha,
-              formatted_value: `${item.area_ha.toFixed(1)} ha`,
+              value: item.completed_hectares,
+              formatted_value: `${item.completed_hectares.toFixed(1)} ha`,
               year: item.year,
             };
           }),
@@ -922,7 +917,7 @@ serve(async (req) => {
         `
         )
         .eq("species_code", "15")
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("total_animals", 0) // Only include sites with actual animals
         .order("rank_dk_species_production", { ascending: true })
         .limit(limit);
@@ -931,7 +926,7 @@ serve(async (req) => {
         .from("site_species_production_ranked")
         .select("chr", { count: "exact" })
         .eq("species_code", "15")
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("total_animals", 0);
 
       if (pigData) {
@@ -996,12 +991,13 @@ serve(async (req) => {
           municipality,
           total_animals,
           rank_dk_species_production,
-          year
+          year,
+          company_id
         `
         )
         .eq("species_code", "12")
         .eq("year", 2025)
-        .gt("total_animals", 0) // Only include sites with actual animals
+        .gt("total_animals", 0)
         .order("rank_dk_species_production", { ascending: true })
         .limit(limit);
 
@@ -1012,54 +1008,39 @@ serve(async (req) => {
         .eq("year", 2025)
         .gt("total_animals", 0);
 
-      if (cattleData) {
-        const chrList = cattleData.map((item) => item.chr);
-        const { data: chrToCvr } = await supabase
-          .from("production_sites")
-          .select(
-            `
-            chr,
-            companies!inner(id, company_name, cvr_number)
-          `
-          )
-          .in("chr", chrList);
+      if (cattleData && cattleData.length > 0) {
+        const companyIds = cattleData.map((item: any) => item.company_id);
+        const { data: cattleCompanies } = await supabase
+          .from("companies")
+          .select("id, cvr_number, company_name, municipality")
+          .in("id", companyIds);
 
-        const chrMap = new Map(
-          chrToCvr?.map((item: any) => [
-            item.chr.toString(),
-            {
-              cvr_number: item.companies?.cvr_number?.toString() || "",
-              company_id: item.companies?.id || "",
-              company_name: item.companies?.company_name || "",
-            },
-          ]) || []
+        const companyMap = new Map(
+          cattleCompanies?.map((c: any) => [c.id, c]) || []
         );
 
         rankings.push({
           id: "largest_cattle_production",
           title: "Størst Kvægproduktion",
           category: "animal",
-          description:
-            "Produktionssteder med den største kvægproduktion i 2024",
+          description: "Virksomheder med den største kvægkapacitet i 2025",
           unit: "kvæg",
           company_count: cattleCount || 0,
-          items: cattleData
-            .map((item) => {
-              const companyInfo = chrMap.get(item.chr);
-              return companyInfo
-                ? {
-                    company_id: companyInfo.company_id,
-                    cvr_number: companyInfo.cvr_number,
-                    company_name: companyInfo.company_name,
-                    municipality: item.municipality,
-                    rank: item.rank_dk_species_production,
-                    value: item.total_animals,
-                    formatted_value: `${item.total_animals.toLocaleString()} kvæg`,
-                    year: item.year,
-                  }
-                : null;
-            })
-            .filter((item) => item !== null),
+          items: cattleData.map((item: any) => {
+            const company = companyMap.get(item.company_id);
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || "N/A",
+              company_name: company?.company_name || "Ukendt virksomhed",
+              municipality: item.municipality || "Ukendt kommune",
+              rank: item.rank_dk_species_production,
+              value: item.total_animals,
+              formatted_value: `${Math.round(
+                item.total_animals
+              ).toLocaleString()} kvæg`,
+              year: item.year,
+            };
+          }),
         });
       }
 
@@ -1079,7 +1060,7 @@ serve(async (req) => {
         .limit(limit);
 
       const { count: antibioticCount } = await supabase
-        .from("antibiotic_usage_summary")
+        .from("animal_welfare_summary")
         .select("company_id", { count: "exact" })
         .eq("year", 2025)
         .gt("total_ddd_usage", 0);
@@ -1107,7 +1088,7 @@ serve(async (req) => {
           items: antibioticData.map((item, index) => {
             const company = companyMap.get(item.company_id);
             return {
-            company_id: item.company_id,
+              company_id: item.company_id,
               cvr_number: company?.cvr_number?.toString() || "N/A",
               company_name: company?.company_name || "Ukendt virksomhed",
               municipality: company?.municipality || "Ukendt kommune",
@@ -1130,7 +1111,7 @@ serve(async (req) => {
           year
         `
         )
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("site_count", 0) // Only include companies with actual production sites
         .order("site_count", { ascending: false })
         .limit(limit);
@@ -1138,7 +1119,7 @@ serve(async (req) => {
       const { count: sitesCount } = await supabase
         .from("animal_welfare_summary")
         .select("company_id", { count: "exact" })
-        .eq("year", 2025)
+        .eq("year", 2024)
         .gt("site_count", 0);
 
       if (sitesData?.length) {
@@ -1177,24 +1158,37 @@ serve(async (req) => {
         });
       }
 
-      // 20. Most Transported Pigs
-      const { data: transportData } = await supabase
+      // 20. Most Transported Pigs - Manual join
+      const { data: transportRawData } = await supabase
         .from("animal_transport_weekly_summary")
-        .select(
-          `
-          company_id,
-          animal_count,
-          companies!inner(cvr_number, company_name, municipality)
-        `
-        )
+        .select("company_id, animal_count")
         .gte("transport_date_week_start", "2024-01-01")
         .lt("transport_date_week_start", "2025-01-01");
 
-      const { count: transportCount } = await supabase
-        .from("animal_transport_weekly_summary")
-        .select("company_id", { count: "exact", head: true })
-        .gte("transport_date_week_start", "2024-01-01")
-        .lt("transport_date_week_start", "2025-01-01");
+      // Get unique company IDs and fetch company details
+      const uniqueCompanyIds = [
+        ...new Set(transportRawData?.map((item) => item.company_id)),
+      ];
+      const transportCount = uniqueCompanyIds.length;
+
+      const { data: transportCompanies } = await supabase
+        .from("companies")
+        .select("id, cvr_number, company_name, municipality")
+        .in("id", uniqueCompanyIds);
+
+      // Create company lookup map
+      const transportCompanyMap = new Map(
+        transportCompanies?.map((c: any) => [c.id, c]) || []
+      );
+
+      // Join the data
+      const transportData =
+        transportRawData
+          ?.map((transport) => ({
+            ...transport,
+            companies: transportCompanyMap.get(transport.company_id),
+          }))
+          .filter((item) => item.companies) || [];
 
       if (transportData) {
         // Aggregate by company
@@ -1205,8 +1199,8 @@ serve(async (req) => {
             companyTransports.set(key, {
               company_id: item.company_id,
               cvr_number: item.companies.cvr_number,
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
+              company_name: item.companies.company_name,
+              municipality: item.companies.municipality,
               total_animals: 0,
             });
           }
@@ -1237,6 +1231,82 @@ serve(async (req) => {
           })),
         });
       }
+
+      // 21. Most Transported Cattle
+      const { data: cattleTransportRawData } = await supabase
+        .from("animal_transports")
+        .select("company_id, animal_count")
+        .eq("species_code", "12")
+        .gte("transport_date", "2024-01-01")
+        .lt("transport_date", "2025-01-01");
+
+      // Get unique company IDs and fetch company details
+      const uniqueCattleCompanyIds = [
+        ...new Set(cattleTransportRawData?.map((item) => item.company_id)),
+      ];
+      const cattleTransportCount = uniqueCattleCompanyIds.length;
+
+      const { data: cattleTransportCompanies } = await supabase
+        .from("companies")
+        .select("id, cvr_number, company_name, municipality")
+        .in("id", uniqueCattleCompanyIds);
+
+      // Create company lookup map
+      const cattleTransportCompanyMap = new Map(
+        cattleTransportCompanies?.map((c: any) => [c.id, c]) || []
+      );
+
+      // Join the data
+      const cattleTransportData =
+        cattleTransportRawData
+          ?.map((transport) => ({
+            ...transport,
+            companies: cattleTransportCompanyMap.get(transport.company_id),
+          }))
+          .filter((item) => item.companies) || [];
+
+      if (cattleTransportData) {
+        // Aggregate by company
+        const companyCattleTransports = new Map();
+        cattleTransportData.forEach((item) => {
+          const companyId = item.company_id;
+          const existing = companyCattleTransports.get(companyId) || {
+            company_id: companyId,
+            total_animals: 0,
+            cvr_number: item.companies.cvr_number,
+            company_name: item.companies.company_name,
+            municipality: item.companies.municipality,
+          };
+          existing.total_animals += item.animal_count;
+          companyCattleTransports.set(companyId, existing);
+        });
+
+        const sortedCattleTransports = Array.from(
+          companyCattleTransports.values()
+        )
+          .filter((company) => company.total_animals > 0)
+          .sort((a, b) => b.total_animals - a.total_animals)
+          .slice(0, limit);
+
+        rankings.push({
+          id: "most_transported_cattle",
+          title: "Flest Transporterede Kvæg",
+          category: "animal",
+          description: "Virksomheder med flest transporterede kvæg i 2024",
+          unit: "kvæg",
+          company_count: cattleTransportCount || 0,
+          items: sortedCattleTransports.map((item, index) => ({
+            company_id: item.company_id,
+            cvr_number: item.cvr_number?.toString() || "N/A",
+            company_name: item.company_name || "Ukendt virksomhed",
+            municipality: item.municipality || "Ukendt kommune",
+            rank: index + 1,
+            value: item.total_animals,
+            formatted_value: `${item.total_animals.toLocaleString()} kvæg`,
+            year: 2024,
+          })),
+        });
+      }
     }
 
     // Worker Rankings
@@ -1258,7 +1328,7 @@ serve(async (req) => {
 
       if (workerEmployeeData && workerEmployeeData.length > 0) {
         // Get company details for the worker data
-        const companyIds = workerEmployeeData.map(item => item.company_id);
+        const companyIds = workerEmployeeData.map((item) => item.company_id);
         const { data: companies } = await supabase
           .from("companies")
           .select("id, cvr_number, company_name, municipality")
@@ -1266,7 +1336,7 @@ serve(async (req) => {
 
         // Create a map for quick lookup
         const companyMap = new Map();
-        companies?.forEach(company => {
+        companies?.forEach((company) => {
           companyMap.set(company.id, company);
         });
 
@@ -1285,9 +1355,11 @@ serve(async (req) => {
               cvr_number: company?.cvr_number?.toString() || "N/A",
               company_name: company?.company_name || "Ukendt virksomhed",
               municipality: company?.municipality || "Ukendt kommune",
-            rank: index + 1,
-            value: item.average_employee_count,
-              formatted_value: `${Math.round(item.average_employee_count)} ansatte`,
+              rank: index + 1,
+              value: item.average_employee_count,
+              formatted_value: `${Math.round(
+                item.average_employee_count
+              )} ansatte`,
               year: item.year,
             };
           }),
@@ -1311,7 +1383,7 @@ serve(async (req) => {
 
       if (visaData && visaData.length > 0) {
         // Get company details for the visa data
-        const visaCompanyIds = visaData.map(item => item.company_id);
+        const visaCompanyIds = visaData.map((item) => item.company_id);
         const { data: visaCompanies } = await supabase
           .from("companies")
           .select("id, cvr_number, company_name, municipality")
@@ -1319,7 +1391,7 @@ serve(async (req) => {
 
         // Create a map for quick lookup
         const visaCompanyMap = new Map();
-        visaCompanies?.forEach(company => {
+        visaCompanies?.forEach((company) => {
           visaCompanyMap.set(company.id, company);
         });
 
@@ -1347,23 +1419,38 @@ serve(async (req) => {
         });
       }
 
-      // 23. Most Work Injuries (text ranges like "1-5", "6", etc.)
-      const { data: injuryData } = await supabase
+      // 23. Most Work Injuries - Manual join like other worker rankings
+      const { data: injuryRawData } = await supabase
         .from("worker_yearly_summary")
-        .select(
-          `
-          company_id,
-          injury_count_reported,
-          year,
-          companies!inner(cvr_number, company_name, municipality)
-        `
-        )
+        .select("company_id, injury_count_reported, year")
         .eq("year", 2024)
         .not("injury_count_reported", "is", null)
         .neq("injury_count_reported", "")
         .neq("injury_count_reported", "0")
-        .order("injury_count_reported", { ascending: false })
-        .limit(limit);
+        .limit(200);
+
+      // Get company data for the injury data
+      const injuryCompanyIds =
+        injuryRawData?.map((item) => item.company_id) || [];
+      const { data: injuryCompanies } = await supabase
+        .from("companies")
+        .select("id, cvr_number, company_name, municipality")
+        .in("id", injuryCompanyIds);
+
+      // Create lookup map
+      const injuryCompanyLookup = new Map();
+      injuryCompanies?.forEach((company) => {
+        injuryCompanyLookup.set(company.id, company);
+      });
+
+      // Join the data
+      const injuryData =
+        injuryRawData
+          ?.map((injury) => ({
+            ...injury,
+            companies: injuryCompanyLookup.get(injury.company_id),
+          }))
+          .filter((item) => item.companies) || [];
 
       const { count: injuryCount } = await supabase
         .from("worker_yearly_summary")
@@ -1373,7 +1460,39 @@ serve(async (req) => {
         .neq("injury_count_reported", "")
         .neq("injury_count_reported", "0");
 
-      if (injuryData) {
+      if (injuryData && injuryData.length > 0) {
+        // Parse injury count buckets and convert to numeric values for sorting
+        const parseInjuryCount = (injuryStr: string): number => {
+          if (!injuryStr) return 0;
+
+          // Handle range format like "1-5"
+          if (injuryStr.includes("-")) {
+            const parts = injuryStr.split("-");
+            // Use the upper bound of the range
+            return parseInt(parts[1]) || 0;
+          }
+
+          // Handle multiple values separated by "; "
+          if (injuryStr.includes(";")) {
+            const values = injuryStr.split(";").map((v) => v.trim());
+            // Return the highest numeric value
+            return Math.max(...values.map(parseInjuryCount));
+          }
+
+          // Handle single numeric value
+          const num = parseInt(injuryStr);
+          return isNaN(num) ? 0 : num;
+        };
+
+        // Sort by injury count (highest first)
+        const sortedInjuries = injuryData
+          .map((item) => ({
+            ...item,
+            numeric_injury_count: parseInjuryCount(item.injury_count_reported),
+          }))
+          .sort((a, b) => b.numeric_injury_count - a.numeric_injury_count)
+          .slice(0, limit);
+
         rankings.push({
           id: "most_work_injuries",
           title: "Flest Arbejdsulykker",
@@ -1381,32 +1500,50 @@ serve(async (req) => {
           description: "Virksomheder med rapporterede arbejdsulykker i 2024",
           unit: "ulykker",
           company_count: injuryCount || 0,
-          items: injuryData.map((item, index) => ({
+          items: sortedInjuries.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.companies?.cvr_number?.toString() || "N/A",
             company_name: item.companies?.company_name || "Ukendt virksomhed",
             municipality: item.companies?.municipality || "Ukendt kommune",
             rank: index + 1,
-            value: item.injury_count_reported,
+            value: item.numeric_injury_count,
             formatted_value: `${item.injury_count_reported} ulykker`,
             year: item.year,
           })),
         });
       }
 
-      // 24. Most Workplace Inspections
-      const { data: inspectionData } = await supabase
+      // 24. Most Workplace Inspections - Get data and manually join
+      const { data: inspectionRawData } = await supabase
         .from("workplace_inspections")
-        .select(
-          `
-          cvr_number,
-          company_name,
-          year,
-          companies!inner(id, cvr_number, company_name, municipality)
-        `
-        )
+        .select("cvr_number, company_name, year")
         .eq("year", 2025)
-        .limit(200); // Get more records to group by company
+        .limit(200);
+
+      // Get company data for matching
+      const inspectionCvrs =
+        inspectionRawData
+          ?.map((item) => parseInt(item.cvr_number))
+          .filter((cvr) => !isNaN(cvr)) || [];
+      const { data: companyData } = await supabase
+        .from("companies")
+        .select("id, cvr_number, company_name, municipality")
+        .in("cvr_number", inspectionCvrs);
+
+      // Create lookup map
+      const companyLookup = new Map();
+      companyData?.forEach((company) => {
+        companyLookup.set(company.cvr_number.toString(), company);
+      });
+
+      // Join the data
+      const inspectionData =
+        inspectionRawData
+          ?.map((inspection) => ({
+            ...inspection,
+            companies: companyLookup.get(inspection.cvr_number),
+          }))
+          .filter((item) => item.companies) || [];
 
       // Get count of companies with inspections
       const { count: inspectionCount } = await supabase
@@ -1456,21 +1593,38 @@ serve(async (req) => {
         });
       }
 
-      // 25. Most Urgent Violations (Strakspåbud)
-      const { data: urgentViolationData } = await supabase
+      // 25. Most Urgent Violations (Strakspåbud) - Manual join
+      const { data: urgentViolationRawData } = await supabase
         .from("workplace_inspections")
-        .select(
-          `
-          cvr_number,
-          company_name,
-          decision_type,
-          year,
-          companies!inner(id, cvr_number, company_name, municipality)
-        `
-        )
+        .select("cvr_number, company_name, decision_type, year")
         .eq("year", 2025)
         .eq("decision_type", "Strakspåbud")
-        .limit(200); // Get more to properly count violations per company
+        .limit(200);
+
+      // Get company data for urgent violations
+      const violationCvrs =
+        urgentViolationRawData
+          ?.map((item) => parseInt(item.cvr_number))
+          .filter((cvr) => !isNaN(cvr)) || [];
+      const { data: violationCompanyData } = await supabase
+        .from("companies")
+        .select("id, cvr_number, company_name, municipality")
+        .in("cvr_number", violationCvrs);
+
+      // Create lookup map for violations
+      const violationCompanyLookup = new Map();
+      violationCompanyData?.forEach((company) => {
+        violationCompanyLookup.set(company.cvr_number.toString(), company);
+      });
+
+      // Join the violation data
+      const urgentViolationData =
+        urgentViolationRawData
+          ?.map((violation) => ({
+            ...violation,
+            companies: violationCompanyLookup.get(violation.cvr_number),
+          }))
+          .filter((item) => item.companies) || [];
 
       if (urgentViolationData) {
         // Group by company and count urgent violations
@@ -1516,70 +1670,6 @@ serve(async (req) => {
           })),
         });
       }
-
-      // 26. Best Safety Compliance (highest compliance rate)
-      const { data: complianceData } = await supabase
-        .from("workplace_inspections")
-        .select(
-          `
-          cvr_number,
-          company_name,
-          company_compliance_rate,
-          year,
-          companies!inner(id, cvr_number, company_name, municipality)
-        `
-        )
-        .eq("year", 2025)
-        .not("company_compliance_rate", "is", null)
-        .gte("company_compliance_rate", 0.5) // Only show companies with at least 50% compliance
-        .order("company_compliance_rate", { ascending: false })
-        .limit(limit);
-
-      if (complianceData) {
-        // Get unique companies with their best compliance rate
-        const complianceByCompany = complianceData.reduce((acc, item) => {
-          const key = item.cvr_number;
-          if (
-            !acc[key] ||
-            acc[key].compliance_rate < item.company_compliance_rate
-          ) {
-            acc[key] = {
-              cvr_number: item.cvr_number,
-              company_name: item.companies?.company_name || item.company_name,
-              municipality: item.companies?.municipality,
-              company_id: item.companies?.id,
-              compliance_rate: item.company_compliance_rate,
-            };
-          }
-          return acc;
-        }, {});
-
-        const sortedCompliance = Object.values(complianceByCompany)
-          .sort((a: any, b: any) => b.compliance_rate - a.compliance_rate)
-          .slice(0, limit);
-
-        rankings.push({
-          id: "best_safety_compliance",
-          title: "Bedste Arbejdsmiljø Compliance",
-          category: "worker",
-          description:
-            "Virksomheder med højeste compliance rate hos Arbejdstilsynet i 2025",
-          unit: "compliance",
-          company_count: Object.keys(complianceByCompany).length,
-          items: sortedCompliance.map((item: any, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.cvr_number?.toString() || "N/A",
-            company_name: item.company_name || "Ukendt virksomhed",
-            municipality: item.municipality || "Ukendt kommune",
-            rank: index + 1,
-            value: item.compliance_rate,
-            formatted_value: `${(item.compliance_rate * 100).toFixed(
-              1
-            )}% compliance`,
-            year: 2025,
-          })),
-        });
-      }
     }
 
     // Filter to specific ranking if requested
@@ -1602,12 +1692,12 @@ serve(async (req) => {
     });
 
     return new Response(JSON.stringify(response), {
-        headers: {
-          ...corsHeaders,
+      headers: {
+        ...corsHeaders,
         "Content-Type": "application/json",
         "X-Cache": "MISS",
-        },
-        status: 200,
+      },
+      status: 200,
     });
   } catch (error) {
     console.error("Error in homepage-rankings:", error);
@@ -1619,7 +1709,7 @@ serve(async (req) => {
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 500,
-  }
+      }
     );
   }
 });
