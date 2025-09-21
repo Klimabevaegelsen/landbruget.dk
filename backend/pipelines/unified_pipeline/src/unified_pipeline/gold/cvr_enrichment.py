@@ -573,7 +573,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     # Aggressive cleanup every 10 chunks (following H3 PFAS pattern)
                     if (chunk_idx + 1) % 10 == 0:
                         self.log.info(f"🧹 Deep cleanup after {chunk_idx + 1} chunks")
-                        self.conn.execute("CHECKPOINT")
+                        # NOTE: CHECKPOINT not supported for in-memory databases
                         self.conn.execute("PRAGMA optimize")
                         import gc
 
@@ -1855,7 +1855,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         )
 
                         # Immediate cleanup after each batch
-                        self.conn.execute("CHECKPOINT")
+                        # NOTE: CHECKPOINT not supported for in-memory databases
                         import gc
 
                         gc.collect()
@@ -1877,7 +1877,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.info(f"✅ Completed processing {employment_field} for all companies")
 
             # Deep cleanup after each employment type
-            self.conn.execute("CHECKPOINT")
+            # NOTE: CHECKPOINT not supported for in-memory databases
             self.conn.execute("PRAGMA optimize")
             import gc
 
@@ -1893,7 +1893,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         """
         try:
             # DuckDB-specific cleanup
-            self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL
+            # NOTE: CHECKPOINT not supported for in-memory databases
             self.conn.execute("PRAGMA optimize")  # Optimize database structure
 
             # Force Python garbage collection
@@ -1928,7 +1928,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.warning("🚨 Performing emergency memory cleanup")
 
             # Aggressive DuckDB cleanup
-            self.conn.execute("CHECKPOINT")
+            # NOTE: CHECKPOINT not supported for in-memory databases
             self.conn.execute("PRAGMA optimize")
 
             # Clear all caches
