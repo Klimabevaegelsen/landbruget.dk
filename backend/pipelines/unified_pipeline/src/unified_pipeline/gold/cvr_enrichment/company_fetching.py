@@ -86,6 +86,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         """
         super().__init__(config)
 
+        # Apply memory optimizations for GitHub Actions environment
+        self._apply_memory_optimizations()
+
         # Initialize CVR API client
         cvr_username = os.getenv("CVR_USERNAME", "Martin_Collignon_CVR_I_SKYEN")
         cvr_password = os.getenv("CVR_PASSWORD", "3a37d029-9588-4c00-8a09-3d2901452d45")
@@ -110,6 +113,116 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             else "disabled (handled in Address Geocoding step)"
         )
         self.log.info(f"   • Address geocoding: {geocoding_status}")
+
+    def _apply_memory_optimizations(self):
+        """
+        Apply DuckDB memory optimizations specifically for CVR company fetching.
+
+        The company fetching step processes large JSON structures from the CVR API,
+        which can be memory-intensive. This method configures DuckDB for GitHub Actions
+        environment with conservative memory settings.
+        """
+        try:
+            self.log.info(
+                "🔧 Applying CVR company fetching memory optimizations for GitHub Actions..."
+            )
+
+            # CRITICAL: Reduce memory limit for GitHub Actions (16GB total RAM)
+            # Leave 8GB buffer for OS, Python, and API processing
+            self.conn.execute("SET memory_limit = '8GB'")  # Reduced from default 12GB
+            self.conn.execute("SET max_memory = '8GB'")
+
+            # CRITICAL: Reduce threads to minimize memory pressure
+            # CVR API processing is I/O bound, fewer threads = less memory per thread
+            self.conn.execute("SET threads = 2")  # Reduced from default 4
+
+            # CRITICAL: Enable memory-efficient settings
+            self.conn.execute("SET preserve_insertion_order = false")  # Allow reordering
+            self.conn.execute("SET enable_progress_bar = false")  # Reduce overhead
+
+            # CRITICAL: More aggressive temporary directory management
+            self.conn.execute("SET temp_directory = '/tmp/duckdb_cvr_company'")
+            self.conn.execute("SET max_temp_directory_size = '3GB'")  # Conservative limit
+
+            # CRITICAL: More frequent checkpoints to clear memory
+            self.conn.execute("SET checkpoint_threshold = '128MB'")  # More frequent than default
+            self.conn.execute("SET wal_autocheckpoint = 50")  # More frequent WAL checkpoints
+
+            # ADDITIONAL: Disable object cache to reduce memory usage
+            self.conn.execute("SET enable_object_cache = false")  # Prioritize memory over speed
+
+            self.log.info("✅ CVR company fetching memory optimizations applied")
+            self.log.info("   • Memory limit: 8GB (reduced from 12GB)")
+            self.log.info("   • Threads: 2 (reduced from 4)")
+            self.log.info("   • Temp directory size: 3GB")
+            self.log.info("   • Checkpoint threshold: 128MB")
+
+        except Exception as e:
+            self.log.warning(f"Failed to apply memory optimizations: {e}")
+
+    def _cleanup_batch_memory(self):
+        """
+        Aggressive memory cleanup after processing each batch.
+
+        This is critical for preventing memory accumulation across batches.
+        Each batch can contain large JSON structures from CVR API responses,
+        and without proper cleanup, memory usage grows until OOM errors occur.
+
+        IMPORTANT: This method is called AFTER batch data has been safely
+        inserted into DuckDB tables, so no data is lost during cleanup.
+        """
+        try:
+            self.log.debug("🧹 Starting batch memory cleanup (data already persisted)...")
+
+            # CRITICAL: Force DuckDB checkpoint to flush all data to disk and clear WAL
+            # This ensures all batch data is permanently written before memory cleanup
+            self.conn.execute("CHECKPOINT")
+            self.log.debug("   ✓ DuckDB checkpoint completed - all data flushed to disk")
+
+            # CRITICAL: Force DuckDB to optimize and free internal structures
+            self.conn.execute("PRAGMA optimize")
+            self.log.debug("   ✓ DuckDB optimization completed")
+
+            # CRITICAL: Clear query plan cache to free memory
+            try:
+                self.conn.execute("PRAGMA cache_size = 0")  # Clear cache
+                self.conn.execute("PRAGMA cache_size = -1000")  # Reset to small cache
+                self.log.debug("   ✓ Query plan cache cleared")
+            except Exception as pragma_e:
+                self.log.debug(f"   ⚠ Cache cleanup warning: {pragma_e}")
+
+            # CRITICAL: Force Python garbage collection to free API response objects
+            import gc
+
+            collected = gc.collect()
+            self.log.debug(f"   ✓ Python garbage collection: freed {collected} objects")
+
+            # ADDITIONAL: Clear any temporary tables or views (preserving main data tables)
+            try:
+                temp_objects = self.conn.execute("""
+                    SELECT table_name FROM information_schema.tables
+                    WHERE table_name LIKE 'temp_%' OR table_name LIKE 'tmp_%'
+                """).fetchall()
+
+                dropped_count = 0
+                for (temp_table,) in temp_objects:
+                    try:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                        dropped_count += 1
+                    except Exception:
+                        pass  # Ignore errors dropping temp tables
+
+                if dropped_count > 0:
+                    self.log.debug(f"   ✓ Dropped {dropped_count} temporary tables")
+
+            except Exception:
+                pass  # Ignore errors in temp cleanup
+
+            self.log.debug("✅ Batch memory cleanup completed - ready for next batch")
+
+        except Exception as e:
+            self.log.warning(f"Memory cleanup warning (non-critical): {e}")
+            # Continue processing even if cleanup fails
 
     @timed(name="Company fetching processing")
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
@@ -414,7 +527,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 total_stats["total_api_calls"] += batch_stats["api_calls"]
                 total_stats["batches_processed"] += 1
 
-                # Memory cleanup after each batch
+                # CRITICAL: Memory cleanup after each batch (data already persisted)
                 self._cleanup_batch_memory()
 
                 # Progress update
