@@ -9,7 +9,7 @@ const WARMUP_FILES = [
   'field_analysis_2024.pmtiles',
 
   // Background layers (used by all users)
-  'bnbo_all_2024.pmtiles', // Fixed: use file with correct coordinates
+  'bnbo_areas.pmtiles', // BNBO areas from environmental generator
   'buildings_proximity_2024.pmtiles',
 
   // Historical years (medium priority)
