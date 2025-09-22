@@ -80,7 +80,7 @@ jobs:
             echo "🔥 Warming: ${filename}"
 
             # Make a range request to warm the cache (PMTiles header)
-            local response=$(curl -s -w "%{http_code}|%{size_download}|%{time_total}" \
+            local response=$(curl -s -L -w "%{http_code}|%{size_download}|%{time_total}" \
               -H "Range: bytes=0-16383" \
               -H "User-Agent: GitHub-Actions-Warmup/1.0" \
               -H "X-Cache-Warming: true" \
