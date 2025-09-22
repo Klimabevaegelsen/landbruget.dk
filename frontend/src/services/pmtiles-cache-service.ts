@@ -57,7 +57,7 @@ class PMTilesCacheService {
     const [fields, bnbo, wetlands, water_projects, buildings] =
       await Promise.all([
         this.getPMTilesUrl(`field_analysis_${year}.pmtiles`),
-        this.getPMTilesUrl('bnbo_all_2024.pmtiles'), // Fixed: use file with correct coordinates
+        this.getPMTilesUrl('bnbo_areas.pmtiles'), // BNBO areas from environmental generator
         this.getPMTilesUrl('wetlands_all_2024.pmtiles'),
         this.getPMTilesUrl('water_projects_2024.pmtiles'),
         this.getPMTilesUrl('buildings_proximity_2024.pmtiles'),
