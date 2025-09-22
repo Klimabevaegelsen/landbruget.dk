@@ -13,6 +13,7 @@ class PMTilesCacheService {
   private cache = new Map<string, CachedPMTilesUrl>();
   private readonly CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // 1 week in milliseconds
   private readonly USE_PROXY = true; // Use proxy to avoid CORS issues
+  private readonly PROXY_BASE_URL = 'https://www.landbruget.dk'; // Enforce www for consistency
 
   /**
    * Get a PMTiles URL with caching optimization
@@ -29,7 +30,7 @@ class PMTilesCacheService {
 
     // Determine URL based on proxy setting
     const url = this.USE_PROXY
-      ? `/api/pmtiles/pmtiles/${filename}` // Use our caching proxy
+      ? `${this.PROXY_BASE_URL}/api/pmtiles/pmtiles/${filename}` // Use our caching proxy
       : `https://data.pesticidkortet.dk/pmtiles/${filename}`; // Direct R2 URL
 
     // Cache the URL
