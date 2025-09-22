@@ -76,44 +76,39 @@ serve(async (req) => {
 
     // Financial Rankings
     if (!category || category === "all" || category === "financial") {
-      // 1. Highest Profit
+      // 1. Highest Profit - Using view with pre-joined company details
       const { data: profitData } = await supabase
-        .from("yearly_financials")
-        .select(
-          `
-          company_id,
-          cvr_number,
-          net_profit_loss,
-          year,
-          companies!inner(company_name, municipality)
-        `
-        )
+        .from("yearly_financials_with_company_details")
+        .select("*")
         .not("net_profit_loss", "is", null)
         .gt("net_profit_loss", 0)
         .eq("year", 2024) // Use most recent complete year
+        .eq("is_agricultural_company", true) // Only agricultural companies
         .order("net_profit_loss", { ascending: false })
         .limit(limit);
 
       const { count: profitCount } = await supabase
-        .from("yearly_financials")
+        .from("yearly_financials_with_company_details")
         .select("*", { count: "exact", head: true })
         .not("net_profit_loss", "is", null)
         .gt("net_profit_loss", 0)
-        .eq("year", 2024);
+        .eq("year", 2024)
+        .eq("is_agricultural_company", true);
 
       if (profitData) {
         rankings.push({
           id: "highest_profit",
           title: "Højest Overskud",
           category: "financial",
-          description: "Virksomheder med det højeste nettoresultat i 2024",
+          description:
+            "Landbrugsvirksomheder med det højeste nettoresultat i 2024",
           unit: "DKK",
           company_count: profitCount || 0,
           items: profitData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number?.toString() || "N/A",
-            company_name: item.companies?.company_name || "Ukendt virksomhed",
-            municipality: item.companies?.municipality || "Ukendt kommune",
+            company_name: item.company_name || "Ukendt virksomhed",
+            municipality: item.municipality || "Ukendt kommune",
             rank: index + 1,
             value: item.net_profit_loss,
             formatted_value: `${(item.net_profit_loss / 1000000).toFixed(
@@ -124,44 +119,39 @@ serve(async (req) => {
         });
       }
 
-      // 2. Largest Assets
+      // 2. Largest Assets - Using view with pre-joined company details
       const { data: assetsData } = await supabase
-        .from("yearly_financials")
-        .select(
-          `
-          company_id,
-          cvr_number,
-          total_assets,
-          year,
-          companies!inner(company_name, municipality)
-        `
-        )
+        .from("yearly_financials_with_company_details")
+        .select("*")
         .not("total_assets", "is", null)
         .gt("total_assets", 0)
         .eq("year", 2024)
+        .eq("is_agricultural_company", true) // Only agricultural companies
         .order("total_assets", { ascending: false })
         .limit(limit);
 
       const { count: assetsCount } = await supabase
-        .from("yearly_financials")
+        .from("yearly_financials_with_company_details")
         .select("*", { count: "exact", head: true })
         .not("total_assets", "is", null)
         .gt("total_assets", 0)
-        .eq("year", 2024);
+        .eq("year", 2024)
+        .eq("is_agricultural_company", true);
 
       if (assetsData) {
         rankings.push({
           id: "largest_assets",
           title: "Størst Aktiver",
           category: "financial",
-          description: "Virksomheder med de største samlede aktiver i 2024",
+          description:
+            "Landbrugsvirksomheder med de største samlede aktiver i 2024",
           unit: "DKK",
           company_count: assetsCount || 0,
           items: assetsData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number?.toString() || "N/A",
-            company_name: item.companies?.company_name || "Ukendt virksomhed",
-            municipality: item.companies?.municipality || "Ukendt kommune",
+            company_name: item.company_name || "Ukendt virksomhed",
+            municipality: item.municipality || "Ukendt kommune",
             rank: index + 1,
             value: item.total_assets,
             formatted_value: `${(item.total_assets / 1000000).toFixed(1)}M kr`,
@@ -170,30 +160,24 @@ serve(async (req) => {
         });
       }
 
-      // 3. Most Employees
+      // 3. Most Employees - Using view with pre-joined company details
       const { data: employeesData } = await supabase
-        .from("yearly_financials")
-        .select(
-          `
-          company_id,
-          cvr_number,
-          average_number_of_employees,
-          year,
-          companies!inner(company_name, municipality)
-        `
-        )
+        .from("yearly_financials_with_company_details")
+        .select("*")
         .not("average_number_of_employees", "is", null)
         .gt("average_number_of_employees", 0)
         .eq("year", 2024)
+        .eq("is_agricultural_company", true) // Only agricultural companies
         .order("average_number_of_employees", { ascending: false })
         .limit(limit);
 
       const { count: employeesCount } = await supabase
-        .from("yearly_financials")
+        .from("yearly_financials_with_company_details")
         .select("*", { count: "exact", head: true })
         .not("average_number_of_employees", "is", null)
         .gt("average_number_of_employees", 0)
-        .eq("year", 2024);
+        .eq("year", 2024)
+        .eq("is_agricultural_company", true);
 
       if (employeesData) {
         rankings.push({
@@ -201,14 +185,14 @@ serve(async (req) => {
           title: "Flest Ansatte",
           category: "financial",
           description:
-            "Virksomheder med flest ansatte ifølge regnskabsdata 2024",
+            "Landbrugsvirksomheder med flest ansatte ifølge regnskabsdata 2024",
           unit: "ansatte",
           company_count: employeesCount || 0,
           items: employeesData.map((item, index) => ({
             company_id: item.company_id,
             cvr_number: item.cvr_number?.toString() || "N/A",
-            company_name: item.companies?.company_name || "Ukendt virksomhed",
-            municipality: item.companies?.municipality || "Ukendt kommune",
+            company_name: item.company_name || "Ukendt virksomhed",
+            municipality: item.municipality || "Ukendt kommune",
             rank: index + 1,
             value: item.average_number_of_employees,
             formatted_value: `${item.average_number_of_employees} ansatte`,
@@ -1311,11 +1295,12 @@ serve(async (req) => {
 
     // Worker Rankings
     if (!category || category === "all" || category === "worker") {
-      // 21. Most Employees (Worker data) - Use worker_yearly_summary materialized view
+      // 21. Most Employees (Worker data) - Use enhanced worker_yearly_summary with company details
       const { data: workerEmployeeData } = await supabase
         .from("worker_yearly_summary")
-        .select("company_id, average_employee_count, year")
+        .select("*")
         .eq("year", 2024)
+        .eq("is_agricultural_company", true) // Only agricultural companies
         .gt("average_employee_count", 0)
         .order("average_employee_count", { ascending: false })
         .limit(limit);
@@ -1324,45 +1309,30 @@ serve(async (req) => {
         .from("worker_yearly_summary")
         .select("company_id", { count: "exact" })
         .eq("year", 2024)
+        .eq("is_agricultural_company", true)
         .gt("average_employee_count", 0);
 
       if (workerEmployeeData && workerEmployeeData.length > 0) {
-        // Get company details for the worker data
-        const companyIds = workerEmployeeData.map((item) => item.company_id);
-        const { data: companies } = await supabase
-          .from("companies")
-          .select("id, cvr_number, company_name, municipality")
-          .in("id", companyIds);
-
-        // Create a map for quick lookup
-        const companyMap = new Map();
-        companies?.forEach((company) => {
-          companyMap.set(company.id, company);
-        });
-
         rankings.push({
           id: "most_employees_worker",
           title: "Flest Ansatte (Arbejdsmarkedsdata)",
           category: "worker",
           description:
-            "Virksomheder med flest ansatte ifølge arbejdsmarkedsdata 2024",
+            "Landbrugsvirksomheder med flest ansatte ifølge arbejdsmarkedsdata 2024",
           unit: "ansatte",
           company_count: workerEmployeeCount || 0,
-          items: workerEmployeeData.map((item, index) => {
-            const company = companyMap.get(item.company_id);
-            return {
-              company_id: item.company_id,
-              cvr_number: company?.cvr_number?.toString() || "N/A",
-              company_name: company?.company_name || "Ukendt virksomhed",
-              municipality: company?.municipality || "Ukendt kommune",
-              rank: index + 1,
-              value: item.average_employee_count,
-              formatted_value: `${Math.round(
-                item.average_employee_count
-              )} ansatte`,
-              year: item.year,
-            };
-          }),
+          items: workerEmployeeData.map((item, index) => ({
+            company_id: item.company_id,
+            cvr_number: item.cvr_number?.toString() || "N/A",
+            company_name: item.company_name || "Ukendt virksomhed",
+            municipality: item.municipality || "Ukendt kommune",
+            rank: index + 1,
+            value: item.average_employee_count,
+            formatted_value: `${Math.round(
+              item.average_employee_count
+            )} ansatte`,
+            year: item.year,
+          })),
         });
       }
 
@@ -1382,12 +1352,15 @@ serve(async (req) => {
         .gt("active_visa_count", 0);
 
       if (visaData && visaData.length > 0) {
-        // Get company details for the visa data
+        // Get company details for the visa data, filtered for agricultural companies
         const visaCompanyIds = visaData.map((item) => item.company_id);
         const { data: visaCompanies } = await supabase
           .from("companies")
-          .select("id, cvr_number, company_name, municipality")
-          .in("id", visaCompanyIds);
+          .select(
+            "id, cvr_number, company_name, municipality, is_agricultural_company"
+          )
+          .in("id", visaCompanyIds)
+          .eq("is_agricultural_company", true); // Only agricultural companies
 
         // Create a map for quick lookup
         const visaCompanyMap = new Map();
@@ -1400,22 +1373,26 @@ serve(async (req) => {
           title: "Flest Arbejdstilladelser",
           category: "worker",
           description:
-            "Virksomheder med flest aktive arbejdstilladelser i 2023",
+            "Landbrugsvirksomheder med flest aktive arbejdstilladelser i 2023",
           unit: "tilladelser",
-          company_count: visaCount || 0,
-          items: visaData.map((item, index) => {
-            const company = visaCompanyMap.get(item.company_id);
-            return {
-              company_id: item.company_id,
-              cvr_number: company?.cvr_number?.toString() || "N/A",
-              company_name: company?.company_name || "Ukendt virksomhed",
-              municipality: company?.municipality || "Ukendt kommune",
-              rank: index + 1,
-              value: item.active_visa_count,
-              formatted_value: `${item.active_visa_count} tilladelser`,
-              year: item.year,
-            };
-          }),
+          company_count: visaCompanies?.length || 0,
+          items: visaData
+            .map((item, index) => {
+              const company = visaCompanyMap.get(item.company_id);
+              if (!company) return null; // Filter out non-agricultural companies
+              return {
+                company_id: item.company_id,
+                cvr_number: company?.cvr_number?.toString() || "N/A",
+                company_name: company?.company_name || "Ukendt virksomhed",
+                municipality: company?.municipality || "Ukendt kommune",
+                rank: index + 1,
+                value: item.active_visa_count,
+                formatted_value: `${item.active_visa_count} tilladelser`,
+                year: item.year,
+              };
+            })
+            .filter((item) => item !== null)
+            .slice(0, limit),
         });
       }
 
@@ -1429,13 +1406,16 @@ serve(async (req) => {
         .neq("injury_count_reported", "0")
         .limit(200);
 
-      // Get company data for the injury data
+      // Get company data for the injury data, filtered for agricultural companies
       const injuryCompanyIds =
         injuryRawData?.map((item) => item.company_id) || [];
       const { data: injuryCompanies } = await supabase
         .from("companies")
-        .select("id, cvr_number, company_name, municipality")
-        .in("id", injuryCompanyIds);
+        .select(
+          "id, cvr_number, company_name, municipality, is_agricultural_company"
+        )
+        .in("id", injuryCompanyIds)
+        .eq("is_agricultural_company", true); // Only agricultural companies
 
       // Create lookup map
       const injuryCompanyLookup = new Map();
@@ -1497,19 +1477,23 @@ serve(async (req) => {
           id: "most_work_injuries",
           title: "Flest Arbejdsulykker",
           category: "worker",
-          description: "Virksomheder med rapporterede arbejdsulykker i 2024",
+          description:
+            "Landbrugsvirksomheder med rapporterede arbejdsulykker i 2024",
           unit: "ulykker",
-          company_count: injuryCount || 0,
-          items: sortedInjuries.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.companies?.cvr_number?.toString() || "N/A",
-            company_name: item.companies?.company_name || "Ukendt virksomhed",
-            municipality: item.companies?.municipality || "Ukendt kommune",
-            rank: index + 1,
-            value: item.numeric_injury_count,
-            formatted_value: `${item.injury_count_reported} ulykker`,
-            year: item.year,
-          })),
+          company_count: injuryCompanies?.length || 0,
+          items: sortedInjuries
+            .filter((item) => item.companies) // Only include agricultural companies
+            .map((item, index) => ({
+              company_id: item.company_id,
+              cvr_number: item.companies?.cvr_number?.toString() || "N/A",
+              company_name: item.companies?.company_name || "Ukendt virksomhed",
+              municipality: item.companies?.municipality || "Ukendt kommune",
+              rank: index + 1,
+              value: item.numeric_injury_count,
+              formatted_value: `${item.injury_count_reported} ulykker`,
+              year: item.year,
+            }))
+            .slice(0, limit),
         });
       }
 
@@ -1520,15 +1504,18 @@ serve(async (req) => {
         .eq("year", 2025)
         .limit(200);
 
-      // Get company data for matching
+      // Get company data for matching, filtered for agricultural companies
       const inspectionCvrs =
         inspectionRawData
           ?.map((item) => parseInt(item.cvr_number))
           .filter((cvr) => !isNaN(cvr)) || [];
       const { data: companyData } = await supabase
         .from("companies")
-        .select("id, cvr_number, company_name, municipality")
-        .in("cvr_number", inspectionCvrs);
+        .select(
+          "id, cvr_number, company_name, municipality, is_agricultural_company"
+        )
+        .in("cvr_number", inspectionCvrs)
+        .eq("is_agricultural_company", true); // Only agricultural companies
 
       // Create lookup map
       const companyLookup = new Map();
@@ -1577,19 +1564,22 @@ serve(async (req) => {
           title: "Flest Arbejdstilsynsinspektioner",
           category: "worker",
           description:
-            "Virksomheder med flest inspektioner fra Arbejdstilsynet i 2025",
+            "Landbrugsvirksomheder med flest inspektioner fra Arbejdstilsynet i 2025",
           unit: "inspektioner",
-          company_count: inspectionCount || 0,
-          items: sortedInspections.map((item: any, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.cvr_number?.toString() || "N/A",
-            company_name: item.company_name || "Ukendt virksomhed",
-            municipality: item.municipality || "Ukendt kommune",
-            rank: index + 1,
-            value: item.count,
-            formatted_value: `${item.count} inspektioner`,
-            year: 2025,
-          })),
+          company_count: companyData?.length || 0,
+          items: sortedInspections
+            .filter((item: any) => item.company_id) // Only include agricultural companies
+            .map((item: any, index) => ({
+              company_id: item.company_id,
+              cvr_number: item.cvr_number?.toString() || "N/A",
+              company_name: item.company_name || "Ukendt virksomhed",
+              municipality: item.municipality || "Ukendt kommune",
+              rank: index + 1,
+              value: item.count,
+              formatted_value: `${item.count} inspektioner`,
+              year: 2025,
+            }))
+            .slice(0, limit),
         });
       }
 
@@ -1601,15 +1591,18 @@ serve(async (req) => {
         .eq("decision_type", "Strakspåbud")
         .limit(200);
 
-      // Get company data for urgent violations
+      // Get company data for urgent violations, filtered for agricultural companies
       const violationCvrs =
         urgentViolationRawData
           ?.map((item) => parseInt(item.cvr_number))
           .filter((cvr) => !isNaN(cvr)) || [];
       const { data: violationCompanyData } = await supabase
         .from("companies")
-        .select("id, cvr_number, company_name, municipality")
-        .in("cvr_number", violationCvrs);
+        .select(
+          "id, cvr_number, company_name, municipality, is_agricultural_company"
+        )
+        .in("cvr_number", violationCvrs)
+        .eq("is_agricultural_company", true); // Only agricultural companies
 
       // Create lookup map for violations
       const violationCompanyLookup = new Map();
@@ -1655,19 +1648,22 @@ serve(async (req) => {
           title: "Flest Strakspåbud",
           category: "worker",
           description:
-            "Virksomheder med flest strakspåbud fra Arbejdstilsynet i 2025",
+            "Landbrugsvirksomheder med flest strakspåbud fra Arbejdstilsynet i 2025",
           unit: "strakspåbud",
-          company_count: Object.keys(urgentViolationsByCompany).length,
-          items: sortedUrgentViolations.map((item: any, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.cvr_number?.toString() || "N/A",
-            company_name: item.company_name || "Ukendt virksomhed",
-            municipality: item.municipality || "Ukendt kommune",
-            rank: index + 1,
-            value: item.count,
-            formatted_value: `${item.count} strakspåbud`,
-            year: 2025,
-          })),
+          company_count: violationCompanyData?.length || 0,
+          items: sortedUrgentViolations
+            .filter((item: any) => item.company_id) // Only include agricultural companies
+            .map((item: any, index) => ({
+              company_id: item.company_id,
+              cvr_number: item.cvr_number?.toString() || "N/A",
+              company_name: item.company_name || "Ukendt virksomhed",
+              municipality: item.municipality || "Ukendt kommune",
+              rank: index + 1,
+              value: item.count,
+              formatted_value: `${item.count} strakspåbud`,
+              year: 2025,
+            }))
+            .slice(0, limit),
         });
       }
     }
