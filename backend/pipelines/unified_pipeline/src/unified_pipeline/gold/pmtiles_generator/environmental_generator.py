@@ -158,7 +158,7 @@ class EnvironmentalLayersPMTilesGenerator:
                     WHEN status_category = 'Completed' THEN 'Gennemført'
                     ELSE 'Ukendt status'
                 END as status_danish,
-                ST_AsGeoJSON(geometry) as geometry
+                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             """
@@ -266,7 +266,7 @@ class EnvironmentalLayersPMTilesGenerator:
                     WHEN toerv_pct = '<3' THEN 'Lav tørv (<3%)'
                     ELSE 'Ukendt tørv indhold'
                 END as toerv_description,
-                ST_AsGeoJSON(geometry) as geometry
+                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             ORDER BY wetland_id
@@ -365,7 +365,7 @@ class EnvironmentalLayersPMTilesGenerator:
                 dissolved_at::varchar as dissolved_at,
                 '#4a90e2' as color,
                 'Vandprojekt' as project_type_danish,
-                ST_AsGeoJSON(geometry) as geometry
+                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
             FROM {table_name}
             WHERE geometry IS NOT NULL
             """

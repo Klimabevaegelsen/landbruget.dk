@@ -146,7 +146,7 @@ class BuildingsProximityPMTilesGenerator:
                     WHEN category_group = 'agricultural' THEN 3
                     ELSE 4
                 END as priority,
-                ST_AsGeoJSON(geo_building_centroid) as geometry
+                ST_AsGeoJSON(ST_FlipCoordinates(geo_building_centroid)) as geometry
             FROM {table_name}
             WHERE category_group IN ('residential', 'publicServices', 'agricultural')
                 AND geo_building_centroid IS NOT NULL
