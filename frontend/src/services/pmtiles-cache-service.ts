@@ -30,7 +30,7 @@ class PMTilesCacheService {
 
     // Determine URL based on proxy setting
     const url = this.USE_PROXY
-      ? `${this.PROXY_BASE_URL}/api/pmtiles/pmtiles/${filename}` // Use our caching proxy
+      ? `${this.PROXY_BASE_URL}/api/pmtiles/pmtiles/${filename}?v=${Date.now()}` // Use our caching proxy
       : `https://data.pesticidkortet.dk/pmtiles/${filename}`; // Direct R2 URL
 
     // Cache the URL
