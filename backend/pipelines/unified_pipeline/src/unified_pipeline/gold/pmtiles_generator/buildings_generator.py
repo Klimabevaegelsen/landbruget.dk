@@ -2,6 +2,7 @@
 
 import logging
 import os
+from datetime import datetime
 from typing import Dict, List, Optional
 
 import duckdb
@@ -71,7 +72,7 @@ class BuildingsProximityPMTilesGenerator:
                 success = await self.tippecanoe.generate_pmtiles(
                     geojson_path=geojson_path,
                     output_path=pmtiles_path,
-                    layer_name="buildings_proximity",
+                    layer_name="buildings",
                     max_zoom=14,  # Higher zoom for building points
                     min_zoom=8,  # Don't show at very low zoom levels
                     buffer=64,
@@ -86,7 +87,7 @@ class BuildingsProximityPMTilesGenerator:
                 # Move to final location
                 final_path = os.path.join(
                     os.path.dirname(self.config.temp_dir),
-                    "buildings_proximity_2024.pmtiles",  # Match frontend expectation
+                    f"buildings_proximity_{datetime.now().year}.pmtiles",
                 )
 
                 import shutil
@@ -476,7 +477,7 @@ class BuildingsProximityPMTilesGenerator:
         results = {}
 
         # Generate only the buildings proximity PMTiles that the frontend uses
-        results["buildings_proximity_2024"] = await self.generate_buildings_proximity_pmtiles()
+        results["buildings_proximity"] = await self.generate_buildings_proximity_pmtiles()
 
         # Log summary
         successful = sum(1 for path in results.values() if path is not None)

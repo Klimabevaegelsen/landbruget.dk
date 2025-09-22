@@ -2,6 +2,7 @@
 
 import logging
 import os
+from datetime import datetime
 from typing import Dict, Optional
 
 import duckdb
@@ -55,13 +56,13 @@ class EnvironmentalLayersPMTilesGenerator:
 
         # Generate wetlands PMTiles
         if "wetlands" in environmental_layers:
-            results["wetlands_all_2024"] = await self._generate_wetlands_pmtiles(
+            results["wetlands_all"] = await self._generate_wetlands_pmtiles(
                 environmental_layers["wetlands"]
             )
 
         # Generate water projects PMTiles
         if "water_projects" in environmental_layers:
-            results["water_projects_2024"] = await self._generate_water_projects_pmtiles(
+            results["water_projects"] = await self._generate_water_projects_pmtiles(
                 environmental_layers["water_projects"]
             )
 
@@ -102,7 +103,7 @@ class EnvironmentalLayersPMTilesGenerator:
                 success = await self.tippecanoe.generate_pmtiles(
                     geojson_path=geojson_path,
                     output_path=pmtiles_path,
-                    layer_name="bnbo_areas",
+                    layer_name="bnbo",
                     max_zoom=12,  # Lower zoom for environmental layers
                     min_zoom=0,
                     buffer=32,  # Smaller buffer for environmental layers
@@ -213,7 +214,7 @@ class EnvironmentalLayersPMTilesGenerator:
                 # Move to final location
                 final_path = os.path.join(
                     os.path.dirname(self.config.temp_dir),
-                    "wetlands_all_2024.pmtiles",  # Match frontend expectation
+                    f"wetlands_all_{datetime.now().year}.pmtiles",
                 )
 
                 import shutil
@@ -329,7 +330,7 @@ class EnvironmentalLayersPMTilesGenerator:
                 # Move to final location
                 final_path = os.path.join(
                     os.path.dirname(self.config.temp_dir),
-                    "water_projects_2024.pmtiles",  # Match frontend expectation
+                    f"water_projects_{datetime.now().year}.pmtiles",
                 )
 
                 import shutil
