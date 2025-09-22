@@ -44,14 +44,18 @@ class CloudflareR2Uploader:
                 f"rclone version: {result.stdout.strip().split()[1] if result.stdout else 'unknown'}"
             )
 
-            # Check if R2 remote already exists
-            result = subprocess.run(
-                ["rclone", "listremotes"], capture_output=True, text=True, timeout=10
-            )
+            # Check if R2 remote already exists (skip if write-only permissions)
+            try:
+                result = subprocess.run(
+                    ["rclone", "listremotes"], capture_output=True, text=True, timeout=10
+                )
 
-            if f"{self.r2_remote}:" in result.stdout:
-                logger.info(f"rclone remote '{self.r2_remote}' already configured")
-                return True
+                if result.returncode == 0 and f"{self.r2_remote}:" in result.stdout:
+                    logger.info(f"rclone remote '{self.r2_remote}' already configured")
+                    return True
+            except Exception:
+                # Ignore listremotes failures - might be write-only permissions
+                logger.info("Cannot list remotes - assuming write-only permissions, will configure anyway")
 
             # Configure R2 remote using environment variables
             access_key_id = os.environ.get("R2_ACCESS_KEY_ID")
@@ -113,16 +117,16 @@ class CloudflareR2Uploader:
                 logger.error("Failed to setup rclone configuration")
                 return None
 
-            # Upload file
-            r2_path = f"{self.r2_remote}:{self.config.cloudflare_r2_bucket}/{r2_key}"
+            # Upload file with correct destination path
+            r2_destination = f"{self.r2_remote}:{self.config.cloudflare_r2_bucket}/{r2_key}"
 
-            logger.info(f"Uploading {file_path} to {r2_path}")
+            logger.info(f"Uploading {file_path} to {r2_destination}")
 
             upload_cmd = [
                 "rclone",
-                "copy",
+                "copyto",  # Use copyto for exact destination path
                 file_path,
-                f"{self.r2_remote}:{self.config.cloudflare_r2_bucket}/",
+                r2_destination,
                 "--progress",
                 "--stats",
                 "30s",
