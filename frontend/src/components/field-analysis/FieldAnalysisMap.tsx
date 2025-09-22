@@ -36,6 +36,7 @@ interface MapInstance {
     id: string,
     image: HTMLCanvasElement | ImageBitmap | ImageData
   ) => void;
+  hasImage: (id: string) => boolean;
   setFilter: (id: string, filter: unknown) => void;
 }
 
@@ -958,7 +959,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               ctx.stroke();
 
               const bitmap = await createImageBitmap(canvas);
-              map.addImage('partial-coverage-pattern', bitmap);
+              if (!map.hasImage('partial-coverage-pattern')) {
+                map.addImage('partial-coverage-pattern', bitmap);
+              }
             }
           } catch (error) {
             console.warn('Failed to create partial coverage pattern:', error);
@@ -1112,7 +1115,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               completedCtx.stroke();
 
               const completedBitmap = await createImageBitmap(completedCanvas);
-              map.addImage('bnbo-completed-pattern', completedBitmap);
+              if (!map.hasImage('bnbo-completed-pattern')) {
+                map.addImage('bnbo-completed-pattern', completedBitmap);
+              }
             }
 
             // Create action required pattern (red with cross-hatch)
@@ -1137,7 +1142,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               actionCtx.stroke();
 
               const actionBitmap = await createImageBitmap(actionCanvas);
-              map.addImage('bnbo-action-pattern', actionBitmap);
+              if (!map.hasImage('bnbo-action-pattern')) {
+                map.addImage('bnbo-action-pattern', actionBitmap);
+              }
             }
           } catch (error) {
             console.warn('Failed to create BNBO patterns:', error);
@@ -1255,7 +1262,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               ctx.stroke();
 
               const imageBitmap = await createImageBitmap(canvas);
-              map.addImage('wetlands-pattern', imageBitmap);
+              if (!map.hasImage('wetlands-pattern')) {
+                map.addImage('wetlands-pattern', imageBitmap);
+              }
 
               // Update layer to use pattern
               if (map.getLayer('wetlands-fill')) {
@@ -1342,7 +1351,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               }
 
               const imageBitmap = await createImageBitmap(canvas);
-              map.addImage('water-projects-pattern', imageBitmap);
+              if (!map.hasImage('water-projects-pattern')) {
+                map.addImage('water-projects-pattern', imageBitmap);
+              }
 
               // Update layer to use pattern
               if (map.getLayer('water-projects-fill')) {
@@ -1403,54 +1414,65 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const addBuildingsLayers = useCallback(
     (map: MapInstance) => {
       if (map.getSource('buildings') && !map.getLayer('buildings-fill')) {
-        map.addLayer({
-          id: 'buildings-fill',
-          source: 'buildings',
-          'source-layer': 'buildings',
-          type: 'fill',
-          paint: {
-            'fill-color': [
-              'case',
-              // Educational/Public services buildings - Pink
-              ['==', ['get', 'building_usage_category'], 'publicServices'],
-              '#EC4899', // Pink for schools and daycare
-              // Agricultural buildings - Brown
-              ['==', ['get', 'building_usage_category'], 'agricultural'],
-              '#A16207', // Brown for agricultural buildings
-              // Residential buildings - Light blue (default)
-              '#4A90E2',
-            ],
-            'fill-opacity': 0.6,
-          },
-          layout: {
-            visibility: layerVisibility.buildings ? 'visible' : 'none',
-          },
-        });
+        console.log('✅ Adding Buildings layers...');
+        try {
+          map.addLayer({
+            id: 'buildings-fill',
+            source: 'buildings',
+            'source-layer': 'buildings',
+            type: 'fill',
+            paint: {
+              'fill-color': [
+                'case',
+                // Educational/Public services buildings - Pink
+                ['==', ['get', 'building_usage_category'], 'publicServices'],
+                '#EC4899', // Pink for schools and daycare
+                // Agricultural buildings - Brown
+                ['==', ['get', 'building_usage_category'], 'agricultural'],
+                '#A16207', // Brown for agricultural buildings
+                // Residential buildings - Light blue (default)
+                '#4A90E2',
+              ],
+              'fill-opacity': 0.6,
+            },
+            layout: {
+              visibility: layerVisibility.buildings ? 'visible' : 'none',
+            },
+          });
+          console.log('✅ Buildings fill layer added successfully');
+        } catch (error) {
+          console.error('🚨 Failed to add Buildings fill layer:', error);
+        }
 
-        map.addLayer({
-          id: 'buildings-outline',
-          source: 'buildings',
-          'source-layer': 'buildings',
-          type: 'line',
-          paint: {
-            'line-color': [
-              'case',
-              // Educational/Public services buildings - Darker pink
-              ['==', ['get', 'building_usage_category'], 'publicServices'],
-              '#BE185D', // Darker pink outline
-              // Agricultural buildings - Darker brown
-              ['==', ['get', 'building_usage_category'], 'agricultural'],
-              '#92400E', // Darker brown outline
-              // Residential buildings - Default blue
-              '#2563EB',
-            ],
-            'line-width': 1,
-            'line-opacity': 0.8,
-          },
-          layout: {
-            visibility: layerVisibility.buildings ? 'visible' : 'none',
-          },
-        });
+        try {
+          map.addLayer({
+            id: 'buildings-outline',
+            source: 'buildings',
+            'source-layer': 'buildings',
+            type: 'line',
+            paint: {
+              'line-color': [
+                'case',
+                // Educational/Public services buildings - Darker pink
+                ['==', ['get', 'building_usage_category'], 'publicServices'],
+                '#BE185D', // Darker pink outline
+                // Agricultural buildings - Darker brown
+                ['==', ['get', 'building_usage_category'], 'agricultural'],
+                '#92400E', // Darker brown outline
+                // Residential buildings - Default blue
+                '#2563EB',
+              ],
+              'line-width': 1,
+              'line-opacity': 0.8,
+            },
+            layout: {
+              visibility: layerVisibility.buildings ? 'visible' : 'none',
+            },
+          });
+          console.log('✅ Buildings outline layer added successfully');
+        } catch (error) {
+          console.error('🚨 Failed to add Buildings outline layer:', error);
+        }
       }
     },
     [layerVisibility.buildings]
