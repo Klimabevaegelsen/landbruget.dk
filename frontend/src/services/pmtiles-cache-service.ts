@@ -61,7 +61,7 @@ class PMTilesCacheService {
         this.getPMTilesUrl('pmtiles/bnbo_areas.pmtiles'), // BNBO areas from environmental generator
         this.getPMTilesUrl('pmtiles/wetlands_all.pmtiles'), // Match actual R2 upload names
         this.getPMTilesUrl('pmtiles/water_projects.pmtiles'), // Match actual R2 upload names
-        this.getPMTilesUrl('pmtiles/buildings_proximity.pmtiles'), // Match actual R2 upload names
+        this.getPMTilesUrl('pmtiles/buildings_proximity_2025.pmtiles'), // Match actual R2 upload names
       ]);
 
     return { fields, bnbo, wetlands, water_projects, buildings };
@@ -137,7 +137,10 @@ class PMTilesCacheService {
    * Preload commonly used background layers
    */
   async preloadCommonLayers(): Promise<void> {
-    const commonLayers = ['bnbo_areas.pmtiles', 'buildings_proximity.pmtiles'];
+    const commonLayers = [
+      'bnbo_areas.pmtiles',
+      'buildings_proximity_2025.pmtiles',
+    ];
 
     console.log('🏗️ Preloading common background layers');
     await this.preloadPMTiles(commonLayers);
