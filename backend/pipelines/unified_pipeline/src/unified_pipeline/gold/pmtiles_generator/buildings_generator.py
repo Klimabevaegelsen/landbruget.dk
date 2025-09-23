@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-from datetime import datetime
 from typing import Dict, List, Optional
 
 import duckdb
@@ -88,7 +87,7 @@ class BuildingsProximityPMTilesGenerator:
                 # Move to final location
                 final_path = os.path.join(
                     os.path.dirname(self.config.temp_dir),
-                    f"buildings_proximity_{datetime.now().year}.pmtiles",
+                    "buildings_proximity.pmtiles",
                 )
 
                 import shutil
@@ -282,7 +281,7 @@ class BuildingsProximityPMTilesGenerator:
                     WHEN category_group = 'agricultural' THEN 'Landbrug'
                     ELSE 'Andet'
                 END as building_type_simple,
-                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
+                ST_AsGeoJSON(geometry) as geometry
             FROM buildings_with_proximity
             ORDER BY distance_to_field_m, category_group, building_uuid
             """
@@ -344,10 +343,10 @@ class BuildingsProximityPMTilesGenerator:
                         CREATE OR REPLACE TABLE agricultural_fields_proximity AS
                         SELECT DISTINCT
                             field_uuid,
-                            ST_FlipCoordinates(geometry) as geometry  -- Fix coordinate swap issue
+                            geometry as geometry  -- Fix coordinate swap issue
                         FROM read_parquet('{gcs_path}data.parquet')
                         WHERE geometry IS NOT NULL
-                            AND ST_IsValid(ST_FlipCoordinates(geometry))
+                            AND ST_IsValid(geometry)
                             AND area_ha > 0.1  -- Minimum 0.1 hectare fields
                         """
 
@@ -525,7 +524,7 @@ class BuildingsProximityPMTilesGenerator:
                 inspire_dwellings,
                 '#ff6b6b' as color,
                 'Boligbyggeri' as category_danish,
-                ST_AsGeoJSON(ST_FlipCoordinates(geo_building_polygon)) as geometry
+                ST_AsGeoJSON(geo_building_polygon) as geometry
             FROM {table_name}
             WHERE category_group = 'residential'
                 AND geo_building_polygon IS NOT NULL
@@ -653,7 +652,7 @@ class BuildingsProximityPMTilesGenerator:
                 inspire_construction_year,
                 '#45b7d1' as color,
                 'Uddannelsesinstitution' as category_danish,
-                ST_AsGeoJSON(ST_FlipCoordinates(geo_building_polygon)) as geometry
+                ST_AsGeoJSON(geo_building_polygon) as geometry
             FROM {table_name}
             WHERE category_group = 'publicServices'
                 AND (
