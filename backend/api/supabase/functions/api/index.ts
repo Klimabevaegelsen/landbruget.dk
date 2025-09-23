@@ -1836,6 +1836,13 @@ serve(
 
     const url = new URL(req.url);
     const companyIdParam = url.searchParams.get("id");
+    const refreshCache = url.searchParams.get("refresh_cache") === "true"; // Force cache refresh
+
+    // Clear config cache if refresh is requested
+    if (refreshCache) {
+      cachedConfig = null;
+      console.log("🔄 Config cache cleared due to refresh_cache parameter");
+    }
 
     // Validate company ID
     const validation = validateCompanyId(companyIdParam);
