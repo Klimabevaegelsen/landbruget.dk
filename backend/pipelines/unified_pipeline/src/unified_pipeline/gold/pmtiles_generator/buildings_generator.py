@@ -263,9 +263,9 @@ class BuildingsProximityPMTilesGenerator:
                     ELSE '#888888'
                 END as color,
                 CASE
-                    WHEN category_group = 'residential' THEN 'Boligbyggeri'
-                    WHEN category_group = 'publicServices' THEN 'Offentlig service'
-                    WHEN category_group = 'agricultural' THEN 'Landbrugsbyggeri'
+                    WHEN category_group = 'residential' THEN 'Beboelsesbygning'
+                    WHEN category_group = 'publicServices' THEN 'Offentlige institutioner'
+                    WHEN category_group = 'agricultural' THEN 'Landbrugsbygning'
                     ELSE 'Andet'
                 END as category_danish,
                 CASE
@@ -526,10 +526,11 @@ class BuildingsProximityPMTilesGenerator:
                 inspire_dwellings,
                 '#ff6b6b' as color,
                 'Boligbyggeri' as category_danish,
-                geo_building_centroid as geometry
+                ST_AsGeoJSON(ST_FlipCoordinates(geo_building_polygon)) as geometry
             FROM {table_name}
             WHERE category_group = 'residential'
-                AND geo_building_centroid IS NOT NULL
+                AND geo_building_polygon IS NOT NULL
+                AND ST_IsValid(geo_building_polygon)
             ORDER BY building_uuid
             """
 
@@ -653,7 +654,7 @@ class BuildingsProximityPMTilesGenerator:
                 inspire_construction_year,
                 '#45b7d1' as color,
                 'Uddannelsesinstitution' as category_danish,
-                geo_building_centroid as geometry
+                ST_AsGeoJSON(ST_FlipCoordinates(geo_building_polygon)) as geometry
             FROM {table_name}
             WHERE category_group = 'publicServices'
                 AND (
@@ -662,7 +663,8 @@ class BuildingsProximityPMTilesGenerator:
                     inspire_current_use ILIKE '%education%' OR
                     building_type ILIKE '%skole%'
                 )
-                AND geo_building_centroid IS NOT NULL
+                AND geo_building_polygon IS NOT NULL
+                AND ST_IsValid(geo_building_polygon)
             ORDER BY building_uuid
             """
 
