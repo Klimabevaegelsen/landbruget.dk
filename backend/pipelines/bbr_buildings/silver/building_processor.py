@@ -312,7 +312,7 @@ class BuildingProcessor:
             SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT building_uuid) as unique_buildings,
-                AVG(TRY_CAST(floor_area AS DOUBLE)) as avg_floor_area,
+                AVG(building_floor_area_sqm) as avg_floor_area,
                 COUNT(*) FILTER (
                     WHERE building_usage_category = 'residential'
                 ) as residential_count,
