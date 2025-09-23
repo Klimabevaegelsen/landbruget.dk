@@ -1192,7 +1192,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           map.addLayer({
             id: 'bnbo-fill',
             source: 'bnbo',
-            'source-layer': 'bnbo_areas',
+            'source-layer': 'bnbo',
             type: 'fill',
             paint: {
               'fill-color': [
@@ -1236,7 +1236,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           map.addLayer({
             id: 'bnbo-outline',
             source: 'bnbo',
-            'source-layer': 'bnbo_areas',
+            'source-layer': 'bnbo',
             type: 'line',
             paint: {
               'line-color': [
@@ -1876,19 +1876,36 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   // Query for field data at a specific coordinate
   const queryFieldDataAtCoordinate = useCallback(
     async (lng: number, lat: number): Promise<FieldAnalysisData | null> => {
-      if (!mapRef.current) return null;
+      if (!mapRef.current) {
+        console.log('🔍 No map ref available for field query');
+        return null;
+      }
 
       const map = mapRef.current.getMap();
       const point = map.project([lng, lat]);
+      console.log('🔍 Querying field data at coordinate:', { lng, lat, point });
 
       // Query for field features at this point
       const fieldFeatures = map.queryRenderedFeatures(point, {
         layers: ['fields-fill'],
       });
 
+      console.log('🔍 Field query result:', {
+        featuresFound: fieldFeatures.length,
+        layerExists: !!map.getLayer('fields-fill'),
+        layerVisible: map.getLayer('fields-fill')
+          ? map.getLayoutProperty('fields-fill', 'visibility')
+          : 'layer not found',
+      });
+
       if (fieldFeatures.length > 0) {
         const fieldData = fieldFeatures[0].properties as FieldAnalysisData;
         fieldData.click_coordinates = { lat, lng };
+        console.log('🔍 Found field data:', {
+          crop_name: fieldData.crop_name,
+          area_hectares: fieldData.area_hectares,
+          field_uuid: fieldData.field_uuid,
+        });
         return fieldData;
       }
 
@@ -1911,17 +1928,26 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           feature.layer.id.startsWith('wetlands-') ||
           feature.layer.id.startsWith('water-projects-')
         ) {
+          console.log(
+            '🔍 Environmental layer hovered, querying for field data...'
+          );
           const underlyingFieldData = await queryFieldDataAtCoordinate(
             event.lngLat.lng,
             event.lngLat.lat
           );
 
           if (underlyingFieldData) {
+            console.log('🔍 Found underlying field data for hover:', {
+              crop_name: underlyingFieldData.crop_name,
+              area_hectares: underlyingFieldData.area_hectares,
+            });
             // Merge environmental layer properties with field data
             properties = {
               ...properties, // Environmental layer data first
               ...underlyingFieldData, // Field data second (will override if same keys)
             };
+          } else {
+            console.log('🔍 No underlying field data found for hover');
           }
         }
 
@@ -1960,6 +1986,13 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       };
 
       const feature = event.features && event.features[0];
+      console.log('🔍 Click event:', {
+        hasFeature: !!feature,
+        layerId: feature?.layer?.id,
+        allFeatures:
+          event.features?.map((f) => ({ id: f.layer.id, source: f.source })) ||
+          [],
+      });
       if (feature && feature.layer.id.startsWith('fields-')) {
         // Field click - add coordinates and select field
         console.log('🔍 Field layer clicked:', feature.layer.id);
