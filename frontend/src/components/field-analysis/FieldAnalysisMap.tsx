@@ -1937,17 +1937,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           );
 
           if (underlyingFieldData) {
-            console.log('🔍 Found underlying field data for hover:', {
-              crop_name: underlyingFieldData.crop_name,
-              area_hectares: underlyingFieldData.area_hectares,
-            });
             // Merge environmental layer properties with field data
             properties = {
               ...properties, // Environmental layer data first
               ...underlyingFieldData, // Field data second (will override if same keys)
             };
-          } else {
-            console.log('🔍 No underlying field data found for hover');
           }
         }
 
