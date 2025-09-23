@@ -299,7 +299,7 @@ class BuildingProcessor:
                 END as category_group,
                 bbr_usage_code,
                 COALESCE(bcm.name, 'Ukendt BBR kode (' || bbr_usage_code || ')') as bbr_usage_name,
-                inspire_category_group,
+                category_group as inspire_category_group,
                 CURRENT_DATE as last_updated
             FROM {processing_table} pb
             LEFT JOIN bbr_code_mapping bcm ON TRY_CAST(pb.bbr_usage_code AS INTEGER) = bcm.code
