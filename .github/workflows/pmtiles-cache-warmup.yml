@@ -42,25 +42,25 @@ jobs:
 
           # High priority files that should always be warmed
           HIGH_PRIORITY_FILES=(
-            "field_analysis_2023.pmtiles"
-            "field_analysis_2024.pmtiles"
-            "bnbo_areas.pmtiles"
-            "wetlands_all.pmtiles"
-            "water_projects.pmtiles"
-            "buildings_proximity.pmtiles"
+            "pmtiles/field_analysis_2023.pmtiles"
+            "pmtiles/field_analysis_2024.pmtiles"
+            "pmtiles/bnbo_areas.pmtiles"
+            "pmtiles/wetlands_all.pmtiles"
+            "pmtiles/water_projects.pmtiles"
+            "pmtiles/buildings_proximity.pmtiles"
           )
 
           # All files for complete warmup
           ALL_FILES=(
             "${HIGH_PRIORITY_FILES[@]}"
-            "field_analysis_2022.pmtiles"
-            "field_analysis_2021.pmtiles"
-            "field_analysis_2020.pmtiles"
-            "field_analysis_2019.pmtiles"
-            "field_analysis_2018.pmtiles"
-            "field_analysis_2017.pmtiles"
-            "field_analysis_2016.pmtiles"
-            "field_analysis_2015.pmtiles"
+            "pmtiles/field_analysis_2022.pmtiles"
+            "pmtiles/field_analysis_2021.pmtiles"
+            "pmtiles/field_analysis_2020.pmtiles"
+            "pmtiles/field_analysis_2019.pmtiles"
+            "pmtiles/field_analysis_2018.pmtiles"
+            "pmtiles/field_analysis_2017.pmtiles"
+            "pmtiles/field_analysis_2016.pmtiles"
+            "pmtiles/field_analysis_2015.pmtiles"
           )
 
           # Determine which files to warm
