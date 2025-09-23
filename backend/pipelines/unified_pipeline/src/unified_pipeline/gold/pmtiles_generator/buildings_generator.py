@@ -1,5 +1,6 @@
 """Buildings Proximity PMTiles Generator."""
 
+import asyncio
 import logging
 import os
 from datetime import datetime
@@ -108,6 +109,9 @@ class BuildingsProximityPMTilesGenerator:
     async def _export_buildings_geojson(self, table_name: str, output_path: str) -> bool:
         """Export buildings data as GeoJSON with proximity-relevant attributes.
 
+        Only includes buildings within 100m of agricultural fields as per requirements
+        in COMPREHENSIVE_FIELD_ANALYSIS_PMTILES_PLAN.md.
+
         Args:
             table_name: Name of the buildings table
             output_path: Path for output GeoJSON file
@@ -116,7 +120,33 @@ class BuildingsProximityPMTilesGenerator:
             True if successful, False otherwise
         """
         try:
+            # First, load agricultural fields data to filter buildings by proximity
+            await self._load_agricultural_fields_for_proximity()
+
+            # Query with 100m proximity filtering to agricultural fields
             query = f"""
+            WITH buildings_within_100m AS (
+                SELECT DISTINCT b.*,
+                    MIN(ST_Distance(
+                        ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
+                        ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832')
+                    )) as distance_to_nearest_field_m
+                FROM {table_name} b
+                CROSS JOIN agricultural_fields_proximity f
+                WHERE b.category_group IN ('residential', 'publicServices', 'agricultural')
+                    AND b.geometry IS NOT NULL
+                    AND f.geometry IS NOT NULL
+                    AND ST_DWithin(
+                        ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
+                        ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832'),
+                        100.0
+                    )
+                GROUP BY
+                    b.building_uuid, b.category_group, b.building_type,
+                    b.building_usage_category, b.inspire_current_use, b.address,
+                    b.address_full, b.building_floor_area_sqm, b.inspire_construction_year,
+                    b.inspire_floors, b.inspire_dwellings, b.geometry
+            )
             SELECT
                 building_uuid,
                 category_group,
@@ -129,6 +159,7 @@ class BuildingsProximityPMTilesGenerator:
                 inspire_construction_year,
                 inspire_floors,
                 inspire_dwellings,
+                ROUND(distance_to_nearest_field_m, 1) as distance_to_field_m,
                 CASE
                     WHEN category_group = 'residential' THEN '#ff6b6b'
                     WHEN category_group = 'publicServices' THEN '#45b7d1'
@@ -148,10 +179,8 @@ class BuildingsProximityPMTilesGenerator:
                     ELSE 4
                 END as priority,
                 ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
-            FROM {table_name}
-            WHERE category_group IN ('residential', 'publicServices', 'agricultural')
-                AND geometry IS NOT NULL
-            ORDER BY category_group, building_uuid
+            FROM buildings_within_100m
+            ORDER BY distance_to_nearest_field_m, category_group, building_uuid
             """
 
             property_columns = [
@@ -166,6 +195,7 @@ class BuildingsProximityPMTilesGenerator:
                 "inspire_construction_year",
                 "inspire_floors",
                 "inspire_dwellings",
+                "distance_to_field_m",
                 "color",
                 "category_danish",
                 "priority",
@@ -178,6 +208,89 @@ class BuildingsProximityPMTilesGenerator:
         except Exception as e:
             logger.error(f"Error exporting buildings GeoJSON: {e}")
             return False
+
+    async def _load_agricultural_fields_for_proximity(self) -> None:
+        """Load agricultural fields data for proximity filtering.
+
+        Creates a table 'agricultural_fields_proximity' with field geometries
+        for use in 100m proximity filtering of buildings.
+        """
+        try:
+            # Load the latest agricultural fields data from multiple years
+            # Use the most recent available data
+            current_year = 2024
+            fields_loaded = False
+
+            for year in range(current_year, current_year - 3, -1):  # Try last 3 years
+                try:
+                    base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker"
+                    year_path = f"{base_path}/{year}"
+
+                    # Try to find the latest timestamped directory for this year
+                    gcs_path = await self.data_loader._find_latest_timestamped_path(year_path)
+                    if gcs_path:
+                        logger.info(
+                            f"Loading agricultural fields from {year} for proximity filtering"
+                        )
+
+                        query = f"""
+                        CREATE OR REPLACE TABLE agricultural_fields_proximity AS
+                        SELECT DISTINCT
+                            field_uuid,
+                            geometry
+                        FROM read_parquet('{gcs_path}*.parquet')
+                        WHERE geometry IS NOT NULL
+                            AND ST_IsValid(geometry)
+                            AND area_ha > 0.1  -- Minimum 0.1 hectare fields
+                        """
+
+                        await asyncio.to_thread(self.conn.execute, query)
+
+                        # Verify data was loaded
+                        count_result = await asyncio.to_thread(
+                            self.conn.execute, "SELECT COUNT(*) FROM agricultural_fields_proximity"
+                        )
+                        field_count = count_result.fetchone()[0]
+
+                        if field_count > 0:
+                            logger.info(
+                                f"Loaded {field_count:,} agricultural fields "
+                                f"for proximity filtering"
+                            )
+                            fields_loaded = True
+                            break
+
+                except Exception as e:
+                    logger.warning(f"Failed to load agricultural fields from year {year}: {e}")
+                    continue
+
+            if not fields_loaded:
+                # Fallback: create empty table to prevent query errors
+                logger.warning("No agricultural fields data found, creating empty table")
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    """
+                    CREATE OR REPLACE TABLE agricultural_fields_proximity AS
+                    SELECT
+                        CAST(NULL AS VARCHAR) as field_uuid,
+                        CAST(NULL AS GEOMETRY) as geometry
+                    WHERE FALSE
+                """,
+                )
+
+        except Exception as e:
+            logger.error(f"Error loading agricultural fields for proximity filtering: {e}")
+            # Create empty table to prevent query errors
+            await asyncio.to_thread(
+                self.conn.execute,
+                """
+                CREATE OR REPLACE TABLE agricultural_fields_proximity AS
+                SELECT
+                    CAST(NULL AS VARCHAR) as field_uuid,
+                    CAST(NULL AS GEOMETRY) as geometry
+                WHERE FALSE
+            """,
+            )
 
     def _get_buildings_tippecanoe_args(self) -> List[str]:
         """Get additional tippecanoe arguments for buildings proximity.
