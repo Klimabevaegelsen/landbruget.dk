@@ -134,7 +134,7 @@ class BuildingsProximityPMTilesGenerator:
                 CREATE OR REPLACE TABLE buildings_utm AS
                 SELECT
                     building_uuid, category_group, building_type, building_usage_category,
-                    inspire_current_use, address, address_full, building_floor_area_sqm,
+                    current_use, address, address_full, building_floor_area_sqm,
                     inspire_construction_year, inspire_floors, inspire_dwellings,
                     bbr_usage_code,
                     COALESCE(bbr_usage_name, 'Ukendt bygningstype') as bbr_usage_name,
@@ -186,7 +186,7 @@ class BuildingsProximityPMTilesGenerator:
                 CREATE OR REPLACE TABLE buildings_with_proximity AS
                 SELECT
                     building_uuid, category_group, building_type, building_usage_category,
-                    inspire_current_use, address, address_full, building_floor_area_sqm,
+                    current_use, address, address_full, building_floor_area_sqm,
                     inspire_construction_year, inspire_floors, inspire_dwellings,
                     bbr_usage_code, bbr_usage_name,
                     CAST(NULL AS DOUBLE) as distance_to_field_m,
@@ -220,7 +220,7 @@ class BuildingsProximityPMTilesGenerator:
                     INSERT INTO buildings_with_proximity
                     SELECT DISTINCT
                         b.building_uuid, b.category_group, b.building_type,
-                        b.building_usage_category, b.inspire_current_use, b.address,
+                        b.building_usage_category, b.current_use, b.address,
                         b.address_full, b.building_floor_area_sqm, b.inspire_construction_year,
                         b.inspire_floors, b.inspire_dwellings, b.bbr_usage_code, b.bbr_usage_name,
                         MIN(ST_Distance(b.geometry_utm,
@@ -232,7 +232,7 @@ class BuildingsProximityPMTilesGenerator:
                     JOIN agricultural_fields_proximity f_orig ON f.field_uuid = f_orig.field_uuid
                     GROUP BY
                         b.building_uuid, b.category_group, b.building_type,
-                        b.building_usage_category, b.inspire_current_use, b.address,
+                        b.building_usage_category, b.current_use, b.address,
                         b.address_full, b.building_floor_area_sqm, b.inspire_construction_year,
                         b.inspire_floors, b.inspire_dwellings, b.bbr_usage_code,
                         b.bbr_usage_name, b.geometry_wgs84
@@ -246,7 +246,7 @@ class BuildingsProximityPMTilesGenerator:
                 category_group,
                 building_type,
                 building_usage_category,
-                inspire_current_use,
+                current_use,
                 address,
                 address_full,
                 building_floor_area_sqm,
@@ -292,7 +292,7 @@ class BuildingsProximityPMTilesGenerator:
                 "category_group",
                 "building_type",
                 "building_usage_category",
-                "inspire_current_use",
+                "current_use",
                 "address",
                 "address_full",
                 "building_floor_area_sqm",
@@ -647,7 +647,7 @@ class BuildingsProximityPMTilesGenerator:
                 building_uuid,
                 building_type,
                 building_usage_category,
-                inspire_current_use,
+                current_use,
                 address,
                 address_full,
                 building_floor_area_sqm,
@@ -660,7 +660,7 @@ class BuildingsProximityPMTilesGenerator:
                 AND (
                     building_usage_category ILIKE '%skole%' OR
                     building_usage_category ILIKE '%uddannelse%' OR
-                    inspire_current_use ILIKE '%education%' OR
+                    current_use ILIKE '%education%' OR
                     building_type ILIKE '%skole%'
                 )
                 AND geo_building_polygon IS NOT NULL
@@ -672,7 +672,7 @@ class BuildingsProximityPMTilesGenerator:
                 "building_uuid",
                 "building_type",
                 "building_usage_category",
-                "inspire_current_use",
+                "current_use",
                 "address",
                 "address_full",
                 "building_floor_area_sqm",
