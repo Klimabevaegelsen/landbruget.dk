@@ -239,7 +239,9 @@ class BuildingProcessor:
                 COUNT(*) FILTER (
                     WHERE building_usage_category = 'agricultural'
                 ) as agricultural_count,
-                COUNT(*) FILTER (WHERE building_usage_category = 'educational') as educational_count
+                COUNT(*) FILTER (
+                    WHERE building_usage_category = 'publicServices'
+                ) as publicservices_count
             FROM processed_buildings
         """).fetchone()
 
@@ -249,7 +251,7 @@ class BuildingProcessor:
         self.logger.info(f"  Average floor area: {stats[2]:.1f} m²")
         self.logger.info(f"  Residential: {stats[3]:,}")
         self.logger.info(f"  Agricultural: {stats[4]:,}")
-        self.logger.info(f"  Educational: {stats[5]:,}")
+        self.logger.info(f"  Public Services: {stats[5]:,}")
 
         # Save processed buildings
         output_dir.mkdir(parents=True, exist_ok=True)
