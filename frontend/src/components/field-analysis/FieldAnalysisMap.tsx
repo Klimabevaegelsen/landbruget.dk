@@ -139,14 +139,59 @@ function MapTooltip({
   const getRelevantData = () => {
     const data: Array<{ label: string; value: unknown; unit?: string }> = [];
 
-    // Always show basic field info
+    // Show layer-specific data first
+    if (layerName === 'BNBO Område') {
+      // Show BNBO status if available
+      if (properties.status_category) {
+        const statusLabel =
+          properties.status_category === 'Action Required'
+            ? 'BNBO handling påkrævet'
+            : properties.status_category === 'Completed'
+              ? 'BNBO gennemført'
+              : 'BNBO status';
+        const statusValue =
+          properties.status_category === 'Action Required'
+            ? 'Handling påkrævet'
+            : properties.status_category === 'Completed'
+              ? 'Gennemført'
+              : properties.status_category;
+        data.push({ label: statusLabel, value: statusValue });
+      }
+    } else if (layerName === 'Lavbundsområde') {
+      // Show wetland-specific data
+      if (properties.wetland_id) {
+        data.push({ label: 'Vådomr. ID', value: properties.wetland_id });
+      }
+      if (properties.toerv_pct) {
+        data.push({ label: 'Tørv indhold', value: properties.toerv_pct });
+      }
+      if (properties.toerv_description) {
+        data.push({
+          label: 'Tørv beskrivelse',
+          value: properties.toerv_description,
+        });
+      }
+    } else if (layerName === 'Vandprojekt') {
+      // Show water project-specific data
+      if (properties.project_id) {
+        data.push({ label: 'Projekt ID', value: properties.project_id });
+      }
+      if (properties.feature_count) {
+        data.push({ label: 'Antal features', value: properties.feature_count });
+      }
+      if (properties.dissolved_at) {
+        data.push({ label: 'Opløst dato', value: properties.dissolved_at });
+      }
+    }
+
+    // Always show basic field info if available (for underlying field data)
     if (properties.crop_name) {
       data.push({ label: 'Afgrøde', value: properties.crop_name });
     }
 
     if (properties.area_hectares) {
       data.push({
-        label: 'Areal',
+        label: 'Markareal',
         value: properties.area_hectares,
         unit: 'ha',
       });
@@ -161,23 +206,6 @@ function MapTooltip({
 
     if (properties.kommune) {
       data.push({ label: 'Kommune', value: properties.kommune });
-    }
-
-    // Show BNBO status if available
-    if (properties.status_category) {
-      const statusLabel =
-        properties.status_category === 'Action Required'
-          ? 'BNBO handling påkrævet'
-          : properties.status_category === 'Completed'
-            ? 'BNBO gennemført'
-            : 'BNBO status';
-      const statusValue =
-        properties.status_category === 'Action Required'
-          ? 'Handling påkrævet'
-          : properties.status_category === 'Completed'
-            ? 'Gennemført'
-            : properties.status_category;
-      data.push({ label: statusLabel, value: statusValue });
     }
 
     // Show building-specific data if available
@@ -457,6 +485,15 @@ function MapTooltip({
             {String(properties.site_name)}
           </p>
         ) : null}
+        {/* Show indicator if this is an environmental layer with underlying field data */}
+        {(layerName === 'BNBO Område' ||
+          layerName === 'Lavbundsområde' ||
+          layerName === 'Vandprojekt') &&
+          Boolean(properties.crop_name) && (
+            <p className="text-muted-foreground mt-1 text-xs italic">
+              Inkluderer markdata
+            </p>
+          )}
       </div>
 
       {/* Content with improved spacing and hierarchy */}
@@ -1155,7 +1192,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           map.addLayer({
             id: 'bnbo-fill',
             source: 'bnbo',
-            'source-layer': 'bnbo',
+            'source-layer': 'bnbo_areas',
             type: 'fill',
             paint: {
               'fill-color': [
@@ -1199,7 +1236,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           map.addLayer({
             id: 'bnbo-outline',
             source: 'bnbo',
-            'source-layer': 'bnbo',
+            'source-layer': 'bnbo_areas',
             type: 'line',
             paint: {
               'line-color': [
@@ -1832,17 +1869,66 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     }
   }, [fieldsPaintProps, layerVisibility.fields]); // Use memoized paint props
 
+  // Track map interactions to prevent clicks during dragging
+  const isMapDraggingRef = useRef(false);
+  const lastMapMoveTimeRef = useRef<number>(0);
+
+  // Query for field data at a specific coordinate
+  const queryFieldDataAtCoordinate = useCallback(
+    async (lng: number, lat: number): Promise<FieldAnalysisData | null> => {
+      if (!mapRef.current) return null;
+
+      const map = mapRef.current.getMap();
+      const point = map.project([lng, lat]);
+
+      // Query for field features at this point
+      const fieldFeatures = map.queryRenderedFeatures(point, {
+        layers: ['fields-fill'],
+      });
+
+      if (fieldFeatures.length > 0) {
+        const fieldData = fieldFeatures[0].properties as FieldAnalysisData;
+        fieldData.click_coordinates = { lat, lng };
+        return fieldData;
+      }
+
+      return null;
+    },
+    []
+  );
+
   // Handle hover events
   const onHover = useCallback(
-    (event: MapLayerMouseEvent) => {
+    async (event: MapLayerMouseEvent) => {
       const feature = event.features && event.features[0];
       if (feature) {
         const layerName = getLayerDisplayName(feature.layer.id);
+        let properties = feature.properties || {};
+
+        // For environmental layers, try to get underlying field data for enhanced tooltip
+        if (
+          feature.layer.id.startsWith('bnbo-') ||
+          feature.layer.id.startsWith('wetlands-') ||
+          feature.layer.id.startsWith('water-projects-')
+        ) {
+          const underlyingFieldData = await queryFieldDataAtCoordinate(
+            event.lngLat.lng,
+            event.lngLat.lat
+          );
+
+          if (underlyingFieldData) {
+            // Merge environmental layer properties with field data
+            properties = {
+              ...properties, // Environmental layer data first
+              ...underlyingFieldData, // Field data second (will override if same keys)
+            };
+          }
+        }
 
         setHoverInfo({
           x: event.point.x,
           y: event.point.y,
-          properties: feature.properties || {},
+          properties,
           layerName,
           visualizationMode: filterState.visualizationMode,
           colorUnit: filterState.colorUnit,
@@ -1851,16 +1937,16 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         setHoverInfo(null);
       }
     },
-    [filterState.visualizationMode, filterState.colorUnit]
+    [
+      filterState.visualizationMode,
+      filterState.colorUnit,
+      queryFieldDataAtCoordinate,
+    ]
   );
-
-  // Track map interactions to prevent clicks during dragging
-  const isMapDraggingRef = useRef(false);
-  const lastMapMoveTimeRef = useRef<number>(0);
 
   // Handle click events for field selection and coordinate capture
   const onClick = useCallback(
-    (event: MapLayerMouseEvent) => {
+    async (event: MapLayerMouseEvent) => {
       const now = Date.now();
 
       // If the map was moving recently (within 50ms), consider this a drag end, not a click
@@ -1889,10 +1975,38 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         const fieldData = feature.properties as FieldAnalysisData;
         fieldData.click_coordinates = coordinates;
         onFieldSelect(fieldData);
+      } else if (
+        feature &&
+        (feature.layer.id.startsWith('bnbo-') ||
+          feature.layer.id.startsWith('wetlands-') ||
+          feature.layer.id.startsWith('water-projects-'))
+      ) {
+        // Environmental layer click - try to find underlying field data
+        console.log(
+          '🔍 Environmental layer clicked:',
+          feature.layer.id,
+          feature.properties
+        );
+
+        // Query for underlying field data at the same coordinate
+        const underlyingFieldData = await queryFieldDataAtCoordinate(
+          coordinates.lng,
+          coordinates.lat
+        );
+
+        if (underlyingFieldData) {
+          // Found underlying field data - show it in the sidebar
+          console.log('🔍 Found underlying field data:', underlyingFieldData);
+          onFieldSelect(underlyingFieldData);
+        } else {
+          // No underlying field data - just show coordinates
+          console.log('🔍 No underlying field data found');
+          onMapClick?.(coordinates);
+        }
       } else if (feature) {
         // Other layer click - log for debugging
         console.log(
-          '🔍 Non-field layer clicked:',
+          '🔍 Non-environmental layer clicked:',
           feature.layer.id,
           feature.properties
         );
@@ -1902,7 +2016,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         onMapClick?.(coordinates);
       }
     },
-    [onFieldSelect, onMapClick]
+    [onFieldSelect, onMapClick, queryFieldDataAtCoordinate]
   );
 
   // Get display name for layer
