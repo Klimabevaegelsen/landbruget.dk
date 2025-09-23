@@ -73,10 +73,10 @@ class BuildingsProximityPMTilesGenerator:
                     geojson_path=geojson_path,
                     output_path=pmtiles_path,
                     layer_name="buildings",
-                    max_zoom=14,  # Higher zoom for building points
-                    min_zoom=8,  # Don't show at very low zoom levels
+                    max_zoom=14,
+                    min_zoom=8,
                     buffer=64,
-                    simplification=1,  # Minimal simplification for points
+                    simplification=2,  # Allow more simplification for polygons
                     additional_args=self._get_buildings_tippecanoe_args(),
                 )
 
@@ -147,10 +147,10 @@ class BuildingsProximityPMTilesGenerator:
                     WHEN category_group = 'agricultural' THEN 3
                     ELSE 4
                 END as priority,
-                ST_AsGeoJSON(ST_FlipCoordinates(geo_building_centroid)) as geometry
+                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
             FROM {table_name}
             WHERE category_group IN ('residential', 'publicServices', 'agricultural')
-                AND geo_building_centroid IS NOT NULL
+                AND geometry IS NOT NULL
             ORDER BY category_group, building_uuid
             """
 
