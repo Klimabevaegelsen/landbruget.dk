@@ -139,15 +139,15 @@ const RANKINGS = [
   },
   {
     id: 'most_foreign_workers',
-    title: 'Flest arbejdstilladelser',
+    title: 'Førstegangsvisum ansøgninger',
     category: 'worker',
-    description: 'Virksomheder med flest aktive arbejdstilladelser i 2025',
+    description: 'Virksomheder med flest førstegangsvisum ansøgninger i 2024',
   },
   {
     id: 'most_work_injuries',
     title: 'Flest arbejdsulykker',
     category: 'worker',
-    description: 'Virksomheder med flest rapporterede arbejdsulykker i 2025',
+    description: 'Virksomheder med flest rapporterede arbejdsulykker i 2024',
   },
   {
     id: 'most_workplace_inspections',
