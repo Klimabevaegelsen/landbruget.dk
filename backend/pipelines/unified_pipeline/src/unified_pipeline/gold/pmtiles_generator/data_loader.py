@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import re
 from typing import Dict, Optional
 
 import duckdb
@@ -512,6 +511,9 @@ class PMTilesDataLoader:
     async def _find_latest_timestamped_path(self, base_path: str) -> Optional[str]:
         """Find the latest timestamped directory in a base path.
 
+        Uses the same proven pattern as other pipelines in the codebase.
+        Handles different file patterns for different datasets.
+
         Args:
             base_path: Base GCS path like gs://bucket/silver/dataset/
 
@@ -519,32 +521,43 @@ class PMTilesDataLoader:
             Full path to latest timestamped directory, or None if not found
         """
         try:
-            # List directories in the base path
-            directories = await asyncio.to_thread(self.gcs.list_files, f"{base_path}*")
-            if not directories:
+            # Ensure base_path ends with / for proper pattern matching
+            if not base_path.endswith("/"):
+                base_path += "/"
+
+            # Try different file patterns based on the dataset type
+            patterns_to_try = [
+                f"{base_path}*/data.parquet",  # Standard pattern (FVM marker, etc.)
+                f"{base_path}*/joined_buildings.parquet",  # BBR buildings pattern
+                f"{base_path}*/*.parquet",  # Any parquet file pattern
+            ]
+
+            files_with_timestamps = []
+
+            for pattern in patterns_to_try:
+                try:
+                    # Get files with timestamps using the standard GCS utility
+                    pattern_files = await asyncio.to_thread(
+                        self.gcs.list_files_with_timestamps, pattern
+                    )
+                    files_with_timestamps.extend(pattern_files)
+                except Exception:
+                    continue  # Try next pattern
+
+            if not files_with_timestamps:
                 return None
 
-            # Filter for timestamped directories (YYYYMMDD_HHMMSS pattern)
-            timestamped_dirs = []
-            for dir_path in directories:
-                # Extract directory name from path
-                dir_name = dir_path.rstrip("/").split("/")[-1]
-                # Check if it matches timestamp pattern
-                if re.match(r"^\d{8}_\d{6}$", dir_name):
-                    # Ensure path ends with / for directory access
-                    if not dir_path.endswith("/"):
-                        dir_path += "/"
-                    timestamped_dirs.append((dir_name, dir_path))
+            # Sort by timestamp (most recent first) and get the latest
+            files_with_timestamps.sort(key=lambda x: x[1], reverse=True)
+            latest_file_path = files_with_timestamps[0][0]
 
-            if not timestamped_dirs:
-                return None
+            # Extract directory path from file path
+            # Convert gs://bucket/silver/dataset/YYYYMMDD_HHMMSS/file.parquet
+            # to gs://bucket/silver/dataset/YYYYMMDD_HHMMSS/
+            latest_dir_path = "/".join(latest_file_path.split("/")[:-1]) + "/"
 
-            # Sort by timestamp (latest first) and return the path
-            timestamped_dirs.sort(key=lambda x: x[0], reverse=True)
-            latest_path = timestamped_dirs[0][1]
-
-            logger.info(f"Found latest timestamped directory: {latest_path}")
-            return latest_path
+            logger.info(f"Found latest timestamped directory: {latest_dir_path}")
+            return latest_dir_path
 
         except Exception as e:
             logger.error(f"Error finding latest timestamped path for {base_path}: {e}")
