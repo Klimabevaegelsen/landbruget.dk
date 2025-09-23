@@ -231,7 +231,9 @@ export const pmtilesCacheService = new PMTilesCacheService();
 
 // Make pmtilesCacheService available globally for debugging
 if (typeof window !== 'undefined') {
-  (window as any).pmtilesCacheService = pmtilesCacheService;
+  (
+    window as typeof window & { pmtilesCacheService: PMTilesCacheService }
+  ).pmtilesCacheService = pmtilesCacheService;
 }
 
 // Clean expired entries periodically (every 30 minutes)
