@@ -45,7 +45,9 @@ jobs:
             "field_analysis_2023.pmtiles"
             "field_analysis_2024.pmtiles"
             "bnbo_areas.pmtiles"
-            "buildings_proximity_2024.pmtiles"
+            "wetlands_all.pmtiles"
+            "water_projects.pmtiles"
+            "buildings_proximity.pmtiles"
           )
 
           # All files for complete warmup
@@ -59,8 +61,6 @@ jobs:
             "field_analysis_2017.pmtiles"
             "field_analysis_2016.pmtiles"
             "field_analysis_2015.pmtiles"
-            "wetlands_all_2024.pmtiles"
-            "water_projects_2024.pmtiles"
           )
 
           # Determine which files to warm
@@ -152,7 +152,7 @@ jobs:
           echo "🔍 Verifying cache status..."
 
           # Check a few key files to ensure they're accessible
-          KEY_FILES=("field_analysis_2023.pmtiles" "bnbo_areas.pmtiles")
+          KEY_FILES=("field_analysis_2024.pmtiles" "bnbo_areas.pmtiles" "wetlands_all.pmtiles")
 
           for filename in "${KEY_FILES[@]}"; do
             url="${FRONTEND_URL}/api/pmtiles/pmtiles/${filename}"
