@@ -178,7 +178,7 @@ class BuildingProcessor:
         inspire_columns_check = conn.execute("""
             SELECT column_name
             FROM (DESCRIBE joined_buildings)
-            WHERE column_name IN ('inspire_current_use', 'category_group', 'bbr_usage_code')
+            WHERE column_name IN ('current_use', 'category_group', 'bbr_usage_code')
         """).fetchall()
 
         if len(inspire_columns_check) >= 3:
@@ -188,7 +188,7 @@ class BuildingProcessor:
             # Debug: Check publicServices count in existing data
             public_count = conn.execute("""
                 SELECT COUNT(*) FROM joined_buildings
-                WHERE inspire_current_use = 'publicServices'
+                WHERE current_use = 'publicServices'
             """).fetchone()[0]
             self.logger.info(f"🔍 PublicServices buildings in joined data: {public_count:,}")
 
@@ -197,7 +197,7 @@ class BuildingProcessor:
                 education_sample = conn.execute("""
                     SELECT bbr_usage_code, COUNT(*) as count
                     FROM joined_buildings
-                    WHERE inspire_current_use = 'publicServices'
+                    WHERE current_use = 'publicServices'
                       AND bbr_usage_code IN ('420', '421', '422', '429', '440', '441')
                     GROUP BY bbr_usage_code
                     ORDER BY count DESC
@@ -269,17 +269,17 @@ class BuildingProcessor:
                 geometry as geo_building_polygon,
                 ST_Centroid(geometry) as geo_building_centroid,
                 building_type,
-                floor_area as building_floor_area_sqm,
+                TRY_CAST(floor_area AS DOUBLE) as building_floor_area_sqm,
                 join_status,
                 CASE
-                    WHEN inspire_current_use IN (
+                    WHEN current_use IN (
                         'individualResidence', 'collectiveResidence', 'twoDwellings'
                     ) THEN 'residential'
-                    WHEN inspire_current_use = 'agriculture' THEN 'agricultural'
-                    WHEN inspire_current_use = 'publicServices' THEN 'publicServices'
+                    WHEN current_use = 'agriculture' THEN 'agricultural'
+                    WHEN current_use = 'publicServices' THEN 'publicServices'
                     ELSE 'other'
                 END as building_usage_category,
-                inspire_current_use,
+                current_use,
                 inspire_building_nature,
                 inspire_construction_year,
                 inspire_floor_area,
@@ -290,11 +290,11 @@ class BuildingProcessor:
                 address,
                 geometry,
                 CASE
-                    WHEN inspire_current_use IN (
+                    WHEN current_use IN (
                         'individualResidence', 'collectiveResidence', 'twoDwellings'
                     ) THEN 'residential'
-                    WHEN inspire_current_use = 'agriculture' THEN 'agricultural'
-                    WHEN inspire_current_use = 'publicServices' THEN 'publicServices'
+                    WHEN current_use = 'agriculture' THEN 'agricultural'
+                    WHEN current_use = 'publicServices' THEN 'publicServices'
                     ELSE 'other'
                 END as category_group,
                 bbr_usage_code,
@@ -304,7 +304,7 @@ class BuildingProcessor:
             FROM {processing_table} pb
             LEFT JOIN bbr_code_mapping bcm ON TRY_CAST(pb.bbr_usage_code AS INTEGER) = bcm.code
             WHERE ST_IsValid(geometry)
-            AND floor_area > 0
+            AND TRY_CAST(floor_area AS DOUBLE) > 0
         """)
 
         # Get processing statistics
@@ -312,7 +312,7 @@ class BuildingProcessor:
             SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT building_uuid) as unique_buildings,
-                AVG(floor_area) as avg_floor_area,
+                AVG(TRY_CAST(floor_area AS DOUBLE)) as avg_floor_area,
                 COUNT(*) FILTER (
                     WHERE building_usage_category = 'residential'
                 ) as residential_count,
@@ -351,7 +351,7 @@ class BuildingProcessor:
                     table_name="processed_buildings",
                     gcs_path=gcs_path,
                     compression="zstd",
-                    query="SELECT * FROM processed_buildings ORDER BY floor_area DESC",
+                    query="SELECT * FROM processed_buildings ORDER BY building_floor_area_sqm DESC",
                 )
 
                 self.logger.info(f"✅ Native GCS export successful: {gcs_path}")
@@ -363,7 +363,7 @@ class BuildingProcessor:
         conn.execute(f"""
             COPY (
                 SELECT * FROM processed_buildings
-                ORDER BY floor_area DESC
+                ORDER BY building_floor_area_sqm DESC
             ) TO '{output_file}' (FORMAT PARQUET)
         """)
 
