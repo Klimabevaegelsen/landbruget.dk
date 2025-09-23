@@ -280,12 +280,12 @@ class BuildingProcessor:
                     ELSE 'other'
                 END as building_usage_category,
                 current_use,
-                inspire_building_nature,
-                inspire_construction_year,
-                inspire_floor_area,
-                inspire_floors,
-                inspire_dwellings,
-                address_full,
+                building_nature as inspire_building_nature,
+                construction_year as inspire_construction_year,
+                floor_area as inspire_floor_area,
+                floors as inspire_floors,
+                dwellings as inspire_dwellings,
+                address as address_full,
                 -- Pesticide proximity pipeline compatibility columns
                 address,
                 geometry,
