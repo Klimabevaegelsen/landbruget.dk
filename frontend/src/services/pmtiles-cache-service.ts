@@ -229,6 +229,11 @@ class PMTilesCacheService {
 // Export singleton instance
 export const pmtilesCacheService = new PMTilesCacheService();
 
+// Make pmtilesCacheService available globally for debugging
+if (typeof window !== 'undefined') {
+  (window as any).pmtilesCacheService = pmtilesCacheService;
+}
+
 // Clean expired entries periodically (every 30 minutes)
 if (typeof window !== 'undefined') {
   setInterval(
