@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
           try {
             // Use our own proxy API to warm the cache
-            const proxyUrl = `${request.nextUrl.origin}/api/pmtiles/pmtiles/${filename}`;
+            const proxyUrl = `${request.nextUrl.origin}/api/pmtiles/${filename}`;
 
             console.log(`🔥 Warming: ${filename}`);
 
