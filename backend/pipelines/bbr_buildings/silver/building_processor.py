@@ -257,6 +257,15 @@ class BuildingProcessor:
         # Apply silver layer transformations
         self.logger.info("Applying silver layer transformations...")
 
+        # Debug: Check what columns are actually in the processing table
+        self.logger.info(f"🔍 Checking columns in {processing_table}:")
+        try:
+            schema = conn.execute(f"DESCRIBE {processing_table}").fetchall()
+            for col_name, col_type, _, _, _, _ in schema:
+                self.logger.info(f"  - {col_name} ({col_type})")
+        except Exception as e:
+            self.logger.error(f"Failed to describe {processing_table}: {e}")
+
         # Create BBR code mapping table for join
         bbr_mappings = [(code, name) for code, name in self.bbr_code_names.items()]
         conn.execute("CREATE OR REPLACE TABLE bbr_code_mapping (code INTEGER, name VARCHAR)")
@@ -265,7 +274,7 @@ class BuildingProcessor:
         conn.execute(f"""
             CREATE OR REPLACE TABLE processed_buildings AS
             SELECT
-                building_uuid,
+                BBRUUID as building_uuid,
                 geometry as geo_building_polygon,
                 ST_Centroid(geometry) as geo_building_centroid,
                 building_type,
