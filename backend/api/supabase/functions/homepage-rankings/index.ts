@@ -1146,6 +1146,7 @@ serve(async (req) => {
       const { data: transportRawData } = await supabase
         .from("animal_transport_weekly_summary")
         .select("company_id, animal_count")
+        .eq("species_code", "15") // Filter for pigs only
         .gte("transport_date_week_start", "2024-01-01")
         .lt("transport_date_week_start", "2025-01-01");
 
@@ -1218,11 +1219,11 @@ serve(async (req) => {
 
       // 21. Most Transported Cattle
       const { data: cattleTransportRawData } = await supabase
-        .from("animal_transports")
+        .from("animal_transport_weekly_summary")
         .select("company_id, animal_count")
-        .eq("species_code", "12")
-        .gte("transport_date", "2024-01-01")
-        .lt("transport_date", "2025-01-01");
+        .eq("species_code", "12") // Filter for cattle only
+        .gte("transport_date_week_start", "2024-01-01")
+        .lt("transport_date_week_start", "2025-01-01");
 
       // Get unique company IDs and fetch company details
       const uniqueCattleCompanyIds = [
@@ -1398,7 +1399,7 @@ serve(async (req) => {
 
       // 23. Most Work Injuries - Using incidents table for 2024 data
       const { data: injuryRawData } = await supabase
-        .rpc('get_company_incident_counts_2024')
+        .rpc("get_company_incident_counts_2024")
         .limit(200);
 
       // If RPC doesn't exist, fall back to manual query
@@ -1410,9 +1411,11 @@ serve(async (req) => {
         // Only use TOTAL records to avoid double counting (specific injury types are breakdowns)
         const { data: incidentsData } = await supabase
           .from("incidents")
-          .select("company_id, incident_date, type, subtype, injury_count_bucket")
+          .select(
+            "company_id, incident_date, type, subtype, injury_count_bucket"
+          )
           .eq("type", "workplace_safety")
-          .eq("subtype", "TOTAL")  // Only TOTAL records to avoid double counting
+          .eq("subtype", "TOTAL") // Only TOTAL records to avoid double counting
           .gte("incident_date", "2024-01-01")
           .lt("incident_date", "2025-01-01")
           .limit(1000);
@@ -1437,9 +1440,13 @@ serve(async (req) => {
           // Group by company and sum injury counts from buckets
           const companyInjuryCounts = new Map();
           incidentsData.forEach((incident) => {
-            const currentCount = companyInjuryCounts.get(incident.company_id) || 0;
+            const currentCount =
+              companyInjuryCounts.get(incident.company_id) || 0;
             const bucketValue = parseInjuryBucket(incident.injury_count_bucket);
-            companyInjuryCounts.set(incident.company_id, currentCount + bucketValue);
+            companyInjuryCounts.set(
+              incident.company_id,
+              currentCount + bucketValue
+            );
           });
 
           // Get company data for companies with incidents, filtered for agricultural companies
@@ -1453,12 +1460,13 @@ serve(async (req) => {
             .eq("is_agricultural_company", true); // Only agricultural companies
 
           // Create joined data
-          injuryData = injuryCompanies?.map((company) => ({
-            company_id: company.id,
-            incident_count: companyInjuryCounts.get(company.id),
-            companies: company,
-            year: 2024
-          })) || [];
+          injuryData =
+            injuryCompanies?.map((company) => ({
+              company_id: company.id,
+              incident_count: companyInjuryCounts.get(company.id),
+              companies: company,
+              year: 2024,
+            })) || [];
 
           injuryCount = injuryData.length;
         }
