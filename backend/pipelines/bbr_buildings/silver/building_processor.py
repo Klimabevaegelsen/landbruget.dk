@@ -207,7 +207,7 @@ class BuildingProcessor:
                     self.logger.info("🏫 Education buildings by BBR code:")
                     for code, count in education_sample:
                         code_name = self._get_bbr_code_name(code)
-                        self.logger.info(f"  BBR {code} ({code_name}): {count:,} buildings")
+                        self.logger.info(f"  {code_name}: {count:,} buildings")
                 else:
                     self.logger.warning(
                         "⚠️ No education BBR codes found in joined publicServices buildings"
