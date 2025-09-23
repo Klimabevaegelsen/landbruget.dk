@@ -269,7 +269,7 @@ class BuildingProcessor:
                 geometry as geo_building_polygon,
                 ST_Centroid(geometry) as geo_building_centroid,
                 building_type,
-                building_floor_area_sqm,
+                floor_area as building_floor_area_sqm,
                 join_status,
                 CASE
                     WHEN inspire_current_use IN (
@@ -304,7 +304,7 @@ class BuildingProcessor:
             FROM {processing_table} pb
             LEFT JOIN bbr_code_mapping bcm ON TRY_CAST(pb.bbr_usage_code AS INTEGER) = bcm.code
             WHERE ST_IsValid(geometry)
-            AND building_floor_area_sqm > 0
+            AND floor_area > 0
         """)
 
         # Get processing statistics
@@ -312,7 +312,7 @@ class BuildingProcessor:
             SELECT
                 COUNT(*) as total_buildings,
                 COUNT(DISTINCT building_uuid) as unique_buildings,
-                AVG(building_floor_area_sqm) as avg_floor_area,
+                AVG(floor_area) as avg_floor_area,
                 COUNT(*) FILTER (
                     WHERE building_usage_category = 'residential'
                 ) as residential_count,
@@ -351,7 +351,7 @@ class BuildingProcessor:
                     table_name="processed_buildings",
                     gcs_path=gcs_path,
                     compression="zstd",
-                    query="SELECT * FROM processed_buildings ORDER BY building_floor_area_sqm DESC",
+                    query="SELECT * FROM processed_buildings ORDER BY floor_area DESC",
                 )
 
                 self.logger.info(f"✅ Native GCS export successful: {gcs_path}")
@@ -363,7 +363,7 @@ class BuildingProcessor:
         conn.execute(f"""
             COPY (
                 SELECT * FROM processed_buildings
-                ORDER BY building_floor_area_sqm DESC
+                ORDER BY floor_area DESC
             ) TO '{output_file}' (FORMAT PARQUET)
         """)
 
