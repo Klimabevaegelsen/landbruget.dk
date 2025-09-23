@@ -120,33 +120,127 @@ class BuildingsProximityPMTilesGenerator:
             True if successful, False otherwise
         """
         try:
+            logger.info("🏢 Generating buildings GeoJSON with 100m proximity filtering...")
+
             # First, load agricultural fields data to filter buildings by proximity
             await self._load_agricultural_fields_for_proximity()
 
-            # Query with 100m proximity filtering to agricultural fields
-            query = f"""
-            WITH buildings_within_100m AS (
-                SELECT DISTINCT b.*,
-                    MIN(ST_Distance(
-                        ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
-                        ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832')
-                    )) as distance_to_nearest_field_m
-                FROM {table_name} b
-                CROSS JOIN agricultural_fields_proximity f
-                WHERE b.category_group IN ('residential', 'publicServices', 'agricultural')
-                    AND b.geometry IS NOT NULL
-                    AND f.geometry IS NOT NULL
-                    AND ST_DWithin(
-                        ST_Transform(b.geometry, 'EPSG:4326', 'EPSG:25832'),
-                        ST_Transform(f.geometry, 'EPSG:4326', 'EPSG:25832'),
-                        100.0
-                    )
-                GROUP BY
-                    b.building_uuid, b.category_group, b.building_type,
-                    b.building_usage_category, b.inspire_current_use, b.address,
-                    b.address_full, b.building_floor_area_sqm, b.inspire_construction_year,
-                    b.inspire_floors, b.inspire_dwellings, b.geometry
+            # SPATIAL_JOIN COMPLIANT APPROACH (PR #545)
+            # Step 1: Create pre-transformed buildings table for SPATIAL_JOIN optimization
+            logger.info("📍 Pre-transforming buildings to UTM Zone 32N for spatial operations...")
+            await asyncio.to_thread(
+                self.conn.execute,
+                f"""
+                CREATE OR REPLACE TABLE buildings_utm AS
+                SELECT
+                    building_uuid, category_group, building_type, building_usage_category,
+                    inspire_current_use, address, address_full, building_floor_area_sqm,
+                    inspire_construction_year, inspire_floors, inspire_dwellings,
+                    bbr_usage_code,
+                    COALESCE(bbr_usage_name, 'Ukendt bygningstype') as bbr_usage_name,
+                    ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as geometry_utm,
+                    geometry as geometry_wgs84
+                FROM {table_name}
+                WHERE category_group IN ('residential', 'publicServices', 'agricultural')
+                    AND geometry IS NOT NULL
+            """,
             )
+
+            # Step 2: Create pre-transformed and buffered agricultural fields
+            logger.info("🌾 Pre-transforming agricultural fields with 100m buffer...")
+            await asyncio.to_thread(
+                self.conn.execute,
+                """
+                CREATE OR REPLACE TABLE fields_buffered AS
+                SELECT
+                    field_uuid,
+                    ST_Buffer(
+                        ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832'),
+                        100.0
+                    ) as geometry_buffer_utm
+                FROM agricultural_fields_proximity
+                WHERE geometry IS NOT NULL
+            """,
+            )
+
+            # Step 3: Perform SPATIAL_JOIN compliant proximity filtering
+            # This follows PR #545 requirements:
+            # ✅ Simple table-to-table JOIN (no complex nesting)
+            # ✅ Single spatial predicate (ST_Intersects only)
+            # ✅ Pre-transformed geometries (no ST_Transform in join)
+            # ✅ Clean query structure
+            logger.info("🔗 Performing SPATIAL_JOIN optimized proximity filtering...")
+
+            chunk_size = 10000  # Process buildings in chunks for memory safety
+            building_count = await asyncio.to_thread(
+                self.conn.execute, "SELECT COUNT(*) FROM buildings_utm"
+            )
+            total_buildings = building_count.fetchone()[0]
+
+            logger.info(f"Processing {total_buildings:,} buildings in chunks of {chunk_size:,}")
+
+            # Create final results table
+            await asyncio.to_thread(
+                self.conn.execute,
+                """
+                CREATE OR REPLACE TABLE buildings_with_proximity AS
+                SELECT
+                    building_uuid, category_group, building_type, building_usage_category,
+                    inspire_current_use, address, address_full, building_floor_area_sqm,
+                    inspire_construction_year, inspire_floors, inspire_dwellings,
+                    bbr_usage_code, bbr_usage_name,
+                    CAST(NULL AS DOUBLE) as distance_to_field_m,
+                    geometry_wgs84 as geometry
+                FROM buildings_utm
+                WHERE FALSE  -- Empty table with correct schema
+            """,
+            )
+
+            # Process in chunks to respect memory limits
+            for offset in range(0, total_buildings, chunk_size):
+                chunk_num = offset // chunk_size + 1
+                total_chunks = (total_buildings + chunk_size - 1) // chunk_size
+                logger.info(f"Processing chunk {chunk_num}/{total_chunks}")
+
+                # Create chunk table
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    f"""
+                    CREATE OR REPLACE TABLE buildings_chunk AS
+                    SELECT * FROM buildings_utm
+                    ORDER BY building_uuid
+                    LIMIT {chunk_size} OFFSET {offset}
+                """,
+                )
+
+                # SPATIAL_JOIN compliant query - simple table-to-table join
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    """
+                    INSERT INTO buildings_with_proximity
+                    SELECT DISTINCT
+                        b.building_uuid, b.category_group, b.building_type,
+                        b.building_usage_category, b.inspire_current_use, b.address,
+                        b.address_full, b.building_floor_area_sqm, b.inspire_construction_year,
+                        b.inspire_floors, b.inspire_dwellings, b.bbr_usage_code, b.bbr_usage_name,
+                        MIN(ST_Distance(b.geometry_utm,
+                            ST_Transform(f_orig.geometry, 'EPSG:4326', 'EPSG:25832')
+                        )) as distance_to_field_m,
+                        b.geometry_wgs84 as geometry
+                    FROM buildings_chunk b
+                    JOIN fields_buffered f ON ST_Intersects(b.geometry_utm, f.geometry_buffer_utm)
+                    JOIN agricultural_fields_proximity f_orig ON f.field_uuid = f_orig.field_uuid
+                    GROUP BY
+                        b.building_uuid, b.category_group, b.building_type,
+                        b.building_usage_category, b.inspire_current_use, b.address,
+                        b.address_full, b.building_floor_area_sqm, b.inspire_construction_year,
+                        b.inspire_floors, b.inspire_dwellings, b.bbr_usage_code,
+                        b.bbr_usage_name, b.geometry_wgs84
+                """,
+                )
+
+            # Final query for GeoJSON export
+            query = """
             SELECT
                 building_uuid,
                 category_group,
@@ -159,7 +253,9 @@ class BuildingsProximityPMTilesGenerator:
                 inspire_construction_year,
                 inspire_floors,
                 inspire_dwellings,
-                ROUND(distance_to_nearest_field_m, 1) as distance_to_field_m,
+                bbr_usage_code,
+                bbr_usage_name,
+                ROUND(distance_to_field_m, 1) as distance_to_field_m,
                 CASE
                     WHEN category_group = 'residential' THEN '#ff6b6b'
                     WHEN category_group = 'publicServices' THEN '#45b7d1'
@@ -178,9 +274,17 @@ class BuildingsProximityPMTilesGenerator:
                     WHEN category_group = 'agricultural' THEN 3
                     ELSE 4
                 END as priority,
+                CASE
+                    WHEN bbr_usage_code IN ('420', '421', '422', '429') THEN 'Skole'
+                    WHEN bbr_usage_code IN ('440', '441') THEN 'Børnehave'
+                    WHEN category_group = 'publicServices' THEN 'Offentlig service'
+                    WHEN category_group = 'residential' THEN 'Bolig'
+                    WHEN category_group = 'agricultural' THEN 'Landbrug'
+                    ELSE 'Andet'
+                END as building_type_simple,
                 ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
-            FROM buildings_within_100m
-            ORDER BY distance_to_nearest_field_m, category_group, building_uuid
+            FROM buildings_with_proximity
+            ORDER BY distance_to_field_m, category_group, building_uuid
             """
 
             property_columns = [
@@ -195,12 +299,16 @@ class BuildingsProximityPMTilesGenerator:
                 "inspire_construction_year",
                 "inspire_floors",
                 "inspire_dwellings",
+                "bbr_usage_code",
+                "bbr_usage_name",
                 "distance_to_field_m",
                 "color",
                 "category_danish",
                 "priority",
+                "building_type_simple",
             ]
 
+            logger.info("📄 Exporting buildings to GeoJSON...")
             return await GeoJSONWriter.write_geojson_from_query(
                 self.conn, query, output_path, property_columns
             )
