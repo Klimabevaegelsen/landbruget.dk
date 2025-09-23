@@ -64,7 +64,11 @@ serve(async (req) => {
     // Check cache first (cache by category and rankingId)
     const cacheKey = `${category || "all"}-${rankingId || "all"}-${limit}`;
     const cached = cachedRankings.get(cacheKey);
-    if (!refreshCache && cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    if (
+      !refreshCache &&
+      cached &&
+      Date.now() - cached.timestamp < CACHE_DURATION
+    ) {
       return new Response(JSON.stringify(cached.data), {
         headers: {
           ...corsHeaders,
@@ -1149,60 +1153,35 @@ serve(async (req) => {
         });
       }
 
-      // 20. Most Transported Pigs - Manual join
-      const { data: transportRawData } = await supabase
-        .from("animal_transport_weekly_summary")
-        .select("company_id, animal_count")
+      // 20. Most Transported Pigs - Use company-level materialized view
+      const { data: pigTransportData } = await supabase
+        .from("company_transport_summary")
+        .select("company_id, total_animals")
         .eq("species_code", "15") // Filter for pigs only
-        .gte("transport_date_week_start", "2024-01-01")
-        .lt("transport_date_week_start", "2025-01-01");
+        .eq("year", 2024)
+        .gt("total_animals", 0)
+        .order("total_animals", { ascending: false })
+        .limit(limit);
 
-      // Get unique company IDs and fetch company details
-      const uniqueCompanyIds = [
-        ...new Set(transportRawData?.map((item) => item.company_id)),
-      ];
-      const transportCount = uniqueCompanyIds.length;
+      const { count: pigTransportCount } = await supabase
+        .from("company_transport_summary")
+        .select("company_id", { count: "exact" })
+        .eq("species_code", "15")
+        .eq("year", 2024)
+        .gt("total_animals", 0);
 
-      const { data: transportCompanies } = await supabase
-        .from("companies")
-        .select("id, cvr_number, company_name, municipality")
-        .in("id", uniqueCompanyIds);
+      if (pigTransportData?.length) {
+        // Get company details for the limited results
+        const companyIds = pigTransportData.map((item) => item.company_id);
+        const { data: pigTransportCompanies } = await supabase
+          .from("companies")
+          .select("id, cvr_number, company_name, municipality")
+          .in("id", companyIds);
 
-      // Create company lookup map
-      const transportCompanyMap = new Map(
-        transportCompanies?.map((c: any) => [c.id, c]) || []
-      );
-
-      // Join the data
-      const transportData =
-        transportRawData
-          ?.map((transport) => ({
-            ...transport,
-            companies: transportCompanyMap.get(transport.company_id),
-          }))
-          .filter((item) => item.companies) || [];
-
-      if (transportData) {
-        // Aggregate by company
-        const companyTransports = new Map();
-        transportData.forEach((item) => {
-          const key = item.company_id;
-          if (!companyTransports.has(key)) {
-            companyTransports.set(key, {
-              company_id: item.company_id,
-              cvr_number: item.companies.cvr_number,
-              company_name: item.companies.company_name,
-              municipality: item.companies.municipality,
-              total_animals: 0,
-            });
-          }
-          companyTransports.get(key).total_animals += item.animal_count;
-        });
-
-        const sortedTransports = Array.from(companyTransports.values())
-          .filter((company) => company.total_animals > 0) // Only include companies with actual transports
-          .sort((a, b) => b.total_animals - a.total_animals)
-          .slice(0, limit);
+        // Create company lookup map
+        const companyMap = new Map(
+          pigTransportCompanies?.map((c: any) => [c.id, c]) || []
+        );
 
         rankings.push({
           id: "most_transported_pigs",
@@ -1210,75 +1189,54 @@ serve(async (req) => {
           category: "animal",
           description: "Virksomheder med flest transporterede svin i 2024",
           unit: "svin",
-          company_count: transportCount || 0,
-          items: sortedTransports.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.cvr_number?.toString() || "N/A",
-            company_name: item.company_name || "Ukendt virksomhed",
-            municipality: item.municipality || "Ukendt kommune",
-            rank: index + 1,
-            value: item.total_animals,
-            formatted_value: `${item.total_animals.toLocaleString()} svin`,
-            year: 2024,
-          })),
+          company_count: pigTransportCount || 0,
+          items: pigTransportData.map((item, index) => {
+            const company = companyMap.get(item.company_id);
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || "N/A",
+              company_name: company?.company_name || "Ukendt virksomhed",
+              municipality: company?.municipality || "Ukendt kommune",
+              rank: index + 1,
+              value: item.total_animals,
+              formatted_value: `${item.total_animals.toLocaleString()} svin`,
+              year: 2024,
+            };
+          }),
         });
       }
 
-      // 21. Most Transported Cattle
-      const { data: cattleTransportRawData } = await supabase
-        .from("animal_transport_weekly_summary")
-        .select("company_id, animal_count")
+      // 21. Most Transported Cattle - Use company-level materialized view
+      const { data: cattleTransportData } = await supabase
+        .from("company_transport_summary")
+        .select("company_id, total_animals")
         .eq("species_code", "12") // Filter for cattle only
-        .gte("transport_date_week_start", "2024-01-01")
-        .lt("transport_date_week_start", "2025-01-01");
+        .eq("year", 2024)
+        .gt("total_animals", 0)
+        .order("total_animals", { ascending: false })
+        .limit(limit);
 
-      // Get unique company IDs and fetch company details
-      const uniqueCattleCompanyIds = [
-        ...new Set(cattleTransportRawData?.map((item) => item.company_id)),
-      ];
-      const cattleTransportCount = uniqueCattleCompanyIds.length;
+      const { count: cattleTransportCount } = await supabase
+        .from("company_transport_summary")
+        .select("company_id", { count: "exact" })
+        .eq("species_code", "12")
+        .eq("year", 2024)
+        .gt("total_animals", 0);
 
-      const { data: cattleTransportCompanies } = await supabase
-        .from("companies")
-        .select("id, cvr_number, company_name, municipality")
-        .in("id", uniqueCattleCompanyIds);
+      if (cattleTransportData?.length) {
+        // Get company details for the limited results
+        const cattleCompanyIds = cattleTransportData.map(
+          (item) => item.company_id
+        );
+        const { data: cattleTransportCompanies } = await supabase
+          .from("companies")
+          .select("id, cvr_number, company_name, municipality")
+          .in("id", cattleCompanyIds);
 
-      // Create company lookup map
-      const cattleTransportCompanyMap = new Map(
-        cattleTransportCompanies?.map((c: any) => [c.id, c]) || []
-      );
-
-      // Join the data
-      const cattleTransportData =
-        cattleTransportRawData
-          ?.map((transport) => ({
-            ...transport,
-            companies: cattleTransportCompanyMap.get(transport.company_id),
-          }))
-          .filter((item) => item.companies) || [];
-
-      if (cattleTransportData) {
-        // Aggregate by company
-        const companyCattleTransports = new Map();
-        cattleTransportData.forEach((item) => {
-          const companyId = item.company_id;
-          const existing = companyCattleTransports.get(companyId) || {
-            company_id: companyId,
-            total_animals: 0,
-            cvr_number: item.companies.cvr_number,
-            company_name: item.companies.company_name,
-            municipality: item.companies.municipality,
-          };
-          existing.total_animals += item.animal_count;
-          companyCattleTransports.set(companyId, existing);
-        });
-
-        const sortedCattleTransports = Array.from(
-          companyCattleTransports.values()
-        )
-          .filter((company) => company.total_animals > 0)
-          .sort((a, b) => b.total_animals - a.total_animals)
-          .slice(0, limit);
+        // Create company lookup map
+        const cattleCompanyMap = new Map(
+          cattleTransportCompanies?.map((c: any) => [c.id, c]) || []
+        );
 
         rankings.push({
           id: "most_transported_cattle",
@@ -1287,16 +1245,19 @@ serve(async (req) => {
           description: "Virksomheder med flest transporterede kvæg i 2024",
           unit: "kvæg",
           company_count: cattleTransportCount || 0,
-          items: sortedCattleTransports.map((item, index) => ({
-            company_id: item.company_id,
-            cvr_number: item.cvr_number?.toString() || "N/A",
-            company_name: item.company_name || "Ukendt virksomhed",
-            municipality: item.municipality || "Ukendt kommune",
-            rank: index + 1,
-            value: item.total_animals,
-            formatted_value: `${item.total_animals.toLocaleString()} kvæg`,
-            year: 2024,
-          })),
+          items: cattleTransportData.map((item, index) => {
+            const company = cattleCompanyMap.get(item.company_id);
+            return {
+              company_id: item.company_id,
+              cvr_number: company?.cvr_number?.toString() || "N/A",
+              company_name: company?.company_name || "Ukendt virksomhed",
+              municipality: company?.municipality || "Ukendt kommune",
+              rank: index + 1,
+              value: item.total_animals,
+              formatted_value: `${item.total_animals.toLocaleString()} kvæg`,
+              year: 2024,
+            };
+          }),
         });
       }
     }
