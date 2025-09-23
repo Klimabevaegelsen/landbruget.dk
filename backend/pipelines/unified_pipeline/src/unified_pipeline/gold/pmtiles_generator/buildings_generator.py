@@ -344,10 +344,10 @@ class BuildingsProximityPMTilesGenerator:
                         CREATE OR REPLACE TABLE agricultural_fields_proximity AS
                         SELECT DISTINCT
                             field_uuid,
-                            geometry
+                            ST_GeomFromWKB(geometry) as geometry
                         FROM read_parquet('{gcs_path}data.parquet')
                         WHERE geometry IS NOT NULL
-                            AND ST_IsValid(geometry)
+                            AND ST_IsValid(ST_GeomFromWKB(geometry))
                             AND area_ha > 0.1  -- Minimum 0.1 hectare fields
                         """
 
