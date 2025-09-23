@@ -53,11 +53,18 @@ serve(async (req) => {
     const category = url.searchParams.get("category"); // 'all', 'financial', 'field', 'environment', 'animal', 'worker'
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "20"), 50); // Max 50 per table
     const rankingId = url.searchParams.get("rankingId"); // Optional: fetch only specific ranking
+    const refreshCache = url.searchParams.get("refresh_cache") === "true"; // Force cache refresh
+
+    // Clear cache if refresh is requested
+    if (refreshCache) {
+      cachedRankings.clear();
+      console.log("🔄 Cache cleared due to refresh_cache parameter");
+    }
 
     // Check cache first (cache by category and rankingId)
     const cacheKey = `${category || "all"}-${rankingId || "all"}-${limit}`;
     const cached = cachedRankings.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    if (!refreshCache && cached && Date.now() - cached.timestamp < CACHE_DURATION) {
       return new Response(JSON.stringify(cached.data), {
         headers: {
           ...corsHeaders,
@@ -1699,7 +1706,7 @@ serve(async (req) => {
       headers: {
         ...corsHeaders,
         "Content-Type": "application/json",
-        "X-Cache": "MISS",
+        "X-Cache": refreshCache ? "REFRESHED" : "MISS",
       },
       status: 200,
     });
