@@ -344,10 +344,10 @@ class BuildingsProximityPMTilesGenerator:
                         CREATE OR REPLACE TABLE agricultural_fields_proximity AS
                         SELECT DISTINCT
                             field_uuid,
-                            ST_GeomFromWKB(geometry) as geometry
+                            ST_FlipCoordinates(geometry) as geometry  -- Fix coordinate swap issue
                         FROM read_parquet('{gcs_path}data.parquet')
                         WHERE geometry IS NOT NULL
-                            AND ST_IsValid(ST_GeomFromWKB(geometry))
+                            AND ST_IsValid(ST_FlipCoordinates(geometry))
                             AND area_ha > 0.1  -- Minimum 0.1 hectare fields
                         """
 
