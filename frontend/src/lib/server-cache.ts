@@ -63,9 +63,13 @@ export const getCachedHomepageStatistics = unstable_cache(
  * Revalidates every Tuesday when data updates
  */
 export const getCachedHomepageRankings = unstable_cache(
-  async (category: string = 'all', limit: string = '20') => {
+  async (
+    category: string = 'all',
+    limit: string = '20',
+    rankingId: string = ''
+  ) => {
     console.log(
-      `🔄 Fetching fresh homepage rankings (${category}) from Supabase...`
+      `🔄 Fetching fresh homepage rankings (${category}${rankingId ? `, ranking: ${rankingId}` : ''}) from Supabase...`
     );
 
     try {
@@ -75,6 +79,9 @@ export const getCachedHomepageRankings = unstable_cache(
       );
       functionUrl.searchParams.set('category', category);
       functionUrl.searchParams.set('limit', limit);
+      if (rankingId) {
+        functionUrl.searchParams.set('rankingId', rankingId);
+      }
 
       const response = await fetch(functionUrl.toString(), {
         method: 'GET',
@@ -92,17 +99,19 @@ export const getCachedHomepageRankings = unstable_cache(
       }
 
       const data = await response.json();
-      console.log(`✅ Fresh homepage rankings (${category}) cached on server`);
+      console.log(
+        `✅ Fresh homepage rankings (${category}${rankingId ? `, ranking: ${rankingId}` : ''}) cached on server`
+      );
       return data;
     } catch (error) {
       console.error(
-        `❌ Failed to fetch homepage rankings (${category}):`,
+        `❌ Failed to fetch homepage rankings (${category}${rankingId ? `, ranking: ${rankingId}` : ''}):`,
         error
       );
       throw error; // Re-throw to let API route handle the error
     }
   },
-  ['homepage-rankings'], // Cache key
+  ['homepage-rankings'], // Cache key - will be combined with parameters
   {
     revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
     tags: ['homepage-rankings'], // Cache tags for manual invalidation
