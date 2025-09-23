@@ -279,7 +279,7 @@ class BuildingProcessor:
                     WHEN current_use = 'publicServices' THEN 'publicServices'
                     ELSE 'other'
                 END as building_usage_category,
-                current_use as inspire_current_use,
+                current_use,
                 building_nature as inspire_building_nature,
                 construction_year as inspire_construction_year,
                 floor_area as inspire_floor_area,
