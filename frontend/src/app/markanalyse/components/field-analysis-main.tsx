@@ -24,6 +24,11 @@ import {
   FilterState,
   YearSelection,
 } from '@/components/field-analysis/types';
+import {
+  convertToCSV,
+  downloadCSV,
+  generateCSVFilename,
+} from '@/utils/csv-export';
 
 // Dynamically import the map component to avoid SSR issues
 const FieldAnalysisMap = dynamic(
@@ -92,6 +97,14 @@ export default function FieldAnalysisMain() {
     water_projects: '',
     buildings: '',
   });
+
+  // Ref to access map's queryVisibleFields function
+  const queryVisibleFieldsRef = useRef<(() => FieldAnalysisData[]) | null>(
+    null
+  );
+
+  // Track current zoom level for CSV download enablement
+  const [currentZoom, setCurrentZoom] = useState(7);
 
   // Ensure client-side only rendering
   useEffect(() => {
@@ -200,6 +213,8 @@ export default function FieldAnalysisMain() {
       pitch: viewState.pitch,
       bearing: viewState.bearing,
     });
+    // Track zoom level for CSV download enablement
+    setCurrentZoom(viewState.zoom);
   }, []);
 
   // Handle year selection changes - now preserves viewport and selected field
@@ -222,6 +237,33 @@ export default function FieldAnalysisMain() {
 
     setIsLoading(false);
   }, []);
+
+  // Handle CSV download
+  const handleDownloadCSV = useCallback(() => {
+    if (!queryVisibleFieldsRef.current) {
+      console.warn('CSV download: queryVisibleFields function not available');
+      return;
+    }
+
+    try {
+      const visibleFields = queryVisibleFieldsRef.current();
+
+      if (visibleFields.length === 0) {
+        console.warn('CSV download: No visible fields found');
+        // Could show a toast notification here
+        return;
+      }
+
+      const csvContent = convertToCSV(visibleFields);
+      const filename = generateCSVFilename(yearSelection.selectedYear);
+
+      downloadCSV(csvContent, filename);
+      console.log(`Downloaded CSV with ${visibleFields.length} fields`);
+    } catch (error) {
+      console.error('Error downloading CSV:', error);
+      // Could show an error toast here
+    }
+  }, [yearSelection.selectedYear]);
 
   // Handle escape key
   useEffect(() => {
@@ -263,6 +305,8 @@ export default function FieldAnalysisMain() {
           onFilterChange={handleFilterChange}
           onYearChange={handleYearChange}
           onExpandedChange={setSidebarExpanded}
+          onDownloadCSV={handleDownloadCSV}
+          currentZoom={currentZoom}
         />
       )}
 
@@ -335,6 +379,7 @@ export default function FieldAnalysisMain() {
                 (!!selectedField || !!clickedCoordinates) &&
                 !isPanelCollapsed
               }
+              queryVisibleFieldsRef={queryVisibleFieldsRef}
             />
           )}
         </div>
