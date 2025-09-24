@@ -133,7 +133,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
             CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
                 SELECT CASE
                     WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
-                         OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{{7}}$')
+                         OR NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)),
+                                               '^[1-9][0-9]{{7}}$')
                     THEN NULL
                     ELSE CONCAT(
                         SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
@@ -284,11 +285,13 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                 cvr_number,
                 company_uuid(cvr_number) as company_uuid,
                 json_extract_string(raw_json, '$.company_name') as company_name,
-                json_extract_string(raw_json, '$.company_type_description') as company_type_description,
+                json_extract_string(raw_json, '$.company_type_description')
+                    as company_type_description,
                 json_extract_string(raw_json, '$.status') as status,
                 json_extract_string(raw_json, '$.founded_date') as founded_date,
                 json_extract_string(raw_json, '$.dissolution_date') as dissolution_date,
-                json_extract(raw_json, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
+                json_extract(raw_json, '$.advertisement_protection')::BOOLEAN
+                    as advertisement_protection,
                 json_extract(raw_json, '$.pnumber_count')::INTEGER as pnumber_count,
                 -- Address fields (will be populated by Address Geocoding step)
                 NULL::VARCHAR as current_full_address,
@@ -309,12 +312,14 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                 -- Extract industry information
                 CASE
                     WHEN json_array_length(json_extract(raw_json, '$.industries')) > 0 THEN
-                        json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code')
+                        json_extract_string(json_extract(raw_json, '$.industries[0]'),
+                                          '$.industry_code')
                     ELSE NULL
                 END as primary_industry_code,
                 CASE
                     WHEN json_array_length(json_extract(raw_json, '$.industries')) > 0 THEN
-                        json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_description')
+                        json_extract_string(json_extract(raw_json, '$.industries[0]'),
+                                          '$.industry_description')
                     ELSE NULL
                 END as primary_industry_description,
                 -- Agricultural company classification (64 industry codes)
@@ -337,52 +342,56 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
 
     def _get_agricultural_classification_sql(self) -> str:
         """Get SQL for agricultural company classification."""
-        return """
+        # Extract industry code for readability
+        industry_code_expr = ("json_extract_string(json_extract(raw_json, '$.industries[0]'), "
+                             "'$.industry_code')")
+        is_current_expr = ("json_extract(json_extract(raw_json, '$.industries[0]'), "
+                          "'$.is_current')::BOOLEAN")
+
+        return f"""
             CASE
                 WHEN json_array_length(json_extract(raw_json, '$.industries')) > 0 THEN
                     CASE
-                        WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IS NOT NULL
-                        AND json_extract(json_extract(raw_json, '$.industries[0]'), '$.is_current')::BOOLEAN = true
+                        WHEN {industry_code_expr} IS NOT NULL
+                        AND {is_current_expr} = true
                         THEN
                             CASE
                                 -- Primary Agriculture, Forestry and Fishing (codes 01-03)
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') LIKE '01%'
-                                     OR json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') LIKE '02%'
-                                     OR json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') LIKE '03%'
+                                WHEN {industry_code_expr} LIKE '01%'
+                                     OR {industry_code_expr} LIKE '02%'
+                                     OR {industry_code_expr} LIKE '03%'
                                 THEN true
-                                -- Fish farming and aquaculture
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN ('050200')
-                                THEN true
-                                -- Real estate (agricultural properties)
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN ('702040', '682040')
-                                THEN true
-                                -- Veterinary services
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN ('852000', '750000')
-                                THEN true
-                                -- Agricultural support services and consulting
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN ('749010', '741410')
-                                THEN true
-                                -- Agricultural machinery and equipment
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN (
-                                    '516600', '773100', '713100', '466100', '518800', '283000', '293220'
+                                -- Fish farming: 050200
+                                WHEN {industry_code_expr} IN ('050200') THEN true
+                                -- Real estate (agricultural): 702040, 682040
+                                WHEN {industry_code_expr} IN ('702040', '682040') THEN true
+                                -- Veterinary services: 852000, 750000
+                                WHEN {industry_code_expr} IN ('852000', '750000') THEN true
+                                -- Agricultural support: 749010, 741410
+                                WHEN {industry_code_expr} IN ('749010', '741410') THEN true
+                                -- Agricultural machinery
+                                WHEN {industry_code_expr} IN (
+                                    '516600', '773100', '713100', '466100',
+                                    '518800', '283000', '293220'
                                 ) THEN true
-                                -- Agricultural trade (livestock, feed, plants)
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN (
-                                    '512300', '462100', '462300', '462200', '512100', '512200', '461100', '511100'
+                                -- Agricultural trade
+                                WHEN {industry_code_expr} IN (
+                                    '512300', '462100', '462300', '462200',
+                                    '512100', '512200', '461100', '511100'
                                 ) THEN true
-                                -- Agricultural processing and food production
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN (
-                                    '151110', '109100', '101110', '110200', '101190', '101300', '105100'
+                                -- Agricultural processing
+                                WHEN {industry_code_expr} IN (
+                                    '151110', '109100', '101110', '110200',
+                                    '101190', '101300', '105100'
                                 ) THEN true
-                                -- Agricultural retail (flowers, pets)
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN (
+                                -- Agricultural retail: 524875, 477630, 524885, 477610
+                                WHEN {industry_code_expr} IN (
                                     '524875', '477630', '524885', '477610'
                                 ) THEN true
-                                -- Agricultural education and storage
-                                WHEN json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code') IN (
+                                -- Agricultural education: 802240, 631200, 521000
+                                WHEN {industry_code_expr} IN (
                                     '802240', '631200', '521000'
                                 ) THEN true
-                                -- Default to false for all other sectors
                                 ELSE false
                             END
                         ELSE false
@@ -406,7 +415,9 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     cvr_number,
                     idx as leadership_idx
                 FROM {raw_data_table}
-                CROSS JOIN unnest(generate_series(0::BIGINT, (json_array_length(json_extract(raw_json, '$.leadership')) - 1)::BIGINT)) as t(idx)
+                CROSS JOIN unnest(generate_series(0::BIGINT, (
+                    json_array_length(json_extract(raw_json, '$.leadership')) - 1
+                )::BIGINT)) as t(idx)
                 WHERE json_array_length(json_extract(raw_json, '$.leadership')) > 0
             )
             SELECT
@@ -419,7 +430,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     json_extract(rd.raw_json, '$.leadership[' || lf.leadership_idx || ']'),
                     '$.relation_type'
                 ) as person_relation_type,
-                json_extract(rd.raw_json, '$.leadership[' || lf.leadership_idx || ']') as person_data_json,
+                json_extract(rd.raw_json, '$.leadership[' || lf.leadership_idx || ']')
+                    as person_data_json,
                 rd.fetch_timestamp as processing_timestamp
             FROM leadership_flattened lf
             JOIN {raw_data_table} rd ON lf.cvr_number = rd.cvr_number
@@ -446,7 +458,9 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     cvr_number,
                     idx as employment_idx
                 FROM {raw_data_table}
-                CROSS JOIN unnest(generate_series(0::BIGINT, (json_array_length(json_extract(raw_json, '$.employment')) - 1)::BIGINT)) as t(idx)
+                CROSS JOIN unnest(generate_series(0::BIGINT, (
+                    json_array_length(json_extract(raw_json, '$.employment')) - 1
+                )::BIGINT)) as t(idx)
                 WHERE json_array_length(json_extract(raw_json, '$.employment')) > 0
             )
             SELECT
@@ -470,7 +484,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     json_extract(rd.raw_json, '$.employment[' || ef.employment_idx || ']'),
                     '$.is_current'
                 )::BOOLEAN as is_current,
-                json_extract(rd.raw_json, '$.employment[' || ef.employment_idx || ']') as employment_data_json,
+                json_extract(rd.raw_json, '$.employment[' || ef.employment_idx || ']')
+                    as employment_data_json,
                 rd.fetch_timestamp as processing_timestamp
             FROM employment_flattened ef
             JOIN {raw_data_table} rd ON ef.cvr_number = rd.cvr_number
@@ -533,7 +548,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
             if self.config.save_companies_table:
                 local_companies_path = "/tmp/cvr_companies_silver.parquet"
                 self.conn.execute(
-                    f"COPY {companies_table} TO '{local_companies_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
+                    f"COPY {companies_table} TO '{local_companies_path}' "
+                    f"(FORMAT 'parquet', COMPRESSION 'zstd')"
                 )
                 self.log.info(f"💾 Saved companies to artifact: {local_companies_path}")
 
