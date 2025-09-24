@@ -278,9 +278,35 @@ jobs:
             ${{ github.event.inputs.skip_cleanup == 'true' && '--no-cleanup' || '' }} \
             ${{ github.event.inputs.keep_versions && format('--keep-versions={0}', github.event.inputs.keep_versions) || '' }}
 
-  notify-completion:
+  invalidate-cache:
     runs-on: ubuntu-latest
     needs: [generate-environmental, generate-field-analysis, generate-all]
+    if: always() && (needs.generate-environmental.result == 'success' || needs.generate-field-analysis.result == 'success' || needs.generate-all.result == 'success')
+    steps:
+      - name: Invalidate frontend cache
+        run: |
+          echo "🔄 Invalidating frontend cache after PMTiles update..."
+          curl -X POST "https://www.landbruget.dk/api/revalidate-cache" \
+            -H "Content-Type: application/json" \
+            -w "Status: %{http_code}\n" || echo "⚠️ Cache invalidation failed, but continuing..."
+
+      - name: Warm PMTiles cache
+        env:
+          PMTILES_WARMUP_TOKEN: ${{ secrets.PMTILES_WARMUP_TOKEN }}
+        run: |
+          echo "🔥 Warming PMTiles cache..."
+          if [[ -n "$PMTILES_WARMUP_TOKEN" ]]; then
+            curl -X POST "https://www.landbruget.dk/api/pmtiles-warmup" \
+              -H "Authorization: Bearer $PMTILES_WARMUP_TOKEN" \
+              -H "Content-Type: application/json" \
+              -w "Status: %{http_code}\n" || echo "⚠️ PMTiles warmup failed, but continuing..."
+          else
+            echo "⚠️ PMTILES_WARMUP_TOKEN not set, skipping warmup"
+          fi
+
+  notify-completion:
+    runs-on: ubuntu-latest
+    needs: [generate-environmental, generate-field-analysis, generate-all, invalidate-cache]
     if: always()
     steps:
       - name: Check job results
