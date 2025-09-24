@@ -78,7 +78,7 @@ export default function CompanyFieldsMap({
     water_projects:
       'https://data.pesticidkortet.dk/pmtiles/water_projects_2024.pmtiles',
     buildings:
-      'https://data.pesticidkortet.dk/pmtiles/buildings_proximity_2024.pmtiles',
+      'https://data.pesticidkortet.dk/pmtiles/buildings_proximity.pmtiles',
   };
 
   // Ensure client-side only rendering
