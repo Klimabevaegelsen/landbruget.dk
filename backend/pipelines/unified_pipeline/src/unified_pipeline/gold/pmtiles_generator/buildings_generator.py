@@ -167,7 +167,7 @@ class BuildingsProximityPMTilesGenerator:
 
             chunk_size = 10000  # Process buildings in chunks for memory safety
             building_count = await asyncio.to_thread(
-                self.conn.execute, "SELECT COUNT(*) FROM buildings_utm"
+                self.conn.execute, "SELECT COUNT(*) FROM buildings_for_proximity"
             )
             total_buildings = building_count.fetchone()[0]
 
@@ -184,8 +184,8 @@ class BuildingsProximityPMTilesGenerator:
                     inspire_construction_year, inspire_floors, inspire_dwellings,
                     bbr_usage_code, bbr_usage_name,
                     CAST(NULL AS DOUBLE) as distance_to_field_m,
-                    geometry_wgs84 as geometry
-                FROM buildings_utm
+                    geometry as geometry
+                FROM buildings_for_proximity
                 WHERE FALSE  -- Empty table with correct schema
             """,
             )
@@ -201,7 +201,7 @@ class BuildingsProximityPMTilesGenerator:
                     self.conn.execute,
                     f"""
                     CREATE OR REPLACE TABLE buildings_chunk AS
-                    SELECT * FROM buildings_utm
+                    SELECT * FROM buildings_for_proximity
                     ORDER BY building_uuid
                     LIMIT {chunk_size} OFFSET {offset}
                 """,
