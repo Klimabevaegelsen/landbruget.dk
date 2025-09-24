@@ -618,16 +618,16 @@ class CVRAPIClient:
                             {
                                 "postal_code": addr_entry.get("postnummer"),
                                 "city": addr_entry.get("postdistrikt"),
-                                "municipality_code": addr_entry.get("kommune", {}).get(
+                                "municipality_code": (addr_entry.get("kommune") or {}).get(
                                     "kommuneKode"
                                 ),
                                 "municipality_name": self._format_municipality_name(
-                                    addr_entry.get("kommune", {}).get("kommuneNavn")
+                                    (addr_entry.get("kommune") or {}).get("kommuneNavn")
                                 ),
                                 "country_code": addr_entry.get("landekode"),
-                                "period_start": addr_entry.get("periode", {}).get("gyldigFra"),
-                                "period_end": addr_entry.get("periode", {}).get("gyldigTil"),
-                                "is_current": addr_entry.get("periode", {}).get("gyldigTil")
+                                "period_start": (addr_entry.get("periode") or {}).get("gyldigFra"),
+                                "period_end": (addr_entry.get("periode") or {}).get("gyldigTil"),
+                                "is_current": (addr_entry.get("periode") or {}).get("gyldigTil")
                                 is None,
                             }
                         )
@@ -1877,9 +1877,9 @@ class CVRAPIClient:
                     "door": address_entry.get("sidedoer"),
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
-                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                    "municipality_code": (address_entry.get("kommune") or {}).get("kommuneKode"),
                     "municipality_name": self._format_municipality_name(
-                        address_entry.get("kommune", {}).get("kommuneNavn")
+                        (address_entry.get("kommune") or {}).get("kommuneNavn")
                     ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
@@ -1918,9 +1918,9 @@ class CVRAPIClient:
                     "door": address_entry.get("sidedoer"),
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
-                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                    "municipality_code": (address_entry.get("kommune") or {}).get("kommuneKode"),
                     "municipality_name": self._format_municipality_name(
-                        address_entry.get("kommune", {}).get("kommuneNavn")
+                        (address_entry.get("kommune") or {}).get("kommuneNavn")
                     ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
