@@ -124,39 +124,34 @@ class BuildingsProximityPMTilesGenerator:
             # First, load agricultural fields data to filter buildings by proximity
             await self._load_agricultural_fields_for_proximity()
 
-            # SPATIAL_JOIN COMPLIANT APPROACH (PR #545)
-            # Step 1: Create pre-transformed buildings table for SPATIAL_JOIN optimization
-            logger.info("📍 Pre-transforming buildings to UTM Zone 32N for spatial operations...")
+            # COORDINATE ALIGNMENT - Flip BBR buildings to match field coordinate order
+            logger.info("📍 Creating buildings table for proximity analysis...")
             await asyncio.to_thread(
                 self.conn.execute,
                 f"""
-                CREATE OR REPLACE TABLE buildings_utm AS
+                CREATE OR REPLACE TABLE buildings_for_proximity AS
                 SELECT
                     building_uuid, category_group, building_type, building_usage_category,
                     current_use, address, address_full, building_floor_area_sqm,
                     inspire_construction_year, inspire_floors, inspire_dwellings,
                     bbr_usage_code,
                     COALESCE(bbr_usage_name, 'Ukendt bygningstype') as bbr_usage_name,
-                    ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832') as geometry_utm,
-                    geometry as geometry_wgs84
+                    ST_FlipCoordinates(geometry) as geometry
                 FROM {table_name}
                 WHERE category_group IN ('residential', 'publicServices', 'agricultural')
                     AND geometry IS NOT NULL
             """,
             )
 
-            # Step 2: Create pre-transformed and buffered agricultural fields
-            logger.info("🌾 Pre-transforming agricultural fields with 100m buffer...")
+            # Step 2: Create buffered agricultural fields (use geometry as-is like field analysis)
+            logger.info("🌾 Creating buffered agricultural fields...")
             await asyncio.to_thread(
                 self.conn.execute,
                 """
                 CREATE OR REPLACE TABLE fields_buffered AS
                 SELECT
                     field_uuid,
-                    ST_Buffer(
-                        ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832'),
-                        100.0
-                    ) as geometry_buffer_utm
+                    ST_Buffer(geometry, 0.001) as geometry_buffer
                 FROM agricultural_fields_proximity
                 WHERE geometry IS NOT NULL
             """,
@@ -222,19 +217,17 @@ class BuildingsProximityPMTilesGenerator:
                         b.building_usage_category, b.current_use, b.address,
                         b.address_full, b.building_floor_area_sqm, b.inspire_construction_year,
                         b.inspire_floors, b.inspire_dwellings, b.bbr_usage_code, b.bbr_usage_name,
-                        MIN(ST_Distance(b.geometry_utm,
-                            ST_Transform(f_orig.geometry, 'EPSG:4326', 'EPSG:25832')
-                        )) as distance_to_field_m,
-                        b.geometry_wgs84 as geometry
+                        MIN(ST_Distance(b.geometry, f_orig.geometry)) as distance_to_field_m,
+                        b.geometry as geometry
                     FROM buildings_chunk b
-                    JOIN fields_buffered f ON ST_Intersects(b.geometry_utm, f.geometry_buffer_utm)
+                    JOIN fields_buffered f ON ST_Intersects(b.geometry, f.geometry_buffer)
                     JOIN agricultural_fields_proximity f_orig ON f.field_uuid = f_orig.field_uuid
                     GROUP BY
                         b.building_uuid, b.category_group, b.building_type,
                         b.building_usage_category, b.current_use, b.address,
                         b.address_full, b.building_floor_area_sqm, b.inspire_construction_year,
                         b.inspire_floors, b.inspire_dwellings, b.bbr_usage_code,
-                        b.bbr_usage_name, b.geometry_wgs84
+                        b.bbr_usage_name, b.geometry
                 """,
                 )
 
@@ -281,7 +274,7 @@ class BuildingsProximityPMTilesGenerator:
                     WHEN category_group = 'agricultural' THEN 'Landbrug'
                     ELSE 'Andet'
                 END as building_type_simple,
-                ST_AsGeoJSON(geometry) as geometry
+                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
             FROM buildings_with_proximity
             ORDER BY distance_to_field_m, category_group, building_uuid
             """
