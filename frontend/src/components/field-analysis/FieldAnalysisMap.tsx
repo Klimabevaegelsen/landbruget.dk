@@ -72,6 +72,9 @@ interface FieldAnalysisMapProps {
   viewState?: Partial<ViewState>;
   onViewStateChange?: (viewState: ViewState) => void;
   hasRightPanel?: boolean; // New prop to indicate if right panel is open
+  queryVisibleFieldsRef?: React.MutableRefObject<
+    (() => FieldAnalysisData[]) | null
+  >;
 }
 
 interface TooltipInfo {
@@ -529,6 +532,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   viewState: externalViewState,
   onViewStateChange,
   hasRightPanel,
+  queryVisibleFieldsRef,
 }: FieldAnalysisMapProps) {
   const { mapStyle } = useMapTheme();
 
@@ -1913,6 +1917,54 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     },
     []
   );
+
+  // Query all visible field features in the current map view
+  const queryVisibleFields = useCallback((): FieldAnalysisData[] => {
+    if (!mapRef.current) {
+      console.log('🔍 No map ref available for visible fields query');
+      return [];
+    }
+
+    const map = mapRef.current.getMap();
+
+    // Check if fields layer exists and is visible
+    if (
+      !map.getLayer('fields-fill') ||
+      map.getLayoutProperty('fields-fill', 'visibility') === 'none'
+    ) {
+      console.log('🔍 Fields layer not visible, returning empty array');
+      return [];
+    }
+
+    // Query all rendered field features in the current viewport
+    const fieldFeatures = map.queryRenderedFeatures(undefined, {
+      layers: ['fields-fill'],
+    });
+
+    console.log('🔍 Found', fieldFeatures.length, 'visible field features');
+
+    // Convert features to FieldAnalysisData and remove duplicates
+    const uniqueFields: Record<string, FieldAnalysisData> = {};
+
+    fieldFeatures.forEach((feature) => {
+      const fieldData = feature.properties as FieldAnalysisData;
+      if (fieldData.field_uuid && !uniqueFields[fieldData.field_uuid]) {
+        uniqueFields[fieldData.field_uuid] = fieldData;
+      }
+    });
+
+    const result = Object.values(uniqueFields);
+    console.log('🔍 Returning', result.length, 'unique visible fields');
+
+    return result;
+  }, []);
+
+  // Expose queryVisibleFields function via ref
+  useEffect(() => {
+    if (queryVisibleFieldsRef) {
+      queryVisibleFieldsRef.current = queryVisibleFields;
+    }
+  }, [queryVisibleFields, queryVisibleFieldsRef]);
 
   // Handle hover events
   const onHover = useCallback(
