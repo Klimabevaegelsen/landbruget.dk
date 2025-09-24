@@ -37,9 +37,9 @@ class CompanyFetchingConfig(BaseJobConfig):
 
     # Company fetching specific configuration with memory-aware batching
     memory_safe_batch_size: int = Field(
-        default=500,
+        default=250,
         description="Number of CVR numbers to process per memory-safe batch "
-        "(conservative for GitHub Actions)",
+        "(ultra-conservative for GitHub Actions to prevent OOM errors)",
     )
 
     fetch_all_fields: bool = Field(
@@ -128,9 +128,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             )
 
             # CRITICAL: Reduce memory limit for GitHub Actions (16GB total RAM)
-            # Leave 8GB buffer for OS, Python, and API processing
-            self.conn.execute("SET memory_limit = '8GB'")  # Reduced from default 12GB
-            self.conn.execute("SET max_memory = '8GB'")
+            # Leave 10GB buffer for OS, Python, and API processing to prevent OOM
+            self.conn.execute("SET memory_limit = '6GB'")  # Ultra-conservative limit
+            self.conn.execute("SET max_memory = '6GB'")
 
             # CRITICAL: Reduce threads to minimize memory pressure
             # CVR API processing is I/O bound, fewer threads = less memory per thread
@@ -151,7 +151,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             self.conn.execute("SET enable_object_cache = false")  # Prioritize memory over speed
 
             self.log.info("✅ CVR company fetching memory optimizations applied")
-            self.log.info("   • Memory limit: 8GB (reduced from 12GB)")
+            self.log.info("   • Memory limit: 6GB (ultra-conservative for OOM prevention)")
             self.log.info("   • Threads: 2 (reduced from 4)")
             self.log.info("   • Temp directory size: 3GB")
             self.log.info("   • Database: In-memory (no checkpointing needed)")
@@ -743,18 +743,6 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self._append_employment_batch(json_strings)
 
         self.log.debug(f"Appended {len(companies_data)} companies to output tables")
-
-    def _cleanup_batch_memory(self) -> None:
-        """Clean up memory after processing a batch."""
-        import gc
-
-        # Force garbage collection
-        collected = gc.collect()
-
-        # NOTE: CHECKPOINT not supported for in-memory databases
-        # DuckDB handles memory management automatically for in-memory mode
-
-        self.log.debug(f"Memory cleanup: collected {collected} objects")
 
     @timed(name="Creating and saving ownership table")
     def _create_and_save_ownership_table(self) -> None:
