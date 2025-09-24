@@ -211,8 +211,6 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         """
         consolidated_table = "cvr_companies_consolidated"
         companies_table = silver_tables.get("companies")
-        persons_table = silver_tables.get("persons")
-        employment_table = silver_tables.get("employment")
 
         if not companies_table:
             raise ValueError("Companies table is required for consolidation")
@@ -314,8 +312,10 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
                 *,
                 -- Add validation flags
                 CASE
-                    WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8 THEN false
-                    WHEN NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{{7}}$') THEN false
+                    WHEN cvr_number IS NULL OR LENGTH(TRIM(CAST(cvr_number AS VARCHAR))) != 8
+                         THEN false
+                    WHEN NOT REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[1-9][0-9]{{7}}$')
+                         THEN false
                     ELSE true
                 END as cvr_number_valid,
                 CASE
@@ -351,7 +351,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             f"   • Valid CVR numbers: {valid_cvr_count:,} ({valid_cvr_count/total_count*100:.1f}%)"
         )
         self.log.info(
-            f"   • Valid company names: {valid_name_count:,} ({valid_name_count/total_count*100:.1f}%)"
+            f"   • Valid company names: {valid_name_count:,} "
+            f"({valid_name_count/total_count*100:.1f}%)"
         )
         self.log.info(
             f"   • Valid UUIDs: {valid_uuid_count:,} ({valid_uuid_count/total_count*100:.1f}%)"
@@ -400,7 +401,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         if os.getenv("GITHUB_ACTIONS") == "true":
             local_companies_path = "/tmp/cvr_company_data.parquet"
             self.conn.execute(
-                f"COPY {validated_table} TO '{local_companies_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
+                f"COPY {validated_table} TO '{local_companies_path}' "
+                f"(FORMAT 'parquet', COMPRESSION 'zstd')"
             )
             self.log.info(f"💾 Saved companies to artifact: {local_companies_path}")
 
