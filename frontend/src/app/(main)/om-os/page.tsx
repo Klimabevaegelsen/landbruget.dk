@@ -223,6 +223,30 @@ export default function AboutPage() {
                 </p>
               </div>
             </section>
+
+            {/* Contact Section */}
+            <section className="space-y-6">
+              <h2 className="text-primary border-primary/20 mt-16 border-b pb-4 text-3xl leading-tight font-bold">
+                Kontakt os
+              </h2>
+              <div className="space-y-4">
+                <p className="text-muted-foreground text-lg leading-relaxed">
+                  Har du spørgsmål, forslag til forbedringer, eller har du fundet
+                  fejl i vores data? Vi hører gerne fra dig!
+                </p>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <a
+                    href="mailto:info@landbruget.dk"
+                    className="touch-target inline-flex min-h-[44px] items-center justify-center rounded-lg bg-primary px-6 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                  >
+                    Skriv til os: info@landbruget.dk
+                  </a>
+                  <p className="text-muted-foreground text-sm">
+                    Vi bestræber os på at svare inden for få dage.
+                  </p>
+                </div>
+              </div>
+            </section>
           </article>
         </div>
       </Container>

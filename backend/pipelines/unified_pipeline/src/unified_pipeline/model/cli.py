@@ -116,6 +116,8 @@ class Stage(Enum):
     pnumber_fetching = "pnumber_fetching"
     financial_documents = "financial_documents"
     address_geocoding = "address_geocoding"
+    data_parsing = "data_parsing"
+    data_consolidation = "data_consolidation"
 
 
 class FVMLayerType(Enum):
