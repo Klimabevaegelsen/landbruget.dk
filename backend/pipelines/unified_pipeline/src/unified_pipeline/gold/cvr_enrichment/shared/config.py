@@ -15,7 +15,8 @@ class CVREnrichmentStep(str, Enum):
     """Enumeration of CVR enrichment pipeline steps."""
 
     COLLECTION = "collection"
-    COMPANY_FETCHING = "company_fetching"
+    COMPANY_FETCHING = "company_fetching"  # Bronze layer - raw data fetching
+    DATA_PARSING = "data_parsing"  # Silver layer - structured data parsing
     PNUMBER_FETCHING = "pnumber_fetching"
     FINANCIAL_DOCUMENTS = "financial_documents"
     ADDRESS_GEOCODING = "address_geocoding"
@@ -251,9 +252,15 @@ def _get_latest_input_paths_from_gcs(
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
+        elif step == CVREnrichmentStep.DATA_PARSING:
+            # Data parsing depends on raw company fetching (Bronze layer)
+            pattern = f"gs://{bucket}/bronze/cvr_raw_companies/*/consolidated.parquet"
+            latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
+            return [latest_file] if latest_file else []
+
         elif step == CVREnrichmentStep.PNUMBER_FETCHING:
-            # P-number fetching depends on company fetching
-            pattern = f"gs://{bucket}/gold/cvr_enrichment_companies/*/data.parquet"
+            # P-number fetching depends on parsed company data (Silver layer)
+            pattern = f"gs://{bucket}/silver/cvr_companies/*/data.parquet"
             latest_file = _find_latest_file_with_pattern(gcs_access, pattern, max_days_back)
             return [latest_file] if latest_file else []
 
@@ -583,9 +590,13 @@ def _get_traditional_input_paths(
         # Company fetching depends on collection step
         return [f"{base_path}/collection.parquet"]
 
-    elif step == CVREnrichmentStep.PNUMBER_FETCHING:
-        # P-number fetching depends on company fetching (no batching)
+    elif step == CVREnrichmentStep.DATA_PARSING:
+        # Data parsing depends on raw company fetching (Bronze layer)
         return [f"{base_path}/company_fetching.parquet"]
+
+    elif step == CVREnrichmentStep.PNUMBER_FETCHING:
+        # P-number fetching depends on parsed data (Silver layer)
+        return [f"{base_path}/data_parsing.parquet"]
 
     elif step == CVREnrichmentStep.FINANCIAL_DOCUMENTS:
         # Financial documents depend on company fetching (no batching)
