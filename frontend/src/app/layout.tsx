@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
-import PasswordProtection from '@/components/PasswordProtection';
 import { ToastProvider_ } from '@/components/ui/toast';
 import { ThemeProvider } from '@/components/theme/theme-provider';
 
@@ -31,10 +30,7 @@ export default function RootLayout({
     <html lang="da" suppressHydrationWarning>
       <body className={`${plusJakartaSans.variable} antialiased`}>
         <ThemeProvider defaultTheme="system" storageKey="landbruget-theme">
-          <ToastProvider_>
-            {process.env.NODE_ENV === 'production' && <PasswordProtection />}
-            {children}
-          </ToastProvider_>
+          <ToastProvider_>{children}</ToastProvider_>
         </ThemeProvider>
       </body>
     </html>
