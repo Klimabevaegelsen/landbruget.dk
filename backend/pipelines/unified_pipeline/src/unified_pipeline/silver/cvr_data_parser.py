@@ -255,8 +255,21 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
         )
 
         if not input_paths:
+            # Provide more debugging information
+            expected_path = (
+                f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{self.date_pattern}/consolidated.parquet"
+            )
+            self.log.error(f"Expected Bronze layer data at: {expected_path}")
+            self.log.error(f"Date pattern used: {self.date_pattern}")
+            self.log.error("This usually means:")
+            self.log.error("1. The company_fetching step failed or didn't complete")
+            self.log.error(
+                "2. The data_parsing step is running independently without Bronze layer data"
+            )
+            self.log.error("3. There's a timestamp mismatch between steps")
+            
             raise ValueError(
-                "No Bronze layer data found. "
+                f"No Bronze layer data found at expected path: {expected_path}. "
                 "Ensure the company_fetching step has completed successfully."
             )
 
