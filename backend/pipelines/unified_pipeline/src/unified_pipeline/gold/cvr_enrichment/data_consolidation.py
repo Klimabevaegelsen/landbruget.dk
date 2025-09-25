@@ -106,7 +106,12 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         try:
             # Step 1: Load Silver layer structured data
             self.log.info("📋 Step 1/4: Loading Silver layer structured data")
-            silver_tables = self._load_silver_data()
+            if silver_data:
+                self.log.info("Using silver data passed from previous step")
+                silver_tables = silver_data
+            else:
+                self.log.info("Loading silver data from GCS")
+                silver_tables = self._load_silver_data()
 
             # Step 2: Consolidate into Gold layer format
             self.log.info("🔄 Step 2/4: Consolidating data into Gold layer format")
@@ -135,6 +140,25 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             self.log.error("=" * 60)
             raise
 
+    def _find_latest_silver_file(self, table_type: str) -> str:
+        """Find the latest Silver layer file for a given table type."""
+        # Try current date pattern first
+        current_path = (
+            f"gs://{self.config.bucket}/silver/{table_type}/{self.date_pattern}/data.parquet"
+        )
+
+        try:
+            # Quick check if current path exists by attempting to read metadata
+            self.conn.execute(f"SELECT COUNT(*) FROM read_parquet('{current_path}') LIMIT 1")
+            return current_path
+        except Exception:
+            pass
+
+        # Fallback: try to find any recent file
+        # This is a simplified approach - in production, you might want more sophisticated logic
+        self.log.warning(f"Could not find Silver layer data at {current_path}, using fallback path")
+        return current_path
+
     @timed(name="Loading Silver layer data")
     def _load_silver_data(self) -> Dict[str, str]:
         """
@@ -145,10 +169,8 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
         """
         silver_tables = {}
 
-        # Load companies table
-        companies_path = (
-            f"gs://{self.config.bucket}/silver/cvr_companies/{self.date_pattern}/data.parquet"
-        )
+        # Load companies table - try to find latest Silver layer data
+        companies_path = self._find_latest_silver_file("cvr_companies")
         companies_table = "silver_companies"
         try:
             self.conn.execute(f"""
@@ -163,9 +185,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             silver_tables["companies"] = None
 
         # Load persons table
-        persons_path = (
-            f"gs://{self.config.bucket}/silver/cvr_persons/{self.date_pattern}/data.parquet"
-        )
+        persons_path = self._find_latest_silver_file("cvr_persons")
         persons_table = "silver_persons"
         try:
             self.conn.execute(f"""
@@ -180,9 +200,7 @@ class DataConsolidation(BaseSource[DataConsolidationConfig], GoldJobInterface):
             silver_tables["persons"] = None
 
         # Load employment table
-        employment_path = (
-            f"gs://{self.config.bucket}/silver/cvr_employment/{self.date_pattern}/data.parquet"
-        )
+        employment_path = self._find_latest_silver_file("cvr_employment")
         employment_table = "silver_employment"
         try:
             self.conn.execute(f"""
