@@ -284,16 +284,16 @@ DATA_SOURCE_REGISTRY: Dict[str, DataSourceInfo] = {
         display_name="Pesticid Overholdelse",
         display_description="Analyse af pesticidanvendelses overholdelse af regler",
     ),
-    "pesticide_applications_with_field_details": DataSourceInfo(
-        source_authority="Multiple (Combined Dataset)",
-        data_acquisition_method="Database View",
-        data_description="Enhanced pesticide applications with field details and spatial information",
-        update_frequency="Real-time",
+    "pesticide_applications": DataSourceInfo(
+        source_authority="Multiple (Pesticide Disaggregation + BMD)",
+        data_acquisition_method="Data Processing Pipeline",
+        data_description="Field-level pesticide applications with risk assessments and company linkage",
+        update_frequency="Monthly",
         pipeline_name="unified_pipeline",
-        data_format="Database View",
+        data_format="Database Table",
         data_source_type=DataSourceType.DATABASE,
-        display_name="Pesticidanvendelse med Markdetaljer",
-        display_description="Detaljeret pesticidanvendelse pr. mark med rumlige data og links til luftfotos",
+        display_name="Pesticidanvendelse (Mark-niveau)",
+        display_description="Detaljeret pesticidanvendelse pr. mark med risikovurdering og virksomhedstilknytning",
     ),
     # ========================================
     # CHR PIPELINE SOURCES

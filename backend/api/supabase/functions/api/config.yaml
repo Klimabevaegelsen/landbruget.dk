@@ -609,7 +609,7 @@ pageBuilder:
       dataLineage: "https://github.com/Klimabevaegelsen/landbruget.dk/blob/main/docs/DATA_LINEAGE_COMPREHENSIVE.md#pesticide-disaggregation-workflow"
     dataSource:
       params:
-        source: "pesticide_applications_with_field_details"
+        source: "pesticide_applications"
         table:
           columns:
             - key: "year"
