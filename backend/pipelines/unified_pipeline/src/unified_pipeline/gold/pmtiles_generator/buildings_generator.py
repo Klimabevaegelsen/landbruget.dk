@@ -274,7 +274,7 @@ class BuildingsProximityPMTilesGenerator:
                     WHEN category_group = 'agricultural' THEN 'Landbrug'
                     ELSE 'Andet'
                 END as building_type_simple,
-                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
+                ST_AsGeoJSON(geometry) as geometry
             FROM buildings_with_proximity
             ORDER BY distance_to_field_m, category_group, building_uuid
             """
