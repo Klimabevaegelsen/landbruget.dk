@@ -240,9 +240,27 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
 
     def _load_raw_data_from_gcs(self, table_name: str) -> str:
         """Load raw data from GCS Bronze layer."""
-        # Look for consolidated raw data from Bronze layer
-        timestamp_pattern = self.date_pattern
-        raw_data_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp_pattern}/consolidated.parquet"
+        from unified_pipeline.gold.cvr_enrichment.shared.config import (
+            CVREnrichmentStep,
+            get_step_input_paths,
+        )
+
+        # Use shared config to get the proper input paths for data parsing step
+        input_paths = get_step_input_paths(
+            step=CVREnrichmentStep.DATA_PARSING,
+            date_pattern=self.date_pattern,
+            bucket=self.config.bucket,
+            enable_independent_execution=True,
+            max_days_back=30,
+        )
+
+        if not input_paths:
+            raise ValueError(
+                "No Bronze layer data found. "
+                "Ensure the company_fetching step has completed successfully."
+            )
+
+        raw_data_path = input_paths[0]  # Should be the consolidated.parquet file
 
         try:
             self.log.info(f"Loading raw data from: {raw_data_path}")
@@ -343,10 +361,12 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
     def _get_agricultural_classification_sql(self) -> str:
         """Get SQL for agricultural company classification."""
         # Extract industry code for readability
-        industry_code_expr = ("json_extract_string(json_extract(raw_json, '$.industries[0]'), "
-                             "'$.industry_code')")
-        is_current_expr = ("json_extract(json_extract(raw_json, '$.industries[0]'), "
-                          "'$.is_current')::BOOLEAN")
+        industry_code_expr = (
+            "json_extract_string(json_extract(raw_json, '$.industries[0]'), " "'$.industry_code')"
+        )
+        is_current_expr = (
+            "json_extract(json_extract(raw_json, '$.industries[0]'), " "'$.is_current')::BOOLEAN"
+        )
 
         return f"""
             CASE
