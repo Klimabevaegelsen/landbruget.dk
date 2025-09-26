@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +31,7 @@ import {
   Eye,
   Palette,
   Calendar,
+  Download,
 } from 'lucide-react';
 
 interface LayerControlPanelEnhancedProps {
@@ -37,6 +39,9 @@ interface LayerControlPanelEnhancedProps {
   filterState: FilterState;
   onLayerToggle: (layerName: keyof LayerVisibility) => void;
   onFilterChange: (filters: Partial<FilterState>) => void;
+  onDownloadCSV?: () => void;
+  isDownloadEnabled?: boolean;
+  currentZoom?: number;
 }
 
 export function LayerControlPanelEnhanced({
@@ -44,6 +49,9 @@ export function LayerControlPanelEnhanced({
   filterState,
   onLayerToggle,
   onFilterChange,
+  onDownloadCSV,
+  isDownloadEnabled = false,
+  currentZoom = 0,
 }: LayerControlPanelEnhancedProps) {
   const layerConfigs = [
     {
@@ -278,6 +286,41 @@ export function LayerControlPanelEnhanced({
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* CSV Download */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Download className="h-4 w-4" />
+            Eksporter Data
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <p className="text-muted-foreground text-xs">
+              Download synlige marker som CSV-fil. Kræver zoom niveau 10+ for at
+              aktivere.
+            </p>
+
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={onDownloadCSV}
+                disabled={!isDownloadEnabled}
+                size="sm"
+                className="flex-1"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download CSV
+              </Button>
+            </div>
+
+            <div className="text-muted-foreground text-xs">
+              Zoom niveau: {currentZoom.toFixed(1)}
+              {currentZoom < 10 && ' (zoom ind for at aktivere)'}
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Layers, Filter, Calendar, Settings } from 'lucide-react';
+import { Layers, Filter, Calendar, Settings, Download } from 'lucide-react';
 import {
   Sidebar,
   SidebarHeader,
@@ -11,6 +11,7 @@ import {
   SidebarItem,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { Button } from '@/components/ui/button';
 import {
   LayerVisibility,
   FilterState,
@@ -26,6 +27,8 @@ interface FieldSidebarProps {
   onFilterChange: (filters: Partial<FilterState>) => void;
   onYearChange: (year: number) => void;
   onExpandedChange?: (expanded: boolean) => void;
+  onDownloadCSV?: () => void;
+  currentZoom?: number;
 }
 
 export function FieldSidebar({
@@ -36,9 +39,11 @@ export function FieldSidebar({
   onFilterChange,
   onYearChange,
   onExpandedChange,
+  onDownloadCSV,
+  currentZoom = 0,
 }: FieldSidebarProps) {
   const [activeSection, setActiveSection] = useState<
-    'layers' | 'filters' | 'years' | 'settings'
+    'layers' | 'filters' | 'years' | 'settings' | 'export'
   >('layers');
 
   return (
@@ -87,6 +92,12 @@ export function FieldSidebar({
             active={activeSection === 'settings'}
             onClick={() => setActiveSection('settings')}
           />
+          <SidebarItem
+            icon={<Download className="h-4 w-4" />}
+            label="Eksporter"
+            active={activeSection === 'export'}
+            onClick={() => setActiveSection('export')}
+          />
         </SidebarGroup>
 
         <FieldSidebarExpandedContent
@@ -97,6 +108,8 @@ export function FieldSidebar({
           onLayerToggle={onLayerToggle}
           onFilterChange={onFilterChange}
           onYearChange={onYearChange}
+          onDownloadCSV={onDownloadCSV}
+          currentZoom={currentZoom}
         />
       </SidebarContent>
     </Sidebar>
@@ -112,14 +125,18 @@ function FieldSidebarExpandedContent({
   onLayerToggle,
   onFilterChange,
   onYearChange,
+  onDownloadCSV,
+  currentZoom = 0,
 }: {
-  activeSection: 'layers' | 'filters' | 'years' | 'settings';
+  activeSection: 'layers' | 'filters' | 'years' | 'settings' | 'export';
   layerVisibility: LayerVisibility;
   filterState: FilterState;
   yearSelection: YearSelection;
   onLayerToggle: (layerName: keyof LayerVisibility) => void;
   onFilterChange: (filters: Partial<FilterState>) => void;
   onYearChange: (year: number) => void;
+  onDownloadCSV?: () => void;
+  currentZoom?: number;
 }) {
   const { isExpanded } = useSidebar();
 
@@ -242,6 +259,40 @@ function FieldSidebarExpandedContent({
                 </span>
               </label>
             ))}
+          </div>
+        </SidebarGroup>
+      )}
+
+      {/* Export Section */}
+      {activeSection === 'export' && (
+        <SidebarGroup label="Eksporter Data">
+          <div className="space-y-3 px-3 py-2">
+            <p className="text-muted-foreground text-sm">
+              Download synlige marker som CSV-fil. Kræver zoom niveau 10+ for at
+              aktivere.
+            </p>
+
+            <Button
+              onClick={onDownloadCSV}
+              disabled={!onDownloadCSV || currentZoom < 10}
+              size="sm"
+              className="w-full"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download CSV
+            </Button>
+
+            <div className="text-muted-foreground text-xs">
+              Zoom niveau: {currentZoom.toFixed(1)}
+              {currentZoom < 10 && ' (zoom ind for at aktivere)'}
+            </div>
+
+            <div className="border-t pt-2">
+              <p className="text-muted-foreground text-xs">
+                CSV-filen indeholder alle synlige marker med deres pesticiddata,
+                miljødata og geografiske information.
+              </p>
+            </div>
           </div>
         </SidebarGroup>
       )}

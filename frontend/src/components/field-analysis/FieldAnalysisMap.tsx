@@ -13,7 +13,8 @@ import Map, {
   MapLayerMouseEvent,
   NavigationControl,
   ViewState,
-} from 'react-map-gl/maplibre';
+  MapRef,
+} from '@vis.gl/react-maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useMapTheme } from '@/hooks/useMapTheme';
 import { LayerVisibility, FilterState, FieldAnalysisData } from './types';
@@ -21,11 +22,11 @@ import { getDecileBreakpoints, getColorScheme } from './colorUtils';
 import { SearchBar } from './SearchBar';
 import { ColorLegend } from './ColorLegend';
 
-// Type for MapLibre map instance
+// Type for MapLibre map instance - updated for @vis.gl/react-maplibre
 interface MapInstance {
   getSource: (id: string) => unknown;
   getLayer: (id: string) => unknown;
-  addLayer: (layer: unknown) => void;
+  addLayer: (layer: unknown, beforeId?: string) => unknown;
   removeLayer: (id: string) => void;
   removeSource: (id: string) => void;
   setLayoutProperty: (id: string, prop: string, value: string) => void;
@@ -35,6 +36,7 @@ interface MapInstance {
     id: string,
     image: HTMLCanvasElement | ImageBitmap | ImageData
   ) => void;
+  hasImage: (id: string) => boolean;
   setFilter: (id: string, filter: unknown) => void;
 }
 
@@ -70,6 +72,9 @@ interface FieldAnalysisMapProps {
   viewState?: Partial<ViewState>;
   onViewStateChange?: (viewState: ViewState) => void;
   hasRightPanel?: boolean; // New prop to indicate if right panel is open
+  queryVisibleFieldsRef?: React.MutableRefObject<
+    (() => FieldAnalysisData[]) | null
+  >;
 }
 
 interface TooltipInfo {
@@ -137,14 +142,59 @@ function MapTooltip({
   const getRelevantData = () => {
     const data: Array<{ label: string; value: unknown; unit?: string }> = [];
 
-    // Always show basic field info
+    // Show layer-specific data first
+    if (layerName === 'BNBO Område') {
+      // Show BNBO status if available
+      if (properties.status_category) {
+        const statusLabel =
+          properties.status_category === 'Action Required'
+            ? 'BNBO handling påkrævet'
+            : properties.status_category === 'Completed'
+              ? 'BNBO gennemført'
+              : 'BNBO status';
+        const statusValue =
+          properties.status_category === 'Action Required'
+            ? 'Handling påkrævet'
+            : properties.status_category === 'Completed'
+              ? 'Gennemført'
+              : properties.status_category;
+        data.push({ label: statusLabel, value: statusValue });
+      }
+    } else if (layerName === 'Lavbundsområde') {
+      // Show wetland-specific data
+      if (properties.wetland_id) {
+        data.push({ label: 'Vådomr. ID', value: properties.wetland_id });
+      }
+      if (properties.toerv_pct) {
+        data.push({ label: 'Tørv indhold', value: properties.toerv_pct });
+      }
+      if (properties.toerv_description) {
+        data.push({
+          label: 'Tørv beskrivelse',
+          value: properties.toerv_description,
+        });
+      }
+    } else if (layerName === 'Vandprojekt') {
+      // Show water project-specific data
+      if (properties.project_id) {
+        data.push({ label: 'Projekt ID', value: properties.project_id });
+      }
+      if (properties.feature_count) {
+        data.push({ label: 'Antal features', value: properties.feature_count });
+      }
+      if (properties.dissolved_at) {
+        data.push({ label: 'Opløst dato', value: properties.dissolved_at });
+      }
+    }
+
+    // Always show basic field info if available (for underlying field data)
     if (properties.crop_name) {
       data.push({ label: 'Afgrøde', value: properties.crop_name });
     }
 
     if (properties.area_hectares) {
       data.push({
-        label: 'Areal',
+        label: 'Markareal',
         value: properties.area_hectares,
         unit: 'ha',
       });
@@ -159,23 +209,6 @@ function MapTooltip({
 
     if (properties.kommune) {
       data.push({ label: 'Kommune', value: properties.kommune });
-    }
-
-    // Show BNBO status if available
-    if (properties.status_category) {
-      const statusLabel =
-        properties.status_category === 'Action Required'
-          ? 'BNBO handling påkrævet'
-          : properties.status_category === 'Completed'
-            ? 'BNBO gennemført'
-            : 'BNBO status';
-      const statusValue =
-        properties.status_category === 'Action Required'
-          ? 'Handling påkrævet'
-          : properties.status_category === 'Completed'
-            ? 'Gennemført'
-            : properties.status_category;
-      data.push({ label: statusLabel, value: statusValue });
     }
 
     // Show building-specific data if available
@@ -455,6 +488,15 @@ function MapTooltip({
             {String(properties.site_name)}
           </p>
         ) : null}
+        {/* Show indicator if this is an environmental layer with underlying field data */}
+        {(layerName === 'BNBO Område' ||
+          layerName === 'Lavbundsområde' ||
+          layerName === 'Vandprojekt') &&
+          Boolean(properties.crop_name) && (
+            <p className="text-muted-foreground mt-1 text-xs italic">
+              Inkluderer markdata
+            </p>
+          )}
       </div>
 
       {/* Content with improved spacing and hierarchy */}
@@ -490,29 +532,59 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   viewState: externalViewState,
   onViewStateChange,
   hasRightPanel,
+  queryVisibleFieldsRef,
 }: FieldAnalysisMapProps) {
   const { mapStyle } = useMapTheme();
-  const mapRef = useRef<{ getMap: () => MapInstance } | null>(null);
+
+  // Fallback map style in case external style fails
+  const fallbackMapStyle = {
+    version: 8 as const,
+    sources: {},
+    layers: [
+      {
+        id: 'background',
+        type: 'background' as const,
+        paint: {
+          'background-color': '#f8f9fa',
+        },
+      },
+    ],
+  };
+  const mapRef = useRef<MapRef | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadedSourcesRef = useRef<Set<string>>(new Set());
+  const [styleLoadFailed, setStyleLoadFailed] = useState(false);
+  const [currentMapStyle, setCurrentMapStyle] = useState(mapStyle);
 
   // Internal view state for controlled map
-  const [internalViewState, setInternalViewState] = useState<ViewState>({
+  const [internalViewState, setInternalViewState] = useState<
+    ViewState & { width: number; height: number }
+  >({
     longitude: 9.501785,
     latitude: 56.26392,
     zoom: 7,
     pitch: 0,
     bearing: 0,
     padding: { top: 0, bottom: 0, left: 0, right: 0 },
+    width: 800,
+    height: 600,
   });
 
+  // Handle map style changes and fallback
+  useEffect(() => {
+    if (!styleLoadFailed) {
+      setCurrentMapStyle(mapStyle);
+    }
+  }, [mapStyle, styleLoadFailed]);
+
   // PROPERLY MERGE viewState - merge external with internal defaults
-  const currentViewState: ViewState = externalViewState
-    ? { ...internalViewState, ...externalViewState }
-    : internalViewState;
+  const currentViewState: ViewState & { width: number; height: number } =
+    externalViewState
+      ? { ...internalViewState, ...externalViewState }
+      : internalViewState;
 
   // Optimized throttling using requestAnimationFrame for smooth performance
   const rafIdRef = useRef<number | null>(null);
@@ -523,10 +595,29 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const handleViewStateChange = useCallback(
     (evt: { viewState: ViewState }) => {
       const newViewState = evt.viewState;
+      const currentViewState = externalViewState || internalViewState;
+
+      // Only track movement time if the view actually changed significantly
+      const hasSignificantChange =
+        !currentViewState ||
+        Math.abs(newViewState.longitude - (currentViewState.longitude ?? 0)) >
+          0.0001 ||
+        Math.abs(newViewState.latitude - (currentViewState.latitude ?? 0)) >
+          0.0001 ||
+        Math.abs(newViewState.zoom - (currentViewState.zoom ?? 0)) > 0.01;
+
+      if (hasSignificantChange) {
+        lastMapMoveTimeRef.current = Date.now();
+        isMapDraggingRef.current = true;
+      }
 
       // Always update internal state immediately for smooth map movement
       if (!externalViewState) {
-        setInternalViewState(newViewState);
+        setInternalViewState({
+          ...newViewState,
+          width: internalViewState.width,
+          height: internalViewState.height,
+        });
       }
 
       // Store the latest view state
@@ -550,9 +641,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         if (onViewStateChange && lastViewState.current) {
           onViewStateChange(lastViewState.current);
         }
+        // Reset dragging state after movement stops
+        isMapDraggingRef.current = false;
       }, 150); // Send final position after 150ms of no movement
     },
-    [onViewStateChange, externalViewState]
+    [onViewStateChange, externalViewState, internalViewState]
   );
 
   // Handle location selection from search
@@ -907,7 +1000,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               ctx.stroke();
 
               const bitmap = await createImageBitmap(canvas);
-              map.addImage('partial-coverage-pattern', bitmap);
+              if (!map.hasImage('partial-coverage-pattern')) {
+                map.addImage('partial-coverage-pattern', bitmap);
+              }
             }
           } catch (error) {
             console.warn('Failed to create partial coverage pattern:', error);
@@ -1033,7 +1128,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   // Add BNBO layers with cross-hatch pattern
   const addBNBOLayers = useCallback(
     (map: MapInstance) => {
+      console.log('🔍 addBNBOLayers called');
+      console.log('🔍 BNBO source exists:', !!map.getSource('bnbo'));
+      console.log('🔍 BNBO layer exists:', !!map.getLayer('bnbo-fill'));
       if (map.getSource('bnbo') && !map.getLayer('bnbo-fill')) {
+        console.log('✅ Adding BNBO layers...');
         // Create status-based patterns for BNBO
         const createBNBOPatterns = async () => {
           try {
@@ -1057,7 +1156,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               completedCtx.stroke();
 
               const completedBitmap = await createImageBitmap(completedCanvas);
-              map.addImage('bnbo-completed-pattern', completedBitmap);
+              if (!map.hasImage('bnbo-completed-pattern')) {
+                map.addImage('bnbo-completed-pattern', completedBitmap);
+              }
             }
 
             // Create action required pattern (red with cross-hatch)
@@ -1082,36 +1183,43 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               actionCtx.stroke();
 
               const actionBitmap = await createImageBitmap(actionCanvas);
-              map.addImage('bnbo-action-pattern', actionBitmap);
+              if (!map.hasImage('bnbo-action-pattern')) {
+                map.addImage('bnbo-action-pattern', actionBitmap);
+              }
             }
           } catch (error) {
             console.warn('Failed to create BNBO patterns:', error);
           }
         };
 
-        map.addLayer({
-          id: 'bnbo-fill',
-          source: 'bnbo',
-          'source-layer': 'bnbo',
-          type: 'fill',
-          paint: {
-            'fill-color': [
-              'case',
-              // If action is required (yellow)
-              ['==', ['get', 'status_category'], 'Action Required'],
-              '#EAB308',
-              // If completed (green)
-              ['==', ['get', 'status_category'], 'Completed'],
-              '#10B981',
-              // Default blue for general BNBO areas
-              '#2563EB',
-            ],
-            'fill-opacity': 0.6,
-          },
-          layout: {
-            visibility: layerVisibility.bnbo ? 'visible' : 'none',
-          },
-        });
+        try {
+          map.addLayer({
+            id: 'bnbo-fill',
+            source: 'bnbo',
+            'source-layer': 'bnbo',
+            type: 'fill',
+            paint: {
+              'fill-color': [
+                'case',
+                // If action is required (yellow)
+                ['==', ['get', 'status_category'], 'Action Required'],
+                '#EAB308',
+                // If completed (green)
+                ['==', ['get', 'status_category'], 'Completed'],
+                '#10B981',
+                // Default blue for general BNBO areas
+                '#2563EB',
+              ],
+              'fill-opacity': 0.6,
+            },
+            layout: {
+              visibility: layerVisibility.bnbo ? 'visible' : 'none',
+            },
+          });
+          console.log('✅ BNBO fill layer added successfully');
+        } catch (error) {
+          console.error('🚨 Failed to add BNBO fill layer:', error);
+        }
 
         // Create patterns after layer is added
         createBNBOPatterns().then(() => {
@@ -1128,27 +1236,32 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           }
         });
 
-        map.addLayer({
-          id: 'bnbo-outline',
-          source: 'bnbo',
-          'source-layer': 'bnbo',
-          type: 'line',
-          paint: {
-            'line-color': [
-              'case',
-              ['==', ['get', 'status_category'], 'Action Required'],
-              '#DC2626', // Darker red outline
-              ['==', ['get', 'status_category'], 'Completed'],
-              '#059669', // Darker green outline
-              '#1D4ED8', // Darker blue outline
-            ],
-            'line-width': 1.5,
-            'line-opacity': 0.9,
-          },
-          layout: {
-            visibility: layerVisibility.bnbo ? 'visible' : 'none',
-          },
-        });
+        try {
+          map.addLayer({
+            id: 'bnbo-outline',
+            source: 'bnbo',
+            'source-layer': 'bnbo',
+            type: 'line',
+            paint: {
+              'line-color': [
+                'case',
+                ['==', ['get', 'status_category'], 'Action Required'],
+                '#DC2626', // Darker red outline
+                ['==', ['get', 'status_category'], 'Completed'],
+                '#059669', // Darker green outline
+                '#1D4ED8', // Darker blue outline
+              ],
+              'line-width': 1.5,
+              'line-opacity': 0.9,
+            },
+            layout: {
+              visibility: layerVisibility.bnbo ? 'visible' : 'none',
+            },
+          });
+          console.log('✅ BNBO outline layer added successfully');
+        } catch (error) {
+          console.error('🚨 Failed to add BNBO outline layer:', error);
+        }
       }
     },
     [layerVisibility.bnbo]
@@ -1190,7 +1303,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               ctx.stroke();
 
               const imageBitmap = await createImageBitmap(canvas);
-              map.addImage('wetlands-pattern', imageBitmap);
+              if (!map.hasImage('wetlands-pattern')) {
+                map.addImage('wetlands-pattern', imageBitmap);
+              }
 
               // Update layer to use pattern
               if (map.getLayer('wetlands-fill')) {
@@ -1277,7 +1392,9 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               }
 
               const imageBitmap = await createImageBitmap(canvas);
-              map.addImage('water-projects-pattern', imageBitmap);
+              if (!map.hasImage('water-projects-pattern')) {
+                map.addImage('water-projects-pattern', imageBitmap);
+              }
 
               // Update layer to use pattern
               if (map.getLayer('water-projects-fill')) {
@@ -1338,54 +1455,65 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const addBuildingsLayers = useCallback(
     (map: MapInstance) => {
       if (map.getSource('buildings') && !map.getLayer('buildings-fill')) {
-        map.addLayer({
-          id: 'buildings-fill',
-          source: 'buildings',
-          'source-layer': 'buildings',
-          type: 'fill',
-          paint: {
-            'fill-color': [
-              'case',
-              // Educational/Public services buildings - Pink
-              ['==', ['get', 'building_usage_category'], 'publicServices'],
-              '#EC4899', // Pink for schools and daycare
-              // Agricultural buildings - Brown
-              ['==', ['get', 'building_usage_category'], 'agricultural'],
-              '#A16207', // Brown for agricultural buildings
-              // Residential buildings - Light blue (default)
-              '#4A90E2',
-            ],
-            'fill-opacity': 0.6,
-          },
-          layout: {
-            visibility: layerVisibility.buildings ? 'visible' : 'none',
-          },
-        });
+        console.log('✅ Adding Buildings layers...');
+        try {
+          map.addLayer({
+            id: 'buildings-fill',
+            source: 'buildings',
+            'source-layer': 'buildings',
+            type: 'fill',
+            paint: {
+              'fill-color': [
+                'case',
+                // Educational/Public services buildings - Pink
+                ['==', ['get', 'building_usage_category'], 'publicServices'],
+                '#EC4899', // Pink for schools and daycare
+                // Agricultural buildings - Brown
+                ['==', ['get', 'building_usage_category'], 'agricultural'],
+                '#A16207', // Brown for agricultural buildings
+                // Residential buildings - Light blue (default)
+                '#4A90E2',
+              ],
+              'fill-opacity': 0.6,
+            },
+            layout: {
+              visibility: layerVisibility.buildings ? 'visible' : 'none',
+            },
+          });
+          console.log('✅ Buildings fill layer added successfully');
+        } catch (error) {
+          console.error('🚨 Failed to add Buildings fill layer:', error);
+        }
 
-        map.addLayer({
-          id: 'buildings-outline',
-          source: 'buildings',
-          'source-layer': 'buildings',
-          type: 'line',
-          paint: {
-            'line-color': [
-              'case',
-              // Educational/Public services buildings - Darker pink
-              ['==', ['get', 'building_usage_category'], 'publicServices'],
-              '#BE185D', // Darker pink outline
-              // Agricultural buildings - Darker brown
-              ['==', ['get', 'building_usage_category'], 'agricultural'],
-              '#92400E', // Darker brown outline
-              // Residential buildings - Default blue
-              '#2563EB',
-            ],
-            'line-width': 1,
-            'line-opacity': 0.8,
-          },
-          layout: {
-            visibility: layerVisibility.buildings ? 'visible' : 'none',
-          },
-        });
+        try {
+          map.addLayer({
+            id: 'buildings-outline',
+            source: 'buildings',
+            'source-layer': 'buildings',
+            type: 'line',
+            paint: {
+              'line-color': [
+                'case',
+                // Educational/Public services buildings - Darker pink
+                ['==', ['get', 'building_usage_category'], 'publicServices'],
+                '#BE185D', // Darker pink outline
+                // Agricultural buildings - Darker brown
+                ['==', ['get', 'building_usage_category'], 'agricultural'],
+                '#92400E', // Darker brown outline
+                // Residential buildings - Default blue
+                '#2563EB',
+              ],
+              'line-width': 1,
+              'line-opacity': 0.8,
+            },
+            layout: {
+              visibility: layerVisibility.buildings ? 'visible' : 'none',
+            },
+          });
+          console.log('✅ Buildings outline layer added successfully');
+        } catch (error) {
+          console.error('🚨 Failed to add Buildings outline layer:', error);
+        }
       }
     },
     [layerVisibility.buildings]
@@ -1395,7 +1523,8 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const onMapLoad = useCallback(() => {
     if (!mapRef.current) return;
 
-    const map = mapRef.current.getMap();
+    const map = mapRef.current.getMap() as MapInstance;
+    if (!map) return;
 
     try {
       // Reset loaded sources tracking
@@ -1421,13 +1550,28 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               type: 'vector',
               url: `pmtiles://${url}`,
             });
-            console.log(`Added ${layerName} source:`, url);
+            console.log(`✅ Added ${layerName} source:`, url);
             sourcesAdded++;
+
+            // Special debugging for BNBO
+            if (layerName === 'bnbo') {
+              console.log('🔍 BNBO source added - URL:', url);
+              console.log('🔍 BNBO layer visibility:', layerVisibility.bnbo);
+            }
           } catch (error) {
             const errorMessage = `Failed to add ${layerName} source: ${error}`;
-            console.warn(`${errorMessage}`);
+            console.warn(`❌ ${errorMessage}`);
             sourceErrors.push(errorMessage);
+
+            // Special debugging for BNBO
+            if (layerName === 'bnbo') {
+              console.error('🚨 BNBO source failed to load:', error);
+            }
           }
+        } else if (!url) {
+          console.warn(`⚠️ Empty URL for ${layerName} layer`);
+        } else if (map.getSource(layerName)) {
+          console.log(`ℹ️ ${layerName} source already exists`);
         }
       });
 
@@ -1450,11 +1594,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       }
 
       // Add layers
-      addFieldsLayers(map);
-      addBNBOLayers(map);
-      addWetlandsLayers(map);
-      addWaterProjectsLayers(map);
-      addBuildingsLayers(map);
+      addFieldsLayers(map as unknown as MapInstance);
+      addBNBOLayers(map as unknown as MapInstance);
+      addWetlandsLayers(map as unknown as MapInstance);
+      addWaterProjectsLayers(map as unknown as MapInstance);
+      addBuildingsLayers(map as unknown as MapInstance);
 
       // Don't set loading to false here - wait for sourcedata events
       console.log(`Waiting for ${sourcesAdded} PMTiles sources to load...`);
@@ -1476,6 +1620,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     addBuildingsLayers,
     onMapReady,
     handleSourceData,
+    layerVisibility.bnbo,
   ]);
 
   // Handle PMTiles URL changes (e.g., year selection) - optimized approach
@@ -1510,12 +1655,12 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         // Remove and re-add source (MapLibre doesn't support direct URL updates)
         // But we do it more efficiently by only affecting the fields source
         // First remove all field layers that depend on the source
-        removeFieldsLayers(map);
+        removeFieldsLayers(map as unknown as MapInstance);
         map.removeSource('fields');
         map.addSource('fields', newSource);
 
         // Re-add only the fields layers (other layers remain unaffected)
-        addFieldsLayers(map);
+        addFieldsLayers(map as unknown as MapInstance);
 
         // Don't set loading to false here - wait for sourcedata event
         console.log(`Waiting for optimized fields source to load...`);
@@ -1640,14 +1785,14 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     // Update filters on existing layers (only set filter if it exists)
     if (map.getLayer('fields-fill')) {
       if (companyFilter) {
-        map.setFilter('fields-fill', companyFilter);
+        map.setFilter('fields-fill', companyFilter as never);
       } else {
         map.setFilter('fields-fill', null); // Clear filter
       }
     }
     if (map.getLayer('fields-outline')) {
       if (companyFilter) {
-        map.setFilter('fields-outline', companyFilter);
+        map.setFilter('fields-outline', companyFilter as never);
       } else {
         map.setFilter('fields-outline', null); // Clear filter
       }
@@ -1656,15 +1801,15 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       const partialFilter = companyFilter
         ? ['all', companyFilter, ['==', ['get', 'is_partial_coverage'], true]]
         : ['==', ['get', 'is_partial_coverage'], true];
-      map.setFilter('fields-partial-coverage-base', partialFilter);
-      map.setFilter('fields-partial-coverage-pattern', partialFilter);
+      map.setFilter('fields-partial-coverage-base', partialFilter as never);
+      map.setFilter('fields-partial-coverage-pattern', partialFilter as never);
     }
     if (map.getLayer('organic-borders')) {
       let organicFilter: unknown = ['==', ['get', 'is_organic'], true];
       if (companyFilter) {
         organicFilter = ['all', companyFilter, organicFilter];
       }
-      map.setFilter('organic-borders', organicFilter);
+      map.setFilter('organic-borders', organicFilter as never);
     }
   }, [filterState.companyFilter]);
 
@@ -1728,17 +1873,134 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     }
   }, [fieldsPaintProps, layerVisibility.fields]); // Use memoized paint props
 
+  // Track map interactions to prevent clicks during dragging
+  const isMapDraggingRef = useRef(false);
+  const lastMapMoveTimeRef = useRef<number>(0);
+
+  // Query for field data at a specific coordinate
+  const queryFieldDataAtCoordinate = useCallback(
+    async (lng: number, lat: number): Promise<FieldAnalysisData | null> => {
+      if (!mapRef.current) {
+        console.log('🔍 No map ref available for field query');
+        return null;
+      }
+
+      const map = mapRef.current.getMap();
+      const point = map.project([lng, lat]);
+      console.log('🔍 Querying field data at coordinate:', { lng, lat, point });
+
+      // Query for field features at this point
+      const fieldFeatures = map.queryRenderedFeatures(point, {
+        layers: ['fields-fill'],
+      });
+
+      console.log('🔍 Field query result:', {
+        featuresFound: fieldFeatures.length,
+        layerExists: !!map.getLayer('fields-fill'),
+        layerVisible: map.getLayer('fields-fill')
+          ? map.getLayoutProperty('fields-fill', 'visibility')
+          : 'layer not found',
+      });
+
+      if (fieldFeatures.length > 0) {
+        const fieldData = fieldFeatures[0].properties as FieldAnalysisData;
+        fieldData.click_coordinates = { lat, lng };
+        console.log('🔍 Found field data:', {
+          crop_name: fieldData.crop_name,
+          area_hectares: fieldData.area_hectares,
+          field_uuid: fieldData.field_uuid,
+        });
+        return fieldData;
+      }
+
+      return null;
+    },
+    []
+  );
+
+  // Query all visible field features in the current map view
+  const queryVisibleFields = useCallback((): FieldAnalysisData[] => {
+    if (!mapRef.current) {
+      console.log('🔍 No map ref available for visible fields query');
+      return [];
+    }
+
+    const map = mapRef.current.getMap();
+
+    // Check if fields layer exists and is visible
+    if (
+      !map.getLayer('fields-fill') ||
+      map.getLayoutProperty('fields-fill', 'visibility') === 'none'
+    ) {
+      console.log('🔍 Fields layer not visible, returning empty array');
+      return [];
+    }
+
+    // Query all rendered field features in the current viewport
+    const fieldFeatures = map.queryRenderedFeatures(undefined, {
+      layers: ['fields-fill'],
+    });
+
+    console.log('🔍 Found', fieldFeatures.length, 'visible field features');
+
+    // Convert features to FieldAnalysisData and remove duplicates
+    const uniqueFields: Record<string, FieldAnalysisData> = {};
+
+    fieldFeatures.forEach((feature) => {
+      const fieldData = feature.properties as FieldAnalysisData;
+      if (fieldData.field_uuid && !uniqueFields[fieldData.field_uuid]) {
+        uniqueFields[fieldData.field_uuid] = fieldData;
+      }
+    });
+
+    const result = Object.values(uniqueFields);
+    console.log('🔍 Returning', result.length, 'unique visible fields');
+
+    return result;
+  }, []);
+
+  // Expose queryVisibleFields function via ref
+  useEffect(() => {
+    if (queryVisibleFieldsRef) {
+      queryVisibleFieldsRef.current = queryVisibleFields;
+    }
+  }, [queryVisibleFields, queryVisibleFieldsRef]);
+
   // Handle hover events
   const onHover = useCallback(
-    (event: MapLayerMouseEvent) => {
+    async (event: MapLayerMouseEvent) => {
       const feature = event.features && event.features[0];
       if (feature) {
         const layerName = getLayerDisplayName(feature.layer.id);
+        let properties = feature.properties || {};
+
+        // For environmental layers, try to get underlying field data for enhanced tooltip
+        if (
+          feature.layer.id.startsWith('bnbo-') ||
+          feature.layer.id.startsWith('wetlands-') ||
+          feature.layer.id.startsWith('water-projects-')
+        ) {
+          console.log(
+            '🔍 Environmental layer hovered, querying for field data...'
+          );
+          const underlyingFieldData = await queryFieldDataAtCoordinate(
+            event.lngLat.lng,
+            event.lngLat.lat
+          );
+
+          if (underlyingFieldData) {
+            // Merge environmental layer properties with field data
+            properties = {
+              ...properties, // Environmental layer data first
+              ...underlyingFieldData, // Field data second (will override if same keys)
+            };
+          }
+        }
 
         setHoverInfo({
           x: event.point.x,
           y: event.point.y,
-          properties: feature.properties || {},
+          properties,
           layerName,
           visualizationMode: filterState.visualizationMode,
           colorUnit: filterState.colorUnit,
@@ -1747,66 +2009,20 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         setHoverInfo(null);
       }
     },
-    [filterState.visualizationMode, filterState.colorUnit]
+    [
+      filterState.visualizationMode,
+      filterState.colorUnit,
+      queryFieldDataAtCoordinate,
+    ]
   );
-
-  // Track drag state to prevent clicks during drag operations
-  const isDraggingRef = useRef(false);
-  const dragStartTimeRef = useRef<number>(0);
-  const mouseDownPositionRef = useRef<{ x: number; y: number } | null>(null);
-
-  // Handle mouse down to start tracking potential drag
-  const onMouseDown = useCallback((event: MapLayerMouseEvent) => {
-    mouseDownPositionRef.current = {
-      x: event.point.x,
-      y: event.point.y,
-    };
-    // Don't set drag start time yet - only when we detect actual dragging
-  }, []);
-
-  // Handle mouse move to detect dragging
-  const onMouseMove = useCallback(
-    (event: MapLayerMouseEvent) => {
-      if (mouseDownPositionRef.current) {
-        const deltaX = Math.abs(event.point.x - mouseDownPositionRef.current.x);
-        const deltaY = Math.abs(event.point.y - mouseDownPositionRef.current.y);
-
-        // If mouse moved more than 5 pixels, consider it a drag
-        if (deltaX > 5 || deltaY > 5) {
-          if (!isDraggingRef.current) {
-            // First time detecting drag - set the drag start time
-            isDraggingRef.current = true;
-            dragStartTimeRef.current = Date.now();
-          }
-        }
-      }
-
-      // Call the original hover handler
-      onHover(event);
-    },
-    [onHover]
-  );
-
-  // Handle mouse up to end drag tracking
-  const onMouseUp = useCallback(() => {
-    // Reset drag tracking after a small delay
-    setTimeout(() => {
-      isDraggingRef.current = false;
-      mouseDownPositionRef.current = null;
-    }, 100);
-  }, []);
 
   // Handle click events for field selection and coordinate capture
   const onClick = useCallback(
-    (event: MapLayerMouseEvent) => {
-      // Prevent clicks during or immediately after drag operations
-      if (isDraggingRef.current) {
-        return;
-      }
+    async (event: MapLayerMouseEvent) => {
+      const now = Date.now();
 
-      // Prevent clicks if we just finished dragging (within 200ms)
-      const timeSinceDragStart = Date.now() - dragStartTimeRef.current;
-      if (timeSinceDragStart < 200) {
+      // If the map was moving recently (within 50ms), consider this a drag end, not a click
+      if (now - lastMapMoveTimeRef.current < 50) {
         return;
       }
 
@@ -1816,17 +2032,70 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       };
 
       const feature = event.features && event.features[0];
+      console.log('🔍 Click event:', {
+        hasFeature: !!feature,
+        layerId: feature?.layer?.id,
+        allFeatures:
+          event.features?.map((f) => ({ id: f.layer.id, source: f.source })) ||
+          [],
+      });
       if (feature && feature.layer.id.startsWith('fields-')) {
         // Field click - add coordinates and select field
+        console.log('🔍 Field layer clicked:', feature.layer.id);
+        console.log('🔍 Environmental data check:', {
+          bnbo_area_hectares: feature.properties?.bnbo_area_hectares,
+          wetland_area_hectares: feature.properties?.wetland_area_hectares,
+          unique_pesticide_products:
+            feature.properties?.unique_pesticide_products,
+          pesticides_kg_detail: feature.properties?.pesticides_kg_detail,
+          pesticides_liters_detail:
+            feature.properties?.pesticides_liters_detail,
+        });
         const fieldData = feature.properties as FieldAnalysisData;
         fieldData.click_coordinates = coordinates;
         onFieldSelect(fieldData);
+      } else if (
+        feature &&
+        (feature.layer.id.startsWith('bnbo-') ||
+          feature.layer.id.startsWith('wetlands-') ||
+          feature.layer.id.startsWith('water-projects-'))
+      ) {
+        // Environmental layer click - try to find underlying field data
+        console.log(
+          '🔍 Environmental layer clicked:',
+          feature.layer.id,
+          feature.properties
+        );
+
+        // Query for underlying field data at the same coordinate
+        const underlyingFieldData = await queryFieldDataAtCoordinate(
+          coordinates.lng,
+          coordinates.lat
+        );
+
+        if (underlyingFieldData) {
+          // Found underlying field data - show it in the sidebar
+          console.log('🔍 Found underlying field data:', underlyingFieldData);
+          onFieldSelect(underlyingFieldData);
+        } else {
+          // No underlying field data - just show coordinates
+          console.log('🔍 No underlying field data found');
+          onMapClick?.(coordinates);
+        }
+      } else if (feature) {
+        // Other layer click - log for debugging
+        console.log(
+          '🔍 Non-environmental layer clicked:',
+          feature.layer.id,
+          feature.properties
+        );
+        onMapClick?.(coordinates);
       } else {
         // Empty area click - only show coordinates if no field is selected
         onMapClick?.(coordinates);
       }
     },
-    [onFieldSelect, onMapClick]
+    [onFieldSelect, onMapClick, queryFieldDataAtCoordinate]
   );
 
   // Get display name for layer
@@ -1890,12 +2159,16 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     >
       {/* Search Bar - positioned to avoid sidebar collision */}
       <div
-        className={`pointer-events-auto absolute top-4 left-4 z-30 transition-all duration-200 md:left-[90px] md:w-80 lg:w-96 xl:w-[28rem] ${
-          hasRightPanel
-            ? 'right-[21rem] xl:right-[29rem]'
-            : 'right-4 md:right-auto'
+        className={`pointer-events-auto absolute z-30 transition-all duration-200 ${
+          // Mobile positioning - below hamburger menu with proper spacing
+          'top-[5rem] right-4 left-4 md:top-4 md:right-auto md:left-[90px] md:w-80 lg:w-96 xl:w-[28rem]'
+        } ${
+          hasRightPanel ? 'md:right-[21rem] xl:right-[29rem]' : 'md:right-4'
         }`}
-        style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
+        style={{
+          // Mobile: position below hamburger menu with proper spacing
+          top: 'max(4rem, calc(env(safe-area-inset-top) + 3rem))',
+        }}
       >
         <SearchBar
           onLocationSelect={handleLocationSelect}
@@ -1906,47 +2179,60 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
 
       <Map
         ref={mapRef}
-        viewState={currentViewState}
+        initialViewState={currentViewState}
         onMove={handleViewStateChange}
         style={{ width: '100%', height: '100%' }}
-        mapStyle={mapStyle}
+        mapStyle={styleLoadFailed ? fallbackMapStyle : currentMapStyle}
         interactiveLayerIds={interactiveLayerIds}
         onLoad={onMapLoad}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
+        onMouseMove={onHover}
         onMouseLeave={() => setHoverInfo(null)}
         onClick={onClick}
         cursor="grab"
-        // Explicitly enable map interactions
+        // Explicitly enable map interactions - try different approach
         dragPan={true}
         scrollZoom={true}
-        touchZoom={true}
-        touchRotate={false} // Disable rotation to avoid conflicts with pan
         doubleClickZoom={true}
         keyboard={true}
-        // Ensure proper touch handling
         touchPitch={false}
+        // Add debug logging for initialization
+        onError={(error: unknown) => {
+          console.error('🚨 Map error:', error);
+          // If it's a style loading error, try fallback
+          const errorMessage =
+            (error as { error?: { message?: string } })?.error?.message || '';
+          if (
+            errorMessage.includes('style') ||
+            errorMessage.includes('fetch')
+          ) {
+            console.warn('🔄 Style loading failed, trying fallback style');
+            setStyleLoadFailed(true);
+          }
+        }}
+        onStyleData={() => {
+          // Style loaded successfully
+        }}
+        onSourceData={() => {
+          // Source data loaded
+        }}
+        // Try to ensure the map is properly initialized
+        reuseMaps={false}
       >
         <NavigationControl position="top-right" />
 
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
 
-      {/* Color Legend - positioned to avoid mobile controls and sidebar collision */}
+      {/* Color Legend - positioned for mobile visibility and desktop sidebar avoidance */}
       <div
-        className="pointer-events-auto absolute left-4 z-30 max-w-[calc(100vw-2rem)] md:left-[90px] md:max-w-xs"
-        data-testid="color-legend-container"
+        className="pointer-events-auto absolute right-4 left-4 z-30 max-h-[40vh] max-w-[calc(100vw-2rem)] overflow-auto md:top-20 md:right-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs"
         style={{
-          // Position from bottom, but limit height to ensure it fits
-          bottom: '1rem',
-          maxHeight: 'calc(100vh - 8rem)', // Ensure it fits within viewport
-          overflow: 'auto', // Allow scrolling if content is too tall
+          // Mobile: position below search bar, accounting for safe areas
+          top: 'max(8rem, calc(env(safe-area-inset-top) + 7rem))',
         }}
+        data-testid="color-legend-container"
       >
-        <div style={{ maxHeight: '12rem', overflow: 'auto' }}>
-          <ColorLegend filterState={filterState} />
-        </div>
+        <ColorLegend filterState={filterState} />
       </div>
 
       {hoverInfo && <MapTooltip {...hoverInfo} />}

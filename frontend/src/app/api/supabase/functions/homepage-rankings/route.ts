@@ -18,9 +18,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category') || 'all';
     const limit = searchParams.get('limit') || '20';
+    const rankingId = searchParams.get('rankingId') || '';
 
     // Use server-side cached data (revalidates automatically every 7 days)
-    const data = await getCachedHomepageRankings(category, limit);
+    const data = await getCachedHomepageRankings(category, limit, rankingId);
 
     return NextResponse.json(data, {
       headers: CACHE_HEADERS,

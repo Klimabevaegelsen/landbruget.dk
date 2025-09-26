@@ -497,26 +497,31 @@ def perform_chunked_spatial_join(
     ]
     print(f"✅ Filtered to {filtered_count:,} buildings (from ~2.7M total)")
 
-    # Fix: Use ST_Union to merge multi-part geometries instead of ST_Dump
-    # This prevents duplicate rows for buildings with complex geometries
+    # Fix: Preserve individual geometries for buildings with multiple living properties
+    # Instead of ST_Union_Agg which merges separate dwelling units into one geometry,
+    # keep each dwelling unit as a separate row with its own geometry
     conn.execute("""
         CREATE OR REPLACE TABLE geodanmark_buildings AS
         SELECT
             BBRUUID,
             bygningstype,
-            ST_Union_Agg(geometri) as geometry,
-            ST_Area_Spheroid(ST_Union_Agg(geometri)) as building_area_m2
+            geometri as geometry,  -- Keep individual geometries, don't merge
+            ST_Area_Spheroid(geometri) as building_area_m2,
+            ROW_NUMBER() OVER (
+                PARTITION BY BBRUUID, bygningstype
+                ORDER BY ST_Area_Spheroid(geometri) DESC
+            ) as dwelling_unit_rank
         FROM geodanmark_buildings_filtered
         WHERE ST_IsValid(geometri)
-        GROUP BY BBRUUID, bygningstype
-        HAVING ST_Area_Spheroid(ST_Union_Agg(geometri)) > 1  -- Minimum 1m² building area
+        AND ST_Area_Spheroid(geometri) > 1  -- Minimum 1m² building area
     """)
 
     # Get optimized building count
     optimized_count = conn.execute("SELECT COUNT(*) FROM geodanmark_buildings").fetchone()[0]
 
     print(
-        f"✅ Optimized {filtered_count:,} → {optimized_count:,} building geometries with ST_Union"
+        f"✅ Preserved {optimized_count:,} individual dwelling unit geometries "
+        f"(from {filtered_count:,} raw geometries)"
     )
 
     # Process in chunks with memory management

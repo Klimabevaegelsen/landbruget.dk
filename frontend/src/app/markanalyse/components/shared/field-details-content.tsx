@@ -30,6 +30,14 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
   const [copiedCoordinates, setCopiedCoordinates] = useState(false);
 
   const formatNumber = (num: number, decimals: number = 2): string => {
+    // Don't display if the value is effectively zero
+    if (num < 0.001) return '< 0,001';
+
+    // For very small values, show more precision
+    if (num < 1 && decimals === 0) {
+      return num.toLocaleString('da-DK', { maximumFractionDigits: 3 });
+    }
+
     return num.toLocaleString('da-DK', { maximumFractionDigits: decimals });
   };
 
@@ -272,14 +280,14 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
             </div>
           )}
 
-        {/* Dosage Information */}
-        {((field.total_dosage_kg && field.total_dosage_kg > 0) ||
-          (field.total_dosage_liters && field.total_dosage_liters > 0) ||
-          (field.total_dosage_grams && field.total_dosage_grams > 0) ||
-          (field.total_dosage_ml && field.total_dosage_ml > 0) ||
+        {/* Dosage Information - only show if there are meaningful values */}
+        {((field.total_dosage_kg && field.total_dosage_kg > 0.001) ||
+          (field.total_dosage_liters && field.total_dosage_liters > 0.001) ||
+          (field.total_dosage_grams && field.total_dosage_grams > 0.001) ||
+          (field.total_dosage_ml && field.total_dosage_ml > 0.001) ||
           (field.total_dosage_tablets && field.total_dosage_tablets > 0)) && (
           <div className="mb-3 space-y-2 lg:space-y-3">
-            {field.total_dosage_kg && field.total_dosage_kg > 0 && (
+            {field.total_dosage_kg && field.total_dosage_kg > 0.001 && (
               <div className="flex items-center justify-between text-sm lg:text-base">
                 <span className="text-muted-foreground">
                   Total dosering (kg):
@@ -289,7 +297,7 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
                 </span>
               </div>
             )}
-            {field.total_dosage_liters && field.total_dosage_liters > 0 && (
+            {field.total_dosage_liters && field.total_dosage_liters > 0.001 && (
               <div className="flex items-center justify-between text-sm lg:text-base">
                 <span className="text-muted-foreground">
                   Total dosering (L):
@@ -299,7 +307,7 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
                 </span>
               </div>
             )}
-            {field.total_dosage_grams && field.total_dosage_grams > 0 && (
+            {field.total_dosage_grams && field.total_dosage_grams > 0.001 && (
               <div className="flex items-center justify-between text-sm lg:text-base">
                 <span className="text-muted-foreground">
                   Total dosering (g):
@@ -309,7 +317,7 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
                 </span>
               </div>
             )}
-            {field.total_dosage_ml && field.total_dosage_ml > 0 && (
+            {field.total_dosage_ml && field.total_dosage_ml > 0.001 && (
               <div className="flex items-center justify-between text-sm lg:text-base">
                 <span className="text-muted-foreground">
                   Total dosering (ml):
@@ -431,17 +439,17 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
         <div className="space-y-2 lg:space-y-3">
           {/* PFAS Information */}
           {field.pfas_applications && field.pfas_applications > 0 && (
-            <div className="bg-destructive/10 rounded-lg p-2 lg:p-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 lg:p-3 dark:border-amber-800 dark:bg-amber-950/20">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-destructive flex items-center text-sm font-medium lg:text-base">
+                <span className="flex items-center text-sm font-medium text-amber-700 lg:text-base dark:text-amber-300">
                   <TestTube className="mr-1 h-4 w-4" />
                   PFAS
                 </span>
-                <span className="text-destructive text-sm font-bold lg:text-base">
+                <span className="text-sm font-bold text-amber-800 lg:text-base dark:text-amber-200">
                   {field.pfas_applications} apps
                 </span>
               </div>
-              <div className="text-destructive/80 space-y-1 text-xs lg:text-sm">
+              <div className="space-y-1 text-xs text-amber-700/80 lg:text-sm dark:text-amber-300/80">
                 {field.total_pfas_active_ingredient_kg &&
                   field.total_pfas_active_ingredient_kg > 0 && (
                     <div className="flex justify-between">
@@ -467,18 +475,18 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
 
           {/* Diquat Information */}
           {field.diquat_applications && field.diquat_applications > 0 && (
-            <div className="bg-primary/10 rounded-lg p-2 lg:p-3">
+            <div className="rounded-lg border border-purple-200 bg-purple-50 p-2 lg:p-3 dark:border-purple-800 dark:bg-purple-950/20">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-primary text-sm font-medium lg:text-base">
+                <span className="text-sm font-medium text-purple-700 lg:text-base dark:text-purple-300">
                   💧 Diquat
                 </span>
-                <span className="text-primary text-sm font-bold lg:text-base">
+                <span className="text-sm font-bold text-purple-800 lg:text-base dark:text-purple-200">
                   {field.diquat_applications} apps
                 </span>
               </div>
               {field.total_diquat_belastning &&
                 field.total_diquat_belastning > 0 && (
-                  <div className="text-primary/80 flex justify-between text-xs lg:text-sm">
+                  <div className="flex justify-between text-xs text-purple-700/80 lg:text-sm dark:text-purple-300/80">
                     <span>Belastning:</span>
                     <span className="font-medium">
                       {formatNumber(field.total_diquat_belastning)}
@@ -491,17 +499,17 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
           {/* Glyphosate Information */}
           {field.glyphosate_applications &&
             field.glyphosate_applications > 0 && (
-              <div className="bg-muted/50 rounded-lg p-2 lg:p-3">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 lg:p-3 dark:border-blue-800 dark:bg-blue-950/20">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="flex items-center text-sm font-medium text-green-800 lg:text-base">
+                  <span className="flex items-center text-sm font-medium text-blue-700 lg:text-base dark:text-blue-300">
                     <Leaf className="mr-1 h-4 w-4" />
                     Glyphosate
                   </span>
-                  <span className="text-sm font-bold text-green-800 lg:text-base">
+                  <span className="text-sm font-bold text-blue-800 lg:text-base dark:text-blue-200">
                     {field.glyphosate_applications} apps
                   </span>
                 </div>
-                <div className="space-y-1 text-xs text-green-700 lg:text-sm">
+                <div className="space-y-1 text-xs text-blue-700/80 lg:text-sm dark:text-blue-300/80">
                   {field.total_glyphosate_active_ingredient_kg &&
                     field.total_glyphosate_active_ingredient_kg > 0 && (
                       <div className="flex justify-between">

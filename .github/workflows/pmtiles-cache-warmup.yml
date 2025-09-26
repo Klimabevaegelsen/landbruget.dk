@@ -3,7 +3,7 @@ name: PMTiles Cache Warmup
 on:
   # Run after data pipeline completes
   workflow_run:
-    workflows: ["Data Pipeline"]
+    workflows: ["Data Pipeline", "Generate PMTiles"]
     types: [completed]
     branches: [main]
 
@@ -42,25 +42,25 @@ jobs:
 
           # High priority files that should always be warmed
           HIGH_PRIORITY_FILES=(
-            "field_analysis_2023.pmtiles"
-            "field_analysis_2024.pmtiles"
-            "bnbo_areas.pmtiles"
-            "buildings_proximity_2024.pmtiles"
+            "pmtiles/field_analysis_2023.pmtiles"
+            "pmtiles/field_analysis_2024.pmtiles"
+            "pmtiles/bnbo_areas.pmtiles"
+            "pmtiles/wetlands_all.pmtiles"
+            "pmtiles/water_projects.pmtiles"
+            "pmtiles/buildings_proximity.pmtiles"
           )
 
           # All files for complete warmup
           ALL_FILES=(
             "${HIGH_PRIORITY_FILES[@]}"
-            "field_analysis_2022.pmtiles"
-            "field_analysis_2021.pmtiles"
-            "field_analysis_2020.pmtiles"
-            "field_analysis_2019.pmtiles"
-            "field_analysis_2018.pmtiles"
-            "field_analysis_2017.pmtiles"
-            "field_analysis_2016.pmtiles"
-            "field_analysis_2015.pmtiles"
-            "wetlands_all_2024.pmtiles"
-            "water_projects_2024.pmtiles"
+            "pmtiles/field_analysis_2022.pmtiles"
+            "pmtiles/field_analysis_2021.pmtiles"
+            "pmtiles/field_analysis_2020.pmtiles"
+            "pmtiles/field_analysis_2019.pmtiles"
+            "pmtiles/field_analysis_2018.pmtiles"
+            "pmtiles/field_analysis_2017.pmtiles"
+            "pmtiles/field_analysis_2016.pmtiles"
+            "pmtiles/field_analysis_2015.pmtiles"
           )
 
           # Determine which files to warm
@@ -75,12 +75,12 @@ jobs:
           # Function to warm a single file
           warm_file() {
             local filename=$1
-            local url="${FRONTEND_URL}/api/pmtiles/pmtiles/${filename}"
+            local url="${FRONTEND_URL}/api/pmtiles/${filename}"
 
             echo "🔥 Warming: ${filename}"
 
             # Make a range request to warm the cache (PMTiles header)
-            local response=$(curl -s -w "%{http_code}|%{size_download}|%{time_total}" \
+            local response=$(curl -s -L -w "%{http_code}|%{size_download}|%{time_total}" \
               -H "Range: bytes=0-16383" \
               -H "User-Agent: GitHub-Actions-Warmup/1.0" \
               -H "X-Cache-Warming: true" \
@@ -152,7 +152,7 @@ jobs:
           echo "🔍 Verifying cache status..."
 
           # Check a few key files to ensure they're accessible
-          KEY_FILES=("field_analysis_2023.pmtiles" "bnbo_areas.pmtiles")
+          KEY_FILES=("field_analysis_2024.pmtiles" "bnbo_areas.pmtiles" "wetlands_all.pmtiles")
 
           for filename in "${KEY_FILES[@]}"; do
             url="${FRONTEND_URL}/api/pmtiles/pmtiles/${filename}"

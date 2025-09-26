@@ -39,12 +39,12 @@ interface HomepageRankingsResponse {
 }
 
 const CATEGORY_FILTERS = [
-  { key: 'all', label: 'Alle kategorier', count: 0 },
-  { key: 'financial', label: 'Økonomi', count: 0 },
-  { key: 'field', label: 'Landbrugsareal', count: 0 },
-  { key: 'environment', label: 'Miljø', count: 0 },
-  { key: 'animal', label: 'Husdyr', count: 0 },
-  { key: 'worker', label: 'Medarbejdere', count: 0 },
+  { key: 'all', label: 'Alle kategorier', count: 26 },
+  { key: 'financial', label: 'Økonomi', count: 3 },
+  { key: 'field', label: 'Landbrugsareal', count: 4 },
+  { key: 'environment', label: 'Miljø', count: 8 },
+  { key: 'animal', label: 'Husdyr', count: 6 },
+  { key: 'worker', label: 'Medarbejdere', count: 5 },
 ];
 
 export default function HomepageRankings() {

@@ -287,6 +287,27 @@ class CVRAPIClient:
             self.log.error(f"Error fetching financial documents for CVR {cvr_number}: {e}")
             return []
 
+    def _safe_nested_get(self, data: Dict[str, Any], *keys: str, default=None):
+        """
+        Safely access nested dictionary values with null checks.
+
+        Args:
+            data: Dictionary to access
+            *keys: Sequence of keys to access nested values
+            default: Default value if any key is missing or None
+
+        Returns:
+            Value at the nested path or default
+        """
+        current = data
+        for key in keys:
+            if not isinstance(current, dict) or current is None:
+                return default
+            current = current.get(key)
+            if current is None:
+                return default
+        return current
+
     def _parse_company_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Parse raw company data from CVR API response with comprehensive field extraction.
@@ -306,16 +327,37 @@ class CVRAPIClient:
             self.log.warning(f"Expected dict but got {type(raw_data)} in _parse_company_data")
             return {}
 
-        if not raw_data or "hits" not in raw_data or not raw_data["hits"]["hits"]:
+        # Enhanced null safety checks for API response structure
+        if not raw_data or "hits" not in raw_data:
+            return {}
+
+        # Check if hits is None or not a dict
+        hits_data = raw_data["hits"]
+        if hits_data is None or not isinstance(hits_data, dict):
+            return {}
+
+        # Check if hits array exists and has content
+        if "hits" not in hits_data or not hits_data["hits"]:
             return {}
 
         # Extract the nested Vrvirksomhed structure (universal for all CVR records)
-        hit_source = raw_data["hits"]["hits"][0]["_source"]
-        if "Vrvirksomhed" not in hit_source:
+        first_hit = hits_data["hits"][0]
+        if first_hit is None or not isinstance(first_hit, dict) or "_source" not in first_hit:
+            return {}
+
+        hit_source = first_hit["_source"]
+        if (
+            hit_source is None
+            or not isinstance(hit_source, dict)
+            or "Vrvirksomhed" not in hit_source
+        ):
             self.log.error("No Vrvirksomhed structure found in response")
             return {}
 
         company = hit_source["Vrvirksomhed"]
+        if company is None or not isinstance(company, dict):
+            self.log.error("Vrvirksomhed is not a valid dict structure")
+            return {}
 
         # Initialize comprehensive parsed data structure
         parsed_data = {
@@ -345,12 +387,18 @@ class CVRAPIClient:
         # Extract all company names (current and historical)
         names = []
         for name_entry in company.get("navne", []):
+            if name_entry is None or not isinstance(name_entry, dict):
+                continue
+
+            periode = name_entry.get("periode", {}) or {}
             names.append(
                 {
                     "name": name_entry.get("navn"),
-                    "period_start": name_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": name_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": name_entry.get("periode", {}).get("gyldigTil") is None,
+                    "period_start": periode.get("gyldigFra") if isinstance(periode, dict) else None,
+                    "period_end": periode.get("gyldigTil") if isinstance(periode, dict) else None,
+                    "is_current": periode.get("gyldigTil") is None
+                    if isinstance(periode, dict)
+                    else False,
                 }
             )
         parsed_data["all_names"] = names
@@ -358,6 +406,9 @@ class CVRAPIClient:
         # Extract comprehensive address information
         addresses = []
         for address_entry in company.get("beliggenhedsadresse", []):
+            if address_entry is None or not isinstance(address_entry, dict):
+                continue
+
             address_parts = []
 
             # Build address string safely
@@ -369,6 +420,9 @@ class CVRAPIClient:
                 address_parts.append(f"{address_entry['etage']}.")
             if address_entry.get("sidedoer"):
                 address_parts.append(address_entry["sidedoer"])
+
+            # Safe access to nested kommune data
+            kommune = address_entry.get("kommune", {}) or {}
 
             addresses.append(
                 {
@@ -380,20 +434,25 @@ class CVRAPIClient:
                     "door": address_entry.get("sidedoer"),
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
-                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                    "municipality_code": kommune.get("kommuneKode")
+                    if isinstance(kommune, dict)
+                    else None,
                     "municipality_name": self._format_municipality_name(
-                        address_entry.get("kommune", {}).get("kommuneNavn")
+                        kommune.get("kommuneNavn") if isinstance(kommune, dict) else None
                     ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
-                    "period_start": address_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": address_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": address_entry.get("periode", {}).get("gyldigTil") is None,
+                    "period_start": (address_entry.get("periode", {}) or {}).get("gyldigFra"),
+                    "period_end": (address_entry.get("periode", {}) or {}).get("gyldigTil"),
+                    "is_current": (address_entry.get("periode", {}) or {}).get("gyldigTil") is None,
                 }
             )
 
         # Extract postal addresses (postadresse) if different from location addresses
         for address_entry in company.get("postadresse", []):
+            if address_entry is None or not isinstance(address_entry, dict):
+                continue
+
             address_parts = []
 
             # Build address string safely
@@ -406,6 +465,9 @@ class CVRAPIClient:
             if address_entry.get("sidedoer"):
                 address_parts.append(address_entry["sidedoer"])
 
+            # Safe access to nested kommune data
+            kommune = address_entry.get("kommune", {}) or {}
+
             addresses.append(
                 {
                     "address_type": "postadresse",
@@ -416,15 +478,17 @@ class CVRAPIClient:
                     "door": address_entry.get("sidedoer"),
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
-                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                    "municipality_code": kommune.get("kommuneKode")
+                    if isinstance(kommune, dict)
+                    else None,
                     "municipality_name": self._format_municipality_name(
-                        address_entry.get("kommune", {}).get("kommuneNavn")
+                        kommune.get("kommuneNavn") if isinstance(kommune, dict) else None
                     ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
-                    "period_start": address_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": address_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": address_entry.get("periode", {}).get("gyldigTil") is None,
+                    "period_start": (address_entry.get("periode", {}) or {}).get("gyldigFra"),
+                    "period_end": (address_entry.get("periode", {}) or {}).get("gyldigTil"),
+                    "is_current": (address_entry.get("periode", {}) or {}).get("gyldigTil") is None,
                 }
             )
 
@@ -433,17 +497,27 @@ class CVRAPIClient:
         # Extract contact information
         contact_info = {}
         for contact_entry in company.get("elektroniskPost", []):
-            if contact_entry.get("periode", {}).get("gyldigTil") is None:  # Current email
+            if contact_entry is None or not isinstance(contact_entry, dict):
+                continue
+            if (
+                self._safe_nested_get(contact_entry, "periode", "gyldigTil") is None
+            ):  # Current email
                 contact_info["email"] = contact_entry.get("kontaktoplysning")
                 break
 
         for contact_entry in company.get("telefonNummer", []):
-            if contact_entry.get("periode", {}).get("gyldigTil") is None:  # Current phone
+            if contact_entry is None or not isinstance(contact_entry, dict):
+                continue
+            if (
+                self._safe_nested_get(contact_entry, "periode", "gyldigTil") is None
+            ):  # Current phone
                 contact_info["phone"] = contact_entry.get("kontaktoplysning")
                 break
 
         for contact_entry in company.get("telefaxNummer", []):
-            if contact_entry.get("periode", {}).get("gyldigTil") is None:  # Current fax
+            if contact_entry is None or not isinstance(contact_entry, dict):
+                continue
+            if self._safe_nested_get(contact_entry, "periode", "gyldigTil") is None:  # Current fax
                 contact_info["fax"] = contact_entry.get("kontaktoplysning")
                 break
 
@@ -544,16 +618,16 @@ class CVRAPIClient:
                             {
                                 "postal_code": addr_entry.get("postnummer"),
                                 "city": addr_entry.get("postdistrikt"),
-                                "municipality_code": addr_entry.get("kommune", {}).get(
+                                "municipality_code": (addr_entry.get("kommune") or {}).get(
                                     "kommuneKode"
                                 ),
                                 "municipality_name": self._format_municipality_name(
-                                    addr_entry.get("kommune", {}).get("kommuneNavn")
+                                    (addr_entry.get("kommune") or {}).get("kommuneNavn")
                                 ),
                                 "country_code": addr_entry.get("landekode"),
-                                "period_start": addr_entry.get("periode", {}).get("gyldigFra"),
-                                "period_end": addr_entry.get("periode", {}).get("gyldigTil"),
-                                "is_current": addr_entry.get("periode", {}).get("gyldigTil")
+                                "period_start": (addr_entry.get("periode") or {}).get("gyldigFra"),
+                                "period_end": (addr_entry.get("periode") or {}).get("gyldigTil"),
+                                "is_current": (addr_entry.get("periode") or {}).get("gyldigTil")
                                 is None,
                             }
                         )
@@ -1803,9 +1877,9 @@ class CVRAPIClient:
                     "door": address_entry.get("sidedoer"),
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
-                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                    "municipality_code": (address_entry.get("kommune") or {}).get("kommuneKode"),
                     "municipality_name": self._format_municipality_name(
-                        address_entry.get("kommune", {}).get("kommuneNavn")
+                        (address_entry.get("kommune") or {}).get("kommuneNavn")
                     ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
@@ -1844,9 +1918,9 @@ class CVRAPIClient:
                     "door": address_entry.get("sidedoer"),
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
-                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
+                    "municipality_code": (address_entry.get("kommune") or {}).get("kommuneKode"),
                     "municipality_name": self._format_municipality_name(
-                        address_entry.get("kommune", {}).get("kommuneNavn")
+                        (address_entry.get("kommune") or {}).get("kommuneNavn")
                     ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
