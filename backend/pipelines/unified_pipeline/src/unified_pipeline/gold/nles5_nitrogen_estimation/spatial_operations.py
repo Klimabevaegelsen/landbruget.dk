@@ -930,6 +930,7 @@ class NLES5SpatialOperations:
                     CREATE OR REPLACE TABLE agricultural_fields_spatial AS
                     SELECT
                         field_id,
+                        field_uuid,  -- Preserve UUID from source data
                         cvr_number,
                         area_ha,
                         crop_code,

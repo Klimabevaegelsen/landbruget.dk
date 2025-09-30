@@ -850,23 +850,45 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     if count > 0:
                         self.log.info(f"✅ Found {count:,} records in table: {table_name}")
 
-                        # Get sample data from this table
+                        # Check what columns exist in this table
+                        columns = self.conn.execute(f"""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = '{table_name}'
+                        """).fetchall()
+                        col_set = {col[0].lower() for col in columns}
+                        
+                        # Build column selection based on what exists
+                        soil_col = (
+                            'soil_code' if 'soil_code' in col_set else
+                            'soil_type' if 'soil_type' in col_set else
+                            'soil_type_category' if 'soil_type_category' in col_set else
+                            "'unknown'"
+                        )
+                        crop_col = (
+                            'crop_type' if 'crop_type' in col_set else
+                            'm_code' if 'm_code' in col_set else
+                            "'unknown'"
+                        )
+                        weather_col = 'w_code' if 'w_code' in col_set else "'n/a'"
+                        nitrogen_col = (
+                            'nitrogen_washout_kg_ha' if 'nitrogen_washout_kg_ha' in col_set else
+                            'nitrogen_leaching_nles5' if 'nitrogen_leaching_nles5' in col_set else
+                            'nitrogen_washout_kg_n_ha' if 'nitrogen_washout_kg_n_ha' in col_set else
+                            '0'
+                        )
+
+                        # Get sample data from this table with dynamic column selection
                         preview_data = self.conn.execute(f"""
                             SELECT
                                 field_id,
                                 year,
-                                COALESCE(soil_type, soil_type_category, 'unknown') as soil_type,
-                                COALESCE(m_code, 'unknown') as m_code,
-                                COALESCE(w_code, 'unknown') as w_code,
-                                COALESCE(
-                                    nitrogen_washout_kg_ha, nitrogen_leaching_nles5,
-                                    nitrogen_washout_kg_n_ha, 0
-                                ) as nitrogen_washout_kg_ha
+                                {soil_col} as soil_type,
+                                {crop_col} as m_code,
+                                {weather_col} as w_code,
+                                {nitrogen_col} as nitrogen_washout_kg_ha
                             FROM {table_name}
-                            WHERE COALESCE(
-                                nitrogen_washout_kg_ha, nitrogen_leaching_nles5,
-                                nitrogen_washout_kg_n_ha, 0
-                            ) > 0
+                            WHERE {nitrogen_col} > 0
                             ORDER BY random()
                             LIMIT 5
                         """).fetchall()
@@ -904,26 +926,14 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                                 f"nitrogen washout values"
                             )
 
-                        # Show statistics for this table
+                        # Show statistics for this table using the detected nitrogen column
                         stats = self.conn.execute(f"""
                             SELECT
                                 COUNT(*) as total_records,
-                                COUNT(CASE WHEN COALESCE(
-                                    nitrogen_washout_kg_ha, nitrogen_leaching_nles5,
-                                    nitrogen_washout_kg_n_ha, 0
-                                ) > 0 THEN 1 END) as positive_estimates,
-                                AVG(COALESCE(
-                                    nitrogen_washout_kg_ha, nitrogen_leaching_nles5,
-                                    nitrogen_washout_kg_n_ha, 0
-                                )) as avg_nitrogen,
-                                MIN(COALESCE(
-                                    nitrogen_washout_kg_ha, nitrogen_leaching_nles5,
-                                    nitrogen_washout_kg_n_ha, 0
-                                )) as min_nitrogen,
-                                MAX(COALESCE(
-                                    nitrogen_washout_kg_ha, nitrogen_leaching_nles5,
-                                    nitrogen_washout_kg_n_ha, 0
-                                )) as max_nitrogen
+                                COUNT(CASE WHEN {nitrogen_col} > 0 THEN 1 END) as positive_estimates,
+                                AVG({nitrogen_col}) as avg_nitrogen,
+                                MIN({nitrogen_col}) as min_nitrogen,
+                                MAX({nitrogen_col}) as max_nitrogen
                             FROM {table_name}
                         """).fetchone()
 
@@ -1723,10 +1733,11 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 self.log.error("❌ No batched results to save")
                 return
 
-            # Create output table structure based on batched results
+            # Rename batched results to gold table (avoids copying 1.7M records)
+            self.conn.execute("DROP TABLE IF EXISTS nles5_nitrogen_estimates_gold")
             self.conn.execute("""
-                CREATE OR REPLACE TABLE nles5_nitrogen_estimates_gold AS
-                SELECT * FROM nles5_estimates_final_batched
+                ALTER TABLE nles5_estimates_final_batched 
+                RENAME TO nles5_nitrogen_estimates_gold
             """)
 
             # Log final statistics
@@ -1768,133 +1779,18 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
     def _add_field_uuids_to_gold_table(self, table_name: str) -> None:
         """
-        Add field UUIDs to the final results table by joining with agricultural fields data.
+        Verify field UUIDs are present in the final results table.
 
-        This function performs a LEFT JOIN on field_id and year to populate the field_uuid column
-        that was left NULL during calculations.
+        field_uuid is now preserved throughout the pipeline from the source agricultural fields data,
+        eliminating the need for an expensive JOIN operation at the end.
 
         Args:
-            table_name: Name of the table to add UUIDs to
+            table_name: Name of the table to verify UUIDs in
         """
         try:
-            self.log.info(f"🔗 Adding field UUIDs to {table_name} via join on field_id and year...")
+            self.log.info(f"✅ Verifying field UUIDs in {table_name} (no JOIN needed - UUIDs preserved throughout pipeline)...")
 
-            # Get all years present in the results table
-            years_result = self.conn.execute(f"""
-                SELECT DISTINCT year FROM {table_name} ORDER BY year
-            """).fetchall()
-
-            if not years_result:
-                self.log.warning(f"⚠️ No years found in {table_name}")
-                return
-
-            years = [row[0] for row in years_result]
-            self.log.info(f"📅 Found years in results: {years}")
-
-            # Create a temporary lookup table with field UUIDs from agricultural fields
-            self.log.info("📊 Creating UUID lookup table from agricultural fields data...")
-
-            # Load agricultural fields data for all required years to create UUID lookup
-            for year in years:
-                try:
-                    # Check if we have agricultural fields data for this year
-                    available_years = self._get_available_fvm_marker_years()
-                    if year not in available_years:
-                        self.log.warning(f"⚠️ No agricultural fields data available for year {year}")
-                        continue
-
-                    dataset_name = f"fvm_marker_{year}"
-                    gcs_path = self._get_latest_silver_path(dataset_name)
-
-                    # Load the agricultural fields data with UUIDs for this year
-                    temp_table = f"agricultural_fields_uuid_lookup_{year}"
-                    # Note: query_parquet_direct automatically adds "FROM read_parquet(...)"
-                    self.gcs_access.query_parquet_direct(
-                        gcs_path,
-                        f"""
-                        SELECT DISTINCT
-                            field_id,
-                            field_uuid,
-                            {year} as year
-                        """,
-                        temp_table,
-                    )
-
-                    # Filter the results after loading
-                    self.conn.execute(f"""
-                        DELETE FROM {temp_table}
-                        WHERE field_id IS NULL OR field_uuid IS NULL
-                    """)
-
-                    # Check if this is the first year - create or union
-                    if year == years[0]:
-                        self.conn.execute(f"""
-                            CREATE OR REPLACE TABLE field_uuid_lookup AS
-                            SELECT * FROM {temp_table}
-                        """)
-                    else:
-                        self.conn.execute(f"""
-                            INSERT INTO field_uuid_lookup
-                            SELECT * FROM {temp_table}
-                        """)
-
-                    # Clean up temporary table
-                    self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
-
-                except Exception as e:
-                    self.log.warning(f"⚠️ Could not load UUID data for year {year}: {e}")
-                    continue
-
-            # Check if we have any UUID lookup data
-            try:
-                lookup_count = self.conn.execute(
-                    "SELECT COUNT(*) FROM field_uuid_lookup"
-                ).fetchone()[0]
-                self.log.info(
-                    f"📊 Created UUID lookup table with {lookup_count:,} field-year combinations"
-                )
-
-                if lookup_count == 0:
-                    self.log.error(
-                        "❌ No UUID lookup data available - cannot populate field_uuid column"
-                    )
-                    return
-            except Exception as e:
-                self.log.error(
-                    f"❌ No UUID lookup table was created successfully - "
-                    f"all years failed to load: {e}"
-                )
-                self.log.warning(f"⚠️ Field UUIDs will remain NULL in {table_name}")
-                return
-
-            # Perform the join to update field_uuid values
-            self.log.info(f"🔗 Updating field_uuid column in {table_name}...")
-
-            # Use a more reliable approach for counting updated rows
-            before_count = self.conn.execute(
-                f"SELECT COUNT(*) FROM {table_name} WHERE field_uuid IS NOT NULL"
-            ).fetchone()[0]
-
-            self.conn.execute(f"""
-                UPDATE {table_name}
-                SET field_uuid = lookup.field_uuid
-                FROM field_uuid_lookup lookup
-                WHERE {table_name}.field_id = lookup.field_id
-                  AND {table_name}.year = lookup.year
-                  AND lookup.field_uuid IS NOT NULL
-            """)
-
-            after_count = self.conn.execute(
-                f"SELECT COUNT(*) FROM {table_name} WHERE field_uuid IS NOT NULL"
-            ).fetchone()[0]
-            updated_rows = after_count - before_count
-
-            self.log.info(
-                f"✅ Updated field_uuid for {updated_rows:,} rows "
-                f"({before_count:,} → {after_count:,})"
-            )
-
-            # Report on UUID coverage
+            # Simple verification that UUIDs are present
             total_rows = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             uuid_rows = self.conn.execute(
                 f"SELECT COUNT(*) FROM {table_name} WHERE field_uuid IS NOT NULL"
@@ -1908,23 +1804,17 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             if coverage_pct < 95:
                 self.log.warning(
                     f"⚠️ Low UUID coverage ({coverage_pct:.1f}%) - "
-                    f"some field_id/year combinations may not have UUIDs"
+                    f"some fields may not have UUIDs from source data"
                 )
-
-            # Clean up lookup table
-            self.conn.execute("DROP TABLE IF EXISTS field_uuid_lookup")
+            else:
+                self.log.info(f"✅ UUID coverage is good ({coverage_pct:.1f}%)")
 
         except Exception as e:
-            self.log.error(f"❌ Failed to add field UUIDs to {table_name}: {e}")
-            # Clean up any partial lookup table
-            try:
-                self.conn.execute("DROP TABLE IF EXISTS field_uuid_lookup")
-            except Exception:
-                pass
+            self.log.error(f"❌ Failed to verify field UUIDs in {table_name}: {e}")
             raise
 
     def _add_field_uuids_to_final_results(self) -> None:
-        """Add field UUIDs to the final NLES5 estimates table for single pipeline approach."""
+        """Verify field UUIDs are present in final NLES5 estimates table (UUIDs preserved throughout pipeline)."""
         try:
             # Check if we have the main estimates table
             if (
@@ -1936,8 +1826,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             ):
                 self._add_field_uuids_to_gold_table("nles5_nitrogen_estimates_gold")
 
-                # Re-collect field IDs/UUIDs after UUID join to update validation
-                self.log.info("🔍 Re-collecting field IDs after UUID join...")
+                # Re-collect field IDs/UUIDs after verification
+                self.log.info("🔍 Re-collecting field IDs after UUID verification...")
                 self.field_id_validator.collect_field_ids_after_processing()
             else:
                 self.log.warning("⚠️ No nles5_nitrogen_estimates_gold table found for UUID addition")

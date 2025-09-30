@@ -86,12 +86,12 @@ class NLES5PipelineOrchestrator:
         # NOTE: Comprehensive data validation will run after silver data loading in each batch
         
         # Initialize final results table with proper schema - FIXED: Ensure area_ha supports large values
-        # Note: field_uuid will be joined after calculations are complete
+        # Note: field_uuid is now preserved throughout pipeline from source data
         self.conn.execute("""
             DROP TABLE IF EXISTS nles5_estimates_final_batched;
             CREATE TABLE nles5_estimates_final_batched (
                 field_id VARCHAR,
-                field_uuid VARCHAR,  -- Will be populated via join with agricultural fields data
+                field_uuid VARCHAR,  -- Preserved from source agricultural fields data
                 block_id VARCHAR, 
                 cvr_number VARCHAR,
                 year INTEGER,
@@ -164,12 +164,12 @@ class NLES5PipelineOrchestrator:
             self.log.error("❌ No NLES5 estimates generated across all batches")
             return
             
-        # Add UUIDs to final batched results via join
-        self.log.info("🔗 Adding field UUIDs to final batched results...")
+        # Verify UUIDs in final batched results (no join needed - preserved throughout pipeline)
+        self.log.info("✅ Verifying field UUIDs in final batched results...")
         self.processor._add_field_uuids_to_gold_table("nles5_estimates_final_batched")
         
-        # Re-collect field IDs/UUIDs after UUID join to update validation
-        self.log.info("🔍 Re-collecting field IDs after UUID join for batched results...")
+        # Re-collect field IDs/UUIDs after UUID verification
+        self.log.info("🔍 Re-collecting field IDs after UUID verification for batched results...")
         self.processor.field_id_validator.collect_field_ids_after_processing()
         
         # Log preview of final batched results
@@ -482,12 +482,12 @@ class NLES5PipelineOrchestrator:
                     self.log.info(f"🔍 DEBUG area_ha stats for {estimates_table}: min={area_stats[0]:.4f}, max={area_stats[1]:.4f}, avg={area_stats[2]:.4f}, count={area_stats[3]:,}")
                     
                     # Append batch results to final table with explicit casting
-                    # Note: field_uuid will be populated later via join
+                    # Note: field_uuid is now preserved throughout pipeline from source data
                     self.conn.execute(f"""
                         INSERT INTO nles5_estimates_final_batched
                         SELECT 
                             field_id,
-                            CAST(NULL AS VARCHAR) as field_uuid,  -- Will be populated via join with agricultural fields data
+                            field_uuid,  -- Preserved from source agricultural fields data
                             block_id,
                             cvr_number,
                             year,
@@ -688,11 +688,12 @@ class NLES5PipelineOrchestrator:
             self.log.info(f"🎯 Processing NLES5 for batch target years: {batch_years}")
             
             # Initialize final results table for this batch - FIXED: Proper schema to prevent DECIMAL(2,1) inference
-            # Note: field_uuid excluded from calculations, will be added via join
+            # Note: field_uuid now preserved throughout pipeline from source data
             batch_table_name = f"nles5_estimates_batch_{batch_years[0]}_{batch_years[-1]}"
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {batch_table_name} (
                     field_id VARCHAR,
+                    field_uuid VARCHAR,  -- Preserved from source agricultural fields data
                     block_id VARCHAR,
                     cvr_number VARCHAR,
                     year INTEGER,

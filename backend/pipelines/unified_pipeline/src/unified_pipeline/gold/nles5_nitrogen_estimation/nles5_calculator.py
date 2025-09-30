@@ -49,6 +49,25 @@ class NLES5Calculator:
         """
         try:
             self.log.info("🌧️  IMPLEMENTING DETAILED PERCOLATION EFFECTS FROM REFERENCE NLES5")
+            
+            # DIAGNOSTIC: Check input data before filtering
+            input_count = self.conn.execute("""
+                SELECT COUNT(*) FROM fields_with_climate_soil_crops
+            """).fetchone()[0]
+            
+            percolation_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN total_percolation IS NOT NULL THEN 1 END) as with_percolation,
+                    COUNT(CASE WHEN total_percolation IS NULL THEN 1 END) as without_percolation
+                FROM fields_with_climate_soil_crops
+            """).fetchone()
+            
+            self.log.info(f"📊 Input data for percolation effects: {input_count:,} total fields")
+            self.log.info(f"   ✅ With percolation data: {percolation_stats[1]:,} ({percolation_stats[1]/max(input_count,1)*100:.1f}%)")
+            if percolation_stats[2] > 0:
+                self.log.warning(f"   ⚠️  Missing percolation data: {percolation_stats[2]:,} ({percolation_stats[2]/max(input_count,1)*100:.1f}%)")
+                self.log.warning(f"   These {percolation_stats[2]:,} fields will be excluded from NLES5 calculations")
 
             # Add detailed soil effect calculation from reference implementation
             self.conn.execute("""
@@ -854,6 +873,32 @@ class NLES5Calculator:
             self.log.info(
                 f"Join optimization: nitrogen_base={base_count:,}, fertilizer_accounts={fertilizer_size:,}"
             )
+            
+            # DIAGNOSTIC: Check CVR matching potential
+            if fertilizer_size > 0:
+                cvr_diagnostic = self.conn.execute("""
+                    SELECT 
+                        (SELECT COUNT(DISTINCT cvr_number) FROM nitrogen_base WHERE cvr_number IS NOT NULL) as fields_unique_cvr,
+                        (SELECT COUNT(DISTINCT cvr_number) FROM fertilizer_accounts WHERE cvr_number IS NOT NULL) as fert_unique_cvr,
+                        (SELECT COUNT(DISTINCT nb.cvr_number) 
+                         FROM nitrogen_base nb 
+                         INNER JOIN fertilizer_accounts fa ON nb.cvr_number = fa.cvr_number AND nb.year = fa.year
+                        ) as matching_cvr,
+                        (SELECT AVG(tn_t_ha) FROM fertilizer_accounts WHERE tn_t_ha IS NOT NULL) as avg_fertilizer_quota
+                """).fetchone()
+                
+                if cvr_diagnostic:
+                    self.log.info(f"🔍 CVR MATCHING DIAGNOSTIC:")
+                    self.log.info(f"   Fields with CVR: {cvr_diagnostic[0]:,} unique CVR numbers")
+                    self.log.info(f"   Fertilizer accounts: {cvr_diagnostic[1]:,} unique CVR numbers")
+                    self.log.info(f"   Matching CVRs: {cvr_diagnostic[2]:,} ({cvr_diagnostic[2]/max(cvr_diagnostic[0],1)*100:.1f}% of field CVRs)")
+                    if cvr_diagnostic[3]:
+                        self.log.info(f"   Avg fertilizer quota in data: {cvr_diagnostic[3]:.1f} kg N/ha")
+                    
+                    if cvr_diagnostic[2] == 0:
+                        self.log.warning("⚠️  NO CVR MATCHES between fields and fertilizer accounts!")
+                        self.log.warning("   This means all fields will get default/zero fertilizer values")
+                        self.log.warning("   Check: Are CVR numbers properly formatted? Same year data?")
 
             if base_count > 1_000_000:
                 # Use chunked processing for large datasets
@@ -1081,9 +1126,8 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # NOTE: CHECKPOINT not supported for in-memory databases
-                self.conn.execute("PRAGMA optimize")
-                self.log.info(f"   💾 Memory optimization after combined chunk {chunk_idx + 1}")
+                # DuckDB automatically manages memory - no manual optimization needed
+                self.log.info(f"   💾 Processed combined chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
         self.log.info(f"✅ All {len(batch_files)} combined batches saved. Loading and combining...")
@@ -1203,9 +1247,8 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # NOTE: CHECKPOINT not supported for in-memory databases
-                self.conn.execute("PRAGMA optimize")
-                self.log.info(f"   💾 Memory optimization after fertilizer chunk {chunk_idx + 1}")
+                # DuckDB automatically manages memory - no manual optimization needed
+                self.log.info(f"   💾 Processed fertilizer chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
         self.log.info(
@@ -1321,10 +1364,9 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # NOTE: CHECKPOINT not supported for in-memory databases
-                self.conn.execute("PRAGMA optimize")
+                # DuckDB automatically manages memory - no manual optimization needed
                 self.log.info(
-                    f"   💾 Memory optimization after nitrogen fixation chunk {chunk_idx + 1}"
+                    f"   💾 Processed nitrogen fixation chunk {chunk_idx + 1}"
                 )
 
         # Now load all batches back and combine them
@@ -1445,9 +1487,8 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # NOTE: CHECKPOINT not supported for in-memory databases
-                self.conn.execute("PRAGMA optimize")
-                self.log.info(f"   💾 Memory optimization after field plan chunk {chunk_idx + 1}")
+                # DuckDB automatically manages memory - no manual optimization needed
+                self.log.info(f"   💾 Processed field plan chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
         self.log.info(
@@ -1685,6 +1726,7 @@ class NLES5Calculator:
             CREATE TEMPORARY TABLE fields_with_fertilizer AS
             SELECT
                 f.field_id,
+                f.field_uuid,  -- Preserve UUID from source
                 f.cvr_number,
                 f.year,
                 f.geom,
@@ -1733,6 +1775,7 @@ class NLES5Calculator:
             WITH deduplicated_fields AS (
                 SELECT DISTINCT
                     field_id,
+                    field_uuid,  -- Preserve UUID
                     cvr_number,
                     year,
                     area_ha,
@@ -1760,6 +1803,7 @@ class NLES5Calculator:
             )
             SELECT
                 f.field_id,
+                f.field_uuid,  -- Preserve field UUID from source data
                 -- Generate block_id from available FVM marker data
                 CASE
                     WHEN f.field_id IS NOT NULL AND f.cvr_number IS NOT NULL THEN

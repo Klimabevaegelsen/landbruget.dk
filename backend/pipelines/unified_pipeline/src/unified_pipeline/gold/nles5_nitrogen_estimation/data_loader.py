@@ -539,7 +539,8 @@ class NLES5DataLoader:
             self.log.info(f"✅ Successfully processed GKEA field plan data: {count:,} records with proper field_id mapping")
             
             # ENHANCEMENT: Apply agricultural pattern matching to improve GKEA-FVM matching
-            self._apply_agricultural_pattern_matching_sync(target_table)
+            # NOTE: Disabled due to async/event loop conflicts in pipeline context
+            # self._apply_agricultural_pattern_matching_sync(target_table)
             
             # Log sample data for verification
             sample = self.db.execute(f"""

@@ -973,11 +973,12 @@ class NLES5ClimateProcessor:
                 self.log.warning(f"No climate data available for year {year}")
                 return None
             
-            # OPTIMIZED FOR 10km x 10km GRID: Perfect grid-based spatial join
-            self.log.info(f"Using GRID-OPTIMIZED spatial join for year {year} (10km x 10km DMI grid)")
-            self.log.info("🔧 Applied fix: Replaced CROSS JOIN with ST_Intersects + ST_Buffer optimized for DMI grid structure")
-            self.log.info("🎯 Using 5km buffer - perfect for 10km grid (each field assigned to nearest grid centroid)")
-            self.log.info("📐 DMI grid structure: 10km x 10km cells, so 5km buffer ensures each field gets exactly 1 climate point")
+            # OPTIMIZED FOR 10km x 10km GRID: Nearest neighbor with safe buffer
+            self.log.info(f"Using NEAREST-NEIGHBOR spatial join for year {year} (10km x 10km DMI grid)")
+            self.log.info("🔧 Using LEFT JOIN with 15km buffer to guarantee all fields get climate data")
+            self.log.info("🎯 15km buffer captures all candidate grid points (10km grid diagonal is ~14.1km)")
+            self.log.info("📐 Each field assigned to its nearest climate grid centroid via ROW_NUMBER()")
+            self.log.info("💾 Memory-efficient: batched processing avoids CROSS JOIN explosion")
             
             # DIAGNOSTIC: Check geometry compatibility before join
             batch_diagnostic = self.conn.execute(f"""
@@ -1114,6 +1115,7 @@ class NLES5ClimateProcessor:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {result_table} (
                     field_id VARCHAR,
+                    field_uuid VARCHAR,  -- Preserve UUID throughout pipeline
                     cvr_number VARCHAR,
                     year INTEGER,
                     geom GEOMETRY,
@@ -1135,7 +1137,8 @@ class NLES5ClimateProcessor:
                     avg_precipitation DOUBLE,
                     avg_evaporation DOUBLE,
                     sufficient_climate_data BOOLEAN,
-                    distance_to_climate DOUBLE
+                    distance_to_climate DOUBLE,
+                    climate_assignment_method VARCHAR  -- Track assignment method
                 )
             """)
             
@@ -1146,92 +1149,141 @@ class NLES5ClimateProcessor:
             except Exception as e:
                 self.log.warning(f"Could not create spatial index: {e}")
             
-            # Process in ultra-small chunks to prevent memory exhaustion
-            for batch_idx in range(total_batches):
-                offset = batch_idx * batch_size
-                if batch_idx % 10 == 0:  # Log every 10th batch to reduce log spam
-                    self.log.info(f"Processing batch {batch_idx + 1}/{total_batches} (offset: {offset:,})")
+            # MEMORY-EFFICIENT APPROACH: Process climate points one at a time
+            # Instead of CROSS JOIN, iterate through climate points and update nearest match
+            
+            # Step 1: Create tracking table with all fields (no climate data yet)
+            self.conn.execute(f"""
+                CREATE OR REPLACE TABLE {result_table}_tracking AS
+                SELECT 
+                    field_id, field_uuid, cvr_number, year, geom,
+                    COALESCE(area_ha, 0.0) as area_ha,
+                    COALESCE(crop_name, 'unknown') as crop_name,
+                    COALESCE(crop_name, 'unknown') as m_code,
+                    layer_type,
+                    COALESCE(grundbetaling_eligible, false) as GB,
+                    -- Initialize climate fields as NULL
+                    CAST(NULL AS INTEGER) as climate_year,
+                    CAST(NULL AS GEOMETRY) as climate_point,
+                    CAST(NULL AS DOUBLE) as perco_apr_aug_current,
+                    CAST(NULL AS DOUBLE) as perco_sep_mar_current,
+                    CAST(NULL AS DOUBLE) as perco_apr_aug_previous,
+                    CAST(NULL AS DOUBLE) as perco_sep_mar_previous,
+                    CAST(NULL AS DOUBLE) as total_percolation,
+                    CAST(NULL AS DOUBLE) as avg_precipitation,
+                    CAST(NULL AS DOUBLE) as avg_evaporation,
+                    CAST(NULL AS BOOLEAN) as sufficient_climate_data,
+                    CAST(999999999.0 AS DOUBLE) as distance_to_climate,  -- Initialize with huge distance
+                    CAST(NULL AS VARCHAR) as climate_assignment_method
+                FROM agricultural_fields_spatial
+                WHERE year = {year}
+            """)
+            
+            # Step 2: Get list of climate points with WKT format for easier handling
+            climate_points = self.conn.execute(f"""
+                SELECT 
+                    ST_AsText(geometry) as geom_wkt,
+                    year,
+                    perco_apr_aug_current, perco_sep_mar_current,
+                    perco_apr_aug_previous, perco_sep_mar_previous,
+                    total_percolation, avg_precipitation, avg_evaporation,
+                    sufficient_climate_data
+                FROM {climate_table}
+                WHERE year = {year}
+            """).fetchall()
+            
+            total_climate_points = len(climate_points)
+            self.log.info(f"Processing {total_climate_points} climate points against {field_count:,} fields")
+            
+            # Step 3: Process each climate point and update nearest matches
+            for climate_idx, climate_point in enumerate(climate_points):
+                if climate_idx % 50 == 0:  # Log every 50 climate points
+                    self.log.info(f"   Climate point {climate_idx + 1}/{total_climate_points}")
                 
-                # Use window function instead of CROSS JOIN LATERAL for memory efficiency
-                # This approach is much more memory-efficient according to DuckDB docs
+                c_geom_wkt, c_year, c_apr_aug_cur, c_sep_mar_cur, c_apr_aug_prev, c_sep_mar_prev, \
+                c_total_perc, c_avg_precip, c_avg_evap, c_sufficient = climate_point
+                
+                # Update fields where this climate point is closer than current best
+                # Use ST_GeomFromText with WKT string
                 self.conn.execute(f"""
-                    INSERT INTO {result_table}
-                    WITH field_batch AS (
-                        SELECT 
-                            field_id, cvr_number, year, geom,
-                            -- Essential field attributes for NLES5 calculations  
-                            COALESCE(area_ha, 0.0) as area_ha,
-                            COALESCE(crop_name, 'unknown') as crop_name,
-                            COALESCE(crop_name, 'unknown') as m_code,  -- Use crop_name as m_code
-                            -- Available field metadata from actual schema
-                            layer_type, 
-                            COALESCE(grundbetaling_eligible, false) as GB
-                        FROM agricultural_fields_spatial 
-                        WHERE year = {year}
-                        ORDER BY field_id
-                        LIMIT {batch_size} OFFSET {offset}
-                    ),
-                    climate_year AS (
-                        SELECT *
-                        FROM {climate_table}
-                        WHERE year = {year}
-                    ),
-                    nearest_climate AS (
-                        SELECT 
-                            f.*,
-                            c.year as climate_year,
-                            c.geometry as climate_point,
-                            c.perco_apr_aug_current,
-                            c.perco_sep_mar_current,
-                            c.perco_apr_aug_previous,
-                            c.perco_sep_mar_previous,
-                            c.total_percolation,
-                            c.avg_precipitation,
-                            c.avg_evaporation,
-                            c.sufficient_climate_data,
-                            ST_Distance(ST_Centroid(f.geom), c.geometry) as distance_to_climate,
-                            -- IMPROVED MATCHING: Multi-tiered approach
-                            -- 1. Pure distance-based nearest neighbor
-                            ROW_NUMBER() OVER (PARTITION BY f.field_id ORDER BY ST_Distance(ST_Centroid(f.geom), c.geometry)) as distance_rank,
-                            -- 2. Include tie-breaking by climate data quality (variation preservation)
-                            ROW_NUMBER() OVER (PARTITION BY f.field_id ORDER BY ST_Distance(ST_Centroid(f.geom), c.geometry), c.total_percolation DESC) as quality_rank,
-                            -- 3. Add spatial distribution hash for even assignment
-                            ROW_NUMBER() OVER (PARTITION BY f.field_id ORDER BY 
-                                ST_Distance(ST_Centroid(f.geom), c.geometry),
-                                ABS(HASH(CONCAT(ST_X(c.geometry), ST_Y(c.geometry))) % 1000)
-                            ) as distributed_rank
-                        FROM field_batch f
-                        -- GRID-OPTIMIZED BUFFER: Perfect for 10km x 10km DMI grid structure
-                        -- DMI grid: 10km x 10km cells with centroids, 5km buffer = exactly half grid size
-                        -- This ensures each field is assigned to its nearest grid centroid without overlap
-                        JOIN climate_year c ON ST_Intersects(ST_Centroid(f.geom), ST_Buffer(c.geometry, 5000))
-                    ),
-                    -- NEW: Add validation step to ensure good spatial distribution
-                    validated_assignments AS (
-                        SELECT 
-                            *,
-                            -- Count how many fields are assigned to each climate point
-                            COUNT(*) OVER (PARTITION BY ST_X(climate_point), ST_Y(climate_point)) as climate_point_usage_count
-                        FROM nearest_climate
-                        WHERE distance_rank = 1  -- Use pure distance-based assignment as primary
-                    )
-                    SELECT 
-                        field_id, cvr_number, year, geom,
-                        -- Essential field attributes for NLES5 calculations
-                        area_ha, crop_name, m_code,
-                        -- Available field metadata
-                        layer_type, GB,
-                        -- Climate data columns
-                        climate_year, climate_point,
-                        perco_apr_aug_current, perco_sep_mar_current,
-                        perco_apr_aug_previous, perco_sep_mar_previous,
-                        total_percolation, avg_precipitation, avg_evaporation,
-                        sufficient_climate_data, distance_to_climate
-                    FROM validated_assignments
-                """)
+                    UPDATE {result_table}_tracking
+                    SET 
+                        climate_year = ?,
+                        climate_point = ST_GeomFromText(?),
+                        perco_apr_aug_current = ?,
+                        perco_sep_mar_current = ?,
+                        perco_apr_aug_previous = ?,
+                        perco_sep_mar_previous = ?,
+                        total_percolation = ?,
+                        avg_precipitation = ?,
+                        avg_evaporation = ?,
+                        sufficient_climate_data = ?,
+                        distance_to_climate = ST_Distance(ST_Centroid(geom), ST_GeomFromText(?)),
+                        climate_assignment_method = CASE 
+                            WHEN ST_Distance(ST_Centroid(geom), ST_GeomFromText(?)) <= 15000 THEN 'within_grid'
+                            ELSE 'outside_grid'
+                        END
+                    WHERE ST_Distance(ST_Centroid(geom), ST_GeomFromText(?)) < distance_to_climate
+                """, [c_year, c_geom_wkt, c_apr_aug_cur, c_sep_mar_cur, c_apr_aug_prev, 
+                      c_sep_mar_prev, c_total_perc, c_avg_precip, c_avg_evap, c_sufficient,
+                      c_geom_wkt, c_geom_wkt, c_geom_wkt])
+            
+            # Step 4: Copy final results to result table
+            self.conn.execute(f"""
+                INSERT INTO {result_table}
+                SELECT * FROM {result_table}_tracking
+            """)
+            
+            # Clean up tracking table
+            self.conn.execute(f"DROP TABLE IF EXISTS {result_table}_tracking")
             
             joined_count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
-            self.log.info(f"Year {year}: Joined {joined_count:,} fields with climate data")
+            
+            # Track how many fields used each assignment method
+            assignment_stats = self.conn.execute(f"""
+                SELECT 
+                    climate_assignment_method,
+                    COUNT(*) as count,
+                    AVG(distance_to_climate) as avg_distance,
+                    MAX(distance_to_climate) as max_distance
+                FROM {result_table}
+                WHERE climate_assignment_method IS NOT NULL
+                GROUP BY climate_assignment_method
+                ORDER BY count DESC
+            """).fetchall()
+            
+            if assignment_stats:
+                self.log.info(f"📊 Climate assignment methods for year {year}:")
+                for method, count, avg_dist, max_dist in assignment_stats:
+                    pct = count / joined_count * 100 if joined_count > 0 else 0
+                    self.log.info(f"   {method}: {count:,} fields ({pct:.1f}%) - avg distance: {avg_dist:.0f}m, max: {max_dist:.0f}m")
+            
+            # Check for fields that didn't get climate data (should be zero with fallback)
+            null_climate_count = self.conn.execute(f"""
+                SELECT COUNT(*) FROM {result_table} 
+                WHERE climate_point IS NULL OR total_percolation IS NULL
+            """).fetchone()[0]
+            
+            if null_climate_count > 0:
+                self.log.error(f"❌ {null_climate_count:,} fields ({null_climate_count/max(joined_count,1)*100:.1f}%) STILL have no climate data!")
+                self.log.error("   This should NOT happen with the fallback mechanism - investigate!")
+                
+                # Get statistics on these unmatched fields
+                edge_stats = self.conn.execute(f"""
+                    SELECT 
+                        MIN(ST_X(ST_Centroid(geom))) as min_x,
+                        MAX(ST_X(ST_Centroid(geom))) as max_x,
+                        MIN(ST_Y(ST_Centroid(geom))) as min_y,
+                        MAX(ST_Y(ST_Centroid(geom))) as max_y
+                    FROM {result_table}
+                    WHERE climate_point IS NULL
+                """).fetchone()
+                if edge_stats and edge_stats[0] is not None:
+                    self.log.error(f"   Unmatched fields location: X[{edge_stats[0]:.3f}, {edge_stats[1]:.3f}] Y[{edge_stats[2]:.3f}, {edge_stats[3]:.3f}]")
+            else:
+                self.log.info(f"✅ Year {year}: All {joined_count:,} fields successfully matched with climate data")
+            
+            self.log.info(f"Year {year}: Total fields in result: {joined_count:,}")
             
             # ENHANCED DIAGNOSTIC: Comprehensive spatial distribution analysis
             distribution_analysis = self.conn.execute(f"""

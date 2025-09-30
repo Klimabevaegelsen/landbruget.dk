@@ -604,11 +604,19 @@ class NLES5Validator:
                 'data_quality_score': 0.0  # Initialize with 0 score, will be calculated based on actual data quality
             }
             
-            # Validate each major table
+            # Validate each major table (only check tables that should exist at this point)
+            # Note: This validation runs at Phase 3.5, before NLES5 calculations
             tables_to_validate = [
-                'agricultural_fields',
+                'agricultural_fields',  # Loaded in Phase 2
+                # 'nles5_nitrogen_estimates',  # Created in Phase 4 - skip for now
+                # 'fields_with_climate_soil_crops'  # Created in Phase 4 - skip for now
+            ]
+            
+            # Optionally validate result tables if they exist (for final validation)
+            optional_result_tables = [
                 'nles5_nitrogen_estimates',
-                'fields_with_climate_soil_crops'
+                'fields_with_climate_soil_crops',
+                'nles5_nitrogen_estimates_gold'
             ]
             
             for table_name in tables_to_validate:
@@ -618,6 +626,22 @@ class NLES5Validator:
                 except Exception as e:
                     self.log.warning(f"Could not validate table {table_name}: {e}")
                     validation_results[table_name] = {"error": str(e)}
+            
+            # Try to validate optional tables if they exist (don't fail if they don't)
+            for table_name in optional_result_tables:
+                try:
+                    table_exists = self.conn.execute(f"""
+                        SELECT COUNT(*) FROM information_schema.tables 
+                        WHERE table_name = '{table_name}'
+                    """).fetchone()[0] > 0
+                    
+                    if table_exists:
+                        table_stats = self._validate_table_quality(table_name)
+                        validation_results[table_name] = table_stats
+                        self.log.info(f"✅ Optional table {table_name} validated successfully")
+                except Exception as e:
+                    # Don't log warnings for optional tables that don't exist yet
+                    pass
             
             # Perform specialized validations
             try:
@@ -814,6 +838,12 @@ class NLES5Validator:
         recommendations = validation_results.get('recommendations', [])
         errors = validation_results.get('errors', [])
         
+        # Tables that should exist at validation time (Phase 3.5)
+        required_tables = ['agricultural_fields']
+        
+        # Tables that are created later (Phase 4) - don't warn about these
+        optional_tables = ['nles5_nitrogen_estimates', 'fields_with_climate_soil_crops', 'nles5_nitrogen_estimates_gold']
+        
         for table_name, stats in validation_results.items():
             if table_name in ['passed', 'errors', 'recommendations', 'data_quality_score']:
                 continue  # Skip metadata fields
@@ -822,9 +852,12 @@ class NLES5Validator:
                 continue  # Skip non-dictionary values
                 
             if stats.get("error"):
-                recommendations.append(f"🔧 Fix {table_name}: {stats['error']}")
-                errors.append(f"Table error: {table_name}")
-                # Don't set passed=False for missing tables that aren't critical to validation
+                # Only generate recommendations for required tables
+                # Optional tables might not exist yet (they're created in Phase 4)
+                if table_name in required_tables:
+                    recommendations.append(f"🔧 Fix {table_name}: {stats['error']}")
+                    errors.append(f"Table error: {table_name}")
+                # Skip errors for optional tables - they're created later in the pipeline
                 continue
             
             if stats.get("empty"):
