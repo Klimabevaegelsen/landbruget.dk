@@ -1829,7 +1829,7 @@ class NLES5Calculator:
                         POWER((23.51 +
                                COALESCE(crop_params.nles5_factor, 0) +
                                1.0 * (
-                                   0.456793 * COALESCE(f.tn_t_ha * 1000, 0) +  -- Convert tons/ha to kg/ha for soil N
+                                   0.456793 * (LEAST(COALESCE(f.tn_t_ha, 0), 0.5) * 1000) +  -- Cap at 0.5 t/ha, convert to kg/ha
                                    0.049570 * COALESCE(f.mineral_n_foraar, 0) +
                                    0.157044 * COALESCE(f.mineral_n_eft, 0) +
                                    0.038245 * COALESCE(f.mineral_n_udb, 0) +
