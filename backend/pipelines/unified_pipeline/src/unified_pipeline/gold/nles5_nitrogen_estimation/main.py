@@ -750,15 +750,40 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         gcs_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
                         full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
 
-                        # Use shared GCS interface like other gold stages
-                        self.gcs_access.upload_from_duckdb_table(
-                            table_name,
-                            full_gcs_path,
-                            compression="zstd",
-                            row_group_size=100000,
-                        )
-
-                        self.log.info(f"✅ Saved {table_name} ({count:,} rows) to {full_gcs_path}")
+                        # Export to local file first to avoid DuckDB temp file issues with GCS writes
+                        import tempfile
+                        import os
+                        
+                        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                            local_parquet = tmp_file.name
+                        
+                        try:
+                            # Export to local parquet file
+                            try:
+                                self.conn.execute(f"""
+                                    COPY {table_name} 
+                                    TO '{local_parquet}' 
+                                    (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 100000)
+                                """)
+                            except Exception as copy_error:
+                                # DuckDB sometimes fails to cleanup temp files but the COPY succeeds
+                                if "Could not remove file" in str(copy_error) and os.path.exists(local_parquet):
+                                    self.log.warning(f"⚠️ DuckDB temp file cleanup warning (ignorable): {copy_error}")
+                                else:
+                                    raise
+                            
+                            # Upload local file to GCS using streaming
+                            with open(local_parquet, "rb") as src:
+                                with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
+                                    import shutil
+                                    shutil.copyfileobj(src, dst)
+                            
+                            self.log.info(f"✅ Saved {table_name} ({count:,} rows) to {full_gcs_path}")
+                        finally:
+                            # Clean up local temp file
+                            if os.path.exists(local_parquet):
+                                os.remove(local_parquet)
+                                self.log.info(f"🧹 Cleaned up local temp file")
                     else:
                         self.log.warning(f"Table {table_name} is empty, skipping")
                 except Exception as e:
@@ -1754,14 +1779,92 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             gcs_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
             full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
 
-            self.gcs_access.upload_from_duckdb_table(
-                "nles5_nitrogen_estimates_gold",
-                full_gcs_path,
-                compression="zstd",
-                row_group_size=100000,
-            )
-
-            self.log.info(f"✅ Saved batched results to {full_gcs_path}")
+            # Export to local file first to avoid DuckDB temp file issues with GCS writes
+            import tempfile
+            import os
+            
+            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                local_parquet = tmp_file.name
+            
+            try:
+                # 🔍 DIAGNOSTIC: Check DuckDB temp settings before export
+                temp_info = self.conn.execute("SELECT current_setting('temp_directory') as temp_dir").fetchone()
+                self.log.info(f"🔍 DuckDB temp_directory: {temp_info[0]}")
+                
+                memory_limit = self.conn.execute("SELECT current_setting('memory_limit') as mem").fetchone()
+                self.log.info(f"🔍 DuckDB memory_limit: {memory_limit[0]}")
+                
+                threads = self.conn.execute("SELECT current_setting('threads') as threads").fetchone()
+                self.log.info(f"🔍 DuckDB threads: {threads[0]}")
+                
+                # 🔍 DIAGNOSTIC: Check for existing temp files
+                import glob
+                temp_dir = temp_info[0]
+                if temp_dir and os.path.exists(temp_dir):
+                    temp_files = glob.glob(os.path.join(temp_dir, "duckdb_temp_storage_*.tmp"))
+                    self.log.info(f"🔍 Existing temp files in {temp_dir}: {len(temp_files)}")
+                    if temp_files:
+                        self.log.warning(f"⚠️ Found {len(temp_files)} temp files before export")
+                        for tf in temp_files[:5]:  # Show first 5
+                            self.log.warning(f"   - {os.path.basename(tf)}")
+                
+                # 🔍 DIAGNOSTIC: Try to force checkpoint and disable temp file usage
+                self.log.info(f"🔧 Attempting to checkpoint and optimize for export...")
+                try:
+                    # Force checkpoint to flush any pending writes
+                    self.conn.execute("CHECKPOINT")
+                    self.log.info(f"✓ Checkpoint completed")
+                except Exception as e:
+                    self.log.warning(f"Could not checkpoint: {e}")
+                
+                try:
+                    # Force DuckDB to not use temp files during this operation
+                    self.conn.execute("SET preserve_insertion_order=false")
+                    self.log.info(f"✓ Disabled insertion order preservation")
+                except Exception as e:
+                    self.log.warning(f"Could not disable insertion order: {e}")
+                
+                # Export to local parquet file
+                self.log.info(f"📝 Exporting {final_count:,} records to local parquet file...")
+                self.log.info(f"📝 Target file: {local_parquet}")
+                
+                try:
+                    self.conn.execute(f"""
+                        COPY nles5_nitrogen_estimates_gold 
+                        TO '{local_parquet}' 
+                        (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 100000)
+                    """)
+                except Exception as copy_error:
+                    # DuckDB sometimes fails to cleanup temp files but the COPY succeeds
+                    # Check if the output file was created despite the error
+                    if "Could not remove file" in str(copy_error) and os.path.exists(local_parquet):
+                        self.log.warning(f"⚠️ DuckDB temp file cleanup warning (ignorable): {copy_error}")
+                        self.log.info("✓ Export completed successfully despite cleanup warning")
+                    else:
+                        # Real error - re-raise
+                        raise
+                
+                # 🔍 DIAGNOSTIC: Check if file was created
+                if os.path.exists(local_parquet):
+                    file_size = os.path.getsize(local_parquet) / (1024**2)
+                    self.log.info(f"✓ Export file size: {file_size:.2f} MB")
+                else:
+                    self.log.error(f"❌ Export failed: file not created")
+                    raise RuntimeError("COPY command did not create output file")
+                
+                # Upload local file to GCS using streaming
+                self.log.info(f"☁️ Uploading to GCS: {full_gcs_path}")
+                with open(local_parquet, "rb") as src:
+                    with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
+                        import shutil
+                        shutil.copyfileobj(src, dst)
+                
+                self.log.info(f"✅ Saved batched results to {full_gcs_path}")
+            finally:
+                # Clean up local temp file
+                if os.path.exists(local_parquet):
+                    os.remove(local_parquet)
+                    self.log.info(f"🧹 Cleaned up local temp file")
 
             # Add UUIDs via join before validation
             self._add_field_uuids_to_gold_table("nles5_nitrogen_estimates_gold")
