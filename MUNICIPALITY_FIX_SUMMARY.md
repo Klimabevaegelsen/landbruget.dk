@@ -103,26 +103,27 @@ Added `municipality-details` to `.github/workflows/deploy-edge-function.yml`
 
 ## Current Status
 
-### ✅ Completed
+### ✅ ALL FIXED AND WORKING
 
-- [x] Created `municipality_land_use_summary` (100 municipalities, 2024 data)
-- [x] Created `municipality_production_summary` (99 municipalities, antibiotic data)
+- [x] Created `municipality_land_use_summary` materialized view
+- [x] Created `municipality_production_summary` materialized view
+- [x] **Created `v_municipality_land_use_summary` VIEW (PostgREST-visible)**
+- [x] **Created `v_municipality_production_summary` VIEW (PostgREST-visible)**
 - [x] Granted all permissions
 - [x] Created all indexes
+- [x] Updated Edge Functions to use v_ views
 - [x] Deployed both Edge Functions
 - [x] Updated CI/CD workflow
+- [x] Created migration file for permanent fix
+- [x] **Verified all 10 categories working on /kommuner page**
 
-### ⏳ Waiting
+### 🎯 The Real Problem
 
-- [ ] PostgREST schema cache to refresh (5-10 minutes typical)
+**PostgreSQL's `information_schema` does NOT expose MATERIALIZED VIEWS!**
 
-The PostgREST schema cache in Supabase can take 5-10 minutes to refresh after:
+PostgREST introspects using `information_schema`, so it could never see our materialized views. The solution was to create regular VIEWs that wrap the materialized views - these VIEWs appear in `information_schema` and are discoverable by PostgREST.
 
-1. Creating new tables/views
-2. Sending NOTIFY commands
-3. Redeploying Edge Functions
-
-This is a known Supabase limitation - the cache expires on a timer.
+See [MUNICIPALITY_POSTGREST_FIX.md](./MUNICIPALITY_POSTGREST_FIX.md) for full technical details.
 
 ## Verification Steps
 
