@@ -210,22 +210,6 @@ class FieldAnalysisPMTilesGenerator:
         pesticide_fields = [
             "pesticide_applications as total_pesticide_applications",
             "pesticides_used",
-            # New categorized product details
-            "pfas_products_detail",
-            "pfas_applications",
-            "diquat_products_detail",
-            "diquat_applications",
-            "glyphosate_products_detail",
-            "glyphosate_applications",
-            "other_products_detail",
-            "other_applications",
-            # Legacy unit-based details
-            "pesticides_kg_detail",
-            "pesticides_liters_detail",
-            "pesticides_grams_detail",
-            "pesticides_ml_detail",
-            "pesticides_tablets_detail",
-            # Proximity data
             "residential_buildings_formatted as residential_buildings_proximity",
             "educational_facilities_formatted as educational_facilities_proximity",
             "water_distance_formatted as water_distance_proximity",
@@ -247,9 +231,6 @@ class FieldAnalysisPMTilesGenerator:
             schema_result = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
             available_columns = {row[0] for row in schema_result}
 
-            logger.info(f"Available columns in {table_name}: {len(available_columns)} columns")
-            logger.debug(f"Columns: {sorted(available_columns)}")
-
             # Filter fields to only those available
             selected_fields = []
 
@@ -257,22 +238,17 @@ class FieldAnalysisPMTilesGenerator:
             for field in base_fields:
                 if field in available_columns:
                     selected_fields.append(field)
-                else:
-                    logger.debug(f"Base field not available: {field}")
 
             # Add optional fields if they exist
-            for field_group_name, field_group in [
-                ("environmental", environmental_fields),
-                ("production", production_fields),
-                ("pesticide", pesticide_fields),
-                ("nles5", nles5_fields),
+            for field_group in [
+                environmental_fields,
+                production_fields,
+                pesticide_fields,
+                nles5_fields,
             ]:
-                added_count = 0
                 for field in field_group:
                     if field in available_columns:
                         selected_fields.append(field)
-                        added_count += 1
-                logger.info(f"Added {added_count}/{len(field_group)} {field_group_name} fields")
 
             # Always include geometry last - convert to GeoJSON format with coordinate swap for tippecanoe
             if "geometry" in available_columns:
@@ -281,8 +257,6 @@ class FieldAnalysisPMTilesGenerator:
                 logger.info("Geometry column found and added (converted to GeoJSON with coordinate swap)")
             else:
                 logger.error("No geometry column found! This will cause 0 features.")
-
-            logger.info(f"Total selected fields: {len(selected_fields)}")
 
         except Exception as e:
             logger.warning(f"Could not determine table schema, using base fields: {e}")
