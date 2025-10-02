@@ -274,10 +274,11 @@ class FieldAnalysisPMTilesGenerator:
                         added_count += 1
                 logger.info(f"Added {added_count}/{len(field_group)} {field_group_name} fields")
 
-            # Always include geometry last - convert to GeoJSON format for tippecanoe
+            # Always include geometry last - convert to GeoJSON format with coordinate swap for tippecanoe
             if "geometry" in available_columns:
-                selected_fields.append("ST_AsGeoJSON(geometry) as geometry")
-                logger.info("Geometry column found and added (converted to GeoJSON)")
+                # Use ST_FlipCoordinates to ensure lon,lat order for GeoJSON/tippecanoe compatibility
+                selected_fields.append("ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry")
+                logger.info("Geometry column found and added (converted to GeoJSON with coordinate swap)")
             else:
                 logger.error("No geometry column found! This will cause 0 features.")
 
@@ -285,7 +286,7 @@ class FieldAnalysisPMTilesGenerator:
 
         except Exception as e:
             logger.warning(f"Could not determine table schema, using base fields: {e}")
-            selected_fields = base_fields + ["ST_AsGeoJSON(geometry) as geometry"]
+            selected_fields = base_fields + ["ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry"]
 
         # Build query
         fields_str = ",\n    ".join(selected_fields)
