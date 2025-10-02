@@ -259,26 +259,29 @@ class FieldAnalysisPMTilesGenerator:
                     "Geometry column found and added (converted to GeoJSON with coordinate swap)"
                 )
 
-                # DEBUG: Log coordinate bounds to verify swap worked  
+                # DEBUG: Log coordinate bounds to verify swap worked
                 try:
                     bounds_result = self.conn.execute(
                         f"SELECT ST_XMin(ST_Extent(geometry)), ST_YMin(ST_Extent(geometry)), "
-                        f"ST_XMax(ST_Extent(geometry)), ST_YMax(ST_Extent(geometry)) FROM {table_name}"
+                        f"ST_XMax(ST_Extent(geometry)), ST_YMax(ST_Extent(geometry)) "
+                        f"FROM {table_name}"
                     )
                     min_x, min_y, max_x, max_y = bounds_result.fetchone()
                     logger.info(
-                        f"DEBUG: Original bounds: X({min_x:.6f} to {max_x:.6f}), Y({min_y:.6f} to {max_y:.6f})"
+                        f"DEBUG: Original bounds: X({min_x:.6f} to {max_x:.6f}), "
+                        f"Y({min_y:.6f} to {max_y:.6f})"
                     )
 
                     bounds_flipped = self.conn.execute(
                         f"SELECT ST_XMin(ST_Extent(ST_FlipCoordinates(geometry))), "
                         f"ST_YMin(ST_Extent(ST_FlipCoordinates(geometry))), "
                         f"ST_XMax(ST_Extent(ST_FlipCoordinates(geometry))), "
-                        f"ST_YMax(ST_Extent(ST_FlipCoordinates(geometry))) FROM {table_name}"
+                        f"ST_YMax(ST_Extent(ST_FlipCoordinates(geometry))) "
+                        f"FROM {table_name}"
                     )
                     flip_min_x, flip_min_y, flip_max_x, flip_max_y = bounds_flipped.fetchone()
                     logger.info(
-                        f"DEBUG: Flipped bounds: X({flip_min_x:.6f} to {flip_max_x:.6f}), Y({flip_min_y:.6f} to {flip_max_y:.6f})"
+                        f"DEBUG: Flipped bounds: X({flip_min_x:.6f} to {flip_max_x:.6f}), "\n                        f"Y({flip_min_y:.6f} to {flip_max_y:.6f})"
                     )
                 except Exception as debug_error:
                     logger.warning(f"Could not log coordinate bounds: {debug_error}")
