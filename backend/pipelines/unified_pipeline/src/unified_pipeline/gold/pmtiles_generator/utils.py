@@ -138,7 +138,7 @@ class GeoJSONWriter:
             duckdb_conn: DuckDB connection
             query: SQL query that returns geometry and properties
             output_path: Path for output GeoJSON file
-            properties_columns: List of columns to include as properties 
+            properties_columns: List of columns to include as properties
                 (if None, include all non-geometry)
 
         Returns:
