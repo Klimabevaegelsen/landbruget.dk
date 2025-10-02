@@ -232,8 +232,10 @@ class GeoJSONWriter:
                         sample_coord = first_coord[0][0]  # [lon, lat]
                     else:
                         sample_coord = first_coord  # Point [lon, lat]
-                    
-                    logger.info(f"DEBUG: First coordinate in GeoJSON: [{sample_coord[0]:.6f}, {sample_coord[1]:.6f}]")
+
+                    logger.info(
+                        f"DEBUG: First coordinate in GeoJSON: "\n                        f"[{sample_coord[0]:.6f}, {sample_coord[1]:.6f}]"
+                    )
                     if sample_coord[0] > 50:
                         logger.error("❌ GeoJSON has lat,lon order (WRONG) - first value > 50")
                     else:

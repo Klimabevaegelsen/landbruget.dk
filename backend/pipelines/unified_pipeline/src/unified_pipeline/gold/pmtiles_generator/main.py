@@ -48,7 +48,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
         # Install and load spatial extension on inherited connection
         self.duckdb_conn.execute("INSTALL spatial")
         self.duckdb_conn.execute("LOAD spatial")
-        
+
         # Ensure GCS credentials are properly configured for DuckDB
         self._ensure_gcs_credentials()
 
@@ -80,14 +80,14 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
 
             if gcs_access_key and gcs_secret_key:
                 logger.info("✅ Found GCS HMAC credentials, configuring DuckDB")
-                
+
                 # Install and load httpfs extension for GCS access
                 self.duckdb_conn.execute("INSTALL httpfs")
                 self.duckdb_conn.execute("LOAD httpfs")
-                
+
                 # Set correct GCS region (landbrugsdata-raw-data bucket is in EUROPE-WEST1)
                 self.duckdb_conn.execute("SET s3_region = 'europe-west1'")
-                
+
                 # Create persistent GCS secret for native access
                 self.duckdb_conn.execute(f"""
                     CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
@@ -99,7 +99,9 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
                 logger.info("✅ DuckDB GCS HMAC authentication configured successfully")
             else:
                 logger.warning("⚠️  GCS HMAC credentials not found in environment variables")
-                logger.warning("    Set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY for optimal performance")
+                logger.warning(
+                    "    Set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY for optimal performance"
+                )
         except Exception as e:
             logger.error(f"❌ Failed to setup GCS HMAC authentication: {e}")
             # Don't raise - let it fall back to service account auth
@@ -456,7 +458,9 @@ async def main():
             if isinstance(buildings_pmtiles, dict):
                 successful_buildings = sum(1 for path in buildings_pmtiles.values() if path)
                 total_buildings = len(buildings_pmtiles)
-                logger.info(f"Buildings PMTiles: {successful_buildings}/{total_buildings} successful")
+                logger.info(
+                    f"Buildings PMTiles: {successful_buildings}/{total_buildings} successful"
+                )
             else:
                 # Single result
                 success = buildings_pmtiles is not None
