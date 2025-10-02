@@ -187,21 +187,22 @@ class PMTilesDataLoader:
             DuckDB table name or None if failed
         """
         try:
-            path = self.config.field_production_path.format(year=year)
-            gcs_path = f"gs://{self.config.gcs_bucket}/{path}"
+            base_path = f"gs://{self.config.gcs_bucket}/gold/field_production_{year}"
+
+            # Find the latest timestamped directory
+            gcs_path = await self._find_latest_timestamped_path(base_path)
+            if not gcs_path:
+                logger.warning(f"Field production data not found in: {base_path}")
+                return None
 
             logger.info(f"Loading field production data from {gcs_path}")
-
-            if not await asyncio.to_thread(self.gcs.file_exists, gcs_path):
-                logger.warning(f"Field production data not found: {gcs_path}")
-                return None
 
             table_name = f"field_production_{year}"
 
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
+            FROM read_parquet('{gcs_path}data.parquet')
             WHERE year = {year}
             """
 
@@ -230,21 +231,22 @@ class PMTilesDataLoader:
         """
         try:
             next_year = year + 1
-            path = self.config.pesticide_proximity_path.format(year=year, next_year=next_year)
-            gcs_path = f"gs://{self.config.gcs_bucket}/{path}"
+            base_path = f"gs://{self.config.gcs_bucket}/gold/pesticide_proximity_{year}_{next_year}"
+
+            # Find the latest timestamped directory
+            gcs_path = await self._find_latest_timestamped_path(base_path)
+            if not gcs_path:
+                logger.warning(f"Pesticide proximity data not found in: {base_path}")
+                return None
 
             logger.info(f"Loading pesticide proximity data from {gcs_path}")
-
-            if not await asyncio.to_thread(self.gcs.file_exists, gcs_path):
-                logger.warning(f"Pesticide proximity data not found: {gcs_path}")
-                return None
 
             table_name = f"pesticide_proximity_{year}"
 
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
+            FROM read_parquet('{gcs_path}pesticide_proximity_{year}_{next_year}.parquet')
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -431,7 +433,7 @@ class PMTilesDataLoader:
         try:
             # First, check if BMD data is available and enhance pesticide data
             enhanced_pesticide_table = await self._enhance_pesticide_with_bmd(pesticide_table)
-            
+
             # Create enhanced pesticide summary with detailed product information
             summary_query = f"""
             CREATE OR REPLACE TABLE temp_pesticide_summary AS
@@ -439,31 +441,31 @@ class PMTilesDataLoader:
                 field_uuid,
                 COUNT(*) as pesticide_applications,
                 STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
-                
+
                 -- Enhanced categorized product details with risk information
                 STRING_AGG(
-                    CASE WHEN COALESCE(contains_pfas, false) = true 
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' || 
+                    CASE WHEN COALESCE(contains_pfas, false) = true
+                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                          COALESCE(DosageUnit, 'ukendt') || ':' ||
                          COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
                          COALESCE(signal_word, '')
                     END, ';'
                 ) FILTER (WHERE COALESCE(contains_pfas, false) = true) as pfas_products_detail,
                 COUNT(CASE WHEN COALESCE(contains_pfas, false) = true THEN 1 END) as pfas_applications,
-                
+
                 STRING_AGG(
-                    CASE WHEN COALESCE(contains_diquat, false) = true 
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' || 
+                    CASE WHEN COALESCE(contains_diquat, false) = true
+                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                          COALESCE(DosageUnit, 'ukendt') || ':' ||
                          COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
                          COALESCE(signal_word, '')
                     END, ';'
                 ) FILTER (WHERE COALESCE(contains_diquat, false) = true) as diquat_products_detail,
                 COUNT(CASE WHEN COALESCE(contains_diquat, false) = true THEN 1 END) as diquat_applications,
-                
+
                 STRING_AGG(
-                    CASE WHEN COALESCE(contains_glyphosate, false) = true 
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' || 
+                    CASE WHEN COALESCE(contains_glyphosate, false) = true
+                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                          COALESCE(DosageUnit, 'ukendt') || ':' ||
                          COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
                          COALESCE(signal_word, '')
@@ -472,54 +474,54 @@ class PMTilesDataLoader:
                 COUNT(
                     CASE WHEN COALESCE(contains_glyphosate, false) = true THEN 1 END
                 ) as glyphosate_applications,
-                
+
                 STRING_AGG(
-                    CASE WHEN COALESCE(contains_pfas, false) = false 
-                              AND COALESCE(contains_diquat, false) = false 
+                    CASE WHEN COALESCE(contains_pfas, false) = false
+                              AND COALESCE(contains_diquat, false) = false
                               AND COALESCE(contains_glyphosate, false) = false
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' || 
+                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                          COALESCE(DosageUnit, 'ukendt')
                     END, ';'
-                ) FILTER (WHERE COALESCE(contains_pfas, false) = false 
-                                AND COALESCE(contains_diquat, false) = false 
+                ) FILTER (WHERE COALESCE(contains_pfas, false) = false
+                                AND COALESCE(contains_diquat, false) = false
                                 AND COALESCE(contains_glyphosate, false) = false
                 ) as other_products_detail,
-                COUNT(CASE WHEN COALESCE(contains_pfas, false) = false 
-                              AND COALESCE(contains_diquat, false) = false 
-                              AND COALESCE(contains_glyphosate, false) = false 
+                COUNT(CASE WHEN COALESCE(contains_pfas, false) = false
+                              AND COALESCE(contains_diquat, false) = false
+                              AND COALESCE(contains_glyphosate, false) = false
                               THEN 1 END) as other_applications,
-                
+
                 -- Legacy unit-based aggregations for backward compatibility
                 STRING_AGG(
-                    CASE WHEN DosageUnit IN ('2', 'kg') 
+                    CASE WHEN DosageUnit IN ('2', 'kg')
                     THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                     END, ';'
                 ) FILTER (WHERE DosageUnit IN ('2', 'kg')) as pesticides_kg_detail,
-                
+
                 STRING_AGG(
-                    CASE WHEN DosageUnit IN ('4', 'L', 'liter') 
+                    CASE WHEN DosageUnit IN ('4', 'L', 'liter')
                     THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                     END, ';'
                 ) FILTER (WHERE DosageUnit IN ('4', 'L', 'liter')) as pesticides_liters_detail,
-                
+
                 STRING_AGG(
-                    CASE WHEN DosageUnit IN ('1', 'g', 'gram') 
+                    CASE WHEN DosageUnit IN ('1', 'g', 'gram')
                     THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                     END, ';'
                 ) FILTER (WHERE DosageUnit IN ('1', 'g', 'gram')) as pesticides_grams_detail,
-                
+
                 STRING_AGG(
-                    CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter') 
+                    CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
                     THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                     END, ';'
                 ) FILTER (WHERE DosageUnit IN ('5', 'ml', 'milliliter')) as pesticides_ml_detail,
-                
+
                 STRING_AGG(
-                    CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter') 
+                    CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
                     THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                     END, ';'
                 ) FILTER (WHERE DosageUnit IN ('3', 'tablet', 'tabletter')) as pesticides_tablets_detail,
-                
+
                 -- Proximity data
                 residential_buildings_formatted,
                 educational_facilities_formatted,
@@ -539,7 +541,7 @@ class PMTilesDataLoader:
                 i.*,
                 ps.pesticide_applications,
                 ps.pesticides_used,
-                
+
                 -- New categorized product details
                 ps.pfas_products_detail,
                 ps.pfas_applications,
@@ -549,14 +551,14 @@ class PMTilesDataLoader:
                 ps.glyphosate_applications,
                 ps.other_products_detail,
                 ps.other_applications,
-                
+
                 -- Legacy unit-based details
                 ps.pesticides_kg_detail,
                 ps.pesticides_liters_detail,
                 ps.pesticides_grams_detail,
                 ps.pesticides_ml_detail,
                 ps.pesticides_tablets_detail,
-                
+
                 -- Proximity data
                 ps.residential_buildings_formatted,
                 ps.educational_facilities_formatted,
@@ -582,21 +584,23 @@ class PMTilesDataLoader:
 
     async def _enhance_pesticide_with_bmd(self, pesticide_table: str) -> str:
         """Enhance pesticide data with BMD classifications for PFAS/Diquat/Glyphosate detection.
-        
+
         Args:
             pesticide_table: Name of the pesticide proximity table
-            
+
         Returns:
             Name of the enhanced table with BMD data
         """
         enhanced_table = f"{pesticide_table}_enhanced"
-        
+
         try:
             # Try to load BMD data
             bmd_table = await self._load_bmd_data()
-            
+
             if not bmd_table:
-                logger.warning("BMD data not available, using pesticide data without classifications")
+                logger.warning(
+                    "BMD data not available, using pesticide data without classifications"
+                )
                 # Create enhanced table without BMD data (all classifications will be false/null)
                 await asyncio.to_thread(
                     self.conn.execute,
@@ -607,10 +611,10 @@ class PMTilesDataLoader:
                         false as contains_diquat,
                         false as contains_glyphosate
                     FROM {pesticide_table}
-                    """
+                    """,
                 )
                 return enhanced_table
-            
+
             # Join with BMD data for classifications and risk information
             logger.info("Enhancing pesticide data with BMD classifications and risk data")
             await asyncio.to_thread(
@@ -629,30 +633,33 @@ class PMTilesDataLoader:
                     COALESCE(b.samlet_belastning, 0) as total_burden
                 FROM {pesticide_table} p
                 LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registrerings_nr
-                """
+                """,
             )
-            
+
             # Log enhancement statistics
             total_count = await asyncio.to_thread(
                 self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}"
             )
             pfas_count = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_pfas = true"
+                self.conn.execute,
+                f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_pfas = true",
             )
             diquat_count = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_diquat = true"
+                self.conn.execute,
+                f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_diquat = true",
             )
             glyphosate_count = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_glyphosate = true"
+                self.conn.execute,
+                f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_glyphosate = true",
             )
-            
+
             logger.info(f"Enhanced pesticide data: {total_count.fetchone()[0]:,} total records")
             logger.info(f"  - PFAS products: {pfas_count.fetchone()[0]:,}")
             logger.info(f"  - Diquat products: {diquat_count.fetchone()[0]:,}")
             logger.info(f"  - Glyphosate products: {glyphosate_count.fetchone()[0]:,}")
-            
+
             return enhanced_table
-            
+
         except Exception as e:
             logger.error(f"Error enhancing pesticide data with BMD: {e}")
             # Fallback to original table without enhancements
@@ -660,39 +667,39 @@ class PMTilesDataLoader:
 
     async def _load_bmd_data(self) -> Optional[str]:
         """Load BMD pesticide product database.
-        
+
         Returns:
             DuckDB table name or None if not available
         """
         try:
             # Try to find BMD data in GCS
             base_path = f"gs://{self.config.gcs_bucket}/silver/bmd"
-            
+
             # Find the latest timestamped directory
             gcs_path = await self._find_latest_timestamped_path(base_path)
             if not gcs_path:
                 logger.warning(f"BMD data not found in: {base_path}")
                 return None
-                
+
             table_name = "bmd_data"
-            
+
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
             FROM read_parquet('{gcs_path}pesticide_products.parquet')
             WHERE registrerings_nr IS NOT NULL
             """
-            
+
             await asyncio.to_thread(self.conn.execute, query)
-            
+
             count_result = await asyncio.to_thread(
                 self.conn.execute, f"SELECT COUNT(*) FROM {table_name}"
             )
             count = count_result.fetchone()[0]
-            
+
             logger.info(f"Loaded {count:,} BMD pesticide product records")
             return table_name
-            
+
         except Exception as e:
             logger.warning(f"Could not load BMD data: {e}")
             return None
