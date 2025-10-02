@@ -281,7 +281,8 @@ class FieldAnalysisPMTilesGenerator:
                     )
                     flip_min_x, flip_min_y, flip_max_x, flip_max_y = bounds_flipped.fetchone()
                     logger.info(
-                        f"DEBUG: Flipped bounds: X({flip_min_x:.6f} to {flip_max_x:.6f}), "\n                        f"Y({flip_min_y:.6f} to {flip_max_y:.6f})"
+                        f"DEBUG: Flipped bounds: X({flip_min_x:.6f} to {flip_max_x:.6f}), "
+                        f"Y({flip_min_y:.6f} to {flip_max_y:.6f})"
                     )
                 except Exception as debug_error:
                     logger.warning(f"Could not log coordinate bounds: {debug_error}")

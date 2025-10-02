@@ -124,9 +124,14 @@ jobs:
               print(json.dumps(years_strings))
 
           asyncio.run(detect_years())
-          " > detected_years.json
-            years=$(cat detected_years.json)
-            echo "years=$years" >> $GITHUB_OUTPUT
+          "
+            # Use simple hardcoded recent years like other working workflows
+            years_array="["
+            for year in 2023 2024 2025; do
+                years_array="$years_array\"$year\","
+            done
+            years_array="${years_array%,}]"
+            echo "years=$years_array" >> $GITHUB_OUTPUT
             echo "should_run_matrix=true" >> $GITHUB_OUTPUT
           fi
 
