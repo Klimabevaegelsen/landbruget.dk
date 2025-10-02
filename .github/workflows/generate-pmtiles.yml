@@ -116,7 +116,9 @@ jobs:
 
               # Limit to recent years for regular runs to avoid overwhelming GitHub Actions
               recent_years = [y for y in years_to_process if y >= 2020]
-              print(json.dumps(recent_years))
+              # Format as JSON array of strings for GitHub Actions compatibility
+              years_strings = [str(y) for y in recent_years]
+              print(json.dumps(years_strings))
 
           asyncio.run(detect_years())
           " > detected_years.json
