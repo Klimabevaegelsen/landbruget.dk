@@ -258,6 +258,28 @@ class FieldAnalysisPMTilesGenerator:
                 logger.info(
                     "Geometry column found and added (converted to GeoJSON with coordinate swap)"
                 )
+                
+                # DEBUG: Log coordinate bounds to verify swap worked
+                try:
+                    bounds_result = await asyncio.to_thread(
+                        self.conn.execute,
+                        f"SELECT ST_XMin(ST_Extent(geometry)), ST_YMin(ST_Extent(geometry)), "
+                        f"ST_XMax(ST_Extent(geometry)), ST_YMax(ST_Extent(geometry)) FROM {table_name}"
+                    )
+                    min_x, min_y, max_x, max_y = bounds_result.fetchone()
+                    logger.info(f"DEBUG: Original bounds: X({min_x:.6f} to {max_x:.6f}), Y({min_y:.6f} to {max_y:.6f})")
+                    
+                    bounds_flipped = await asyncio.to_thread(
+                        self.conn.execute,
+                        f"SELECT ST_XMin(ST_Extent(ST_FlipCoordinates(geometry))), "
+                        f"ST_YMin(ST_Extent(ST_FlipCoordinates(geometry))), "
+                        f"ST_XMax(ST_Extent(ST_FlipCoordinates(geometry))), "
+                        f"ST_YMax(ST_Extent(ST_FlipCoordinates(geometry))) FROM {table_name}"
+                    )
+                    flip_min_x, flip_min_y, flip_max_x, flip_max_y = bounds_flipped.fetchone()
+                    logger.info(f"DEBUG: Flipped bounds: X({flip_min_x:.6f} to {flip_max_x:.6f}), Y({flip_min_y:.6f} to {flip_max_y:.6f})")
+                except Exception as debug_error:
+                    logger.warning(f"Could not log coordinate bounds: {debug_error}")
             else:
                 logger.error("No geometry column found! This will cause 0 features.")
 
