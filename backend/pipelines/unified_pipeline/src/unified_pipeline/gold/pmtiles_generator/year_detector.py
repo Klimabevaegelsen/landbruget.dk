@@ -80,38 +80,41 @@ class DataSourceYearDetector:
             List of available years
         """
         try:
-            # List directories in the parent path
+            # Simple approach: list directories directly with the pattern
+            # For "silver/fvm_marker_" -> list "silver/" and find fvm_marker_YYYY
             parent_path = path_pattern.rstrip("_")
-            if parent_path.endswith("/"):
-                parent_path = parent_path[:-1]
-
-            # Get the parent directory
-            parent_dir = str(Path(parent_path).parent)
-            if parent_dir == ".":
-                parent_dir = ""
-
-            # List all paths that match the pattern
+            if not parent_path.endswith("/"):
+                parent_path += "/"
+            
+            # List all items in the parent directory
             all_paths = await asyncio.to_thread(
-                self.gcs.list_files, f"gs://{self.config.gcs_bucket}/{parent_dir}*"
+                self.gcs.list_files, f"gs://{self.config.gcs_bucket}/{parent_path}"
             )
 
-            # Extract years from paths
+            # Extract years from directory names
             years = set()
-            pattern_name = Path(path_pattern).name
-            year_pattern = re.compile(rf"{re.escape(pattern_name)}(\d{{4}})/?$")
-
+            base_name = path_pattern.split("/")[-1]  # e.g., "fvm_marker_"
+            
             for path in all_paths:
-                # Extract the relevant part of the path
-                path_parts = path.replace(f"gs://{self.config.gcs_bucket}/", "").split("/")
-
-                for part in path_parts:
-                    match = year_pattern.match(part)
-                    if match:
-                        year = int(match.group(1))
+                # Remove gs:// prefix if present
+                clean_path = path.replace("gs://", "")
+                
+                # Get just the directory name (last part of path)
+                dir_name = clean_path.split("/")[-1]
+                
+                # Look for pattern like "fvm_marker_2023"
+                if dir_name.startswith(base_name):
+                    # Extract the year part after the base name
+                    year_part = dir_name[len(base_name):]
+                    try:
+                        year = int(year_part)
                         # Validate year is reasonable (2000-2030)
                         if 2000 <= year <= 2030:
                             years.add(year)
+                    except ValueError:
+                        continue
 
+            logger.info(f"Found {len(years)} years for {source_name}: {sorted(years)}")
             return sorted(list(years))
 
         except Exception as e:

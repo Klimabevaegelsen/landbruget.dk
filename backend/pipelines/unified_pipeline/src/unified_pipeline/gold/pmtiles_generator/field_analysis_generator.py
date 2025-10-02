@@ -93,7 +93,8 @@ class FieldAnalysisPMTilesGenerator:
 
                     if size_mb > self.config.max_field_analysis_size_mb:
                         logger.warning(
-                            f"PMTiles file size ({size_mb:.1f} MB) exceeds target ({self.config.max_field_analysis_size_mb} MB)"
+                            f"PMTiles file size ({size_mb:.1f} MB) exceeds target "
+                            f"({self.config.max_field_analysis_size_mb} MB)"
                         )
 
                 # Move to final location (outside temp directory)
@@ -184,7 +185,7 @@ class FieldAnalysisPMTilesGenerator:
             "block_id as markblok_id",  # Frontend expects markblok_id
             "cvr_number",
             "year as field_year",  # Frontend expects field_year
-            "area_ha * 100 as area_hectares",  # Convert ha to hectares, frontend expects area_hectares
+            "area_ha * 100 as area_hectares",  # Convert ha to hectares for frontend
             "crop_name",
             "crop_code",
             "is_organic",
@@ -250,17 +251,21 @@ class FieldAnalysisPMTilesGenerator:
                     if field in available_columns:
                         selected_fields.append(field)
 
-            # Always include geometry last - convert to GeoJSON format with coordinate swap for tippecanoe
+            # Always include geometry last - convert to GeoJSON format with coordinate swap
             if "geometry" in available_columns:
-                # Use ST_FlipCoordinates to ensure lon,lat order for GeoJSON/tippecanoe compatibility
+                # Use ST_FlipCoordinates to ensure lon,lat order for PMTiles compatibility
                 selected_fields.append("ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry")
-                logger.info("Geometry column found and added (converted to GeoJSON with coordinate swap)")
+                logger.info(
+                    "Geometry column found and added (converted to GeoJSON with coordinate swap)"
+                )
             else:
                 logger.error("No geometry column found! This will cause 0 features.")
 
         except Exception as e:
             logger.warning(f"Could not determine table schema, using base fields: {e}")
-            selected_fields = base_fields + ["ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry"]
+            selected_fields = base_fields + [
+                "ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry"
+            ]
 
         # Build query
         fields_str = ",\n    ".join(selected_fields)

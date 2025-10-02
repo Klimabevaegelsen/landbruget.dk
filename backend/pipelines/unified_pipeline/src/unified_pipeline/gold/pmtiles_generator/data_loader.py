@@ -433,13 +433,14 @@ class PMTilesDataLoader:
         try:
             # First, check if BMD data is available and enhance pesticide data
             enhanced_pesticide_table = await self._enhance_pesticide_with_bmd(pesticide_table)
-            
+
             # Check if enhancement worked by testing for BMD columns
             has_bmd_data = False
             try:
-                test_result = await asyncio.to_thread(
-                    self.conn.execute, 
-                    f"SELECT COUNT(*) FROM {enhanced_pesticide_table} WHERE contains_pfas IS NOT NULL LIMIT 1"
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT COUNT(*) FROM {enhanced_pesticide_table} "
+                    "WHERE contains_pfas IS NOT NULL LIMIT 1",
                 )
                 has_bmd_data = True
                 logger.info("BMD enhancement successful - using categorized pesticide aggregation")
@@ -461,30 +462,41 @@ class PMTilesDataLoader:
                         CASE WHEN COALESCE(contains_pfas, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                             COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
+                              COALESCE(health_risk, '') || ':' || 
+                              COALESCE(environmental_risk, '') || ':' ||
                              COALESCE(signal_word, '')
                         END, ';'
                     ) FILTER (WHERE COALESCE(contains_pfas, false) = true) as pfas_products_detail,
-                    COUNT(CASE WHEN COALESCE(contains_pfas, false) = true THEN 1 END) as pfas_applications,
+                     COUNT(
+                         CASE WHEN COALESCE(contains_pfas, false) = true THEN 1 END
+                     ) as pfas_applications,
 
                     STRING_AGG(
                         CASE WHEN COALESCE(contains_diquat, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                             COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
+                              COALESCE(health_risk, '') || ':' || 
+                              COALESCE(environmental_risk, '') || ':' ||
                              COALESCE(signal_word, '')
                         END, ';'
-                    ) FILTER (WHERE COALESCE(contains_diquat, false) = true) as diquat_products_detail,
-                    COUNT(CASE WHEN COALESCE(contains_diquat, false) = true THEN 1 END) as diquat_applications,
+                    ) FILTER (
+                        WHERE COALESCE(contains_diquat, false) = true
+                    ) as diquat_products_detail,
+                     COUNT(
+                         CASE WHEN COALESCE(contains_diquat, false) = true THEN 1 END
+                     ) as diquat_applications,
 
                     STRING_AGG(
                         CASE WHEN COALESCE(contains_glyphosate, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                             COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
+                              COALESCE(health_risk, '') || ':' || 
+                              COALESCE(environmental_risk, '') || ':' ||
                              COALESCE(signal_word, '')
                         END, ';'
-                    ) FILTER (WHERE COALESCE(contains_glyphosate, false) = true) as glyphosate_products_detail,
+                    ) FILTER (
+                        WHERE COALESCE(contains_glyphosate, false) = true
+                    ) as glyphosate_products_detail,
                     COUNT(
                         CASE WHEN COALESCE(contains_glyphosate, false) = true THEN 1 END
                     ) as glyphosate_applications,
@@ -528,13 +540,17 @@ class PMTilesDataLoader:
                         CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                         END, ';'
-                    ) FILTER (WHERE DosageUnit IN ('5', 'ml', 'milliliter')) as pesticides_ml_detail,
+                    ) FILTER (
+                        WHERE DosageUnit IN ('5', 'ml', 'milliliter')
+                    ) as pesticides_ml_detail,
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                         END, ';'
-                    ) FILTER (WHERE DosageUnit IN ('3', 'tablet', 'tabletter')) as pesticides_tablets_detail,
+                    ) FILTER (
+                        WHERE DosageUnit IN ('3', 'tablet', 'tabletter')
+                    ) as pesticides_tablets_detail,
 
                     -- Proximity data
                     residential_buildings_formatted,
@@ -590,13 +606,17 @@ class PMTilesDataLoader:
                         CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                         END, ';'
-                    ) FILTER (WHERE DosageUnit IN ('5', 'ml', 'milliliter')) as pesticides_ml_detail,
+                    ) FILTER (
+                        WHERE DosageUnit IN ('5', 'ml', 'milliliter')
+                    ) as pesticides_ml_detail,
 
                     STRING_AGG(
                         CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
                         END, ';'
-                    ) FILTER (WHERE DosageUnit IN ('3', 'tablet', 'tabletter')) as pesticides_tablets_detail,
+                    ) FILTER (
+                        WHERE DosageUnit IN ('3', 'tablet', 'tabletter')
+                    ) as pesticides_tablets_detail,
 
                     -- Proximity data
                     residential_buildings_formatted,
@@ -693,12 +713,19 @@ class PMTilesDataLoader:
                     LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registrerings_nr
                     """,
                 )
-                
+
                 # Log enhancement statistics (simplified)
-                total_count = await asyncio.to_thread(self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}")
-                logger.info(f"Enhanced pesticide data: {total_count.fetchone()[0]:,} total records with BMD classifications")
+                total_count = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}"
+                )
+                logger.info(
+                    f"Enhanced pesticide data: {total_count.fetchone()[0]:,} total records "
+                    "with BMD classifications"
+                )
             else:
-                logger.warning("BMD data not available, creating enhanced table without classifications")
+                logger.warning(
+                    "BMD data not available, creating enhanced table without classifications"
+                )
                 # Create enhanced table without BMD data (all classifications will be false)
                 await asyncio.to_thread(
                     self.conn.execute,
@@ -714,9 +741,14 @@ class PMTilesDataLoader:
                     FROM {pesticide_table}
                     """,
                 )
-                
-                total_count = await asyncio.to_thread(self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}")
-                logger.info(f"Enhanced pesticide data: {total_count.fetchone()[0]:,} total records without BMD classifications")
+
+                total_count = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}"
+                )
+                logger.info(
+                    f"Enhanced pesticide data: {total_count.fetchone()[0]:,} total records "
+                    "without BMD classifications"
+                )
 
             return enhanced_table
 
