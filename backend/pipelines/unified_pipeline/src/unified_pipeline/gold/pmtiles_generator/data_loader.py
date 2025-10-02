@@ -665,7 +665,7 @@ class PMTilesDataLoader:
             pesticide_table: Name of the pesticide proximity table
 
         Returns:
-            Name of the enhanced table with BMD data
+            Name of the enhanced table with BMD data (always succeeds with fallback)
         """
         enhanced_table = f"{pesticide_table}_enhanced"
 
@@ -673,11 +673,33 @@ class PMTilesDataLoader:
             # Try to load BMD data
             bmd_table = await self._load_bmd_data()
 
-            if not bmd_table:
-                logger.warning(
-                    "BMD data not available, using pesticide data without classifications"
+            # Always create enhanced table, with or without BMD data
+            if bmd_table:
+                logger.info("Enhancing pesticide data with BMD classifications and risk data")
+                # Join with BMD data for classifications and risk information
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    f"""
+                    CREATE OR REPLACE TABLE {enhanced_table} AS
+                    SELECT
+                        p.*,
+                        COALESCE(b.contains_pfas, false) as contains_pfas,
+                        COALESCE(b.contains_diquat, false) as contains_diquat,
+                        COALESCE(b.contains_glyphosate, false) as contains_glyphosate,
+                        b.farebetegnelse_sundhed as health_risk,
+                        b.farebetegnelse_miljø as environmental_risk,
+                        b.signalord as signal_word
+                    FROM {pesticide_table} p
+                    LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registrerings_nr
+                    """,
                 )
-                # Create enhanced table without BMD data (all classifications will be false/null)
+                
+                # Log enhancement statistics (simplified)
+                total_count = await asyncio.to_thread(self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}")
+                logger.info(f"Enhanced pesticide data: {total_count.fetchone()[0]:,} total records with BMD classifications")
+            else:
+                logger.warning("BMD data not available, creating enhanced table without classifications")
+                # Create enhanced table without BMD data (all classifications will be false)
                 await asyncio.to_thread(
                     self.conn.execute,
                     f"""
@@ -685,71 +707,43 @@ class PMTilesDataLoader:
                     SELECT *,
                         false as contains_pfas,
                         false as contains_diquat,
-                        false as contains_glyphosate
+                        false as contains_glyphosate,
+                        NULL as health_risk,
+                        NULL as environmental_risk,
+                        NULL as signal_word
                     FROM {pesticide_table}
                     """,
                 )
-                return enhanced_table
-
-            # Join with BMD data for classifications and risk information
-            logger.info("Enhancing pesticide data with BMD classifications and risk data")
-            await asyncio.to_thread(
-                self.conn.execute,
-                f"""
-                CREATE OR REPLACE TABLE {enhanced_table} AS
-                SELECT
-                    p.*,
-                    COALESCE(b.contains_pfas, false) as contains_pfas,
-                    COALESCE(b.contains_diquat, false) as contains_diquat,
-                    COALESCE(b.contains_glyphosate, false) as contains_glyphosate,
-                    b.farebetegnelse_sundhed as health_risk,
-                    b.farebetegnelse_miljø as environmental_risk,
-                    b.ghs_farepiktogrammer as ghs_pictograms,
-                    b.signalord as signal_word,
-                    COALESCE(b.samlet_belastning, 0) as total_burden
-                FROM {pesticide_table} p
-                LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registrerings_nr
-                """,
-            )
-
-            # Log enhancement statistics
-            try:
-                total_count_result = await asyncio.to_thread(
-                    self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}"
-                )
-                total_count = total_count_result.fetchone()[0] if total_count_result else 0
                 
-                pfas_count_result = await asyncio.to_thread(
-                    self.conn.execute,
-                    f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_pfas = true",
-                )
-                pfas_count = pfas_count_result.fetchone()[0] if pfas_count_result else 0
-                
-                diquat_count_result = await asyncio.to_thread(
-                    self.conn.execute,
-                    f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_diquat = true",
-                )
-                diquat_count = diquat_count_result.fetchone()[0] if diquat_count_result else 0
-                
-                glyphosate_count_result = await asyncio.to_thread(
-                    self.conn.execute,
-                    f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_glyphosate = true",
-                )
-                glyphosate_count = glyphosate_count_result.fetchone()[0] if glyphosate_count_result else 0
-
-                logger.info(f"Enhanced pesticide data: {total_count:,} total records")
-                logger.info(f"  - PFAS products: {pfas_count:,}")
-                logger.info(f"  - Diquat products: {diquat_count:,}")
-                logger.info(f"  - Glyphosate products: {glyphosate_count:,}")
-            except Exception as stats_error:
-                logger.warning(f"Could not get enhancement statistics: {stats_error}")
+                total_count = await asyncio.to_thread(self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}")
+                logger.info(f"Enhanced pesticide data: {total_count.fetchone()[0]:,} total records without BMD classifications")
 
             return enhanced_table
 
         except Exception as e:
             logger.error(f"Error enhancing pesticide data with BMD: {e}")
-            # Fallback to original table without enhancements
-            return pesticide_table
+            # Create a simple enhanced table as fallback
+            try:
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    f"""
+                    CREATE OR REPLACE TABLE {enhanced_table} AS
+                    SELECT *,
+                        false as contains_pfas,
+                        false as contains_diquat,
+                        false as contains_glyphosate,
+                        NULL as health_risk,
+                        NULL as environmental_risk,
+                        NULL as signal_word
+                    FROM {pesticide_table}
+                    """,
+                )
+                logger.info("Created fallback enhanced table without BMD data")
+                return enhanced_table
+            except Exception as fallback_error:
+                logger.error(f"Fallback enhancement also failed: {fallback_error}")
+                # Ultimate fallback - return original table
+                return pesticide_table
 
     async def _load_bmd_data(self) -> Optional[str]:
         """Load BMD pesticide product database.
