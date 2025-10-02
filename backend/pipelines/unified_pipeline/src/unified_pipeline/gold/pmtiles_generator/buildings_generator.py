@@ -166,16 +166,17 @@ class BuildingsProximityPMTilesGenerator:
             logger.info("🔗 Performing SPATIAL_JOIN optimized proximity filtering...")
 
             chunk_size = 10000  # Process buildings in chunks for memory safety
-            
+
             # Verify table exists before counting
             table_exists = await asyncio.to_thread(
-                self.conn.execute, 
-                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'buildings_for_proximity'"
+                self.conn.execute,
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_name = 'buildings_for_proximity'",
             )
             if table_exists.fetchone()[0] == 0:
                 logger.error("buildings_for_proximity table does not exist")
                 return False
-            
+
             building_count = await asyncio.to_thread(
                 self.conn.execute, "SELECT COUNT(*) FROM buildings_for_proximity"
             )

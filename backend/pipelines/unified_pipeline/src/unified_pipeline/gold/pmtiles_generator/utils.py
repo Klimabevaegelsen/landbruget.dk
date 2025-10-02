@@ -127,7 +127,10 @@ class GeoJSONWriter:
 
     @staticmethod
     async def write_geojson_from_query(
-        duckdb_conn, query: str, output_path: str, properties_columns: Optional[List[str]] = None
+        duckdb_conn,
+        query: str,
+        output_path: str,
+        properties_columns: Optional[List[str]] = None,
     ) -> bool:
         """Write GeoJSON file from a DuckDB query result.
 
@@ -135,7 +138,8 @@ class GeoJSONWriter:
             duckdb_conn: DuckDB connection
             query: SQL query that returns geometry and properties
             output_path: Path for output GeoJSON file
-            properties_columns: List of columns to include as properties (if None, include all non-geometry)
+            properties_columns: List of columns to include as properties 
+                (if None, include all non-geometry)
 
         Returns:
             True if successful, False otherwise
@@ -168,10 +172,14 @@ class GeoJSONWriter:
             features = []
             geometry_col_idx = columns.index(geometry_col)
 
+            skipped_count = 0
+            geometry_errors = []
+
             for row in result:
                 # Parse geometry (assuming WKT format)
                 geometry_wkt = row[geometry_col_idx]
                 if not geometry_wkt:
+                    skipped_count += 1
                     continue
 
                 # Handle geometry - could be WKT, WKB, or already GeoJSON string
@@ -182,11 +190,20 @@ class GeoJSONWriter:
                     except json.JSONDecodeError:
                         # Fall back to WKT parsing
                         geometry = GeoJSONWriter._wkt_to_geojson_geometry(geometry_wkt)
+                        if not geometry and len(geometry_errors) < 5:
+                            geometry_errors.append(
+                                f"Failed to parse WKT: {str(geometry_wkt)[:100]}..."
+                            )
                 else:
                     # Handle WKB or other formats
-                    geometry = GeoJSONWriter._wkt_to_geojson_geometry(geometry_wkt)
+                    geometry = GeoJSONWriter._wkt_to_geojson_geometry(str(geometry_wkt))
+                    if not geometry and len(geometry_errors) < 5:
+                        geometry_errors.append(
+                            f"Failed to parse non-string geometry: {type(geometry_wkt)}"
+                        )
 
                 if not geometry:
+                    skipped_count += 1
                     continue
 
                 # Build properties
