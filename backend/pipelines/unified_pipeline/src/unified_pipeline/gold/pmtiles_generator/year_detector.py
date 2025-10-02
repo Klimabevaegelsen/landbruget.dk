@@ -80,39 +80,29 @@ class DataSourceYearDetector:
             List of available years
         """
         try:
-            # Simple approach: list directories directly with the pattern
-            # For "silver/fvm_marker_" -> list "silver/" and find fvm_marker_YYYY
-            parent_path = path_pattern.rstrip("_")
-            if not parent_path.endswith("/"):
-                parent_path += "/"
-            
-            # List all items in the parent directory
-            all_paths = await asyncio.to_thread(
-                self.gcs.list_files, f"gs://{self.config.gcs_bucket}/{parent_path}"
-            )
+            # Use direct glob pattern like pesticide_proximity does
+            # For "silver/fvm_marker_" -> use "silver/fvm_marker_*"
+            direct_pattern = f"gs://{self.config.gcs_bucket}/{path_pattern}*"
+            all_paths = await asyncio.to_thread(self.gcs.list_files, direct_pattern)
 
-            # Extract years from directory names
+            # Extract years using regex like pesticide_proximity does
             years = set()
             base_name = path_pattern.split("/")[-1]  # e.g., "fvm_marker_"
             
+            # Create regex pattern: "fvm_marker_(\d{4})"
+            year_pattern = re.compile(rf"{re.escape(base_name)}(\d{{4}})/?$")
+            
             for path in all_paths:
-                # Remove gs:// prefix if present
-                clean_path = path.replace("gs://", "")
-                
                 # Get just the directory name (last part of path)
-                dir_name = clean_path.split("/")[-1]
+                dir_name = path.split("/")[-1]
                 
-                # Look for pattern like "fvm_marker_2023"
-                if dir_name.startswith(base_name):
-                    # Extract the year part after the base name
-                    year_part = dir_name[len(base_name):]
-                    try:
-                        year = int(year_part)
-                        # Validate year is reasonable (2000-2030)
-                        if 2000 <= year <= 2030:
-                            years.add(year)
-                    except ValueError:
-                        continue
+                # Match the pattern
+                match = year_pattern.match(dir_name)
+                if match:
+                    year = int(match.group(1))
+                    # Validate year is reasonable (2000-2030)
+                    if 2000 <= year <= 2030:
+                        years.add(year)
 
             logger.info(f"Found {len(years)} years for {source_name}: {sorted(years)}")
             return sorted(list(years))
