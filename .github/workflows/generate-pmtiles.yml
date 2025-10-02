@@ -114,7 +114,7 @@ jobs:
               available_years = await detector.detect_all_available_years()
               years_to_process = detector.get_years_to_process(available_years)
 
-              # Limit to recent years for regular runs to avoid overwhelming GitHub Actions  
+              # Limit to recent years for regular runs to avoid overwhelming GitHub Actions
               recent_years = [y for y in years_to_process if y >= 2020]
               # Format as JSON array of strings for GitHub Actions compatibility
               years_strings = [str(y) for y in recent_years]
@@ -122,9 +122,9 @@ jobs:
 
           asyncio.run(detect_years())
           "
-            # Use simple hardcoded recent years like other working workflows
+            # Use all available recent years we know exist
             years_array="["
-            for year in 2023 2024 2025; do
+            for year in 2020 2021 2022 2023 2024 2025; do
                 years_array="$years_array\"$year\","
             done
             years_array="${years_array%,}]"
@@ -184,7 +184,7 @@ jobs:
   generate-field-analysis:
     runs-on: ubuntu-latest
     needs: detect-years
-    if: ${{ needs.detect-years.outputs.should_run_matrix == 'true' }}
+    if: ${{ needs.detect-years.outputs.should_run_matrix == 'true' && (github.event.inputs.target_year != '' || github.event.inputs.years_range != '') }}
     strategy:
       matrix:
         year: ${{ fromJson(needs.detect-years.outputs.years) }}
