@@ -275,7 +275,7 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
           python -m src.unified_pipeline.gold.pmtiles_generator.main \
-            --max-parallel-years=2 \
+            --max-parallel-years=1 \
             ${{ github.event.inputs.skip_upload == 'true' && '--no-upload' || '' }} \
             ${{ github.event.inputs.skip_cleanup == 'true' && '--no-cleanup' || '' }} \
             ${{ github.event.inputs.keep_versions && format('--keep-versions={0}', github.event.inputs.keep_versions) || '' }}
@@ -308,7 +308,13 @@ jobs:
 
   notify-completion:
     runs-on: ubuntu-latest
-    needs: [generate-environmental, generate-field-analysis, generate-all, invalidate-cache]
+    needs:
+      [
+        generate-environmental,
+        generate-field-analysis,
+        generate-all,
+        invalidate-cache,
+      ]
     if: always()
     steps:
       - name: Check job results
