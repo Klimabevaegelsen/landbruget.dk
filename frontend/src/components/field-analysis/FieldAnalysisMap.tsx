@@ -369,7 +369,7 @@ function MapTooltip({
         }
         if (properties.total_pesticide_applications) {
           data.push({
-            label: 'Antal applikationer',
+            label: 'Antal pesticider',
             value: properties.total_pesticide_applications,
           });
         }
@@ -392,7 +392,7 @@ function MapTooltip({
         }
         if (properties.pfas_applications) {
           data.push({
-            label: 'PFAS applikationer',
+            label: 'PFAS pesticider',
             value: properties.pfas_applications,
           });
         }
@@ -408,7 +408,7 @@ function MapTooltip({
         }
         if (properties.diquat_applications) {
           data.push({
-            label: 'Diquat applikationer',
+            label: 'Diquat pesticider',
             value: properties.diquat_applications,
           });
         }
@@ -431,7 +431,7 @@ function MapTooltip({
         }
         if (properties.glyphosate_applications) {
           data.push({
-            label: 'Glyphosate applikationer',
+            label: 'Glyphosate pesticider',
             value: properties.glyphosate_applications,
           });
         }
@@ -440,7 +440,7 @@ function MapTooltip({
       case 'applications_count':
         if (properties.total_pesticide_applications) {
           data.push({
-            label: 'Total applikationer',
+            label: 'Total pesticider',
             value: properties.total_pesticide_applications,
           });
         }

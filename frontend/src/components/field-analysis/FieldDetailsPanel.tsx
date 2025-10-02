@@ -19,6 +19,13 @@ import {
   Home,
   School,
 } from 'lucide-react';
+import {
+  GHS06_SkullCrossbones,
+  GHS07_ExclamationMark,
+  GHS08_HealthHazard,
+  GHS09_Environmental,
+  GHS05_Corrosive,
+} from './GHSPictograms';
 
 interface FieldDetailsPanelProps {
   fieldData?: FieldAnalysisData;
@@ -82,6 +89,167 @@ export function FieldDetailsPanel({
       console.warn('Error parsing pesticide detail:', detailString, e);
       return [];
     }
+  };
+
+  // Parse enhanced pesticide detail strings with risk information (format: "ProductName:dosage:unit:health_risk:env_risk:signal_word")
+  const parsePesticideDetailWithUnit = (
+    detailString: string | undefined
+  ): Array<{
+    name: string;
+    dosage: number;
+    unit: string;
+    healthRisk?: string;
+    envRisk?: string;
+    signalWord?: string;
+  }> => {
+    if (!detailString || detailString.trim() === '') return [];
+
+    try {
+      return detailString
+        .split(';')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+        .map((item) => {
+          const parts = item.split(':');
+          const name = parts[0]?.trim() || 'Ukendt produkt';
+          const dosage = parseFloat(parts[1]?.trim() || '0');
+          const rawUnit = parts[2]?.trim() || 'ukendt';
+          const healthRisk = parts[3]?.trim() || undefined;
+          const envRisk = parts[4]?.trim() || undefined;
+          const signalWord = parts[5]?.trim() || undefined;
+
+          // Convert unit codes to user-friendly names
+          const friendlyUnit =
+            rawUnit === '2'
+              ? 'kg'
+              : rawUnit === '4'
+                ? 'L'
+                : rawUnit === '1'
+                  ? 'g'
+                  : rawUnit === '5'
+                    ? 'ml'
+                    : rawUnit === '3'
+                      ? 'tabletter'
+                      : rawUnit;
+
+          return {
+            name,
+            dosage,
+            unit: friendlyUnit,
+            healthRisk:
+              healthRisk && healthRisk !== '' ? healthRisk : undefined,
+            envRisk: envRisk && envRisk !== '' ? envRisk : undefined,
+            signalWord:
+              signalWord && signalWord !== '' ? signalWord : undefined,
+          };
+        })
+        .filter((item) => item.dosage > 0)
+        .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
+    } catch (e) {
+      console.warn('Error parsing enhanced pesticide detail:', detailString, e);
+      return [];
+    }
+  };
+
+  // Get proper GHS pictogram based on BMD risk classification
+  const getRiskIcon = (
+    healthRisk?: string,
+    envRisk?: string,
+    signalWord?: string
+  ) => {
+    // Most severe: Acute toxicity (GHS06) - Skull and Crossbones
+    if (healthRisk?.includes('Meget giftig') || healthRisk?.includes('Tx')) {
+      return {
+        Icon: GHS06_SkullCrossbones,
+        color: 'text-red-700',
+        bgColor: 'bg-red-100',
+        level: 'Meget giftig',
+        ghs: 'GHS06',
+      };
+    }
+
+    // Severe: Toxic (GHS06) - Skull and Crossbones
+    if (healthRisk?.includes('Giftig') || healthRisk?.includes('T')) {
+      return {
+        Icon: GHS06_SkullCrossbones,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        level: 'Giftig',
+        ghs: 'GHS06',
+      };
+    }
+
+    // Corrosive (GHS05) - Corrosion
+    if (healthRisk?.includes('Ætsende') || healthRisk?.includes('C')) {
+      return {
+        Icon: GHS05_Corrosive,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        level: 'Ætsende',
+        ghs: 'GHS05',
+      };
+    }
+
+    // Health hazard (GHS08) - Health Hazard
+    if (
+      healthRisk?.includes('Sundhedsskadelig') ||
+      healthRisk?.includes('Xn')
+    ) {
+      return {
+        Icon: GHS08_HealthHazard,
+        color: 'text-orange-600',
+        bgColor: 'bg-orange-50',
+        level: 'Sundhedsskadelig',
+        ghs: 'GHS08',
+      };
+    }
+
+    // Irritant (GHS07) - Exclamation Mark
+    if (
+      healthRisk?.includes('Lokalirriterende') ||
+      healthRisk?.includes('Xi')
+    ) {
+      return {
+        Icon: GHS07_ExclamationMark,
+        color: 'text-yellow-600',
+        bgColor: 'bg-yellow-50',
+        level: 'Lokalirriterende',
+        ghs: 'GHS07',
+      };
+    }
+
+    // Environmental hazard (GHS09) - Environment
+    if (envRisk?.includes('Miljøfarlig') || envRisk?.includes('N')) {
+      return {
+        Icon: GHS09_Environmental,
+        color: 'text-green-700',
+        bgColor: 'bg-green-50',
+        level: 'Miljøfarlig',
+        ghs: 'GHS09',
+      };
+    }
+
+    // Signal word fallbacks - use appropriate GHS pictograms
+    if (signalWord === 'Fare') {
+      return {
+        Icon: GHS06_SkullCrossbones,
+        color: 'text-red-600',
+        bgColor: 'bg-red-50',
+        level: 'Fare',
+        ghs: 'SIGNAL',
+      };
+    }
+    if (signalWord === 'Advarsel') {
+      return {
+        Icon: GHS07_ExclamationMark,
+        color: 'text-yellow-600',
+        bgColor: 'bg-yellow-50',
+        level: 'Advarsel',
+        ghs: 'SIGNAL',
+      };
+    }
+
+    return null;
   };
 
   // Handle swipe gestures for mobile
@@ -327,7 +495,7 @@ export function FieldDetailsPanel({
                     fieldData.total_pesticide_applications > 0 && (
                       <div className="flex items-center justify-between">
                         <span className="text-primary/80 text-xs">
-                          Total applikationer
+                          Total pesticider
                         </span>
                         <span className="text-primary text-xs font-medium">
                           {fieldData.total_pesticide_applications}
@@ -413,7 +581,7 @@ export function FieldDetailsPanel({
               fieldData.pesticides_liters_detail ||
               fieldData.pesticides_grams_detail ||
               fieldData.pesticides_ml_detail ||
-              fieldData.pesticides_tons_detail) && (
+              fieldData.pesticides_tablets_detail) && (
               <div className="mt-3">
                 <h4 className="text-foreground mb-2 text-sm font-medium">
                   Anvendte produkter
@@ -487,21 +655,161 @@ export function FieldDetailsPanel({
                     )
                   )}
 
-                  {/* Tons products */}
-                  {parsePesticideDetail(fieldData.pesticides_tons_detail).map(
-                    (product, index) => (
-                      <div
-                        key={`t-${index}`}
-                        className="bg-conventional/10 flex items-center justify-between rounded p-2 text-xs"
-                      >
-                        <span className="text-conventional truncate font-medium">
-                          {product.name}
-                        </span>
-                        <span className="text-conventional/80 ml-2 flex-shrink-0">
-                          {formatNumber(product.dosage, 3)} t
-                        </span>
+                  {/* Tablet products */}
+                  {parsePesticideDetail(
+                    fieldData.pesticides_tablets_detail
+                  ).map((product, index) => (
+                    <div
+                      key={`tablet-${index}`}
+                      className="bg-conventional/10 flex items-center justify-between rounded p-2 text-xs"
+                    >
+                      <span className="text-conventional truncate font-medium">
+                        {product.name}
+                      </span>
+                      <span className="text-conventional/80 ml-2 flex-shrink-0">
+                        {formatNumber(product.dosage, 0)} tabletter
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Categorized Pesticide Products */}
+            {(fieldData.pfas_products_detail ||
+              fieldData.diquat_products_detail ||
+              fieldData.glyphosate_products_detail ||
+              fieldData.other_products_detail) && (
+              <div className="mt-3">
+                <h4 className="text-foreground mb-2 text-sm font-medium">
+                  Anvendte pesticider (kategoriseret)
+                </h4>
+                <div className="max-h-48 space-y-2 overflow-y-auto">
+                  {/* PFAS Products */}
+                  {fieldData.pfas_products_detail && (
+                    <div className="mb-2">
+                      <div className="mb-1 text-xs font-medium text-orange-600">
+                        🚨 PFAS-holdige produkter (
+                        {fieldData.pfas_applications || 0})
                       </div>
-                    )
+                      {parsePesticideDetailWithUnit(
+                        fieldData.pfas_products_detail
+                      ).map((product, index) => {
+                        const riskIcon = getRiskIcon(
+                          product.healthRisk,
+                          product.envRisk,
+                          product.signalWord
+                        );
+                        return (
+                          <div
+                            key={`pfas-${index}`}
+                            className="mb-1 rounded border-l-4 border-orange-400 bg-orange-50 p-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="font-medium text-orange-800">
+                                  {product.name}
+                                </div>
+                                <div className="text-sm text-orange-600">
+                                  {formatNumber(product.dosage, 2)}{' '}
+                                  {product.unit}
+                                </div>
+                              </div>
+                              {riskIcon && (
+                                <div
+                                  className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
+                                  title={`${riskIcon.ghs} - ${riskIcon.level}`}
+                                >
+                                  <riskIcon.Icon
+                                    className={`h-4 w-4 ${riskIcon.color}`}
+                                  />
+                                  <span
+                                    className={`text-xs font-medium ${riskIcon.color}`}
+                                  >
+                                    {riskIcon.level}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Diquat Products */}
+                  {fieldData.diquat_products_detail && (
+                    <div className="mb-2">
+                      <div className="mb-1 text-xs font-medium text-red-600">
+                        ⚠️ Diquat-holdige produkter (
+                        {fieldData.diquat_applications || 0})
+                      </div>
+                      {parsePesticideDetailWithUnit(
+                        fieldData.diquat_products_detail
+                      ).map((product, index) => (
+                        <div
+                          key={`diquat-${index}`}
+                          className="mb-1 rounded border-l-4 border-red-400 bg-red-50 p-2"
+                        >
+                          <span className="font-medium text-red-800">
+                            {product.name}
+                          </span>
+                          <span className="ml-2 text-red-600">
+                            {formatNumber(product.dosage, 2)} {product.unit}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Glyphosate Products */}
+                  {fieldData.glyphosate_products_detail && (
+                    <div className="mb-2">
+                      <div className="mb-1 text-xs font-medium text-yellow-600">
+                        🌾 Glyphosat-holdige produkter (
+                        {fieldData.glyphosate_applications || 0})
+                      </div>
+                      {parsePesticideDetailWithUnit(
+                        fieldData.glyphosate_products_detail
+                      ).map((product, index) => (
+                        <div
+                          key={`glyphosate-${index}`}
+                          className="mb-1 rounded border-l-4 border-yellow-400 bg-yellow-50 p-2"
+                        >
+                          <span className="font-medium text-yellow-800">
+                            {product.name}
+                          </span>
+                          <span className="ml-2 text-yellow-600">
+                            {formatNumber(product.dosage, 2)} {product.unit}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Other Products */}
+                  {fieldData.other_products_detail && (
+                    <div className="mb-2">
+                      <div className="mb-1 text-xs font-medium text-gray-600">
+                        🧪 Øvrige produkter ({fieldData.other_applications || 0}
+                        )
+                      </div>
+                      {parsePesticideDetailWithUnit(
+                        fieldData.other_products_detail
+                      ).map((product, index) => (
+                        <div
+                          key={`other-${index}`}
+                          className="mb-1 rounded border-l-4 border-gray-400 bg-gray-50 p-2"
+                        >
+                          <span className="font-medium text-gray-800">
+                            {product.name}
+                          </span>
+                          <span className="ml-2 text-gray-600">
+                            {formatNumber(product.dosage, 2)} {product.unit}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </div>

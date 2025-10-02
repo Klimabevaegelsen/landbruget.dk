@@ -210,6 +210,25 @@ class FieldAnalysisPMTilesGenerator:
         pesticide_fields = [
             "pesticide_applications as total_pesticide_applications",
             "pesticides_used",
+            
+            # New categorized product details
+            "pfas_products_detail",
+            "pfas_applications",
+            "diquat_products_detail",
+            "diquat_applications",
+            "glyphosate_products_detail",
+            "glyphosate_applications",
+            "other_products_detail",
+            "other_applications",
+            
+            # Legacy unit-based details
+            "pesticides_kg_detail",
+            "pesticides_liters_detail",
+            "pesticides_grams_detail",
+            "pesticides_ml_detail",
+            "pesticides_tablets_detail",
+            
+            # Proximity data
             "residential_buildings_formatted as residential_buildings_proximity",
             "educational_facilities_formatted as educational_facilities_proximity",
             "water_distance_formatted as water_distance_proximity",

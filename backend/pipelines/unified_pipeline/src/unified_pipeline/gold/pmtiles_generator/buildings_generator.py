@@ -136,7 +136,7 @@ class BuildingsProximityPMTilesGenerator:
                     inspire_construction_year, inspire_floors, inspire_dwellings,
                     bbr_usage_code,
                     COALESCE(bbr_usage_name, 'Ukendt bygningstype') as bbr_usage_name,
-                    ST_FlipCoordinates(geometry) as geometry
+                    geometry as geometry
                 FROM {table_name}
                 WHERE category_group IN ('residential', 'publicServices', 'agricultural')
                     AND geometry IS NOT NULL
@@ -166,6 +166,16 @@ class BuildingsProximityPMTilesGenerator:
             logger.info("🔗 Performing SPATIAL_JOIN optimized proximity filtering...")
 
             chunk_size = 10000  # Process buildings in chunks for memory safety
+            
+            # Verify table exists before counting
+            table_exists = await asyncio.to_thread(
+                self.conn.execute, 
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'buildings_for_proximity'"
+            )
+            if table_exists.fetchone()[0] == 0:
+                logger.error("buildings_for_proximity table does not exist")
+                return False
+            
             building_count = await asyncio.to_thread(
                 self.conn.execute, "SELECT COUNT(*) FROM buildings_for_proximity"
             )
