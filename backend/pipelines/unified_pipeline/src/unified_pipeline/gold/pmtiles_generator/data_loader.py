@@ -433,104 +433,180 @@ class PMTilesDataLoader:
         try:
             # First, check if BMD data is available and enhance pesticide data
             enhanced_pesticide_table = await self._enhance_pesticide_with_bmd(pesticide_table)
+            
+            # Check if enhancement worked by testing for BMD columns
+            has_bmd_data = False
+            try:
+                test_result = await asyncio.to_thread(
+                    self.conn.execute, 
+                    f"SELECT COUNT(*) FROM {enhanced_pesticide_table} WHERE contains_pfas IS NOT NULL LIMIT 1"
+                )
+                has_bmd_data = True
+                logger.info("BMD enhancement successful - using categorized pesticide aggregation")
+            except Exception:
+                logger.warning("BMD enhancement failed - falling back to basic aggregation")
+                has_bmd_data = False
 
-            # Create enhanced pesticide summary with detailed product information
-            summary_query = f"""
-            CREATE OR REPLACE TABLE temp_pesticide_summary AS
-            SELECT
-                field_uuid,
-                COUNT(*) as pesticide_applications,
-                STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
+            if has_bmd_data:
+                # Enhanced aggregation with BMD classifications
+                summary_query = f"""
+                CREATE OR REPLACE TABLE temp_pesticide_summary AS
+                SELECT
+                    field_uuid,
+                    COUNT(*) as pesticide_applications,
+                    STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
 
-                -- Enhanced categorized product details with risk information
-                STRING_AGG(
-                    CASE WHEN COALESCE(contains_pfas, false) = true
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
-                         COALESCE(DosageUnit, 'ukendt') || ':' ||
-                         COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
-                         COALESCE(signal_word, '')
-                    END, ';'
-                ) FILTER (WHERE COALESCE(contains_pfas, false) = true) as pfas_products_detail,
-                COUNT(CASE WHEN COALESCE(contains_pfas, false) = true THEN 1 END) as pfas_applications,
+                    -- Enhanced categorized product details with risk information
+                    STRING_AGG(
+                        CASE WHEN COALESCE(contains_pfas, false) = true
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                             COALESCE(DosageUnit, 'ukendt') || ':' ||
+                             COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
+                             COALESCE(signal_word, '')
+                        END, ';'
+                    ) FILTER (WHERE COALESCE(contains_pfas, false) = true) as pfas_products_detail,
+                    COUNT(CASE WHEN COALESCE(contains_pfas, false) = true THEN 1 END) as pfas_applications,
 
-                STRING_AGG(
-                    CASE WHEN COALESCE(contains_diquat, false) = true
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
-                         COALESCE(DosageUnit, 'ukendt') || ':' ||
-                         COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
-                         COALESCE(signal_word, '')
-                    END, ';'
-                ) FILTER (WHERE COALESCE(contains_diquat, false) = true) as diquat_products_detail,
-                COUNT(CASE WHEN COALESCE(contains_diquat, false) = true THEN 1 END) as diquat_applications,
+                    STRING_AGG(
+                        CASE WHEN COALESCE(contains_diquat, false) = true
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                             COALESCE(DosageUnit, 'ukendt') || ':' ||
+                             COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
+                             COALESCE(signal_word, '')
+                        END, ';'
+                    ) FILTER (WHERE COALESCE(contains_diquat, false) = true) as diquat_products_detail,
+                    COUNT(CASE WHEN COALESCE(contains_diquat, false) = true THEN 1 END) as diquat_applications,
 
-                STRING_AGG(
-                    CASE WHEN COALESCE(contains_glyphosate, false) = true
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
-                         COALESCE(DosageUnit, 'ukendt') || ':' ||
-                         COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
-                         COALESCE(signal_word, '')
-                    END, ';'
-                ) FILTER (WHERE COALESCE(contains_glyphosate, false) = true) as glyphosate_products_detail,
-                COUNT(
-                    CASE WHEN COALESCE(contains_glyphosate, false) = true THEN 1 END
-                ) as glyphosate_applications,
+                    STRING_AGG(
+                        CASE WHEN COALESCE(contains_glyphosate, false) = true
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                             COALESCE(DosageUnit, 'ukendt') || ':' ||
+                             COALESCE(health_risk, '') || ':' || COALESCE(environmental_risk, '') || ':' ||
+                             COALESCE(signal_word, '')
+                        END, ';'
+                    ) FILTER (WHERE COALESCE(contains_glyphosate, false) = true) as glyphosate_products_detail,
+                    COUNT(
+                        CASE WHEN COALESCE(contains_glyphosate, false) = true THEN 1 END
+                    ) as glyphosate_applications,
 
-                STRING_AGG(
-                    CASE WHEN COALESCE(contains_pfas, false) = false
-                              AND COALESCE(contains_diquat, false) = false
-                              AND COALESCE(contains_glyphosate, false) = false
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
-                         COALESCE(DosageUnit, 'ukendt')
-                    END, ';'
-                ) FILTER (WHERE COALESCE(contains_pfas, false) = false
-                                AND COALESCE(contains_diquat, false) = false
-                                AND COALESCE(contains_glyphosate, false) = false
-                ) as other_products_detail,
-                COUNT(CASE WHEN COALESCE(contains_pfas, false) = false
-                              AND COALESCE(contains_diquat, false) = false
-                              AND COALESCE(contains_glyphosate, false) = false
-                              THEN 1 END) as other_applications,
+                    STRING_AGG(
+                        CASE WHEN COALESCE(contains_pfas, false) = false
+                                  AND COALESCE(contains_diquat, false) = false
+                                  AND COALESCE(contains_glyphosate, false) = false
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                             COALESCE(DosageUnit, 'ukendt')
+                        END, ';'
+                    ) FILTER (WHERE COALESCE(contains_pfas, false) = false
+                                    AND COALESCE(contains_diquat, false) = false
+                                    AND COALESCE(contains_glyphosate, false) = false
+                    ) as other_products_detail,
+                    COUNT(CASE WHEN COALESCE(contains_pfas, false) = false
+                                  AND COALESCE(contains_diquat, false) = false
+                                  AND COALESCE(contains_glyphosate, false) = false
+                                  THEN 1 END) as other_applications,
 
-                -- Legacy unit-based aggregations for backward compatibility
-                STRING_AGG(
-                    CASE WHEN DosageUnit IN ('2', 'kg')
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
-                    END, ';'
-                ) FILTER (WHERE DosageUnit IN ('2', 'kg')) as pesticides_kg_detail,
+                    -- Legacy unit-based aggregations for backward compatibility
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('2', 'kg')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('2', 'kg')) as pesticides_kg_detail,
 
-                STRING_AGG(
-                    CASE WHEN DosageUnit IN ('4', 'L', 'liter')
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
-                    END, ';'
-                ) FILTER (WHERE DosageUnit IN ('4', 'L', 'liter')) as pesticides_liters_detail,
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('4', 'L', 'liter')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('4', 'L', 'liter')) as pesticides_liters_detail,
 
-                STRING_AGG(
-                    CASE WHEN DosageUnit IN ('1', 'g', 'gram')
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
-                    END, ';'
-                ) FILTER (WHERE DosageUnit IN ('1', 'g', 'gram')) as pesticides_grams_detail,
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('1', 'g', 'gram')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('1', 'g', 'gram')) as pesticides_grams_detail,
 
-                STRING_AGG(
-                    CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
-                    END, ';'
-                ) FILTER (WHERE DosageUnit IN ('5', 'ml', 'milliliter')) as pesticides_ml_detail,
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('5', 'ml', 'milliliter')) as pesticides_ml_detail,
 
-                STRING_AGG(
-                    CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
-                    THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
-                    END, ';'
-                ) FILTER (WHERE DosageUnit IN ('3', 'tablet', 'tabletter')) as pesticides_tablets_detail,
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('3', 'tablet', 'tabletter')) as pesticides_tablets_detail,
 
-                -- Proximity data
-                residential_buildings_formatted,
-                educational_facilities_formatted,
-                water_distance_formatted,
-                AVG(MatchConfidence) as avg_match_confidence
-            FROM {enhanced_pesticide_table}
-            GROUP BY field_uuid, residential_buildings_formatted,
-                     educational_facilities_formatted, water_distance_formatted
-            """
+                    -- Proximity data
+                    residential_buildings_formatted,
+                    educational_facilities_formatted,
+                    water_distance_formatted,
+                    AVG(MatchConfidence) as avg_match_confidence
+                FROM {enhanced_pesticide_table}
+                GROUP BY field_uuid, residential_buildings_formatted,
+                         educational_facilities_formatted, water_distance_formatted
+                """
+            else:
+                # Fallback to basic aggregation without BMD classifications
+                summary_query = f"""
+                CREATE OR REPLACE TABLE temp_pesticide_summary AS
+                SELECT
+                    field_uuid,
+                    COUNT(*) as pesticide_applications,
+                    STRING_AGG(DISTINCT PesticideName, ', ') as pesticides_used,
+
+                    -- Basic product details without classifications (no BMD data available)
+                    NULL as pfas_products_detail,
+                    0 as pfas_applications,
+                    NULL as diquat_products_detail,
+                    0 as diquat_applications,
+                    NULL as glyphosate_products_detail,
+                    0 as glyphosate_applications,
+                    STRING_AGG(
+                        PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
+                        COALESCE(DosageUnit, 'ukendt'), ';'
+                    ) as other_products_detail,
+                    COUNT(*) as other_applications,
+
+                    -- Legacy unit-based aggregations
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('2', 'kg')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('2', 'kg')) as pesticides_kg_detail,
+
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('4', 'L', 'liter')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('4', 'L', 'liter')) as pesticides_liters_detail,
+
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('1', 'g', 'gram')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('1', 'g', 'gram')) as pesticides_grams_detail,
+
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('5', 'ml', 'milliliter')) as pesticides_ml_detail,
+
+                    STRING_AGG(
+                        CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
+                        THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2)
+                        END, ';'
+                    ) FILTER (WHERE DosageUnit IN ('3', 'tablet', 'tabletter')) as pesticides_tablets_detail,
+
+                    -- Proximity data
+                    residential_buildings_formatted,
+                    educational_facilities_formatted,
+                    water_distance_formatted,
+                    AVG(MatchConfidence) as avg_match_confidence
+                FROM {pesticide_table}
+                GROUP BY field_uuid, residential_buildings_formatted,
+                         educational_facilities_formatted, water_distance_formatted
+                """
 
             await asyncio.to_thread(self.conn.execute, summary_query)
 
@@ -637,26 +713,36 @@ class PMTilesDataLoader:
             )
 
             # Log enhancement statistics
-            total_count = await asyncio.to_thread(
-                self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}"
-            )
-            pfas_count = await asyncio.to_thread(
-                self.conn.execute,
-                f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_pfas = true",
-            )
-            diquat_count = await asyncio.to_thread(
-                self.conn.execute,
-                f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_diquat = true",
-            )
-            glyphosate_count = await asyncio.to_thread(
-                self.conn.execute,
-                f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_glyphosate = true",
-            )
+            try:
+                total_count_result = await asyncio.to_thread(
+                    self.conn.execute, f"SELECT COUNT(*) FROM {enhanced_table}"
+                )
+                total_count = total_count_result.fetchone()[0] if total_count_result else 0
+                
+                pfas_count_result = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_pfas = true",
+                )
+                pfas_count = pfas_count_result.fetchone()[0] if pfas_count_result else 0
+                
+                diquat_count_result = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_diquat = true",
+                )
+                diquat_count = diquat_count_result.fetchone()[0] if diquat_count_result else 0
+                
+                glyphosate_count_result = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT COUNT(*) FROM {enhanced_table} WHERE contains_glyphosate = true",
+                )
+                glyphosate_count = glyphosate_count_result.fetchone()[0] if glyphosate_count_result else 0
 
-            logger.info(f"Enhanced pesticide data: {total_count.fetchone()[0]:,} total records")
-            logger.info(f"  - PFAS products: {pfas_count.fetchone()[0]:,}")
-            logger.info(f"  - Diquat products: {diquat_count.fetchone()[0]:,}")
-            logger.info(f"  - Glyphosate products: {glyphosate_count.fetchone()[0]:,}")
+                logger.info(f"Enhanced pesticide data: {total_count:,} total records")
+                logger.info(f"  - PFAS products: {pfas_count:,}")
+                logger.info(f"  - Diquat products: {diquat_count:,}")
+                logger.info(f"  - Glyphosate products: {glyphosate_count:,}")
+            except Exception as stats_error:
+                logger.warning(f"Could not get enhancement statistics: {stats_error}")
 
             return enhanced_table
 
