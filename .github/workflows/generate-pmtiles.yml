@@ -114,11 +114,8 @@ jobs:
               available_years = await detector.detect_all_available_years()
               years_to_process = detector.get_years_to_process(available_years)
 
-              # Limit to recent years for regular runs to avoid overwhelming GitHub Actions
-              # Further limit to 3 most recent years to prevent timeouts
+              # Limit to recent years for regular runs to avoid overwhelming GitHub Actions  
               recent_years = [y for y in years_to_process if y >= 2020]
-              if len(recent_years) > 3:
-                  recent_years = recent_years[-3:]  # Last 3 years only
               # Format as JSON array of strings for GitHub Actions compatibility
               years_strings = [str(y) for y in recent_years]
               print(json.dumps(years_strings))
@@ -240,8 +237,8 @@ jobs:
             ${{ github.event.inputs.keep_versions && format('--keep-versions={0}', github.event.inputs.keep_versions) || '' }}
 
   generate-all:
-    runs-on: ubuntu-latest  
-    if: false  # Disable this job - use generate-field-analysis matrix instead
+    runs-on: ubuntu-latest
+    if: false # Disable this job - use generate-field-analysis matrix instead
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
