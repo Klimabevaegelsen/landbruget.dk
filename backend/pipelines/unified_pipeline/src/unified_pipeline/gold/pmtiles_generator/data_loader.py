@@ -51,6 +51,9 @@ class PMTilesDataLoader:
                 logger.error(f"Failed to load FVM marker data for year {year}")
                 return None
 
+            # Ensure schema compatibility for older years
+            await self._ensure_fvm_schema_compatibility(field_table, year)
+
             # Load optional data sources
             env_analysis_table = None
             production_table = None
@@ -134,6 +137,41 @@ class PMTilesDataLoader:
         except Exception as e:
             logger.error(f"Error loading FVM marker data for year {year}: {e}")
             return None
+
+    async def _ensure_fvm_schema_compatibility(self, table_name: str, year: int) -> None:
+        """Ensure FVM table has required columns for all years.
+        
+        Older years may be missing columns that newer years have.
+        """
+        try:
+            # Get current schema
+            schema_result = await asyncio.to_thread(
+                self.conn.execute, f"DESCRIBE {table_name}"
+            )
+            existing_columns = {row[0] for row in schema_result.fetchall()}
+            
+            # Required columns that might be missing in older years
+            required_columns = {
+                'crop_name': 'VARCHAR DEFAULT NULL',
+                'crop_code': 'VARCHAR DEFAULT NULL', 
+                'is_organic': 'BOOLEAN DEFAULT false',
+                'organic_conversion_date': 'TIMESTAMP DEFAULT NULL',
+                'organic_deregistration_date': 'TIMESTAMP DEFAULT NULL',
+                'organic_conversion_status': 'VARCHAR DEFAULT NULL'
+            }
+            
+            # Add missing columns
+            for col_name, col_type in required_columns.items():
+                if col_name not in existing_columns:
+                    logger.info(f"Adding missing column {col_name} to {table_name} for year {year}")
+                    await asyncio.to_thread(
+                        self.conn.execute,
+                        f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}"
+                    )
+                    
+        except Exception as e:
+            logger.warning(f"Error ensuring schema compatibility for {table_name}: {e}")
+            # Don't fail the pipeline for schema issues
 
     async def _load_field_environmental_analysis(self, year: int) -> Optional[str]:
         """Load field environmental analysis data for a specific year.
@@ -462,7 +500,7 @@ class PMTilesDataLoader:
                         CASE WHEN COALESCE(contains_pfas, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                              COALESCE(health_risk, '') || ':' || 
+                              COALESCE(health_risk, '') || ':' ||
                               COALESCE(environmental_risk, '') || ':' ||
                              COALESCE(signal_word, '')
                         END, ';'
@@ -475,7 +513,7 @@ class PMTilesDataLoader:
                         CASE WHEN COALESCE(contains_diquat, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                              COALESCE(health_risk, '') || ':' || 
+                              COALESCE(health_risk, '') || ':' ||
                               COALESCE(environmental_risk, '') || ':' ||
                              COALESCE(signal_word, '')
                         END, ';'
@@ -490,7 +528,7 @@ class PMTilesDataLoader:
                         CASE WHEN COALESCE(contains_glyphosate, false) = true
                         THEN PesticideName || ':' || ROUND(COALESCE(DosageQuantity, 0), 2) || ':' ||
                              COALESCE(DosageUnit, 'ukendt') || ':' ||
-                              COALESCE(health_risk, '') || ':' || 
+                              COALESCE(health_risk, '') || ':' ||
                               COALESCE(environmental_risk, '') || ':' ||
                              COALESCE(signal_word, '')
                         END, ';'
