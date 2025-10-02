@@ -114,21 +114,15 @@ jobs:
               available_years = await detector.detect_all_available_years()
               years_to_process = detector.get_years_to_process(available_years)
 
-              # Limit to recent years for regular runs to avoid overwhelming GitHub Actions
-              recent_years = [y for y in years_to_process if y >= 2020]
+              # Use all detected years - no artificial filtering
               # Format as JSON array of strings for GitHub Actions compatibility
-              years_strings = [str(y) for y in recent_years]
+              years_strings = [str(y) for y in years_to_process]
               print(json.dumps(years_strings))
 
           asyncio.run(detect_years())
-          "
-            # Use all available recent years we know exist
-            years_array="["
-            for year in 2020 2021 2022 2023 2024 2025; do
-                years_array="$years_array\"$year\","
-            done
-            years_array="${years_array%,}]"
-            echo "years=$years_array" >> $GITHUB_OUTPUT
+          " > detected_years.json
+            years=$(cat detected_years.json)
+            echo "years=$years" >> $GITHUB_OUTPUT
             echo "should_run_matrix=true" >> $GITHUB_OUTPUT
           fi
 

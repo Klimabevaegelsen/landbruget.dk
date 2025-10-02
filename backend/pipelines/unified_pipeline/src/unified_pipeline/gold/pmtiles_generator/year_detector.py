@@ -253,9 +253,17 @@ class DataSourceYearDetector:
             # Auto-detect based on available data
             # Use FVM marker as the base since it's required for all PMTiles
             fvm_years = set(available_years.get("fvm_marker", []))
-            target_years = fvm_years
+            
+            # For field analysis, we only need FVM marker + production data
+            # Pesticide and environmental data are optional enhancements
+            production_years = set(available_years.get("field_production", []))
+            
+            # Take intersection of FVM and production (both required for meaningful analysis)
+            target_years = fvm_years & production_years
+            logger.info(f"FVM marker years: {sorted(fvm_years)}")
+            logger.info(f"Field production years: {sorted(production_years)}")
             logger.info(
-                f"Auto-detected years based on FVM marker availability: {sorted(target_years)}"
+                f"Auto-detected years (FVM + production): {sorted(target_years)}"
             )
 
         # Apply exclusions
