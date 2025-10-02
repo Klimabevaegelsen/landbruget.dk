@@ -210,7 +210,6 @@ class FieldAnalysisPMTilesGenerator:
         pesticide_fields = [
             "pesticide_applications as total_pesticide_applications",
             "pesticides_used",
-            
             # New categorized product details
             "pfas_products_detail",
             "pfas_applications",
@@ -220,14 +219,12 @@ class FieldAnalysisPMTilesGenerator:
             "glyphosate_applications",
             "other_products_detail",
             "other_applications",
-            
             # Legacy unit-based details
             "pesticides_kg_detail",
             "pesticides_liters_detail",
             "pesticides_grams_detail",
             "pesticides_ml_detail",
             "pesticides_tablets_detail",
-            
             # Proximity data
             "residential_buildings_formatted as residential_buildings_proximity",
             "educational_facilities_formatted as educational_facilities_proximity",
@@ -249,7 +246,7 @@ class FieldAnalysisPMTilesGenerator:
             # Get table schema
             schema_result = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
             available_columns = {row[0] for row in schema_result}
-            
+
             logger.info(f"Available columns in {table_name}: {len(available_columns)} columns")
             logger.debug(f"Columns: {sorted(available_columns)}")
 
@@ -277,18 +274,18 @@ class FieldAnalysisPMTilesGenerator:
                         added_count += 1
                 logger.info(f"Added {added_count}/{len(field_group)} {field_group_name} fields")
 
-            # Always include geometry last
+            # Always include geometry last - convert to GeoJSON format for tippecanoe
             if "geometry" in available_columns:
-                selected_fields.append("geometry")
-                logger.info("Geometry column found and added")
+                selected_fields.append("ST_AsGeoJSON(geometry) as geometry")
+                logger.info("Geometry column found and added (converted to GeoJSON)")
             else:
                 logger.error("No geometry column found! This will cause 0 features.")
-                
+
             logger.info(f"Total selected fields: {len(selected_fields)}")
 
         except Exception as e:
             logger.warning(f"Could not determine table schema, using base fields: {e}")
-            selected_fields = base_fields + ["geometry"]
+            selected_fields = base_fields + ["ST_AsGeoJSON(geometry) as geometry"]
 
         # Build query
         fields_str = ",\n    ".join(selected_fields)
