@@ -141,11 +141,19 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
                 "upload_results": {},
             }
 
+            # Initialize variables to prevent scope issues
+            field_pmtiles = {}
+            environmental_pmtiles = {}
+            buildings_pmtiles = {}
+
             # Generate field analysis PMTiles for each year
             if years_to_process:
                 logger.info("Generating field analysis PMTiles")
                 field_pmtiles = await self.field_generator.generate_multiple_years(years_to_process)
                 results["field_analysis_pmtiles"] = field_pmtiles
+            else:
+                logger.info("No years to process for field analysis")
+                results["field_analysis_pmtiles"] = {}
 
             # Generate environmental layers PMTiles (year-independent)
             logger.info("Generating environmental layers PMTiles")

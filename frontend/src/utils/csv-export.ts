@@ -97,7 +97,7 @@ export function convertToCSV(fields: FieldAnalysisData[]): string {
     field.pesticides_liters_detail || '',
     field.pesticides_grams_detail || '',
     field.pesticides_ml_detail || '',
-    field.pesticides_tons_detail || '',
+    field.pesticides_tablets_detail || '',
     field.click_coordinates?.lat?.toString() || '',
     field.click_coordinates?.lng?.toString() || '',
   ]);

@@ -16,7 +16,6 @@ export interface FieldAnalysisData {
   // PFAS data
   total_pfas_active_ingredient_kg: number;
   total_pfas_belastning?: number;
-  pfas_applications?: number;
 
   // All pesticide dosage data (different units based on what's used)
   total_dosage_kg?: number;
@@ -32,10 +31,8 @@ export interface FieldAnalysisData {
 
   // Chemical-specific data
   total_diquat_belastning?: number;
-  diquat_applications?: number;
   total_glyphosate_active_ingredient_kg?: number;
   total_glyphosate_belastning?: number;
-  glyphosate_applications?: number;
 
   // Environmental areas
   bnbo_area_hectares: number;
@@ -55,12 +52,22 @@ export interface FieldAnalysisData {
   unique_pesticide_products?: number;
   is_partial_coverage?: boolean;
 
-  // Detailed pesticide product information
+  // New categorized pesticide details
+  pfas_products_detail?: string;
+  pfas_applications?: number;
+  diquat_products_detail?: string;
+  diquat_applications?: number;
+  glyphosate_products_detail?: string;
+  glyphosate_applications?: number;
+  other_products_detail?: string;
+  other_applications?: number;
+
+  // Legacy detailed pesticide product information
   pesticides_kg_detail?: string;
   pesticides_liters_detail?: string;
   pesticides_grams_detail?: string;
   pesticides_ml_detail?: string;
-  pesticides_tons_detail?: string;
+  pesticides_tablets_detail?: string;
 }
 
 export interface LayerVisibility {
