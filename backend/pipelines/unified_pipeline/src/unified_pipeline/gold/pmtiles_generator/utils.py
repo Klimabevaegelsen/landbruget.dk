@@ -220,6 +220,27 @@ class GeoJSONWriter:
             # Create GeoJSON FeatureCollection
             geojson = {"type": "FeatureCollection", "features": features}
 
+            # DEBUG: Log coordinate bounds from actual GeoJSON
+            if features:
+                try:
+                    # Get first feature's first coordinate to check format
+                    first_feature = features[0]
+                    first_coord = first_feature["geometry"]["coordinates"]
+                    if first_feature["geometry"]["type"] == "MultiPolygon":
+                        sample_coord = first_coord[0][0][0]  # [lon, lat]
+                    elif first_feature["geometry"]["type"] == "Polygon":
+                        sample_coord = first_coord[0][0]  # [lon, lat]
+                    else:
+                        sample_coord = first_coord  # Point [lon, lat]
+                    
+                    logger.info(f"DEBUG: First coordinate in GeoJSON: [{sample_coord[0]:.6f}, {sample_coord[1]:.6f}]")
+                    if sample_coord[0] > 50:
+                        logger.error("❌ GeoJSON has lat,lon order (WRONG) - first value > 50")
+                    else:
+                        logger.info("✅ GeoJSON has lon,lat order (CORRECT) - first value < 50")
+                except Exception as coord_debug_error:
+                    logger.warning(f"Could not debug GeoJSON coordinates: {coord_debug_error}")
+
             # Write to file
             with open(output_path, "w") as f:
                 json.dump(geojson, f, separators=(",", ":"))  # Compact format
