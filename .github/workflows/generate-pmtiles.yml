@@ -131,7 +131,7 @@ jobs:
 
   generate-environmental:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.environmental_only == 'true' || github.event_name == 'schedule' }}
+    if: ${{ github.event.inputs.environmental_only == 'true' || github.event_name == 'schedule' || (github.event.inputs.environmental_only != 'true' && github.event.inputs.target_year == '' && github.event.inputs.years_range == '') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -240,7 +240,7 @@ jobs:
     strategy:
       matrix:
         year: ${{ fromJson(needs.detect-years.outputs.years) }}
-      max-parallel: 3
+      max-parallel: 6
       fail-fast: false
     steps:
       - name: Checkout code
