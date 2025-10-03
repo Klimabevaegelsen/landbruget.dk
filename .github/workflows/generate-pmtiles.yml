@@ -234,7 +234,13 @@ jobs:
 
   generate-all:
     runs-on: ubuntu-latest
-    if: false # Disable this job - use generate-field-analysis matrix instead
+    needs: detect-years
+    if: ${{ needs.detect-years.outputs.should_run_matrix == 'true' && github.event.inputs.environmental_only != 'true' && github.event.inputs.target_year == '' && github.event.inputs.years_range == '' }}
+    strategy:
+      matrix:
+        year: ${{ fromJson(needs.detect-years.outputs.years) }}
+      max-parallel: 3
+      fail-fast: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
