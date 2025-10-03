@@ -120,8 +120,9 @@ jobs:
               print(json.dumps(years_strings))
 
           asyncio.run(detect_years())
-          " > detected_years.json
-            years=$(cat detected_years.json)
+          " > detected_years_raw.txt 2>&1
+            # Extract only the JSON line (last line should be the JSON output)
+            years=$(tail -1 detected_years_raw.txt | grep '^\[' || echo '[]')
             echo "years<<EOF" >> $GITHUB_OUTPUT
             echo "$years" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
