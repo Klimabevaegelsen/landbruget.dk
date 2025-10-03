@@ -139,18 +139,24 @@ class BuildingsProximityPMTilesGenerator:
                 logger.info(
                     f"DEBUG: Building bounds ORIGINAL: X({b_min_x:.6f} to {b_max_x:.6f}), Y({b_min_y:.6f} to {b_max_y:.6f})"
                 )
-                
+
                 # Determine coordinate format based on bounds
                 if b_min_x > 50 and b_max_x < 60 and b_min_y > 8 and b_max_y < 16:
-                    logger.info("DEBUG: Buildings appear to be in lat,lon format (X>50 suggests latitude)")
-                    buildings_need_flip = False
+                    logger.info(
+                        "DEBUG: Buildings appear to be in lat,lon format (X>50 suggests latitude)"
+                    )
+                    buildings_need_flip = True  # Flip to lon,lat format - CORRECT!
                 elif b_min_x > 8 and b_max_x < 16 and b_min_y > 50 and b_max_y < 60:
-                    logger.info("DEBUG: Buildings appear to be in lon,lat format (X<16 suggests longitude)")
-                    buildings_need_flip = True
+                    logger.info(
+                        "DEBUG: Buildings appear to be in lon,lat format (X<16 suggests longitude)"
+                    )
+                    buildings_need_flip = False  # Already in lon,lat format - don't flip!
                 else:
-                    logger.warning(f"DEBUG: Buildings coordinates don't match Denmark bounds - using default")
+                    logger.warning(
+                        f"DEBUG: Buildings coordinates don't match Denmark bounds - using default"
+                    )
                     buildings_need_flip = False
-                    
+
             except Exception as e:
                 logger.warning(f"Could not log building bounds: {e}")
                 buildings_need_flip = False
@@ -162,7 +168,7 @@ class BuildingsProximityPMTilesGenerator:
             else:
                 buildings_geom_sql = "geometry"
                 logger.info("DEBUG: Using original buildings geometry")
-            
+
             buildings_query = f"""
                 CREATE OR REPLACE TABLE buildings_for_proximity AS
                 SELECT
@@ -176,9 +182,9 @@ class BuildingsProximityPMTilesGenerator:
                 WHERE category_group IN ('residential', 'publicServices', 'agricultural')
                     AND geometry IS NOT NULL
             """
-            
+
             await asyncio.to_thread(self.conn.execute, buildings_query)
-            
+
             # DEBUG: Log building coordinates AFTER transformation
             try:
                 transformed_bounds = await asyncio.to_thread(
@@ -209,27 +215,35 @@ class BuildingsProximityPMTilesGenerator:
                 logger.info(
                     f"DEBUG: Field bounds AFTER loading: X({f_min_x:.6f} to {f_max_x:.6f}), Y({f_min_y:.6f} to {f_max_y:.6f})"
                 )
-                
+
                 # Validate coordinate format for Denmark
                 if f_min_x > 50 and f_max_x < 60 and f_min_y > 8 and f_max_y < 16:
-                    logger.info("DEBUG: Fields appear to be in lat,lon format (X>50 suggests latitude)")
+                    logger.info(
+                        "DEBUG: Fields appear to be in lat,lon format (X>50 suggests latitude)"
+                    )
                     fields_format = "lat,lon"
                 elif f_min_x > 8 and f_max_x < 16 and f_min_y > 50 and f_max_y < 60:
-                    logger.info("DEBUG: Fields appear to be in lon,lat format (X<16 suggests longitude)")
+                    logger.info(
+                        "DEBUG: Fields appear to be in lon,lat format (X<16 suggests longitude)"
+                    )
                     fields_format = "lon,lat"
                 else:
                     logger.error(f"DEBUG: Fields coordinates don't match Denmark bounds!")
                     fields_format = "unknown"
-                    
-                # Check if coordinate systems match for spatial join
+
+                # Check if coordinate systems match for spatial join  
                 buildings_format = "lon,lat" if buildings_need_flip else "lat,lon"
-                logger.info(f"DEBUG: Coordinate system status - Buildings: {buildings_format}, Fields: {fields_format}")
-                
+                logger.info(
+                    f"DEBUG: Coordinate system status - Buildings: {buildings_format}, Fields: {fields_format}"
+                )
+
                 if buildings_format != fields_format:
-                    logger.warning("DEBUG: Coordinate system mismatch detected - spatial join may fail!")
+                    logger.warning(
+                        "DEBUG: Coordinate system mismatch detected - spatial join may fail!"
+                    )
                 else:
                     logger.info("DEBUG: Coordinate systems match - spatial join should work!")
-                    
+
             except Exception as e:
                 logger.warning(f"Could not log field bounds: {e}")
 
