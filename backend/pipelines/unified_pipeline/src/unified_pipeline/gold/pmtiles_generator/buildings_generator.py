@@ -126,6 +126,20 @@ class BuildingsProximityPMTilesGenerator:
 
             # COORDINATE ALIGNMENT - Flip BBR buildings to match field coordinate order
             logger.info("📍 Creating buildings table for proximity analysis...")
+            
+            # DEBUG: Log building coordinates before proximity filtering
+            try:
+                building_bounds = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT ST_XMin(ST_Extent(geometry)), ST_YMin(ST_Extent(geometry)), "
+                    f"ST_XMax(ST_Extent(geometry)), ST_YMax(ST_Extent(geometry)) "
+                    f"FROM {table_name} WHERE geometry IS NOT NULL"
+                )
+                b_min_x, b_min_y, b_max_x, b_max_y = building_bounds.fetchone()
+                logger.info(f"DEBUG: Building bounds before filtering: X({b_min_x:.6f} to {b_max_x:.6f}), Y({b_min_y:.6f} to {b_max_y:.6f})")
+            except Exception as e:
+                logger.warning(f"Could not log building bounds: {e}")
+            
             await asyncio.to_thread(
                 self.conn.execute,
                 f"""
@@ -145,6 +159,20 @@ class BuildingsProximityPMTilesGenerator:
 
             # Step 2: Create buffered agricultural fields (use geometry as-is like field analysis)
             logger.info("🌾 Creating buffered agricultural fields...")
+            
+            # DEBUG: Log field coordinates before buffering
+            try:
+                field_bounds = await asyncio.to_thread(
+                    self.conn.execute,
+                    "SELECT ST_XMin(ST_Extent(geometry)), ST_YMin(ST_Extent(geometry)), "
+                    "ST_XMax(ST_Extent(geometry)), ST_YMax(ST_Extent(geometry)) "
+                    "FROM agricultural_fields_proximity"
+                )
+                f_min_x, f_min_y, f_max_x, f_max_y = field_bounds.fetchone()
+                logger.info(f"DEBUG: Field bounds before buffer: X({f_min_x:.6f} to {f_max_x:.6f}), Y({f_min_y:.6f} to {f_max_y:.6f})")
+            except Exception as e:
+                logger.warning(f"Could not log field bounds: {e}")
+            
             await asyncio.to_thread(
                 self.conn.execute,
                 """
@@ -242,6 +270,29 @@ class BuildingsProximityPMTilesGenerator:
                 """,
                 )
 
+            # DEBUG: Log final proximity results before export
+            try:
+                proximity_count = await asyncio.to_thread(
+                    self.conn.execute,
+                    "SELECT COUNT(*) FROM buildings_with_proximity"
+                )
+                count = proximity_count.fetchone()[0]
+                logger.info(f"DEBUG: Buildings with proximity count: {count:,}")
+                
+                if count > 0:
+                    proximity_bounds = await asyncio.to_thread(
+                        self.conn.execute,
+                        "SELECT ST_XMin(ST_Extent(geometry)), ST_YMin(ST_Extent(geometry)), "
+                        "ST_XMax(ST_Extent(geometry)), ST_YMax(ST_Extent(geometry)) "
+                        "FROM buildings_with_proximity"
+                    )
+                    p_min_x, p_min_y, p_max_x, p_max_y = proximity_bounds.fetchone()
+                    logger.info(f"DEBUG: Proximity buildings bounds: X({p_min_x:.6f} to {p_max_x:.6f}), Y({p_min_y:.6f} to {p_max_y:.6f})")
+                else:
+                    logger.error("DEBUG: No buildings found in proximity table - spatial join failed!")
+            except Exception as e:
+                logger.warning(f"Could not log proximity results: {e}")
+
             # Final query for GeoJSON export
             query = """
             SELECT
@@ -285,7 +336,7 @@ class BuildingsProximityPMTilesGenerator:
                     WHEN category_group = 'agricultural' THEN 'Landbrug'
                     ELSE 'Andet'
                 END as building_type_simple,
-                ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry
+                ST_AsGeoJSON(geometry) as geometry
             FROM buildings_with_proximity
             ORDER BY distance_to_field_m, category_group, building_uuid
             """
