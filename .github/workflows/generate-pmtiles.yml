@@ -122,7 +122,9 @@ jobs:
           asyncio.run(detect_years())
           " > detected_years.json
             years=$(cat detected_years.json)
-            echo "years=$years" >> $GITHUB_OUTPUT
+            echo "years<<EOF" >> $GITHUB_OUTPUT
+            echo "$years" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
             echo "should_run_matrix=true" >> $GITHUB_OUTPUT
           fi
 
