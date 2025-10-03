@@ -211,26 +211,28 @@ class FieldAnalysisPMTilesGenerator:
         pesticide_fields = [
             "pesticide_applications as total_pesticide_applications",
             "pesticides_used",
-            
             # Enhanced categorized pesticide details with BMD risk data
             "pfas_products_detail",
-            "pfas_applications", 
+            "pfas_applications",
             "diquat_products_detail",
             "diquat_applications",
-            "glyphosate_products_detail", 
+            "glyphosate_products_detail",
             "glyphosate_applications",
             "other_products_detail",
             "other_applications",
-            
-            # Enhanced aggregated fields for visualization
+            # Enhanced aggregated fields for visualization and details
             "total_pesticide_belastning",
+            "total_pfas_belastning", 
+            "total_diquat_belastning",
+            "total_glyphosate_belastning",
+            "total_pfas_active_ingredient_kg",
+            "total_glyphosate_active_ingredient_kg",
             "unique_pesticide_products",
             "pesticides_kg_detail",
             "pesticides_liters_detail",
-            "pesticides_grams_detail", 
+            "pesticides_grams_detail",
             "pesticides_ml_detail",
             "pesticides_tablets_detail",
-            
             # Proximity data
             "residential_buildings_formatted as residential_buildings_proximity",
             "educational_facilities_formatted as educational_facilities_proximity",
