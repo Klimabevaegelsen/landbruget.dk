@@ -1016,7 +1016,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         const fieldsLayer: MapLibreLayer = {
           id: 'fields-fill',
           source: 'fields',
-          'source-layer': 'fields',
+          'source-layer': 'field_analysis',
           type: 'fill',
           paint: paintProps,
           layout: {
@@ -1038,7 +1038,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         map.addLayer({
           id: 'fields-partial-coverage-base',
           source: 'fields',
-          'source-layer': 'fields',
+          'source-layer': 'field_analysis',
           type: 'fill',
           paint: partialCoveragePaint,
           filter: companyFilter
@@ -1057,7 +1057,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         map.addLayer({
           id: 'fields-partial-coverage-pattern',
           source: 'fields',
-          'source-layer': 'fields',
+          'source-layer': 'field_analysis',
           type: 'fill',
           paint: {
             'fill-pattern': 'partial-coverage-pattern',
@@ -1079,7 +1079,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         const fieldsOutlineLayer: MapLibreLayer = {
           id: 'fields-outline',
           source: 'fields',
-          'source-layer': 'fields',
+          'source-layer': 'field_analysis',
           type: 'line',
           paint: {
             'line-color': '#374151',
@@ -1107,7 +1107,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         map.addLayer({
           id: 'organic-borders',
           source: 'fields',
-          'source-layer': 'fields',
+          'source-layer': 'field_analysis',
           type: 'line',
           filter: organicFilter,
           paint: {
