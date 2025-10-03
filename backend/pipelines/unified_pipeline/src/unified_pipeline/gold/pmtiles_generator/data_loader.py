@@ -140,35 +140,33 @@ class PMTilesDataLoader:
 
     async def _ensure_fvm_schema_compatibility(self, table_name: str, year: int) -> None:
         """Ensure FVM table has required columns for all years.
-        
+
         Older years may be missing columns that newer years have.
         """
         try:
             # Get current schema
-            schema_result = await asyncio.to_thread(
-                self.conn.execute, f"DESCRIBE {table_name}"
-            )
+            schema_result = await asyncio.to_thread(self.conn.execute, f"DESCRIBE {table_name}")
             existing_columns = {row[0] for row in schema_result.fetchall()}
-            
+
             # Required columns that might be missing in older years
             required_columns = {
-                'crop_name': 'VARCHAR DEFAULT NULL',
-                'crop_code': 'VARCHAR DEFAULT NULL', 
-                'is_organic': 'BOOLEAN DEFAULT false',
-                'organic_conversion_date': 'TIMESTAMP DEFAULT NULL',
-                'organic_deregistration_date': 'TIMESTAMP DEFAULT NULL',
-                'organic_conversion_status': 'VARCHAR DEFAULT NULL'
+                "crop_name": "VARCHAR DEFAULT NULL",
+                "crop_code": "VARCHAR DEFAULT NULL",
+                "is_organic": "BOOLEAN DEFAULT false",
+                "organic_conversion_date": "TIMESTAMP DEFAULT NULL",
+                "organic_deregistration_date": "TIMESTAMP DEFAULT NULL",
+                "organic_conversion_status": "VARCHAR DEFAULT NULL",
             }
-            
+
             # Add missing columns
             for col_name, col_type in required_columns.items():
                 if col_name not in existing_columns:
                     logger.info(f"Adding missing column {col_name} to {table_name} for year {year}")
                     await asyncio.to_thread(
                         self.conn.execute,
-                        f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}"
+                        f"ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}",
                     )
-                    
+
         except Exception as e:
             logger.warning(f"Error ensuring schema compatibility for {table_name}: {e}")
             # Don't fail the pipeline for schema issues
@@ -595,14 +593,14 @@ class PMTilesDataLoader:
                     SUM(CASE WHEN COALESCE(contains_pfas, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_pfas_belastning,
                     SUM(CASE WHEN COALESCE(contains_diquat, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_diquat_belastning,
                     SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_glyphosate_belastning,
-                    
+
                     -- Active ingredient calculations
                     SUM(CASE WHEN COALESCE(contains_pfas, false) = true THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_pfas_active_ingredient_kg,
                     SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_glyphosate_active_ingredient_kg,
-                    
+
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
-                    
+
                     -- Proximity data
                     residential_buildings_formatted,
                     educational_facilities_formatted,
@@ -668,6 +666,19 @@ class PMTilesDataLoader:
                     ) FILTER (
                         WHERE DosageUnit IN ('3', 'tablet', 'tabletter')
                     ) as pesticides_tablets_detail,
+
+                    -- BMD burden calculations (fallback - no BMD data available)
+                    0 as total_pesticide_belastning,
+                    0 as total_pfas_belastning,
+                    0 as total_diquat_belastning,
+                    0 as total_glyphosate_belastning,
+                    
+                    -- Active ingredient calculations (fallback)
+                    0 as total_pfas_active_ingredient_kg,
+                    0 as total_glyphosate_active_ingredient_kg,
+                    
+                    -- Product count
+                    COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
                     -- Proximity data
                     residential_buildings_formatted,
@@ -759,7 +770,12 @@ class PMTilesDataLoader:
                         COALESCE(b.contains_glyphosate, false) as contains_glyphosate,
                         b.farebetegnelse_sundhed as health_risk,
                         b.farebetegnelse_miljø as environmental_risk,
-                        b.signalord as signal_word
+                        b.signalord as signal_word,
+                        -- BMD burden calculation fields
+                        COALESCE(b.samlet_belastning, 0) as samlet_belastning,
+                        COALESCE(b.belastning_sundhed, 0) as belastning_sundhed,
+                        COALESCE(b.belastning_miljøeffekt, 0) as belastning_miljøeffekt,
+                        COALESCE(b.belastning_miljøadfærd, 0) as belastning_miljøadfærd
                     FROM {pesticide_table} p
                     LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registrerings_nr
                     """,
@@ -788,7 +804,12 @@ class PMTilesDataLoader:
                         false as contains_glyphosate,
                         NULL as health_risk,
                         NULL as environmental_risk,
-                        NULL as signal_word
+                        NULL as signal_word,
+                        -- BMD burden calculation fields (fallback)
+                        0 as samlet_belastning,
+                        0 as belastning_sundhed,
+                        0 as belastning_miljøeffekt,
+                        0 as belastning_miljøadfærd
                     FROM {pesticide_table}
                     """,
                 )
@@ -817,7 +838,12 @@ class PMTilesDataLoader:
                         false as contains_glyphosate,
                         NULL as health_risk,
                         NULL as environmental_risk,
-                        NULL as signal_word
+                        NULL as signal_word,
+                        -- BMD burden calculation fields (fallback)
+                        0 as samlet_belastning,
+                        0 as belastning_sundhed,
+                        0 as belastning_miljøeffekt,
+                        0 as belastning_miljøadfærd
                     FROM {pesticide_table}
                     """,
                 )
