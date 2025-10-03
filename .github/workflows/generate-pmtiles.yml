@@ -131,7 +131,7 @@ jobs:
 
   generate-environmental:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.environmental_only == 'true' || github.event_name == 'schedule' || (github.event.inputs.environmental_only != 'true' && github.event.inputs.target_year == '' && github.event.inputs.years_range == '') }}
+    if: ${{ github.event.inputs.environmental_only == 'true' || github.event_name == 'schedule' || github.event.inputs.environmental_only != 'true' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
