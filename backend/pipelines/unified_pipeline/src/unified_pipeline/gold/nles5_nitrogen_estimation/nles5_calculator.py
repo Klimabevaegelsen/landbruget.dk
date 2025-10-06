@@ -899,6 +899,79 @@ class NLES5Calculator:
                         self.log.warning("⚠️  NO CVR MATCHES between fields and fertilizer accounts!")
                         self.log.warning("   This means all fields will get default/zero fertilizer values")
                         self.log.warning("   Check: Are CVR numbers properly formatted? Same year data?")
+                        
+                        # ENHANCED DIAGNOSTIC: Check data types and sample values
+                        self.log.info("🔬 DETAILED CVR DIAGNOSTIC - Investigating mismatch...")
+                        
+                        # Check data types
+                        fields_type = self.conn.execute("""
+                            SELECT DISTINCT typeof(cvr_number) as type, COUNT(*) as count
+                            FROM nitrogen_base 
+                            WHERE cvr_number IS NOT NULL
+                            GROUP BY typeof(cvr_number)
+                        """).fetchall()
+                        
+                        fert_type = self.conn.execute("""
+                            SELECT DISTINCT typeof(cvr_number) as type, COUNT(*) as count
+                            FROM fertilizer_accounts 
+                            WHERE cvr_number IS NOT NULL
+                            GROUP BY typeof(cvr_number)
+                        """).fetchall()
+                        
+                        self.log.info(f"   📊 Fields CVR types: {fields_type}")
+                        self.log.info(f"   📊 Fertilizer CVR types: {fert_type}")
+                        
+                        # Sample CVR values from both tables
+                        fields_sample = self.conn.execute("""
+                            SELECT DISTINCT cvr_number, year
+                            FROM nitrogen_base 
+                            WHERE cvr_number IS NOT NULL
+                            ORDER BY cvr_number
+                            LIMIT 5
+                        """).fetchall()
+                        
+                        fert_sample = self.conn.execute("""
+                            SELECT DISTINCT cvr_number, year
+                            FROM fertilizer_accounts 
+                            WHERE cvr_number IS NOT NULL
+                            ORDER BY cvr_number
+                            LIMIT 5
+                        """).fetchall()
+                        
+                        self.log.info(f"   📝 Sample Fields CVR+Year: {fields_sample}")
+                        self.log.info(f"   📝 Sample Fertilizer CVR+Year: {fert_sample}")
+                        
+                        # Check year distributions
+                        fields_years = self.conn.execute("""
+                            SELECT year, COUNT(DISTINCT cvr_number) as unique_cvrs, COUNT(*) as total_rows
+                            FROM nitrogen_base 
+                            WHERE cvr_number IS NOT NULL
+                            GROUP BY year
+                            ORDER BY year
+                        """).fetchall()
+                        
+                        fert_years = self.conn.execute("""
+                            SELECT year, COUNT(DISTINCT cvr_number) as unique_cvrs, COUNT(*) as total_rows
+                            FROM fertilizer_accounts 
+                            WHERE cvr_number IS NOT NULL
+                            GROUP BY year
+                            ORDER BY year
+                        """).fetchall()
+                        
+                        self.log.info(f"   📅 Fields year distribution: {fields_years}")
+                        self.log.info(f"   📅 Fertilizer year distribution: {fert_years}")
+                        
+                        # Check for string formatting issues (e.g., leading zeros, spaces)
+                        cvr_format_check = self.conn.execute("""
+                            SELECT 
+                                (SELECT LENGTH(CAST(cvr_number AS VARCHAR)) as len FROM nitrogen_base WHERE cvr_number IS NOT NULL LIMIT 1) as fields_len,
+                                (SELECT LENGTH(CAST(cvr_number AS VARCHAR)) as len FROM fertilizer_accounts WHERE cvr_number IS NOT NULL LIMIT 1) as fert_len,
+                                (SELECT cvr_number FROM nitrogen_base WHERE cvr_number IS NOT NULL LIMIT 1) as fields_first_cvr,
+                                (SELECT cvr_number FROM fertilizer_accounts WHERE cvr_number IS NOT NULL LIMIT 1) as fert_first_cvr
+                        """).fetchone()
+                        
+                        self.log.info(f"   🔤 Format check - Fields CVR length: {cvr_format_check[0]}, Fertilizer CVR length: {cvr_format_check[1]}")
+                        self.log.info(f"   🔤 Format check - Fields first CVR: '{cvr_format_check[2]}', Fertilizer first CVR: '{cvr_format_check[3]}'")
 
             if base_count > 1_000_000:
                 # Use chunked processing for large datasets
@@ -1702,6 +1775,22 @@ class NLES5Calculator:
             ).fetchone()[0]
             self.log.info(f"   - field_plan_data: {field_plan_data_count:,} records")
 
+            # 🔍 DIAGNOSTIC: Check jordbundstype data type and sample values
+            try:
+                schema_info = self.conn.execute(
+                    "DESCRIBE field_plan_data"
+                ).fetchall()
+                jordbundstype_col = [col for col in schema_info if col[0] == 'jordbundstype']
+                if jordbundstype_col:
+                    self.log.info(f"   - jordbundstype data type: {jordbundstype_col[0][1]}")
+                
+                sample_values = self.conn.execute(
+                    "SELECT DISTINCT jordbundstype FROM field_plan_data WHERE jordbundstype IS NOT NULL LIMIT 10"
+                ).fetchall()
+                self.log.info(f"   - jordbundstype sample values: {[v[0] for v in sample_values]}")
+            except Exception as diag_e:
+                self.log.warning(f"   - Could not retrieve jordbundstype diagnostics: {diag_e}")
+
             # Continue with the fertilizer integration logic...
             return self._execute_target_year_calculation(
                 percolation_table, target_year, fertilizer_table, result_table
@@ -1760,7 +1849,8 @@ class NLES5Calculator:
                 COALESCE(fh.organic_n_hus, 0.0) as organic_n_hus,
                 COALESCE(fh.tn_t_ha, 0.0) as tn_t_ha,
                 -- Join field plan data for additional context
-                COALESCE(fp.jordbundstype, 'Unknown') as field_plan_data_soil_type,
+                -- FIXED: Cast jordbundstype to VARCHAR before COALESCE to avoid INT32 conversion error
+                COALESCE(CAST(fp.jordbundstype AS VARCHAR), 'Unknown') as field_plan_data_soil_type,
                 COALESCE(fp.areal, 0.0) as field_plan_data_area
             FROM {percolation_table} f
             LEFT JOIN {fertilizer_table} fh ON f.cvr_number = fh.cvr_number AND fh.year = {target_year}

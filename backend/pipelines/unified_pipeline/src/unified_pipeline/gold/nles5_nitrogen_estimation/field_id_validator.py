@@ -802,6 +802,9 @@ class FieldIDValidator:
                 try:
                     uuid_presence = self.validate_field_uuid_presence(table_name)
                     comprehensive_results['uuid_presence_validations'][table_name] = uuid_presence
+                    # Log if table was excluded from validation
+                    if 'error' in uuid_presence:
+                        self.log.info(f"   ℹ️ Excluding {table_name} from UUID validation: {uuid_presence['error']}")
                 except Exception as e:
                     self.log.warning(f"Could not validate field_uuid presence in {table_name}: {e}")
                     comprehensive_results['uuid_presence_validations'][table_name] = {'error': str(e)}
@@ -828,13 +831,19 @@ class FieldIDValidator:
                             format_scores.append(id_score)
             
             # Calculate UUID presence scores
+            uuid_tables_checked = []
             for table_name, uuid_validation in comprehensive_results['uuid_presence_validations'].items():
                 if 'error' not in uuid_validation:
                     coverage = uuid_validation.get('field_uuid_coverage', 0.0)
                     uuid_presence_scores.append(coverage)
+                    uuid_tables_checked.append(f"{table_name}({coverage:.0%})")
             
             avg_format_score = sum(format_scores) / len(format_scores) if format_scores else 1.0
             avg_uuid_presence_score = sum(uuid_presence_scores) / len(uuid_presence_scores) if uuid_presence_scores else 1.0
+            
+            # Log which tables were included in UUID scoring
+            if uuid_tables_checked:
+                self.log.info(f"   UUID validation included {len(uuid_tables_checked)} tables: {', '.join(uuid_tables_checked)}")
             
             # NLES5-specific scoring: Format and UUID presence are more important than consistency
             # because NLES5 intentionally filters out 95%+ of records due to missing required data
@@ -959,7 +968,8 @@ Field Identifier Validation Summary:
                 validation_result['total_records'] = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             except Exception as e:
                 validation_result['issues'].append(f"Table {table_name} not accessible: {e}")
-                return validation_result
+                # Mark as error so it's excluded from scoring
+                return {'error': f"Table {table_name} not accessible"}
             
             # Check if field_uuid column exists
             try:
@@ -972,12 +982,14 @@ Field Identifier Validation Summary:
                 validation_result['has_field_uuid_column'] = len(columns_result) > 0
             except Exception as e:
                 validation_result['issues'].append(f"Could not check for field_uuid column: {e}")
-                return validation_result
+                # Mark as error so it's excluded from scoring
+                return {'error': f"Could not check for field_uuid column in {table_name}"}
             
             if not validation_result['has_field_uuid_column']:
                 validation_result['issues'].append(f"Table {table_name} missing field_uuid column")
                 validation_result['recommendations'].append('Ensure field_uuid column is present for proper field tracking')
-                return validation_result
+                # Mark as error so it's excluded from scoring - this table is not relevant for UUID scoring
+                return {'error': f"Table {table_name} missing field_uuid column"}
             
             # Check field_uuid population
             try:

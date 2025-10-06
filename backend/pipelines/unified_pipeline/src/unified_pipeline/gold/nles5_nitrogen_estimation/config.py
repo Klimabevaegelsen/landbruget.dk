@@ -6,7 +6,6 @@ All NLES5 model parameters, processing settings, and environment variable overri
 defined here to ensure consistency across all processing modules.
 """
 
-import json
 import os
 from typing import Dict, List, Optional
 
@@ -37,7 +36,8 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     
     # Farm-level gødningsregnskab data integration
     farm_data_source: str = "gcs"  # Source for farm data: "gcs" (GCS bucket parquet files)
-    farm_data_gcs_path: str = "silver/gr {year}/20250914_135946/"  # GCS path template for gødningsregnskab data
+    # Note: farm_data_gcs_path is no longer used - the pipeline now dynamically discovers
+    # the latest timestamped directory for each year (e.g., silver/gr {year}/YYYYMMDD_HHMMSS/)
     enable_farm_data_integration: bool = True  # Enable farm data integration for enhanced accuracy
     farm_data_years: Optional[List[int]] = [2018, 2019, 2020, 2021, 2022, 2023]  # Available farm data years (updated based on GCS tree)
     farm_data_cache_table: str = "farm_data_cache"  # DuckDB table name for cached farm data
@@ -87,14 +87,6 @@ class NLES5NitrogenEstimationGoldConfig(BaseJobConfig):
     # One year at a time makes it easier to add new years and provides better modularity
     enable_pipeline_batching: bool = bool(os.getenv('ENABLE_PIPELINE_BATCHING', 'true').lower() == 'true')
     target_year_batch_size: int = int(os.getenv('TARGET_YEAR_BATCH_SIZE', '1'))  # Years per pipeline batch (1 for modularity)
-
-    # Geographic bounds for testing (WGS84 coordinates: [min_lon, min_lat, max_lon, max_lat])
-    # Set to None to process entire Denmark, or specify bounds for testing
-    # Test area: Small area around Aarhus city (minimal disk space usage)
-    # This reduces dataset size by ~98% while maintaining representative agricultural data
-    # To disable geographic filtering, set test_bounds = None
-    # Can be overridden by setting the TEST_BOUNDS environment variable as a JSON string, e.g., '[10.0, 55.9, 10.3, 56.2]'.
-    test_bounds: Optional[List[float]] = json.loads(os.getenv('TEST_BOUNDS')) if os.getenv('TEST_BOUNDS') else [10.0, 55.9, 10.3, 56.2]  # Use small test area to prevent disk overflow
 
     # Quality thresholds
     min_data_coverage: float = 0.7  # Minimum acceptable data coverage rate

@@ -35,14 +35,9 @@ class NLES5PipelineOrchestrator:
         self.processor._cleanup_temp_files()
 
         try:
-            self.log.info("🚀 Starting NLES5 nitrogen estimation with test configuration")
+            self.log.info("🚀 Starting NLES5 nitrogen estimation")
             self.log.info(f"🔧 Configuration: {self.config.batch_size:,} batch size, {self.config.max_memory_usage_gb}GB memory limit")
-
-            # Log test configuration
-            if self.config.test_bounds:
-                self.log.info(f"🌍 Geographic test area: {self.config.test_bounds} (Small Aarhus area)")
-            else:
-                self.log.info("🌍 Processing entire Denmark")
+            self.log.info("🌍 Processing entire Denmark")
 
             if self.config.max_years_to_process:
                 self.log.info(f"📅 Years limit: {self.config.max_years_to_process} years (for disk space management)")

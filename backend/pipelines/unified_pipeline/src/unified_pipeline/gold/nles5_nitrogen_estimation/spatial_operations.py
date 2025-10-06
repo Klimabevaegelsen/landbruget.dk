@@ -922,9 +922,9 @@ class NLES5SpatialOperations:
                 # Create a simplified spatial table without complex transformations to avoid performance issues
                 # NOTE: Agricultural fields data already has geometry in the correct format
                 self.log.info("Creating spatial table with COORDINATE SYSTEM FIX...")
-                self.log.warning("🔧 APPLYING COORDINATE SWAP FIX: Fields have X/Y coordinates swapped")
-                self.log.warning("   Original: X=latitude, Y=longitude (INCORRECT)")
-                self.log.warning("   Fixed: X=longitude, Y=latitude (WGS84 STANDARD)")
+                self.log.info("🔧 APPLYING COORDINATE SWAP FIX: Fields have X/Y coordinates swapped")
+                self.log.info("   Original: X=latitude, Y=longitude (INCORRECT)")
+                self.log.info("   Fixed: X=longitude, Y=latitude (WGS84 STANDARD)")
                 
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE agricultural_fields_spatial AS
@@ -985,13 +985,13 @@ class NLES5SpatialOperations:
                 """).fetchone()
                 
                 self.log.info(f"✅ Created agricultural_fields_spatial: {spatial_count:,} records with valid geometries")
-                self.log.warning("📍 COORDINATE FIX RESULTS:")
-                self.log.warning(f"   Total fields: {coordinate_fix_stats[0]:,}")
-                self.log.warning(f"   Fields with swapped coordinates (fixed): {coordinate_fix_stats[1]:,}")
-                self.log.warning(f"   Fields with correct WGS84 coordinates: {coordinate_fix_stats[2]:,}")
-                self.log.warning("   Final coordinate ranges:")
-                self.log.warning(f"     Longitude: {coordinate_fix_stats[3]:.3f}° to {coordinate_fix_stats[4]:.3f}°")
-                self.log.warning(f"     Latitude: {coordinate_fix_stats[5]:.3f}° to {coordinate_fix_stats[6]:.3f}°")
+                self.log.info("📍 COORDINATE FIX RESULTS:")
+                self.log.info(f"   Total fields: {coordinate_fix_stats[0]:,}")
+                self.log.info(f"   Fields with swapped coordinates (fixed): {coordinate_fix_stats[1]:,}")
+                self.log.info(f"   Fields with correct WGS84 coordinates: {coordinate_fix_stats[2]:,}")
+                self.log.info("   Final coordinate ranges:")
+                self.log.info(f"     Longitude: {coordinate_fix_stats[3]:.3f}° to {coordinate_fix_stats[4]:.3f}°")
+                self.log.info(f"     Latitude: {coordinate_fix_stats[5]:.3f}° to {coordinate_fix_stats[6]:.3f}°")
                 
                 if coordinate_fix_stats[2] < coordinate_fix_stats[0] * 0.8:  # Less than 80% have correct coordinates
                     self.log.error(f"🚨 COORDINATE FIX ISSUE: Only {coordinate_fix_stats[2]:,}/{coordinate_fix_stats[0]:,} fields have correct WGS84 coordinates!")
