@@ -77,9 +77,9 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
             self.save_table_to_parquet(standardized_table, output_path)
 
             # Get row count
-            row_count = self.conn.execute(
-                f"SELECT COUNT(*) FROM {standardized_table}"
-            ).fetchone()[0]
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {standardized_table}").fetchone()[
+                0
+            ]
 
             # Create schema dictionary
             schema = {"columns": [], "data_types": []}
@@ -90,9 +90,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
                     "data_types": [col[1] for col in table_info],
                 }
             except Exception as e:
-                logger.warning(
-                    f"Failed to get schema from table {standardized_table}: {str(e)}"
-                )
+                logger.warning(f"Failed to get schema from table {standardized_table}: {str(e)}")
                 schema = {"columns": [], "data_types": []}
 
             # Clean up intermediate tables
