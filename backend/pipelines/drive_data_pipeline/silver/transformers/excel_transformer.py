@@ -440,8 +440,12 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             alter_statements = []
             for new_col, old_col in backward_compatibility_mappings.items():
                 if new_col in column_names and old_col not in column_names:
+                    escaped_table = table_name.replace('"', '""')
+                    escaped_new = new_col.replace('"', '""')
+                    escaped_old = old_col.replace('"', '""')
                     alter_statements.append(
-                        f"ALTER TABLE {table_name} ADD COLUMN {old_col} AS {new_col}"
+                        f'ALTER TABLE "{escaped_table}" ADD COLUMN "{escaped_old}" '
+                        f'AS "{escaped_new}"'
                     )
 
             # Execute all alter statements
