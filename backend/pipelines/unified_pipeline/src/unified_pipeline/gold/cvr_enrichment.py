@@ -573,7 +573,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     # Aggressive cleanup every 10 chunks (following H3 PFAS pattern)
                     if (chunk_idx + 1) % 10 == 0:
                         self.log.info(f"🧹 Deep cleanup after {chunk_idx + 1} chunks")
-                        self.conn.execute("CHECKPOINT")
+                        # NOTE: CHECKPOINT not supported for in-memory databases
                         self.conn.execute("PRAGMA optimize")
                         import gc
 
@@ -1191,15 +1191,87 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 CASE
                     WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
                         CASE
+                            -- Get the primary industry code
                             WHEN json_extract_string(
                                 json_extract(json_data, '$.industries[0]'),
                                 '$.industry_code'
-                            ) LIKE '01%'
+                            ) IS NOT NULL
                             AND json_extract(
                                 json_extract(json_data, '$.industries[0]'),
                                 '$.is_current'
                             )::BOOLEAN = true
-                            THEN true
+                            THEN
+                                CASE
+                                    -- Primary Agriculture, Forestry and Fishing (codes 01-03)
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) LIKE '01%'
+                                         OR json_extract_string(
+                                             json_extract(json_data, '$.industries[0]'),
+                                             '$.industry_code'
+                                         ) LIKE '02%'
+                                         OR json_extract_string(
+                                             json_extract(json_data, '$.industries[0]'),
+                                             '$.industry_code'
+                                         ) LIKE '03%' THEN true
+                                    -- Fish farming and aquaculture
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('050200') THEN true
+                                    -- Real estate (agricultural properties)
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('702040', '682040') THEN true
+                                    -- Veterinary services
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('852000', '750000') THEN true
+                                    -- Agricultural support services and consulting
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('749010', '741410') THEN true
+                                    -- Agricultural machinery and equipment
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN (
+                                        '516600', '773100', '713100', '466100',
+                                        '518800', '283000', '293220'
+                                    ) THEN true
+                                    -- Agricultural trade (livestock, feed, plants)
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN (
+                                        '512300', '462100', '462300', '462200',
+                                        '512100', '512200', '461100', '511100'
+                                    ) THEN true
+                                    -- Agricultural processing and food production
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN (
+                                        '151110', '109100', '101110', '110200',
+                                        '101190', '101300', '105100'
+                                    ) THEN true
+                                    -- Agricultural retail (flowers, pets)
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('524875', '477630', '524885', '477610') THEN true
+                                    -- Agricultural education and storage
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('802240', '631200', '521000') THEN true
+                                    -- Default to false for all other sectors
+                                    ELSE false
+                                END
                             ELSE false
                         END
                     ELSE false
@@ -1783,7 +1855,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         )
 
                         # Immediate cleanup after each batch
-                        self.conn.execute("CHECKPOINT")
+                        # NOTE: CHECKPOINT not supported for in-memory databases
                         import gc
 
                         gc.collect()
@@ -1805,7 +1877,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.info(f"✅ Completed processing {employment_field} for all companies")
 
             # Deep cleanup after each employment type
-            self.conn.execute("CHECKPOINT")
+            # NOTE: CHECKPOINT not supported for in-memory databases
             self.conn.execute("PRAGMA optimize")
             import gc
 
@@ -1821,7 +1893,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         """
         try:
             # DuckDB-specific cleanup
-            self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL
+            # NOTE: CHECKPOINT not supported for in-memory databases
             self.conn.execute("PRAGMA optimize")  # Optimize database structure
 
             # Force Python garbage collection
@@ -1856,7 +1928,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             self.log.warning("🚨 Performing emergency memory cleanup")
 
             # Aggressive DuckDB cleanup
-            self.conn.execute("CHECKPOINT")
+            # NOTE: CHECKPOINT not supported for in-memory databases
             self.conn.execute("PRAGMA optimize")
 
             # Clear all caches

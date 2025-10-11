@@ -37,9 +37,9 @@ class CompanyFetchingConfig(BaseJobConfig):
 
     # Company fetching specific configuration with memory-aware batching
     memory_safe_batch_size: int = Field(
-        default=500,
+        default=250,
         description="Number of CVR numbers to process per memory-safe batch "
-        "(conservative for GitHub Actions)",
+        "(ultra-conservative for GitHub Actions to prevent OOM errors)",
     )
 
     fetch_all_fields: bool = Field(
@@ -86,6 +86,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         """
         super().__init__(config)
 
+        # Apply memory optimizations for GitHub Actions environment
+        self._apply_memory_optimizations()
+
         # Initialize CVR API client
         cvr_username = os.getenv("CVR_USERNAME", "Martin_Collignon_CVR_I_SKYEN")
         cvr_password = os.getenv("CVR_PASSWORD", "3a37d029-9588-4c00-8a09-3d2901452d45")
@@ -110,6 +113,114 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             else "disabled (handled in Address Geocoding step)"
         )
         self.log.info(f"   • Address geocoding: {geocoding_status}")
+
+    def _apply_memory_optimizations(self):
+        """
+        Apply DuckDB memory optimizations specifically for CVR company fetching.
+
+        The company fetching step processes large JSON structures from the CVR API,
+        which can be memory-intensive. This method configures DuckDB for GitHub Actions
+        environment with conservative memory settings.
+        """
+        try:
+            self.log.info(
+                "🔧 Applying CVR company fetching memory optimizations for GitHub Actions..."
+            )
+
+            # CRITICAL: Reduce memory limit for GitHub Actions (16GB total RAM)
+            # Leave 10GB buffer for OS, Python, and API processing to prevent OOM
+            self.conn.execute("SET memory_limit = '6GB'")  # Ultra-conservative limit
+            self.conn.execute("SET max_memory = '6GB'")
+
+            # CRITICAL: Reduce threads to minimize memory pressure
+            # CVR API processing is I/O bound, fewer threads = less memory per thread
+            self.conn.execute("SET threads = 2")  # Reduced from default 4
+
+            # CRITICAL: Enable memory-efficient settings
+            self.conn.execute("SET preserve_insertion_order = false")  # Allow reordering
+            self.conn.execute("SET enable_progress_bar = false")  # Reduce overhead
+
+            # CRITICAL: More aggressive temporary directory management
+            self.conn.execute("SET temp_directory = '/tmp/duckdb_cvr_company'")
+            self.conn.execute("SET max_temp_directory_size = '3GB'")  # Conservative limit
+
+            # NOTE: Checkpoint settings don't apply to in-memory databases
+            # DuckDB handles memory management automatically for in-memory mode
+
+            # ADDITIONAL: Disable object cache to reduce memory usage
+            self.conn.execute("SET enable_object_cache = false")  # Prioritize memory over speed
+
+            self.log.info("✅ CVR company fetching memory optimizations applied")
+            self.log.info("   • Memory limit: 6GB (ultra-conservative for OOM prevention)")
+            self.log.info("   • Threads: 2 (reduced from 4)")
+            self.log.info("   • Temp directory size: 3GB")
+            self.log.info("   • Database: In-memory (no checkpointing needed)")
+
+        except Exception as e:
+            self.log.warning(f"Failed to apply memory optimizations: {e}")
+
+    def _cleanup_batch_memory(self):
+        """
+        Aggressive memory cleanup after processing each batch.
+
+        This is critical for preventing memory accumulation across batches.
+        Each batch can contain large JSON structures from CVR API responses,
+        and without proper cleanup, memory usage grows until OOM errors occur.
+
+        IMPORTANT: This method is called AFTER batch data has been safely
+        inserted into DuckDB tables, so no data is lost during cleanup.
+        """
+        try:
+            self.log.debug("🧹 Starting batch memory cleanup (data already persisted)...")
+
+            # NOTE: CHECKPOINT is not supported in in-memory databases
+            # Data is already safely stored in DuckDB in-memory tables
+            # We rely on DuckDB's internal memory management instead
+
+            # CRITICAL: Force DuckDB to optimize and free internal structures
+            self.conn.execute("PRAGMA optimize")
+            self.log.debug("   ✓ DuckDB optimization completed")
+
+            # CRITICAL: Clear query plan cache to free memory
+            try:
+                self.conn.execute("PRAGMA cache_size = 0")  # Clear cache
+                self.conn.execute("PRAGMA cache_size = -1000")  # Reset to small cache
+                self.log.debug("   ✓ Query plan cache cleared")
+            except Exception as pragma_e:
+                self.log.debug(f"   ⚠ Cache cleanup warning: {pragma_e}")
+
+            # CRITICAL: Force Python garbage collection to free API response objects
+            import gc
+
+            collected = gc.collect()
+            self.log.debug(f"   ✓ Python garbage collection: freed {collected} objects")
+
+            # ADDITIONAL: Clear any temporary tables or views (preserving main data tables)
+            try:
+                temp_objects = self.conn.execute("""
+                    SELECT table_name FROM information_schema.tables
+                    WHERE table_name LIKE 'temp_%' OR table_name LIKE 'tmp_%'
+                """).fetchall()
+
+                dropped_count = 0
+                for (temp_table,) in temp_objects:
+                    try:
+                        self.conn.execute(f"DROP TABLE IF EXISTS {temp_table}")
+                        dropped_count += 1
+                    except Exception:
+                        pass  # Ignore errors dropping temp tables
+
+                if dropped_count > 0:
+                    self.log.debug(f"   ✓ Dropped {dropped_count} temporary tables")
+
+            except Exception:
+                pass  # Ignore errors in temp cleanup
+
+            self.log.debug("✅ Batch memory cleanup completed - ready for next batch")
+
+        except Exception as e:
+            self.log.warning(f"Memory cleanup warning (non-critical): {e}")
+            # Continue processing even if cleanup fails
 
     @timed(name="Company fetching processing")
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> str:
@@ -414,7 +525,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 total_stats["total_api_calls"] += batch_stats["api_calls"]
                 total_stats["batches_processed"] += 1
 
-                # Memory cleanup after each batch
+                # CRITICAL: Memory cleanup after each batch (data already persisted)
                 self._cleanup_batch_memory()
 
                 # Progress update
@@ -532,15 +643,87 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 CASE
                     WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
                         CASE
+                            -- Get the primary industry code
                             WHEN json_extract_string(
                                 json_extract(json_data, '$.industries[0]'),
                                 '$.industry_code'
-                            ) LIKE '01%'
+                            ) IS NOT NULL
                             AND json_extract(
                                 json_extract(json_data, '$.industries[0]'),
                                 '$.is_current'
                             )::BOOLEAN = true
-                            THEN true
+                            THEN
+                                CASE
+                                    -- Primary Agriculture, Forestry and Fishing (codes 01-03)
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) LIKE '01%'
+                                         OR json_extract_string(
+                                             json_extract(json_data, '$.industries[0]'),
+                                             '$.industry_code'
+                                         ) LIKE '02%'
+                                         OR json_extract_string(
+                                             json_extract(json_data, '$.industries[0]'),
+                                             '$.industry_code'
+                                         ) LIKE '03%' THEN true
+                                    -- Fish farming and aquaculture
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('050200') THEN true
+                                    -- Real estate (agricultural properties)
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('702040', '682040') THEN true
+                                    -- Veterinary services
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('852000', '750000') THEN true
+                                    -- Agricultural support services and consulting
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('749010', '741410') THEN true
+                                    -- Agricultural machinery and equipment
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN (
+                                        '516600', '773100', '713100', '466100',
+                                        '518800', '283000', '293220'
+                                    ) THEN true
+                                    -- Agricultural trade (livestock, feed, plants)
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN (
+                                        '512300', '462100', '462300', '462200',
+                                        '512100', '512200', '461100', '511100'
+                                    ) THEN true
+                                    -- Agricultural processing and food production
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN (
+                                        '151110', '109100', '101110', '110200',
+                                        '101190', '101300', '105100'
+                                    ) THEN true
+                                    -- Agricultural retail (flowers, pets)
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('524875', '477630', '524885', '477610') THEN true
+                                    -- Agricultural education and storage
+                                    WHEN json_extract_string(
+                                        json_extract(json_data, '$.industries[0]'),
+                                        '$.industry_code'
+                                    ) IN ('802240', '631200', '521000') THEN true
+                                    -- Default to false for all other sectors
+                                    ELSE false
+                                END
                             ELSE false
                         END
                     ELSE false
@@ -560,18 +743,6 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self._append_employment_batch(json_strings)
 
         self.log.debug(f"Appended {len(companies_data)} companies to output tables")
-
-    def _cleanup_batch_memory(self) -> None:
-        """Clean up memory after processing a batch."""
-        import gc
-
-        # Force garbage collection
-        collected = gc.collect()
-
-        # DuckDB cleanup
-        self.conn.execute("CHECKPOINT")
-
-        self.log.debug(f"Memory cleanup: collected {collected} objects")
 
     @timed(name="Creating and saving ownership table")
     def _create_and_save_ownership_table(self) -> None:

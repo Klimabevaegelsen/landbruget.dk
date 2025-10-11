@@ -49,11 +49,10 @@ from unified_pipeline.gold.cvr_enrichment.company_fetching import (
     CompanyFetchingConfig,
 )
 from unified_pipeline.gold.cvr_enrichment.cvr_collection import CVRCollection, CVRCollectionConfig
-
-# from unified_pipeline.gold.cvr_enrichment.data_consolidation import (
-#     DataConsolidation,
-#     DataConsolidationConfig,
-# )  # REMOVED: Data consolidation step eliminated in architecture redesign
+from unified_pipeline.gold.cvr_enrichment.data_consolidation import (
+    DataConsolidation,
+    DataConsolidationConfig,
+)
 from unified_pipeline.gold.cvr_enrichment.financial_documents import (
     FinancialDocuments,
     FinancialDocumentsConfig,
@@ -115,6 +114,7 @@ from unified_pipeline.silver.agricultural_fields import (
 )
 from unified_pipeline.silver.bnbo_status import BNBOStatusSilver, BNBOStatusSilverConfig
 from unified_pipeline.silver.cadastral import CadastralSilver, CadastralSilverConfig
+from unified_pipeline.silver.cvr_data_parser import CVRDataParser, CVRDataParserConfig
 from unified_pipeline.silver.dagi import DAGISilver, DAGISilverConfig
 from unified_pipeline.silver.dmi import DMISilver, DMISilverConfig
 from unified_pipeline.silver.dst import DSTSilver, DSTSilverConfig
@@ -518,7 +518,9 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             ],
         },
         cli_models.Source.nles5_nitrogen_estimation: {
-            cli_models.Stage.gold: [(NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig)],
+            cli_models.Stage.gold: [
+                (NLES5NitrogenEstimationGold, NLES5NitrogenEstimationGoldConfig)
+            ],
             cli_models.Stage.all: [
                 # Note: This requires silver datasets to be available:
                 # agricultural_fields, soil_types, dmi (climate data)
@@ -552,11 +554,11 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             # New modular pipeline steps
             cli_models.Stage.collection: [(CVRCollection, CVRCollectionConfig)],
             cli_models.Stage.company_fetching: [(CompanyFetching, CompanyFetchingConfig)],
+            cli_models.Stage.data_parsing: [(CVRDataParser, CVRDataParserConfig)],
+            cli_models.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
             cli_models.Stage.pnumber_fetching: [(PNumberFetching, PNumberFetchingConfig)],
             cli_models.Stage.financial_documents: [(FinancialDocuments, FinancialDocumentsConfig)],
             cli_models.Stage.address_geocoding: [(AddressGeocoding, AddressGeocodingConfig)],
-            # cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
-            # REMOVED: Eliminated in redesign
         },
         # CVR Geometry Datasets pipeline not yet implemented
         # cli_models.Source.cvr_geometry_datasets: {

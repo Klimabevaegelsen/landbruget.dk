@@ -35,7 +35,6 @@ on:
           - property_cadastral_merge
           - field_production
           - field_area_analysis
-          - pesticide_disaggregation
           - nles5_nitrogen_estimation
           - pesticide_compliance
           - arbejdstilsynet_inspections
@@ -254,7 +253,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        year: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+        year:
+          [
+            2010,
+            2011,
+            2012,
+            2013,
+            2014,
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+          ]
     name: Pesticide Processing Year ${{ matrix.year }}
     env:
       ENVIRONMENT: production

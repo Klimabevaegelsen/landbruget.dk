@@ -9,8 +9,10 @@ const WARMUP_FILES = [
   'field_analysis_2024.pmtiles',
 
   // Background layers (used by all users)
-  'bnbo_areas.pmtiles',
-  'buildings_proximity_2024.pmtiles',
+  'bnbo_areas.pmtiles', // BNBO areas from environmental generator
+  'buildings_proximity.pmtiles', // Buildings proximity (year-independent)
+  'wetlands_all.pmtiles', // Wetlands (year-independent)
+  'water_projects.pmtiles', // Water projects (year-independent)
 
   // Historical years (medium priority)
   'field_analysis_2022.pmtiles',
@@ -18,10 +20,9 @@ const WARMUP_FILES = [
   'field_analysis_2020.pmtiles',
   'field_analysis_2019.pmtiles',
   'field_analysis_2018.pmtiles',
-
-  // Large files (lower priority)
-  'wetlands_all_2024.pmtiles',
-  'water_projects_2024.pmtiles',
+  'field_analysis_2017.pmtiles',
+  'field_analysis_2016.pmtiles',
+  'field_analysis_2015.pmtiles',
 ];
 
 interface WarmupResult {
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
 
           try {
             // Use our own proxy API to warm the cache
-            const proxyUrl = `${request.nextUrl.origin}/api/pmtiles/pmtiles/${filename}`;
+            const proxyUrl = `${request.nextUrl.origin}/api/pmtiles/${filename}`;
 
             console.log(`🔥 Warming: ${filename}`);
 
