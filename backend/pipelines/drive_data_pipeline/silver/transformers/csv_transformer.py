@@ -119,7 +119,7 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
             )
 
     def _read_csv_with_duckdb(self, file_path: Path) -> str | None:
-        """Read CSV file using DuckDB with auto-detection.
+        """Read CSV file using DuckDB with auto-detection and encoding fallback.
 
         Args:
             file_path: Path to the CSV file
@@ -133,23 +133,86 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
             # Generate unique table name
             table_name = f"csv_data_{int(time.time())}"
 
-            # Use DuckDB's read_csv with auto-detection
-            # This handles various CSV formats, delimiters, and encodings automatically
-            self.conn.execute(f"""
-                CREATE TABLE {table_name} AS
-                SELECT * FROM read_csv('{file_path}', AUTO_DETECT=TRUE, HEADER=TRUE)
-            """)
+            # Try different encodings in order of likelihood for Danish data
+            encodings_to_try = [
+                "UTF-8",  # Most common
+                "UTF-16",  # Windows Unicode
+                "ISO-8859-1",  # Latin-1 (common in Europe)
+                "Windows-1252",  # Windows Western European
+                "CP1252",  # Alternative name for Windows-1252
+            ]
 
-            # Check if table has data
-            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            last_error = None
+            for encoding in encodings_to_try:
+                try:
+                    logger.debug(f"Trying encoding: {encoding}")
 
-            if row_count == 0:
-                logger.warning(f"CSV file {file_path} contains no data")
-                self.drop_table(table_name)
-                return None
+                    # Use DuckDB's read_csv with specific encoding and delimiter
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name} AS
+                        SELECT * FROM read_csv('{file_path}',
+                            AUTO_DETECT=TRUE,
+                            HEADER=TRUE,
+                            ENCODING='{encoding}',
+                            DELIMITER=';',
+                            IGNORE_ERRORS=true
+                        )
+                    """)
 
-            logger.info(f"Successfully read CSV file with {row_count} rows")
-            return table_name
+                    # Check if table has data
+                    row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[
+                        0
+                    ]
+
+                    if row_count > 0:
+                        logger.info(
+                            f"Successfully read CSV file with {row_count} rows "
+                            f"using encoding: {encoding}"
+                        )
+                        return table_name
+                    else:
+                        logger.debug(f"Encoding {encoding} produced empty table, trying next")
+                        self.drop_table(table_name)
+                        continue
+
+                except Exception as e:
+                    logger.debug(f"Encoding {encoding} failed: {str(e)}")
+                    last_error = e
+                    # Clean up failed table
+                    try:
+                        self.drop_table(table_name)
+                    except Exception:
+                        pass
+                    continue
+
+            # If all encodings failed, try with ignore_errors=true as last resort
+            logger.warning("All encodings failed, trying with ignore_errors=true")
+            try:
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name} AS
+                    SELECT * FROM read_csv('{file_path}',
+                        AUTO_DETECT=TRUE,
+                        HEADER=TRUE,
+                        DELIMITER=';',
+                        IGNORE_ERRORS=true
+                    )
+                """)
+
+                row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                if row_count > 0:
+                    logger.warning(
+                        f"Read CSV file with {row_count} rows using ignore_errors=true "
+                        f"(some data may be lost)"
+                    )
+                    return table_name
+                else:
+                    self.drop_table(table_name)
+            except Exception as ignore_error:
+                logger.debug(f"ignore_errors approach also failed: {str(ignore_error)}")
+
+            # All approaches failed
+            logger.error(f"Failed to read CSV file with any encoding: {str(last_error)}")
+            return None
 
         except Exception as e:
             logger.error(f"Failed to read CSV file with DuckDB: {str(e)}")
@@ -336,8 +399,12 @@ class CSVTransformer(BaseTransformer, DuckDBProcessor):
             alter_statements = []
             for new_col, old_col in backward_compatibility_mappings.items():
                 if new_col in column_names and old_col not in column_names:
+                    escaped_table = table_name.replace('"', '""')
+                    escaped_new = new_col.replace('"', '""')
+                    escaped_old = old_col.replace('"', '""')
                     alter_statements.append(
-                        f"ALTER TABLE {table_name} ADD COLUMN {old_col} AS {new_col}"
+                        f'ALTER TABLE "{escaped_table}" ADD COLUMN "{escaped_old}" '
+                        f'AS "{escaped_new}"'
                     )
 
             # Execute all alter statements
