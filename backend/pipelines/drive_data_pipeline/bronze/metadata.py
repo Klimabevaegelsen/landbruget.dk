@@ -131,6 +131,8 @@ class MetadataManager:
             content_type = "PDF"
         elif "spreadsheet" in mime_type or "excel" in mime_type:
             content_type = "Excel"
+        elif "csv" in mime_type:
+            content_type = "CSV"
 
         # Generate metadata
         metadata = FileMetadata(
