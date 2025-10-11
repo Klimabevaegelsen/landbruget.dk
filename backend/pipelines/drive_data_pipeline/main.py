@@ -630,7 +630,7 @@ def main() -> int:
                 # Log all available bronze runs for debugging
                 logger.info(f"Found {len(bronze_runs)} bronze runs:")
                 for i, run_path in enumerate(bronze_runs[:5]):  # Show top 5
-                    logger.info(f"  {i+1}. {run_path}")
+                    logger.info(f"  {i + 1}. {run_path}")
 
                 bronze_run_path = bronze_runs[0]
                 logger.info(f"Using latest Bronze run for Silver processing: {bronze_run_path}")
