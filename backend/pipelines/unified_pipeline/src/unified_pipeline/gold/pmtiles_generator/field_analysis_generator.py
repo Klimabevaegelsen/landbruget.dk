@@ -93,7 +93,8 @@ class FieldAnalysisPMTilesGenerator:
 
                     if size_mb > self.config.max_field_analysis_size_mb:
                         logger.warning(
-                            f"PMTiles file size ({size_mb:.1f} MB) exceeds target ({self.config.max_field_analysis_size_mb} MB)"
+                            f"PMTiles file size ({size_mb:.1f} MB) exceeds target "
+                            f"({self.config.max_field_analysis_size_mb} MB)"
                         )
 
                 # Move to final location (outside temp directory)
@@ -184,7 +185,7 @@ class FieldAnalysisPMTilesGenerator:
             "block_id as markblok_id",  # Frontend expects markblok_id
             "cvr_number",
             "year as field_year",  # Frontend expects field_year
-            "area_ha * 100 as area_hectares",  # Convert ha to hectares, frontend expects area_hectares
+            "area_ha * 100 as area_hectares",  # Convert ha to hectares for frontend
             "crop_name",
             "crop_code",
             "is_organic",
@@ -210,6 +211,29 @@ class FieldAnalysisPMTilesGenerator:
         pesticide_fields = [
             "pesticide_applications as total_pesticide_applications",
             "pesticides_used",
+            # Enhanced categorized pesticide details with BMD risk data
+            "pfas_products_detail",
+            "pfas_applications",
+            "diquat_products_detail",
+            "diquat_applications",
+            "glyphosate_products_detail",
+            "glyphosate_applications",
+            "other_products_detail",
+            "other_applications",
+            # Enhanced aggregated fields for visualization and details
+            "total_pesticide_belastning",
+            "total_pfas_belastning", 
+            "total_diquat_belastning",
+            "total_glyphosate_belastning",
+            "total_pfas_active_ingredient_kg",
+            "total_glyphosate_active_ingredient_kg",
+            "unique_pesticide_products",
+            "pesticides_kg_detail",
+            "pesticides_liters_detail",
+            "pesticides_grams_detail",
+            "pesticides_ml_detail",
+            "pesticides_tablets_detail",
+            # Proximity data
             "residential_buildings_formatted as residential_buildings_proximity",
             "educational_facilities_formatted as educational_facilities_proximity",
             "water_distance_formatted as water_distance_proximity",
@@ -250,13 +274,49 @@ class FieldAnalysisPMTilesGenerator:
                     if field in available_columns:
                         selected_fields.append(field)
 
-            # Always include geometry last
+            # Always include geometry last - convert to GeoJSON format with coordinate swap
             if "geometry" in available_columns:
-                selected_fields.append("geometry")
+                # Use ST_FlipCoordinates to ensure lon,lat order for PMTiles compatibility
+                selected_fields.append("ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry")
+                logger.info(
+                    "Geometry column found and added (converted to GeoJSON with coordinate swap)"
+                )
+
+                # DEBUG: Log coordinate bounds to verify swap worked
+                try:
+                    bounds_result = self.conn.execute(
+                        f"SELECT ST_XMin(ST_Extent(geometry)), ST_YMin(ST_Extent(geometry)), "
+                        f"ST_XMax(ST_Extent(geometry)), ST_YMax(ST_Extent(geometry)) "
+                        f"FROM {table_name}"
+                    )
+                    min_x, min_y, max_x, max_y = bounds_result.fetchone()
+                    logger.info(
+                        f"DEBUG: Original bounds: X({min_x:.6f} to {max_x:.6f}), "
+                        f"Y({min_y:.6f} to {max_y:.6f})"
+                    )
+
+                    bounds_flipped = self.conn.execute(
+                        f"SELECT ST_XMin(ST_Extent(ST_FlipCoordinates(geometry))), "
+                        f"ST_YMin(ST_Extent(ST_FlipCoordinates(geometry))), "
+                        f"ST_XMax(ST_Extent(ST_FlipCoordinates(geometry))), "
+                        f"ST_YMax(ST_Extent(ST_FlipCoordinates(geometry))) "
+                        f"FROM {table_name}"
+                    )
+                    flip_min_x, flip_min_y, flip_max_x, flip_max_y = bounds_flipped.fetchone()
+                    logger.info(
+                        f"DEBUG: Flipped bounds: X({flip_min_x:.6f} to {flip_max_x:.6f}), "
+                        f"Y({flip_min_y:.6f} to {flip_max_y:.6f})"
+                    )
+                except Exception as debug_error:
+                    logger.warning(f"Could not log coordinate bounds: {debug_error}")
+            else:
+                logger.error("No geometry column found! This will cause 0 features.")
 
         except Exception as e:
             logger.warning(f"Could not determine table schema, using base fields: {e}")
-            selected_fields = base_fields + ["geometry"]
+            selected_fields = base_fields + [
+                "ST_AsGeoJSON(ST_FlipCoordinates(geometry)) as geometry"
+            ]
 
         # Build query
         fields_str = ",\n    ".join(selected_fields)

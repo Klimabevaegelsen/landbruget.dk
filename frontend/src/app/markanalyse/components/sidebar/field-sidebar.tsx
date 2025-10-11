@@ -216,7 +216,7 @@ function FieldSidebarExpandedContent({
                 <option value="glyphosate_belastning">
                   Glyphosate belastning
                 </option>
-                <option value="applications_count">Antal applikationer</option>
+                <option value="applications_count">Antal pesticider</option>
                 <option value="organic_status">Økologisk status</option>
                 <option value="area_size">Markareal</option>
               </select>

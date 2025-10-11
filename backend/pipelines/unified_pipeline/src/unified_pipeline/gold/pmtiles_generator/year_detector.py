@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import re
-from pathlib import Path
 from typing import Dict, List, Tuple
 
 from unified_pipeline.util.gcs_access import GCSDataAccess
@@ -80,38 +79,31 @@ class DataSourceYearDetector:
             List of available years
         """
         try:
-            # List directories in the parent path
-            parent_path = path_pattern.rstrip("_")
-            if parent_path.endswith("/"):
-                parent_path = parent_path[:-1]
+            # Use direct glob pattern like pesticide_proximity does
+            # For "silver/fvm_marker_" -> use "silver/fvm_marker_*"
+            direct_pattern = f"gs://{self.config.gcs_bucket}/{path_pattern}*"
+            all_paths = await asyncio.to_thread(self.gcs.list_files, direct_pattern)
 
-            # Get the parent directory
-            parent_dir = str(Path(parent_path).parent)
-            if parent_dir == ".":
-                parent_dir = ""
-
-            # List all paths that match the pattern
-            all_paths = await asyncio.to_thread(
-                self.gcs.list_files, f"gs://{self.config.gcs_bucket}/{parent_dir}*"
-            )
-
-            # Extract years from paths
+            # Extract years using regex like pesticide_proximity does
             years = set()
-            pattern_name = Path(path_pattern).name
-            year_pattern = re.compile(rf"{re.escape(pattern_name)}(\d{{4}})/?$")
-
+            base_name = path_pattern.split("/")[-1]  # e.g., "fvm_marker_"
+            
+            # Create regex pattern: "fvm_marker_(\d{4})"
+            year_pattern = re.compile(rf"{re.escape(base_name)}(\d{{4}})/?$")
+            
             for path in all_paths:
-                # Extract the relevant part of the path
-                path_parts = path.replace(f"gs://{self.config.gcs_bucket}/", "").split("/")
+                # Get just the directory name (last part of path)
+                dir_name = path.split("/")[-1]
+                
+                # Match the pattern
+                match = year_pattern.match(dir_name)
+                if match:
+                    year = int(match.group(1))
+                    # Validate year is reasonable (2000-2030)
+                    if 2000 <= year <= 2030:
+                        years.add(year)
 
-                for part in path_parts:
-                    match = year_pattern.match(part)
-                    if match:
-                        year = int(match.group(1))
-                        # Validate year is reasonable (2000-2030)
-                        if 2000 <= year <= 2030:
-                            years.add(year)
-
+            logger.info(f"Found {len(years)} years for {source_name}: {sorted(years)}")
             return sorted(list(years))
 
         except Exception as e:
@@ -261,9 +253,17 @@ class DataSourceYearDetector:
             # Auto-detect based on available data
             # Use FVM marker as the base since it's required for all PMTiles
             fvm_years = set(available_years.get("fvm_marker", []))
-            target_years = fvm_years
+            
+            # For field analysis, we only need FVM marker + production data
+            # Pesticide and environmental data are optional enhancements
+            production_years = set(available_years.get("field_production", []))
+            
+            # Take intersection of FVM and production (both required for meaningful analysis)
+            target_years = fvm_years & production_years
+            logger.info(f"FVM marker years: {sorted(fvm_years)}")
+            logger.info(f"Field production years: {sorted(production_years)}")
             logger.info(
-                f"Auto-detected years based on FVM marker availability: {sorted(target_years)}"
+                f"Auto-detected years (FVM + production): {sorted(target_years)}"
             )
 
         # Apply exclusions

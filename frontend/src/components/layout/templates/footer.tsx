@@ -42,7 +42,7 @@ export function Footer() {
                 className="touch-target flex min-h-[44px] min-w-[44px] items-center justify-center px-3 py-2 text-sm font-medium hover:underline"
                 href="mailto:info@landbruget.dk"
               >
-                Kontakt os
+                info@landbruget.dk
               </a>
             </div>
           </div>

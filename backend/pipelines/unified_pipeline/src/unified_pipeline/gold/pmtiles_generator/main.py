@@ -48,7 +48,7 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
         # Install and load spatial extension on inherited connection
         self.duckdb_conn.execute("INSTALL spatial")
         self.duckdb_conn.execute("LOAD spatial")
-        
+
         # Ensure GCS credentials are properly configured for DuckDB
         self._ensure_gcs_credentials()
 
@@ -80,14 +80,14 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
 
             if gcs_access_key and gcs_secret_key:
                 logger.info("✅ Found GCS HMAC credentials, configuring DuckDB")
-                
+
                 # Install and load httpfs extension for GCS access
                 self.duckdb_conn.execute("INSTALL httpfs")
                 self.duckdb_conn.execute("LOAD httpfs")
-                
+
                 # Set correct GCS region (landbrugsdata-raw-data bucket is in EUROPE-WEST1)
                 self.duckdb_conn.execute("SET s3_region = 'europe-west1'")
-                
+
                 # Create persistent GCS secret for native access
                 self.duckdb_conn.execute(f"""
                     CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
@@ -99,7 +99,9 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
                 logger.info("✅ DuckDB GCS HMAC authentication configured successfully")
             else:
                 logger.warning("⚠️  GCS HMAC credentials not found in environment variables")
-                logger.warning("    Set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY for optimal performance")
+                logger.warning(
+                    "    Set GCS_ACCESS_KEY_ID and GCS_SECRET_ACCESS_KEY for optimal performance"
+                )
         except Exception as e:
             logger.error(f"❌ Failed to setup GCS HMAC authentication: {e}")
             # Don't raise - let it fall back to service account auth
@@ -141,11 +143,19 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
                 "upload_results": {},
             }
 
+            # Initialize variables to prevent scope issues
+            field_pmtiles = {}
+            environmental_pmtiles = {}
+            buildings_pmtiles = {}
+
             # Generate field analysis PMTiles for each year
             if years_to_process:
                 logger.info("Generating field analysis PMTiles")
                 field_pmtiles = await self.field_generator.generate_multiple_years(years_to_process)
                 results["field_analysis_pmtiles"] = field_pmtiles
+            else:
+                logger.info("No years to process for field analysis")
+                results["field_analysis_pmtiles"] = {}
 
             # Generate environmental layers PMTiles (year-independent)
             logger.info("Generating environmental layers PMTiles")
@@ -422,28 +432,56 @@ async def main():
             logger.info(f"Processed years: {results['processed_years']}")
 
         if "field_analysis_pmtiles" in results:
-            successful_years = sum(1 for path in results["field_analysis_pmtiles"].values() if path)
-            total_years = len(results["field_analysis_pmtiles"])
-            logger.info(f"Field analysis PMTiles: {successful_years}/{total_years} successful")
+            field_pmtiles = results["field_analysis_pmtiles"]
+            if isinstance(field_pmtiles, dict):
+                successful_years = sum(1 for path in field_pmtiles.values() if path)
+                total_years = len(field_pmtiles)
+                logger.info(f"Field analysis PMTiles: {successful_years}/{total_years} successful")
+            else:
+                # Single year result - just check if it exists
+                success = field_pmtiles is not None
+                logger.info(f"Field analysis PMTiles: {1 if success else 0}/1 successful")
 
         if "environmental_pmtiles" in results:
-            successful_env = sum(1 for path in results["environmental_pmtiles"].values() if path)
-            total_env = len(results["environmental_pmtiles"])
-            logger.info(f"Environmental PMTiles: {successful_env}/{total_env} successful")
+            env_pmtiles = results["environmental_pmtiles"]
+            if isinstance(env_pmtiles, dict):
+                successful_env = sum(1 for path in env_pmtiles.values() if path)
+                total_env = len(env_pmtiles)
+                logger.info(f"Environmental PMTiles: {successful_env}/{total_env} successful")
+            else:
+                # Single result
+                success = env_pmtiles is not None
+                logger.info(f"Environmental PMTiles: {1 if success else 0}/1 successful")
 
         if "buildings_pmtiles" in results:
-            successful_buildings = sum(1 for path in results["buildings_pmtiles"].values() if path)
-            total_buildings = len(results["buildings_pmtiles"])
-            logger.info(f"Buildings PMTiles: {successful_buildings}/{total_buildings} successful")
+            buildings_pmtiles = results["buildings_pmtiles"]
+            if isinstance(buildings_pmtiles, dict):
+                successful_buildings = sum(1 for path in buildings_pmtiles.values() if path)
+                total_buildings = len(buildings_pmtiles)
+                logger.info(
+                    f"Buildings PMTiles: {successful_buildings}/{total_buildings} successful"
+                )
+            else:
+                # Single result
+                success = buildings_pmtiles is not None
+                logger.info(f"Buildings PMTiles: {1 if success else 0}/1 successful")
 
         if "upload_results" in results:
-            total_uploads = 0
-            successful_uploads = 0
-            for category_results in results["upload_results"].values():
-                for url in category_results.values():
-                    total_uploads += 1
-                    if url:
-                        successful_uploads += 1
+            upload_results = results["upload_results"]
+            if isinstance(upload_results, dict):
+                total_uploads = 0
+                successful_uploads = 0
+                for category_results in upload_results.values():
+                    if isinstance(category_results, dict):
+                        for url in category_results.values():
+                            total_uploads += 1
+                            if url:
+                                successful_uploads += 1
+                    else:
+                        # Single result
+                        total_uploads += 1
+                        if category_results:
+                            successful_uploads += 1
             logger.info(f"Uploads: {successful_uploads}/{total_uploads} successful")
 
         logger.info("=" * 50)

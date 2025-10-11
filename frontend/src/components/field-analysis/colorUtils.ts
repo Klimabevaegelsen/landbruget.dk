@@ -322,7 +322,7 @@ export function formatVisualizationValue(
   }
 
   if (unit === 'applications') {
-    return `${Math.round(value)} applikationer`;
+    return `${Math.round(value)} pesticider`;
   }
 
   if (unit === 'per_hectare') {
