@@ -21,13 +21,19 @@ const MobileMenu = React.forwardRef<HTMLDivElement, MobileMenuProps>(
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger
             className={cn(
-              'touch-target fixed top-4 left-4 z-50',
-              'mobile-header h-12 w-12 rounded-full shadow-lg',
-              'bg-background/95 border-border border backdrop-blur-sm',
+              'touch-target fixed z-50',
+              'inline-flex items-center justify-center',
+              'border-border h-10 w-10 rounded-full border shadow-lg',
+              'bg-background/95 backdrop-blur-xl',
               'hover:bg-accent hover:text-accent-foreground',
               'focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-none',
+              'transition-colors duration-200',
               triggerClassName
             )}
+            style={{
+              top: 'max(1rem, env(safe-area-inset-top))',
+              left: 'max(1rem, env(safe-area-inset-left))',
+            }}
             aria-label="Åbn menu"
           >
             <Menu size={20} />
@@ -37,11 +43,23 @@ const MobileMenu = React.forwardRef<HTMLDivElement, MobileMenuProps>(
             side="left"
             title={title}
             description={description}
-            className="w-[280px] border-none p-0"
+            className="w-[280px] rounded-none border-none p-0"
           >
             <div className="flex h-full flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-6 pb-4">
+                <div className="flex flex-col">
+                  <h2 className="text-lg font-semibold">{title}</h2>
+                  {description && (
+                    <p className="text-muted-foreground text-sm">
+                      {description}
+                    </p>
+                  )}
+                </div>
+              </div>
+
               {/* Content */}
-              <div className="flex-1 overflow-y-auto p-6">{children}</div>
+              <div className="flex-1 overflow-y-auto px-6 pb-6">{children}</div>
             </div>
           </SheetContent>
         </Sheet>
@@ -93,7 +111,7 @@ const MobileMenuItem = React.forwardRef<HTMLButtonElement, MobileMenuItemProps>(
           'transition-colors duration-200',
           'focus:ring-ring focus:ring-2 focus:ring-offset-2 focus:outline-none',
           variant === 'default' && [
-            'hover:bg-accent hover:text-accent-foreground',
+            'hover:bg-accent/50 hover:text-accent-foreground',
             active && 'bg-primary text-primary-foreground hover:bg-primary/90',
           ],
           variant === 'destructive' &&

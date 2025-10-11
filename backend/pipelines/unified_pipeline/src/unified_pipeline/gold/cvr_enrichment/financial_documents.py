@@ -1706,7 +1706,7 @@ class FinancialDocuments(BaseSource[FinancialDocumentsConfig], GoldJobInterface)
         data_consolidation.py)."""
         try:
             # DuckDB-specific cleanup
-            self.conn.execute("CHECKPOINT")  # Force write to disk and clear WAL
+            # NOTE: CHECKPOINT not supported for in-memory databases
             self.conn.execute("PRAGMA optimize")  # Optimize database structure
 
             # Force Python garbage collection

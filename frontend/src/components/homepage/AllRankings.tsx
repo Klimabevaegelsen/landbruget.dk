@@ -2,7 +2,7 @@
 
 import IndividualRankingTable from './IndividualRankingTable';
 
-// Define all 23 rankings
+// Define all 26 rankings
 const RANKINGS = [
   // Agricultural Area Rankings (4)
   {
@@ -65,14 +65,14 @@ const RANKINGS = [
     title: 'Mest BNBO-areal ikke håndteret',
     category: 'environment',
     description:
-      'Virksomheder med mest boringsnært beskyttelsesområde-areal der kræver handling i 2024',
+      'Virksomheder med mest boringsnært beskyttelsesområde-areal der kræver handling i 2025',
   },
   {
     id: 'most_bnbo_dealt_with',
     title: 'Mest BNBO-areal håndteret',
     category: 'environment',
     description:
-      'Virksomheder med mest boringsnært beskyttelsesområde-areal der er håndteret i 2024',
+      'Virksomheder med mest boringsnært beskyttelsesområde-areal der er håndteret in 2025',
   },
   {
     id: 'most_wetland_not_restored',
@@ -89,32 +89,32 @@ const RANKINGS = [
       'Virksomheder med mest lavbundsjorde-areal der er helt eller delvist genoprettet i 2024',
   },
 
-  // Animal Rankings (5)
+  // Animal Rankings (6)
   {
     id: 'largest_pig_production',
     title: 'Størst svineproduktionskapacitet',
     category: 'animal',
     description:
-      'Produktionssteder med den største svineproduktionskapacitet i 2024',
+      'Produktionssteder med den største svineproduktionskapacitet i 2025',
   },
   {
     id: 'largest_cattle_production',
     title: 'Størst kvægproduktionskapacitet',
     category: 'animal',
     description:
-      'Produktionssteder med den største kvægproduktionskapacitet i 2024',
+      'Produktionssteder med den største kvægproduktionskapacitet i 2025',
   },
   {
     id: 'highest_antibiotic_usage',
     title: 'Højest antibiotikaforbrug',
     category: 'animal',
-    description: 'Virksomheder med det højeste antibiotikaforbrug i 2024',
+    description: 'Virksomheder med det højeste antibiotikaforbrug i 2025',
   },
   {
     id: 'most_production_sites',
     title: 'Flest produktionssteder',
     category: 'animal',
-    description: 'Virksomheder med flest dyreproduktionssteder i 2024',
+    description: 'Virksomheder med flest dyreproduktionssteder in 2025',
   },
   {
     id: 'most_transported_pigs',
@@ -122,26 +122,45 @@ const RANKINGS = [
     category: 'animal',
     description: 'Virksomheder med flest transporterede svin i 2024',
   },
+  {
+    id: 'most_transported_cattle',
+    title: 'Flest transporterede kvæg',
+    category: 'animal',
+    description: 'Virksomheder med flest transporterede kvæg i 2024',
+  },
 
-  // Worker Rankings (3)
+  // Worker Rankings (5)
   {
     id: 'most_employees_worker',
     title: 'Flest ansatte (arbejdsmarkedsdata)',
     category: 'worker',
     description:
-      'Virksomheder med flest ansatte ifølge arbejdsmarkedsdata 2024',
+      'Virksomheder med flest ansatte ifølge arbejdsmarkedsdata 2025',
   },
   {
     id: 'most_foreign_workers',
-    title: 'Flest arbejdstilladelser',
+    title: 'Førstegangsvisum ansøgninger',
     category: 'worker',
-    description: 'Virksomheder med flest aktive arbejdstilladelser i 2024',
+    description: 'Virksomheder med flest førstegangsvisum ansøgninger i 2024',
   },
   {
     id: 'most_work_injuries',
     title: 'Flest arbejdsulykker',
     category: 'worker',
     description: 'Virksomheder med flest rapporterede arbejdsulykker i 2024',
+  },
+  {
+    id: 'most_workplace_inspections',
+    title: 'Flest arbejdstilsynsinspektioner',
+    category: 'worker',
+    description: 'Virksomheder med flest arbejdstilsynsinspektioner i 2025',
+  },
+  {
+    id: 'most_urgent_violations',
+    title: 'Flest strakspåbud',
+    category: 'worker',
+    description:
+      'Virksomheder med flest strakspåbud fra Arbejdstilsynet i 2025',
   },
 
   // Financial Rankings (moved to end)
@@ -185,8 +204,8 @@ export default function AllRankings() {
       {/* Footer */}
       <div className="border-border border-t pt-8 text-center">
         <p className="text-muted-foreground text-xs">
-          Data opdateret: {new Date().toLocaleDateString('da-DK')} • 23
-          ranglister baseret på officielle data fra 2023-2024
+          Data opdateret: {new Date().toLocaleDateString('da-DK')} • 26
+          ranglister baseret på officielle data fra 2024-2025
         </p>
       </div>
     </div>

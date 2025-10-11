@@ -162,7 +162,7 @@ export function LayerControlPanel({
               <option value="glyphosate_belastning">
                 Glyphosate belastning
               </option>
-              <option value="applications_count">Antal applikationer</option>
+              <option value="applications_count">Antal pesticider</option>
               <option value="organic_status">Økologisk status</option>
               <option value="area_size">Markareal</option>
             </select>
@@ -189,7 +189,7 @@ export function LayerControlPanel({
               <option value="total">Total mængde (kg/L)</option>
               <option value="per_hectare">Per hektar</option>
               <option value="belastning">Belastning (anbefalet)</option>
-              <option value="applications">Antal applikationer</option>
+              <option value="applications">Antal pesticider</option>
             </select>
           </div>
 

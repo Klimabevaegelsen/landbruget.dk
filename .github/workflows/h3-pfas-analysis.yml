@@ -6,41 +6,41 @@ on:
       years:
         description: 'Years to process (comma-separated, e.g., "2022,2023" or leave empty for all)'
         required: false
-        default: ''
+        default: ""
       analysis_modes:
-        description: 'Analysis modes to run'
+        description: "Analysis modes to run"
         required: true
-        default: 'h3,kommune'
+        default: "h3,kommune"
         type: choice
         options:
-          - 'h3'
-          - 'kommune'
-          - 'h3,kommune'
+          - "h3"
+          - "kommune"
+          - "h3,kommune"
       h3_resolutions:
         description: 'H3 resolutions to run (comma-separated, e.g., "7,8,9,10" or leave empty for all resolutions)'
         required: false
-        default: '7,8,9,10'
+        default: "7,8,9,10"
       memory_limit:
-        description: 'Memory limit for processing (optimized for 16GB GitHub Actions free tier)'
+        description: "Memory limit for processing (optimized for 16GB GitHub Actions free tier)"
         required: false
-        default: '14GB'
+        default: "14GB"
       thread_count:
-        description: 'Number of threads (optimized for 4 CPU GitHub Actions free tier - max available)'
+        description: "Number of threads (optimized for 4 CPU GitHub Actions free tier - max available)"
         required: false
-        default: '4'
+        default: "4"
       chunk_size:
-        description: 'H3 cells per chunk (optimized for 16GB RAM)'
+        description: "H3 cells per chunk (optimized for 16GB RAM)"
         required: false
-        default: '10000'
+        default: "10000"
 
   schedule:
     # Run weekly on Sunday at 02:00 UTC
-    - cron: '0 2 * * 0'
+    - cron: "0 2 * * 0"
 
   push:
     paths:
-      - 'backend/pipelines/h3_pfas_exposure_pipeline/**'
-      - '.github/workflows/h3-pfas-analysis.yml'
+      - "backend/pipelines/h3_pfas_exposure_pipeline/**"
+      - ".github/workflows/h3-pfas-analysis.yml"
     branches:
       - main
 
@@ -84,8 +84,8 @@ jobs:
               years=("${{ github.event.inputs.years }}")
             fi
           else
-            # Default to all available years (2015-2023)
-            years=("2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023")
+            # Default to all available years (2010-2023)
+            years=("2010" "2011" "2012" "2013" "2014" "2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023")
           fi
 
           # Build matrix combinations - one job per YEAR
@@ -126,8 +126,8 @@ jobs:
     strategy:
       matrix:
         include: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
-      fail-fast: false  # Allow other jobs to continue if one fails
-      max-parallel: 10  # Allow up to 10 concurrent jobs for faster processing
+      fail-fast: false # Allow other jobs to continue if one fails
+      max-parallel: 10 # Allow up to 10 concurrent jobs for faster processing
 
     name: Process Year ${{ matrix.year }} - All Aggregation Levels
 
@@ -138,7 +138,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -344,7 +344,7 @@ jobs:
         with:
           name: output-paths-year${{ matrix.year }}
           path: artifacts/
-          retention-days: 1  # Only need these for the cumulative job
+          retention-days: 1 # Only need these for the cumulative job
 
   # Cumulative analysis job - runs after all individual years are processed
   cumulative-analysis:
@@ -361,7 +361,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3

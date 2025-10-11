@@ -161,11 +161,8 @@ class H3PFASProcessorRefactored:
         # Force garbage collection
         gc.collect()
 
-        # Clear DuckDB cache
-        try:
-            self.conn.execute("CHECKPOINT")
-        except Exception:
-            pass
+        # NOTE: CHECKPOINT not supported for in-memory databases
+        # DuckDB handles memory management automatically for in-memory mode
 
     def _aggressive_cleanup(self):
         """Aggressive cleanup for GitHub Actions constraints - only used at end of processing."""
@@ -198,11 +195,8 @@ class H3PFASProcessorRefactored:
         # Force garbage collection
         gc.collect()
 
-        # Clear DuckDB cache
-        try:
-            self.conn.execute("CHECKPOINT")
-        except Exception:
-            pass
+        # NOTE: CHECKPOINT not supported for in-memory databases
+        # DuckDB handles memory management automatically for in-memory mode
 
     def setup_duckdb(self):
         """Setup DuckDB with required extensions - OPTIMIZED for GitHub Actions."""
@@ -626,12 +620,10 @@ class H3PFASProcessorRefactored:
         except Exception:
             pass
 
-        # Force garbage collection and checkpoint
+        # Force garbage collection
         gc.collect()
-        try:
-            self.conn.execute("CHECKPOINT")
-        except Exception:
-            pass
+        # NOTE: CHECKPOINT not supported for in-memory databases
+        # DuckDB handles memory management automatically for in-memory mode
 
         self._monitor_resources(f"cleanup_year_{year}")
 

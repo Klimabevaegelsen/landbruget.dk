@@ -6,20 +6,20 @@ on:
   workflow_dispatch:
     inputs:
       test_limit:
-        description: 'Test limit (number of CVR numbers to process, empty for no limit)'
+        description: "Test limit (number of CVR numbers to process, empty for no limit)"
         required: false
         type: string
       # batch_count:
-        # description: 'Number of batches for parallel processing'
-        # required: false
-        # default: '5'
-        # type: string
+      # description: 'Number of batches for parallel processing'
+      # required: false
+      # default: '5'
+      # type: string
       skip_steps:
-        description: 'Comma-separated list of steps to skip (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding)'
+        description: "Comma-separated list of steps to skip (collection,company_fetching,data_parsing,data_consolidation,pnumber_fetching,financial_documents,address_geocoding)"
         required: false
         type: string
       run_only_step:
-        description: 'Run only a specific step independently (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding)'
+        description: "Run only a specific step independently (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding). Note: data_parsing and data_consolidation require full pipeline run."
         required: false
         type: choice
         options:
@@ -29,9 +29,9 @@ on:
           - pnumber_fetching
           - financial_documents
           - address_geocoding
-        default: 'none'
+        default: "none"
       log_level:
-        description: 'Logging level'
+        description: "Logging level"
         type: choice
         required: true
         options:
@@ -39,14 +39,14 @@ on:
           - DEBUG
           - WARNING
           - ERROR
-        default: 'INFO'
+        default: "INFO"
   schedule:
     # Run monthly on the 1st at 02:00 UTC
-    - cron: '0 2 1 * *'
+    - cron: "0 2 1 * *"
 
 env:
   BUCKET_NAME: landbrugsdata-raw-data
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: "3.11"
   # Shared timestamp for all pipeline steps to ensure consistent file paths
   PIPELINE_START_TIME: ${{ github.run_started_at }}
   GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
@@ -217,6 +217,138 @@ jobs:
             fi
           fi
 
+      - name: Upload Company Raw Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-raw-company-data
+          path: /tmp/cvr_raw_companies_consolidated.parquet
+          retention-days: 1
+
+  # Step 3: Data Parsing (Silver Layer - Parse raw JSON into structured data)
+  data_parsing:
+    name: "Data Parsing (Silver Layer)"
+    runs-on: ubuntu-latest
+    needs: company_fetching
+    if: ${{ !cancelled() && (github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'data_parsing')) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Download Raw Company Data
+        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-raw-company-data
+          path: /tmp/
+        continue-on-error: true
+
+      - name: Run Data Parsing
+        env:
+          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          PYTHONUNBUFFERED: 1
+        run: |
+          cd backend/pipelines/unified_pipeline
+
+          CMD="python -u -m unified_pipeline run -s cvr_enrichment -j data_parsing"
+
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+
+          echo "🚀 Starting Data Parsing Step"
+          echo "Running with Log Level: $LOG_LEVEL"
+          echo "Running: $CMD"
+          echo "🚀 Command starting now..."
+
+          $CMD
+
+          echo "✅ Data Parsing completed successfully"
+
+      - name: Upload Silver Layer Data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvr-silver-data
+          path: /tmp/cvr_companies_silver.parquet
+          retention-days: 1
+
+  # Step 4: Data Consolidation (Gold Layer - Compatibility bridge)
+  data_consolidation:
+    name: "Data Consolidation (Gold Layer)"
+    runs-on: ubuntu-latest
+    needs: data_parsing
+    if: ${{ !cancelled() && (github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'data_consolidation')) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Download Silver Layer Data
+        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-silver-data
+          path: /tmp/
+        continue-on-error: true
+
+      - name: Run Data Consolidation
+        env:
+          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          PYTHONUNBUFFERED: 1
+        run: |
+          cd backend/pipelines/unified_pipeline
+
+          CMD="python -u -m unified_pipeline run -s cvr_enrichment -j data_consolidation"
+
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          fi
+
+          echo "🚀 Starting Data Consolidation Step"
+          echo "Running with Log Level: $LOG_LEVEL"
+          echo "Running: $CMD"
+          echo "🚀 Command starting now..."
+
+          $CMD
+
+          echo "✅ Data Consolidation completed successfully"
+
       - name: Upload Company Data
         uses: actions/upload-artifact@v4
         with:
@@ -224,11 +356,11 @@ jobs:
           path: /tmp/cvr_company_data.parquet
           retention-days: 1
 
-  # Step 3: P-Number Fetching (Sequential - single job with API-level batching)
+  # Step 5: P-Number Fetching (Sequential - single job with API-level batching)
   pnumber_fetching:
     name: "P-Number Fetching"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching]
+    needs: [cvr_collection, data_consolidation]
     if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching')) || github.event.inputs.run_only_step == 'pnumber_fetching') }}
 
     steps:
@@ -320,11 +452,11 @@ jobs:
           path: /tmp/cvr_pnumber_data.parquet
           retention-days: 1
 
-  # Step 4: Financial Documents (Sequential - process all companies)
+  # Step 6: Financial Documents (Sequential - process all companies)
   financial_documents:
     name: "Financial Documents"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching]
+    needs: [cvr_collection, data_consolidation]
     if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'financial_documents')) || github.event.inputs.run_only_step == 'financial_documents') }}
 
     steps:
@@ -410,13 +542,11 @@ jobs:
           path: /tmp/cvr_financial_data.parquet
           retention-days: 1
 
-
-
-  # Step 5: Address Geocoding (Sequential - process all addresses)
+  # Step 7: Address Geocoding (Sequential - process all addresses)
   address_geocoding:
     name: "Address Geocoding"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching, pnumber_fetching]
+    needs: [cvr_collection, data_consolidation, pnumber_fetching]
     if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'address_geocoding')) || github.event.inputs.run_only_step == 'address_geocoding') }}
 
     steps:
@@ -507,13 +637,20 @@ jobs:
           path: /tmp/cvr_address_data.parquet
           retention-days: 1
 
-
-
-  # Step 6: Pipeline Summary (moved from data_consolidation step)
+  # Step 8: Pipeline Summary
   pipeline_summary:
     name: "Pipeline Summary"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding]
+    needs:
+      [
+        cvr_collection,
+        company_fetching,
+        data_parsing,
+        data_consolidation,
+        pnumber_fetching,
+        financial_documents,
+        address_geocoding,
+      ]
     if: always()
 
     steps:
@@ -527,19 +664,33 @@ jobs:
           echo ""
           echo "📋 Steps Status:"
           echo "   • CVR Collection: ${{ needs.cvr_collection.result }}"
-          echo "   • Company Fetching: ${{ needs.company_fetching.result }}"
+          echo "   • Company Fetching (Bronze): ${{ needs.company_fetching.result }}"
+          echo "   • Data Parsing (Silver): ${{ needs.data_parsing.result }}"
+          echo "   • Data Consolidation (Gold): ${{ needs.data_consolidation.result }}"
           echo "   • P-Number Fetching: ${{ needs.pnumber_fetching.result }}"
           echo "   • Financial Documents: ${{ needs.financial_documents.result }}"
           echo "   • Address Geocoding: ${{ needs.address_geocoding.result }}"
           echo ""
-          echo "✅ Data consolidation is now handled directly in the financial documents step"
-          echo "   as part of the CVR Enrichment Architecture Redesign"
+          echo "✅ New Bronze→Silver→Gold architecture implemented successfully"
+          echo "   • Bronze: Raw JSON data streaming"
+          echo "   • Silver: Structured data parsing"
+          echo "   • Gold: Compatibility consolidation"
 
   # Notification job (runs regardless of success/failure)
   notify:
     name: "Pipeline Notification"
     runs-on: ubuntu-latest
-    needs: [cvr_collection, company_fetching, pnumber_fetching, financial_documents, address_geocoding, pipeline_summary]
+    needs:
+      [
+        cvr_collection,
+        company_fetching,
+        data_parsing,
+        data_consolidation,
+        pnumber_fetching,
+        financial_documents,
+        address_geocoding,
+        pipeline_summary,
+      ]
     if: always()
 
     steps:

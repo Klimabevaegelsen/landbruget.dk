@@ -2,10 +2,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { ViewState } from 'react-map-gl/maplibre';
+import { ViewState } from '@vis.gl/react-maplibre';
 import { LayerControlPanelEnhanced as LayerControlPanel } from './LayerControlPanel';
 import { FieldDetailsPanel } from './FieldDetailsPanel';
-import { CoordinatePanel } from './CoordinatePanel';
 import { LoadingState } from './LoadingState';
 import { YearSlider } from './YearSlider';
 import { pmtilesCacheService } from '@/services/pmtiles-cache-service';
@@ -184,19 +183,10 @@ export default function FieldAnalysisVisualization() {
     (coordinates: { lat: number; lng: number }) => {
       setClickedCoordinates(coordinates);
 
-      // If a field is currently selected, update its click coordinates
-      if (selectedField) {
-        setSelectedField((prev) =>
-          prev
-            ? {
-                ...prev,
-                click_coordinates: coordinates,
-              }
-            : null
-        );
-      }
+      // Clear field selection when clicking on empty areas
+      setSelectedField(null);
     },
-    [selectedField]
+    []
   );
 
   // Handle map view state changes
@@ -431,7 +421,7 @@ export default function FieldAnalysisVisualization() {
               paddingBottom: 'env(safe-area-inset-bottom)',
             }}
           >
-            <CoordinatePanel
+            <FieldDetailsPanel
               coordinates={clickedCoordinates}
               onClose={() => setClickedCoordinates(null)}
             />

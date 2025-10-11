@@ -8,12 +8,13 @@ import React, {
   useMemo,
 } from 'react';
 import dynamic from 'next/dynamic';
-import { ViewState } from 'react-map-gl/maplibre';
+import { ViewState } from '@vis.gl/react-maplibre';
 import { useMobileDetection } from '@/hooks/use-mobile-detection';
 import { FieldSidebar } from './sidebar/field-sidebar';
 import { MobileFieldMenu } from './sidebar/mobile-menu';
 import { FieldDetailsSheet } from './sheets/field-details-sheet';
 import { FieldDetailsContent } from './shared/field-details-content';
+import { FieldDetailsPanel } from '@/components/field-analysis/FieldDetailsPanel';
 import { LoadingState } from '@/components/field-analysis/LoadingState';
 import { YearSlider } from '@/components/field-analysis/YearSlider';
 import { pmtilesCacheService } from '@/services/pmtiles-cache-service';
@@ -23,6 +24,11 @@ import {
   FilterState,
   YearSelection,
 } from '@/components/field-analysis/types';
+import {
+  convertToCSV,
+  downloadCSV,
+  generateCSVFilename,
+} from '@/utils/csv-export';
 
 // Dynamically import the map component to avoid SSR issues
 const FieldAnalysisMap = dynamic(
@@ -91,6 +97,14 @@ export default function FieldAnalysisMain() {
     water_projects: '',
     buildings: '',
   });
+
+  // Ref to access map's queryVisibleFields function
+  const queryVisibleFieldsRef = useRef<(() => FieldAnalysisData[]) | null>(
+    null
+  );
+
+  // Track current zoom level for CSV download enablement
+  const [currentZoom, setCurrentZoom] = useState(7);
 
   // Ensure client-side only rendering
   useEffect(() => {
@@ -184,19 +198,10 @@ export default function FieldAnalysisMain() {
       setClickedCoordinates(coordinates);
       setIsPanelCollapsed(false); // Expand panel when coordinates are clicked
 
-      // If a field is currently selected, update its click coordinates
-      if (selectedField) {
-        setSelectedField((prev) =>
-          prev
-            ? {
-                ...prev,
-                click_coordinates: coordinates,
-              }
-            : null
-        );
-      }
+      // Clear field selection when clicking on empty areas
+      setSelectedField(null);
     },
-    [selectedField]
+    []
   );
 
   // Handle map view state changes
@@ -208,6 +213,8 @@ export default function FieldAnalysisMain() {
       pitch: viewState.pitch,
       bearing: viewState.bearing,
     });
+    // Track zoom level for CSV download enablement
+    setCurrentZoom(viewState.zoom);
   }, []);
 
   // Handle year selection changes - now preserves viewport and selected field
@@ -230,6 +237,33 @@ export default function FieldAnalysisMain() {
 
     setIsLoading(false);
   }, []);
+
+  // Handle CSV download
+  const handleDownloadCSV = useCallback(() => {
+    if (!queryVisibleFieldsRef.current) {
+      console.warn('CSV download: queryVisibleFields function not available');
+      return;
+    }
+
+    try {
+      const visibleFields = queryVisibleFieldsRef.current();
+
+      if (visibleFields.length === 0) {
+        console.warn('CSV download: No visible fields found');
+        // Could show a toast notification here
+        return;
+      }
+
+      const csvContent = convertToCSV(visibleFields);
+      const filename = generateCSVFilename(yearSelection.selectedYear);
+
+      downloadCSV(csvContent, filename);
+      console.log(`Downloaded CSV with ${visibleFields.length} fields`);
+    } catch (error) {
+      console.error('Error downloading CSV:', error);
+      // Could show an error toast here
+    }
+  }, [yearSelection.selectedYear]);
 
   // Handle escape key
   useEffect(() => {
@@ -256,9 +290,10 @@ export default function FieldAnalysisMain() {
     <div
       className={`bg-background relative ${
         isMobile
-          ? 'min-h-[calc(100vh-120px)]' // Mobile: flexible height
+          ? 'min-h-screen overflow-hidden' // Mobile: full screen height, no overflow
           : 'h-[calc(100vh-120px)] overflow-hidden' // Desktop: fixed height with overflow control
       }`}
+      style={isMobile ? { height: '100vh', maxHeight: '100vh' } : undefined}
     >
       {/* Desktop Sidebar */}
       {!isMobile && (
@@ -270,6 +305,8 @@ export default function FieldAnalysisMain() {
           onFilterChange={handleFilterChange}
           onYearChange={handleYearChange}
           onExpandedChange={setSidebarExpanded}
+          onDownloadCSV={handleDownloadCSV}
+          currentZoom={currentZoom}
         />
       )}
 
@@ -292,7 +329,7 @@ export default function FieldAnalysisMain() {
             ? sidebarExpanded
               ? 'ml-[280px] h-full w-[calc(100%-280px)]' // Desktop: fixed height, sidebar margins
               : 'ml-[70px] h-full w-[calc(100%-70px)]'
-            : 'min-h-[calc(100vh-120px)] w-full' // Mobile: full width, flexible height
+            : 'h-full w-full' // Mobile: full dimensions, no extra margins
         }`}
       >
         {/* Year Slider - positioned to avoid sidebar and panel collision */}
@@ -322,11 +359,7 @@ export default function FieldAnalysisMain() {
         </div>
 
         <div
-          className={`absolute inset-0 w-full ${
-            isMobile
-              ? 'min-h-[calc(100vh-160px)]' // Mobile: account for mobile menu
-              : 'h-full' // Desktop: use parent height
-          }`}
+          className="absolute inset-0 h-full w-full"
           style={{ touchAction: 'pan-x pan-y' }}
         >
           {isLoading ? (
@@ -346,6 +379,7 @@ export default function FieldAnalysisMain() {
                 (!!selectedField || !!clickedCoordinates) &&
                 !isPanelCollapsed
               }
+              queryVisibleFieldsRef={queryVisibleFieldsRef}
             />
           )}
         </div>
@@ -486,93 +520,36 @@ export default function FieldAnalysisMain() {
               </button>
             </div>
           ) : (
-            /* Expanded State - Show full content */
-            <div className="p-6">
-              <div className="mb-6 flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-lg font-semibold">GPS Koordinater</h3>
-                  <p className="text-muted-foreground mt-1 truncate text-sm">
-                    Klik på en mark for detaljerede oplysninger
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Collapse Button */}
-                  <button
-                    onClick={() => setIsPanelCollapsed(true)}
-                    className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
-                    aria-label="Skjul panel"
-                    title="Skjul panel for bedre kortoversigt"
+            /* Expanded State - Use unified FieldDetailsPanel */
+            <div className="flex h-full flex-col">
+              <div className="flex items-center justify-between border-b p-4">
+                <h3 className="text-lg font-semibold">GPS Koordinater</h3>
+                <button
+                  onClick={() => setIsPanelCollapsed(true)}
+                  className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
+                  aria-label="Skjul panel"
+                  title="Skjul GPS koordinater"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                  {/* Close Button */}
-                  <button
-                    onClick={() => setClickedCoordinates(null)}
-                    className="hover:bg-muted/50 active:bg-muted flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full p-2 transition-colors"
-                    aria-label="Luk panel"
-                  >
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </div>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
               </div>
-              <div className="bg-primary/10 rounded-lg p-4">
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Latitude:</span>
-                    <span className="font-mono font-medium">
-                      {clickedCoordinates.lat.toFixed(5)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Longitude:</span>
-                    <span className="font-mono font-medium">
-                      {clickedCoordinates.lng.toFixed(5)}
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2">
-                  <a
-                    href={`https://skraafoto.kortforsyningen.dk/?x=${clickedCoordinates.lng}&y=${clickedCoordinates.lat}&zoom=15`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 flex w-full items-center justify-center rounded px-3 py-2 text-center text-sm font-medium transition-colors"
-                  >
-                    Se Skråfoto
-                  </a>
-                  <button
-                    onClick={() => {
-                      const googleMapsUrl = `https://www.google.com/maps?q=${clickedCoordinates.lat},${clickedCoordinates.lng}`;
-                      window.open(googleMapsUrl, '_blank');
-                    }}
-                    className="bg-secondary text-secondary-foreground hover:bg-secondary/90 active:bg-secondary/80 flex w-full items-center justify-center rounded px-3 py-2 text-center text-sm font-medium transition-colors"
-                  >
-                    Åbn i Google Maps
-                  </button>
-                </div>
+              <div className="flex-1 overflow-y-auto">
+                <FieldDetailsPanel
+                  coordinates={clickedCoordinates}
+                  onClose={() => setClickedCoordinates(null)}
+                />
               </div>
             </div>
           )}

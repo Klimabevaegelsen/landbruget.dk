@@ -191,25 +191,25 @@ const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         </div>
 
         {/* PFAS - Clean warning design */}
-        <div className="rounded-md border-l-4 border-red-400 bg-red-50 px-3 py-2">
+        <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
           <div className="mb-1 flex items-center justify-between">
-            <div className="text-sm font-medium text-red-800">
+            <div className="text-sm font-medium text-amber-800">
               PFAS Active Ingredients
             </div>
-            <div className="text-xs font-medium text-red-600">Persistent</div>
+            <div className="text-xs font-medium text-amber-600">Persistent</div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-red-900">
+              <div className="text-base font-semibold text-amber-900">
                 {formatNumber(pfasGrams, 2)}
               </div>
-              <div className="text-red-600">grams total</div>
+              <div className="text-amber-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-red-900">
+              <div className="text-base font-semibold text-amber-900">
                 {formatNumber(pfasIntensity, 2)}
               </div>
-              <div className="text-red-600">grams per hectare</div>
+              <div className="text-amber-600">grams per hectare</div>
             </div>
           </div>
         </div>
@@ -236,22 +236,22 @@ const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         </div>
 
         {/* Diquat - Clean design */}
-        <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
-          <div className="mb-1 text-sm font-medium text-amber-800">
+        <div className="rounded-md border-l-4 border-purple-400 bg-purple-50 px-3 py-2">
+          <div className="mb-1 text-sm font-medium text-purple-800">
             Diquat Active Ingredients
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-amber-900">
+              <div className="text-base font-semibold text-purple-900">
                 {formatNumber(diquatGrams, 2)}
               </div>
-              <div className="text-amber-600">grams total</div>
+              <div className="text-purple-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-amber-900">
+              <div className="text-base font-semibold text-purple-900">
                 {formatNumber(diquatIntensity, 2)}
               </div>
-              <div className="text-amber-600">grams per hectare</div>
+              <div className="text-purple-600">grams per hectare</div>
             </div>
           </div>
         </div>
@@ -363,25 +363,25 @@ const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         </div>
 
         {/* PFAS - Clean warning design */}
-        <div className="rounded-md border-l-4 border-red-400 bg-red-50 px-3 py-2">
+        <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
           <div className="mb-1 flex items-center justify-between">
-            <div className="text-sm font-medium text-red-800">
+            <div className="text-sm font-medium text-amber-800">
               PFAS Active Ingredients
             </div>
-            <div className="text-xs font-medium text-red-600">Persistent</div>
+            <div className="text-xs font-medium text-amber-600">Persistent</div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-red-900">
+              <div className="text-base font-semibold text-amber-900">
                 {formatNumber(pfasGrams, 2)}
               </div>
-              <div className="text-red-600">grams total</div>
+              <div className="text-amber-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-red-900">
+              <div className="text-base font-semibold text-amber-900">
                 {formatNumber(pfasIntensity, 2)}
               </div>
-              <div className="text-red-600">grams per hectare</div>
+              <div className="text-amber-600">grams per hectare</div>
             </div>
           </div>
         </div>
@@ -408,22 +408,22 @@ const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         </div>
 
         {/* Diquat - Clean design */}
-        <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
-          <div className="mb-1 text-sm font-medium text-amber-800">
+        <div className="rounded-md border-l-4 border-purple-400 bg-purple-50 px-3 py-2">
+          <div className="mb-1 text-sm font-medium text-purple-800">
             Diquat Active Ingredients
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-amber-900">
+              <div className="text-base font-semibold text-purple-900">
                 {formatNumber(diquatGrams, 2)}
               </div>
-              <div className="text-amber-600">grams total</div>
+              <div className="text-purple-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-amber-900">
+              <div className="text-base font-semibold text-purple-900">
                 {formatNumber(diquatIntensity, 2)}
               </div>
-              <div className="text-amber-600">grams per hectare</div>
+              <div className="text-purple-600">grams per hectare</div>
             </div>
           </div>
         </div>
