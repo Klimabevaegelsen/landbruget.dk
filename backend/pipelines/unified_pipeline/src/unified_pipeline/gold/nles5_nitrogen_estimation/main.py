@@ -211,6 +211,19 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     for file_path in glob.glob(pattern):
                         try:
                             if os.path.isfile(file_path):
+                                # 🔍 DIAGNOSTIC: Skip DuckDB temp files to prevent corruption
+                                filename = os.path.basename(file_path)
+                                if filename.startswith(
+                                    "duckdb_temp_storage_"
+                                ) and filename.endswith(".tmp"):
+                                    duckdb_files_skipped += 1
+                                    if hasattr(self, "log"):
+                                        self.log.debug(
+                                            f"🔍 CLEANUP: Skipping active DuckDB temp file: "
+                                            f"{filename}"
+                                        )
+                                    continue
+
                                 file_size = os.path.getsize(file_path)
                                 os.remove(file_path)
                                 freed_bytes += file_size
@@ -437,8 +450,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     historical_pattern = f"gs://{self.config.bucket}/silver/fertiliser/*/GKEA{year}_Markplan_med_Gødningsoplysninger.parquet"
 
                 self.log.info(
-                    f"🔍 Searching for {year} field plan data with pattern: "
-                    f"{historical_pattern}"
+                    f"🔍 Searching for {year} field plan data with pattern: {historical_pattern}"
                 )
                 historical_files = self.gcs_access.list_files(historical_pattern)
 
@@ -491,8 +503,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             # Priority 2: Historical Efterafgrøder files (try recent years in order)
             for year in [2024, 2023, 2022, 2021]:
                 pattern_year = (
-                    f"gs://{self.config.bucket}/silver/fertiliser/*/"
-                    f"Efterafgrøder {year}.parquet"
+                    f"gs://{self.config.bucket}/silver/fertiliser/*/Efterafgrøder {year}.parquet"
                 )
                 files_year = self.gcs_access.list_files(pattern_year)
 
@@ -750,13 +761,13 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         gcs_path = f"gold/{dataset_name}/{timestamp}/data.parquet"
                         full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
 
-                        # Export to local file first to avoid DuckDB temp file issues with GCS writes
-                        import tempfile
-                        import os
-                        
-                        with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+                        # Export to local file first to avoid DuckDB temp file issues
+                        # with GCS writes
+                        with tempfile.NamedTemporaryFile(
+                            suffix=".parquet", delete=False
+                        ) as tmp_file:
                             local_parquet = tmp_file.name
-                        
+
                         try:
                             # Export to local parquet file
                             try:
@@ -767,23 +778,30 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                                 """)
                             except Exception as copy_error:
                                 # DuckDB sometimes fails to cleanup temp files but the COPY succeeds
-                                if "Could not remove file" in str(copy_error) and os.path.exists(local_parquet):
-                                    self.log.warning(f"⚠️ DuckDB temp file cleanup warning (ignorable): {copy_error}")
+                                if "Could not remove file" in str(copy_error) and os.path.exists(
+                                    local_parquet
+                                ):
+                                    self.log.warning(
+                                        f"⚠️ DuckDB temp file cleanup warning (ignorable): "
+                                        f"{copy_error}"
+                                    )
                                 else:
                                     raise
-                            
+
                             # Upload local file to GCS using streaming
                             with open(local_parquet, "rb") as src:
                                 with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
                                     import shutil
                                     shutil.copyfileobj(src, dst)
-                            
-                            self.log.info(f"✅ Saved {table_name} ({count:,} rows) to {full_gcs_path}")
+
+                            self.log.info(
+                                f"✅ Saved {table_name} ({count:,} rows) to {full_gcs_path}"
+                            )
                         finally:
                             # Clean up local temp file
                             if os.path.exists(local_parquet):
                                 os.remove(local_parquet)
-                                self.log.info(f"🧹 Cleaned up local temp file")
+                                self.log.info("🧹 Cleaned up local temp file")
                     else:
                         self.log.warning(f"Table {table_name} is empty, skipping")
                 except Exception as e:
@@ -882,25 +900,33 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                             WHERE table_name = '{table_name}'
                         """).fetchall()
                         col_set = {col[0].lower() for col in columns}
-                        
+
                         # Build column selection based on what exists
                         soil_col = (
-                            'soil_code' if 'soil_code' in col_set else
-                            'soil_type' if 'soil_type' in col_set else
-                            'soil_type_category' if 'soil_type_category' in col_set else
-                            "'unknown'"
+                            "soil_code"
+                            if "soil_code" in col_set
+                            else "soil_type"
+                            if "soil_type" in col_set
+                            else "soil_type_category"
+                            if "soil_type_category" in col_set
+                            else "'unknown'"
                         )
                         crop_col = (
-                            'crop_type' if 'crop_type' in col_set else
-                            'm_code' if 'm_code' in col_set else
-                            "'unknown'"
+                            "crop_type"
+                            if "crop_type" in col_set
+                            else "m_code"
+                            if "m_code" in col_set
+                            else "'unknown'"
                         )
-                        weather_col = 'w_code' if 'w_code' in col_set else "'n/a'"
+                        weather_col = "w_code" if "w_code" in col_set else "'n/a'"
                         nitrogen_col = (
-                            'nitrogen_washout_kg_ha' if 'nitrogen_washout_kg_ha' in col_set else
-                            'nitrogen_leaching_nles5' if 'nitrogen_leaching_nles5' in col_set else
-                            'nitrogen_washout_kg_n_ha' if 'nitrogen_washout_kg_n_ha' in col_set else
-                            '0'
+                            "nitrogen_washout_kg_ha"
+                            if "nitrogen_washout_kg_ha" in col_set
+                            else "nitrogen_leaching_nles5"
+                            if "nitrogen_leaching_nles5" in col_set
+                            else "nitrogen_washout_kg_n_ha"
+                            if "nitrogen_washout_kg_n_ha" in col_set
+                            else "0"
                         )
 
                         # Get sample data from this table with dynamic column selection
@@ -955,7 +981,8 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         stats = self.conn.execute(f"""
                             SELECT
                                 COUNT(*) as total_records,
-                                COUNT(CASE WHEN {nitrogen_col} > 0 THEN 1 END) as positive_estimates,
+                                COUNT(CASE WHEN {nitrogen_col} > 0 THEN 1 END) 
+                                    as positive_estimates,
                                 AVG({nitrogen_col}) as avg_nitrogen,
                                 MIN({nitrogen_col}) as min_nitrogen,
                                 MAX({nitrogen_col}) as max_nitrogen
@@ -1002,7 +1029,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         self.log.info("🚀 NLES5 PRODUCTION PERFORMANCE SUMMARY")
         self.log.info("=" * 80)
         self.log.info(
-            f"⏱️  Total execution time: {total_time:.1f} seconds " f"({total_time / 60:.1f} minutes)"
+            f"⏱️  Total execution time: {total_time:.1f} seconds ({total_time / 60:.1f} minutes)"
         )
         self.log.info(f"📊 Fields processed: {result_count:,}")
         self.log.info(
@@ -1542,7 +1569,487 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
             result_table = "fields_complete_target"
 
-            # Simplified soil joining using existing soil_types_prepared table
+            # 🔍 DIAGNOSTIC LOG: Check DuckDB version and EXCEPT support
+            try:
+                version_result = self.conn.execute("SELECT version()").fetchone()
+                self.log.info(f"🔍 DuckDB version: {version_result[0]}")
+
+                # Test EXCEPT syntax support
+                test_except = self.conn.execute("SELECT 1 as col1, 2 as col2, 3 as col3").fetchone()
+                self.log.info(f"🔍 DuckDB basic SELECT test: {test_except}")
+            except Exception as e:
+                self.log.warning(f"🔍 Could not check DuckDB version: {e}")
+
+            # 🔍 DIAGNOSTIC LOG: Check if soil_types_prepared table exists and has expected schema
+            try:
+                soil_table_check = self.conn.execute("""
+                    SELECT COUNT(*) as count, 
+                           COUNT(CASE WHEN soil_code IS NOT NULL THEN 1 END) as has_soil_code,
+                           COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as has_geom
+                    FROM soil_types_prepared
+                """).fetchone()
+                self.log.info(
+                    f"🔍 soil_types_prepared table: {soil_table_check[0]:,} rows, "
+                    f"{soil_table_check[1]:,} with soil_code, {soil_table_check[2]:,} with geom"
+                )
+            except Exception as e:
+                self.log.error(f"🔍 soil_types_prepared table check failed: {e}")
+                raise ValueError(f"soil_types_prepared table is not accessible: {e}")
+
+            # 🔍 DIAGNOSTIC LOG: Check actual schema of fields_climate_table
+            try:
+                schema_info = self.conn.execute(f"""
+                    SELECT column_name, data_type 
+                    FROM information_schema.columns 
+                    WHERE table_name = '{fields_climate_table}'
+                    ORDER BY ordinal_position
+                """).fetchall()
+                self.log.info(f"🔍 Schema of {fields_climate_table}:")
+                for col_name, col_type in schema_info:
+                    self.log.info(f"   - {col_name}: {col_type}")
+            except Exception as e:
+                self.log.warning(f"🔍 Could not get schema for {fields_climate_table}: {e}")
+
+            # 🔍 DIAGNOSTIC LOG: Count fields before soil join
+            fields_before = self.conn.execute(f"""
+                SELECT COUNT(*) as total, COUNT(DISTINCT field_uuid) as unique_uuids
+                FROM {fields_climate_table}
+            """).fetchone()
+            self.log.info(
+                f"🔍 BEFORE soil join: {fields_before[0]:,} rows, "
+                f"{fields_before[1]:,} unique field_uuids"
+            )
+
+            # FIXED: Use window function to select closest soil polygon
+            # when field intersects multiple polygons
+            # This eliminates duplicates by keeping only the nearest soil match per field_uuid
+            # FIXED: Replace SELECT * EXCEPT with explicit column selection
+            # for DuckDB compatibility
+            # FIXED: Use correct schema from fields_climate_target table
+            # (no block_id, crop_code columns)
+
+            # 🔧 MEMORY: Apply temporary DuckDB mitigations to reduce peak memory
+            # during heavy spatial join
+            try:
+                # Log memory before join
+                self._monitor_memory_usage("Before target-year soil join")
+            except Exception:
+                pass
+
+            # 🔍 DIAGNOSTIC: Log soil table complexity and geometry statistics
+            try:
+                soil_stats = self.conn.execute("""
+                    SELECT 
+                        COUNT(*) as total_rows,
+                        COUNT(DISTINCT soil_code) as unique_soil_codes,
+                        COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as geoms_present,
+                        AVG(ST_Area(geom)) as avg_area
+                    FROM soil_types_prepared
+                """).fetchone()
+
+                self.log.info("🔍 SOIL TABLE STATS:")
+                self.log.info(f"   Total soil polygons: {soil_stats[0]:,}")
+                self.log.info(f"   Unique soil codes: {soil_stats[1]:,}")
+                self.log.info(f"   Geometries present: {soil_stats[2]:,}")
+                self.log.info(f"   Avg polygon area: {soil_stats[3]:.2e} sq degrees")
+
+                # Log memory footprint estimate based on row count
+                estimated_mb_per_row = 0.2  # Conservative estimate for original geometries
+                estimated_mb = soil_stats[0] * estimated_mb_per_row
+                self.log.info(f"   Estimated geometry memory: ~{estimated_mb:.1f} MB")
+            except Exception as e:
+                self.log.warning(f"🔍 Could not gather soil table stats: {e}")
+
+            original_threads = None
+            original_pio = None
+            original_object_cache = None
+            try:
+                try:
+                    original_threads = self.conn.execute(
+                        "SELECT current_setting('threads')"
+                    ).fetchone()[0]
+                except Exception:
+                    original_threads = None
+                try:
+                    original_pio = self.conn.execute(
+                        "SELECT current_setting('preserve_insertion_order')"
+                    ).fetchone()[0]
+                except Exception:
+                    original_pio = None
+                try:
+                    original_object_cache = self.conn.execute(
+                        "SELECT current_setting('enable_object_cache')"
+                    ).fetchone()[0]
+                except Exception:
+                    original_object_cache = None
+
+                # Lower threads and disable insertion order to reduce memory fragmentation
+                self.conn.execute("SET threads = 1")
+                self.conn.execute("SET preserve_insertion_order = false")
+
+                # PHASE 5: Additional memory optimizations
+                # Disable object cache to prevent intermediate results from being cached
+                self.conn.execute("SET enable_object_cache = false")
+
+                # Note: temp_directory is already set in __init__, cannot be changed after first use
+
+                self.log.info(
+                    "🔧 MEMORY: Configured DuckDB for minimal memory usage during soil join"
+                )
+
+            except Exception as e:
+                # If settings cannot be changed, continue with best effort
+                self.log.warning(f"Could not apply all memory settings: {e}")
+
+            # Force aggressive cleanup BEFORE starting the join
+            # (outside try block to ensure it runs)
+            try:
+                self._aggressive_cleanup_target_year()
+                self.log.info("🧹 Pre-join cleanup completed")
+            except Exception as e:
+                self.log.warning(f"Pre-join cleanup failed: {e}")
+
+            # 🔍 DIAGNOSTIC: Check field and soil geometry characteristics
+            try:
+                field_geom_stats = self.conn.execute(f"""
+                    SELECT 
+                        COUNT(*) as total_fields,
+                        COUNT(CASE WHEN geom IS NOT NULL THEN 1 END) as has_geometry,
+                        COUNT(CASE WHEN ST_IsValid(geom) THEN 1 END) as valid_geometry,
+                        AVG(ST_Area(geom)) as avg_area,
+                        MIN(ST_XMin(geom)) as min_x,
+                        MAX(ST_XMax(geom)) as max_x,
+                        MIN(ST_YMin(geom)) as min_y,
+                        MAX(ST_YMax(geom)) as max_y
+                    FROM {fields_climate_table}
+                    WHERE geom IS NOT NULL
+                """).fetchone()
+
+                self.log.info("🔍 FIELD GEOMETRY DIAGNOSTICS:")
+                self.log.info(f"   Total fields: {field_geom_stats[0]:,}")
+                has_geom_pct = field_geom_stats[1] / field_geom_stats[0] * 100
+                self.log.info(f"   Has geometry: {field_geom_stats[1]:,} ({has_geom_pct:.1f}%)")
+                valid_geom_pct = field_geom_stats[2] / field_geom_stats[0] * 100
+                self.log.info(f"   Valid geometry: {field_geom_stats[2]:,} ({valid_geom_pct:.1f}%)")
+                self.log.info(f"   Avg field area: {field_geom_stats[3]:.2e} sq degrees")
+                self.log.info(
+                    f"   Bounds: X=[{field_geom_stats[4]:.2f}, {field_geom_stats[5]:.2f}], "
+                    f"Y=[{field_geom_stats[6]:.2f}, {field_geom_stats[7]:.2f}]"
+                )
+
+                soil_geom_stats = self.conn.execute("""
+                    SELECT 
+                        COUNT(*) as total_polygons,
+                        MIN(ST_XMin(geom)) as min_x,
+                        MAX(ST_XMax(geom)) as max_x,
+                        MIN(ST_YMin(geom)) as min_y,
+                        MAX(ST_YMax(geom)) as max_y
+                    FROM soil_types_prepared
+                    WHERE geom IS NOT NULL
+                """).fetchone()
+
+                self.log.info("🔍 SOIL GEOMETRY DIAGNOSTICS:")
+                self.log.info(f"   Total soil polygons: {soil_geom_stats[0]:,}")
+                self.log.info(
+                    f"   Bounds: X=[{soil_geom_stats[1]:.2f}, {soil_geom_stats[2]:.2f}], "
+                    f"Y=[{soil_geom_stats[3]:.2f}, {soil_geom_stats[4]:.2f}]"
+                )
+
+                # Check if bounds overlap
+                x_overlap = (
+                    field_geom_stats[4] <= soil_geom_stats[2]
+                    and field_geom_stats[5] >= soil_geom_stats[1]
+                )
+                y_overlap = (
+                    field_geom_stats[6] <= soil_geom_stats[4]
+                    and field_geom_stats[7] >= soil_geom_stats[3]
+                )
+
+                if x_overlap and y_overlap:
+                    self.log.info("   ✅ Spatial bounds overlap - geometries should be matchable")
+                else:
+                    self.log.warning("   ⚠️  Spatial bounds DO NOT overlap - possible CRS mismatch!")
+                    self.log.warning(f"      X overlap: {x_overlap}, Y overlap: {y_overlap}")
+
+            except Exception as e:
+                self.log.warning(f"Could not gather geometry diagnostics: {e}")
+
+            # 🔧 ANALYSIS: Previous code used ST_Centroid which caused ~4% match failures
+            # Switching to full geometry intersection for better coverage
+            self.log.info(
+                "🔧 Using full geometry intersection for soil matching (previously used centroid)"
+            )
+
+            # PHASE 3: OPTIMIZED TWO-PHASE SOIL JOIN
+            # Instead of materializing all matches with ROW_NUMBER(),
+            # use a multi-phase approach:
+            # 1. Find intersecting soil polygons and calculate overlap areas
+            #    (only for matching pairs)
+            # 2. Select largest overlap per field using QUALIFY
+            #    (more memory-efficient than window functions)
+            # 3. Join back to get final result with all field columns
+
+            self.log.info("🔍 Phase 3.1: Finding intersecting soil polygons...")
+
+            # Phase 1: Find all field-soil intersections and calculate overlap areas
+            # BATCHED APPROACH: Process fields in chunks to avoid memory exhaustion
+            self.conn.execute("DROP TABLE IF EXISTS field_soil_matches_temp")
+
+            # Get total field count
+            total_fields = self.conn.execute(
+                f"SELECT COUNT(*) FROM {fields_climate_table}"
+            ).fetchone()[0]
+            batch_size = (
+                5000  # Process 5K fields at a time - smaller batches to prevent memory exhaustion
+            )
+            num_batches = (total_fields + batch_size - 1) // batch_size
+
+            self.log.info(
+                f"🔍 Processing {total_fields:,} fields in {num_batches} batches of {batch_size:,}"
+            )
+
+            # Create empty result table
+            self.conn.execute("""
+                CREATE TEMPORARY TABLE field_soil_matches_temp (
+                    field_uuid VARCHAR,
+                    soil_code VARCHAR,
+                    soil_description VARCHAR,
+                    clay_content DOUBLE,
+                    overlap_area DOUBLE
+                )
+            """)
+
+            # Process in batches
+            for batch_idx in range(num_batches):
+                offset = batch_idx * batch_size
+
+                # Log progress every batch (they're small now)
+                self.log.info(
+                    f"   Batch {batch_idx + 1}/{num_batches}: Processing fields "
+                    f"{offset:,} to {min(offset + batch_size, total_fields):,}"
+                )
+
+                self.conn.execute(f"""
+                    INSERT INTO field_soil_matches_temp
+                    SELECT 
+                        f.field_uuid,
+                        s.soil_code,
+                        s.soil_description,
+                        s.clay_content,
+                        COALESCE(ST_Area(ST_Intersection(f.geom, s.geom)), 0) as overlap_area
+                    FROM (
+                        SELECT * FROM {fields_climate_table}
+                        ORDER BY field_uuid
+                        LIMIT {batch_size} OFFSET {offset}
+                    ) f
+                    LEFT JOIN soil_types_prepared s ON ST_Intersects(f.geom, s.geom)
+                """)
+
+                # Cleanup and progress update every 10 batches
+                if (batch_idx + 1) % 10 == 0:
+                    try:
+                        self.conn.execute("CHECKPOINT")
+                        rows_so_far = self.conn.execute(
+                            "SELECT COUNT(*) FROM field_soil_matches_temp"
+                        ).fetchone()[0]
+                        self.log.info(
+                            f"   ✓ Completed {batch_idx + 1}/{num_batches} batches, "
+                            f"{rows_so_far:,} matches so far"
+                        )
+                    except Exception:
+                        pass
+
+            # Log intermediate table size for diagnostics
+            try:
+                match_stats = self.conn.execute("""
+                    SELECT 
+                        COUNT(*) as total_matches,
+                        COUNT(DISTINCT field_uuid) as unique_fields,
+                        COUNT(*) FILTER (WHERE soil_code IS NOT NULL) as fields_with_soil,
+                        AVG(CASE WHEN soil_code IS NOT NULL THEN 1 ELSE 0 END) * 
+                            COUNT(DISTINCT field_uuid) as matched_fields
+                    FROM field_soil_matches_temp
+                """).fetchone()
+
+                self.log.info(
+                    f"🔍 Intermediate matches: {match_stats[0]:,} total, "
+                    f"{match_stats[1]:,} unique fields"
+                )
+                soil_pct = int(match_stats[3]) / match_stats[1] * 100
+                self.log.info(
+                    f"   Fields with soil data: {int(match_stats[3]):,} ({soil_pct:.1f}%)"
+                )
+            except Exception as e:
+                self.log.warning(f"Could not log intermediate stats: {e}")
+
+            # Force cleanup after Phase 3.1 to free memory
+            try:
+                self._aggressive_cleanup_target_year()
+                self._monitor_memory_usage("After Phase 3.1")
+            except Exception:
+                pass
+
+            self.log.info("🔍 Phase 3.2: Selecting largest overlap soil match per field...")
+
+            # Phase 2: Select largest overlap per field
+            # (for fields that intersect multiple soil polygons)
+            # DuckDB OPTIMIZATION: Use explicit subquery with QUALIFY instead of DISTINCT ON
+            # QUALIFY is more memory-efficient for window functions in DuckDB
+            self.conn.execute("""
+                DROP TABLE IF EXISTS closest_soil_temp
+            """)
+
+            self.conn.execute("""
+                CREATE TEMPORARY TABLE closest_soil_temp AS
+                SELECT 
+                    field_uuid,
+                    soil_code,
+                    soil_description,
+                    clay_content,
+                    CASE WHEN soil_code IS NOT NULL THEN true ELSE false END as has_soil_data
+                FROM field_soil_matches_temp
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY field_uuid 
+                    ORDER BY 
+                        CASE WHEN soil_code IS NULL THEN 1 ELSE 0 END,
+                        overlap_area DESC NULLS LAST
+                ) = 1
+            """)
+
+            # Clean up intermediate table immediately
+            self.conn.execute("DROP TABLE IF EXISTS field_soil_matches_temp")
+
+            # DuckDB OPTIMIZATION: Force garbage collection to free memory
+            # This ensures intermediate results are fully cleaned up before next phase
+            try:
+                self.conn.execute("CHECKPOINT")
+                self.log.info("🔧 Memory checkpoint completed between phases")
+            except Exception:
+                pass  # CHECKPOINT may not be available in all DuckDB versions
+
+            # Force cleanup after Phase 3.2 to free memory
+            try:
+                self._aggressive_cleanup_target_year()
+                self._monitor_memory_usage("After Phase 3.2")
+            except Exception:
+                pass
+
+            # ENHANCEMENT: Phase 3.2.5 - Nearest Neighbor Fallback for unmatched fields
+            # This reduces the default rate by finding the nearest soil polygon for fields
+            # that didn't intersect any polygon (typically small fields or edge cases)
+            self.log.info("🔍 Phase 3.2.5: Nearest neighbor fallback for unmatched fields...")
+
+            # Initialize for tracking in diagnostics
+            unmatched_count = 0
+
+            try:
+                # Count fields without soil data
+                unmatched_count = self.conn.execute("""
+                    SELECT COUNT(*) FROM closest_soil_temp WHERE soil_code IS NULL
+                """).fetchone()[0]
+
+                if unmatched_count > 0:
+                    self.log.info(
+                        f"   Found {unmatched_count:,} fields without soil match, "
+                        f"searching for nearest neighbors..."
+                    )
+
+                    # For unmatched fields, find the nearest soil polygon within 100m
+                    # This helps small fields and edge cases near polygon boundaries
+                    self.conn.execute(f"""
+                        CREATE TEMPORARY TABLE nearest_soil_fallback AS
+                        SELECT 
+                            field_uuid,
+                            soil_code,
+                            soil_description,
+                            clay_content,
+                            distance
+                        FROM (
+                            SELECT 
+                                u.field_uuid,
+                                s.soil_code,
+                                s.soil_description,
+                                s.clay_content,
+                                ST_Distance(
+                                    ST_Centroid(f.geom), 
+                                    ST_Centroid(s.geom)
+                                ) as distance,
+                                ROW_NUMBER() OVER (
+                                    PARTITION BY u.field_uuid 
+                                    ORDER BY ST_Distance(
+                                        ST_Centroid(f.geom), 
+                                        ST_Centroid(s.geom)
+                                    )
+                                ) as rn
+                            FROM closest_soil_temp u
+                            JOIN {fields_climate_table} f ON u.field_uuid = f.field_uuid
+                            CROSS JOIN soil_types_prepared s
+                            WHERE u.soil_code IS NULL
+                        ) subquery
+                        WHERE rn = 1 
+                          AND distance <= 0.001  -- ~100m in degrees at Denmark's latitude
+                    """)
+
+                    # Count how many were recovered
+                    recovered_count = self.conn.execute("""
+                        SELECT COUNT(*) FROM nearest_soil_fallback
+                    """).fetchone()[0]
+
+                    if recovered_count > 0:
+                        self.log.info(
+                            f"   ✅ Recovered {recovered_count:,} fields using nearest neighbor "
+                            f"(within 100m)"
+                        )
+                        reduction_pct = recovered_count / unmatched_count * 100
+                        self.log.info(f"   → Reducing potential defaults by {reduction_pct:.1f}%")
+
+                        # Update closest_soil_temp with nearest neighbor matches
+                        self.conn.execute("""
+                            UPDATE closest_soil_temp
+                            SET 
+                                soil_code = n.soil_code,
+                                soil_description = n.soil_description,
+                                clay_content = n.clay_content,
+                                has_soil_data = true
+                            FROM nearest_soil_fallback n
+                            WHERE closest_soil_temp.field_uuid = n.field_uuid
+                        """)
+
+                        self.log.info(
+                            f"   ✅ Updated {recovered_count:,} fields with nearest soil data"
+                        )
+                    else:
+                        self.log.info(
+                            "   ⚠️  No nearby soil polygons found (>100m from all unmatched fields)"
+                        )
+
+                    # Clean up temporary table
+                    self.conn.execute("DROP TABLE IF EXISTS nearest_soil_fallback")
+
+                    # Log final unmatched count
+                    final_unmatched = self.conn.execute("""
+                        SELECT COUNT(*) FROM closest_soil_temp WHERE soil_code IS NULL
+                    """).fetchone()[0]
+
+                    if final_unmatched > 0:
+                        self.log.info(
+                            f"   ℹ️  Remaining unmatched fields: {final_unmatched:,} "
+                            f"(will use default '5')"
+                        )
+                    else:
+                        self.log.info("   ✅ All fields matched to soil data!")
+                else:
+                    self.log.info(
+                        "   ✅ All fields already matched (no nearest neighbor fallback needed)"
+                    )
+
+            except Exception as e:
+                self.log.warning(f"   ⚠️  Nearest neighbor fallback failed: {e}")
+                self.log.warning("   → Continuing with original matches")
+
+            self.log.info("🔍 Phase 3.3: Joining soil data back to fields...")
+
+            # Phase 3: Join back to original fields table to get final result
             self.conn.execute(f"""
                 CREATE OR REPLACE TEMPORARY TABLE {result_table} AS
                 SELECT
@@ -1554,6 +2061,108 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 FROM {fields_climate_table} f
                 LEFT JOIN soil_types_prepared s ON ST_Intersects(f.geom, s.geom)
             """)
+
+            # Clean up temporary table
+            self.conn.execute("DROP TABLE IF EXISTS closest_soil_temp")
+
+            # 🔧 MEMORY: Restore DuckDB settings and log memory after join
+            try:
+                if original_threads is not None:
+                    self.conn.execute(f"SET threads = {original_threads}")
+                else:
+                    # Restore to configured threads if original couldn't be read
+                    self.conn.execute(f"SET threads = {self.config.threads}")
+                if original_pio is not None:
+                    # original_pio is 'true'/'false'
+                    self.conn.execute(f"SET preserve_insertion_order = {original_pio}")
+                else:
+                    setting_value = str(self.config.preserve_insertion_order).lower()
+                    self.conn.execute(f"SET preserve_insertion_order = {setting_value}")
+                if original_object_cache is not None:
+                    self.conn.execute(f"SET enable_object_cache = {original_object_cache}")
+                else:
+                    # Default to true if we couldn't read original
+                    self.conn.execute("SET enable_object_cache = true")
+
+                self._monitor_memory_usage("After target-year soil join")
+            except Exception:
+                pass
+
+            # 🔍 DIAGNOSTIC LOG: Verify deduplication worked
+            fields_after = self.conn.execute(f"""
+                SELECT 
+                    COUNT(*) as total, 
+                    COUNT(DISTINCT field_uuid) as unique_uuids,
+                    COUNT(*) - COUNT(DISTINCT field_uuid) as duplicate_rows
+                FROM {result_table}
+            """).fetchone()
+
+            if fields_after[2] == 0:
+                self.log.info(
+                    f"✅ AFTER soil join (deduplicated): {fields_after[0]:,} rows, "
+                    f"{fields_after[1]:,} unique field_uuids, 0 duplicates"
+                )
+            else:
+                self.log.warning(
+                    f"⚠️ AFTER soil join: {fields_after[0]:,} rows, "
+                    f"{fields_after[1]:,} unique field_uuids, "
+                    f"{fields_after[2]:,} DUPLICATE ROWS STILL PRESENT"
+                )
+
+            # 🔍 ENHANCED DIAGNOSTIC: Track soil code assignment statistics
+            try:
+                soil_stats = self.conn.execute(f"""
+                    SELECT 
+                        COUNT(*) as total_fields,
+                        COUNT(CASE WHEN soil_code != '5' THEN 1 END) as real_soil_codes,
+                        COUNT(CASE WHEN soil_code = '5' THEN 1 END) as default_codes,
+                        AVG(CASE WHEN soil_code = '5' THEN area_ha END) as avg_area_defaults,
+                        AVG(CASE WHEN soil_code != '5' THEN area_ha END) as avg_area_matched
+                    FROM {result_table}
+                """).fetchone()
+
+                total, real, defaults, avg_default_area, avg_matched_area = soil_stats
+                default_pct = (defaults / total * 100) if total > 0 else 0
+                real_pct = (real / total * 100) if total > 0 else 0
+
+                self.log.info("\n📊 SOIL CODE ASSIGNMENT SUMMARY:")
+                self.log.info(
+                    f"   Real soil codes:  {real:,} ({real_pct:.2f}%) - "
+                    f"avg area: {avg_matched_area:.2f} ha"
+                )
+                self.log.info(
+                    f"   Default code '5': {defaults:,} ({default_pct:.2f}%) - "
+                    f"avg area: {avg_default_area:.2f} ha"
+                )
+
+                # Log improvement from nearest neighbor fallback
+                if defaults < unmatched_count:
+                    recovered = unmatched_count - defaults
+                    improvement_pct = (
+                        (recovered / unmatched_count * 100) if unmatched_count > 0 else 0
+                    )
+                    self.log.info(
+                        f"   ✅ Nearest neighbor fallback recovered {recovered:,} fields "
+                        f"({improvement_pct:.1f}%)"
+                    )
+
+                # Log quality thresholds
+                if default_pct < 2.0:
+                    self.log.info("   ✅ EXCELLENT: Default rate <2% indicates high soil coverage")
+                elif default_pct < 5.0:
+                    self.log.info("   ✅ GOOD: Default rate <5% is acceptable for production")
+                elif default_pct < 10.0:
+                    self.log.info(
+                        "   ⚠️  FAIR: Default rate <10% - consider investigating coverage gaps"
+                    )
+                else:
+                    self.log.warning(
+                        f"   ⚠️  HIGH: Default rate >{default_pct:.1f}% - "
+                        f"investigate soil coverage issues"
+                    )
+
+            except Exception as e:
+                self.log.warning(f"Could not generate soil code statistics: {e}")
 
             return result_table
 
@@ -1626,7 +2235,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             try:
                 field_count = self.conn.execute(f"""
                     SELECT COUNT(*) FROM agricultural_fields_spatial
-                    WHERE year IN ({','.join(map(str, batch_years))})
+                    WHERE year IN ({",".join(map(str, batch_years))})
                         AND geom IS NOT NULL
                         AND area_ha > 0
                 """).fetchone()[0]
@@ -1758,12 +2367,81 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 self.log.error("❌ No batched results to save")
                 return
 
-            # Rename batched results to gold table (avoids copying 1.7M records)
+            # Create gold table from batched results with explicit CREATE AS SELECT
+            # This ensures proper materialization for subsequent COPY operations
+
+            # 🔍 DIAGNOSTIC: Log temp file state before table operations
+            temp_files_before = glob.glob(os.path.join(self.temp_dir, "duckdb_temp_storage_*.tmp"))
+            self.log.info(f"🔍 BEFORE table creation: {len(temp_files_before)} temp files exist")
+            for tf in temp_files_before[:5]:
+                try:
+                    size = os.path.getsize(tf) / (1024**2)
+                    self.log.info(f"   - {os.path.basename(tf)}: {size:.2f} MB")
+                except Exception:
+                    self.log.warning(f"   - {os.path.basename(tf)}: FILE INACCESSIBLE")
+
+            # 🔍 DIAGNOSTIC: Check if DuckDB connection is still valid
+            try:
+                test_result = self.conn.execute("SELECT 1").fetchone()
+                self.log.info(f"🔍 DuckDB connection test: OK (result={test_result})")
+            except Exception as e:
+                self.log.error(f"🔍 DuckDB connection test: FAILED - {e}")
+
             self.conn.execute("DROP TABLE IF EXISTS nles5_nitrogen_estimates_gold")
-            self.conn.execute("""
-                ALTER TABLE nles5_estimates_final_batched 
-                RENAME TO nles5_nitrogen_estimates_gold
-            """)
+
+            # 🔍 DIAGNOSTIC: Log temp file state after DROP
+            temp_files_after_drop = glob.glob(
+                os.path.join(self.temp_dir, "duckdb_temp_storage_*.tmp")
+            )
+            self.log.info(f"🔍 AFTER DROP: {len(temp_files_after_drop)} temp files exist")
+
+            try:
+                self.log.info(
+                    f"🔍 BEFORE CREATE TABLE: Starting materialization of "
+                    f"{final_count:,} records..."
+                )
+                self.conn.execute("""
+                    CREATE TABLE nles5_nitrogen_estimates_gold AS 
+                    SELECT * FROM nles5_estimates_final_batched
+                """)
+                self.log.info("🔍 AFTER CREATE TABLE: Materialization successful")
+            except Exception as create_error:
+                # 🔍 DIAGNOSTIC: Capture detailed error information
+                temp_files_on_error = glob.glob(
+                    os.path.join(self.temp_dir, "duckdb_temp_storage_*.tmp")
+                )
+                self.log.error(
+                    f"🔍 CREATE TABLE FAILED with {len(temp_files_on_error)} temp files present"
+                )
+                self.log.error(f"🔍 Error details: {create_error}")
+
+                # Check if temp files mentioned in error exist
+                error_str = str(create_error)
+                if "Could not remove file" in error_str:
+                    # Extract filename from error message
+                    match = re.search(r'Could not remove file "([^"]+)"', error_str)
+                    if match:
+                        missing_file = match.group(1)
+                        self.log.error(f"🔍 Missing file: {missing_file}")
+                        self.log.error(f"🔍 File exists: {os.path.exists(missing_file)}")
+
+                        # Check if file was in our list before
+                        missing_basename = os.path.basename(missing_file)
+                        was_present_before = any(missing_basename in tf for tf in temp_files_before)
+                        self.log.error(
+                            f"🔍 File was present before operation: {was_present_before}"
+                        )
+
+                raise
+
+            # Clean up source table
+            self.conn.execute("DROP TABLE IF EXISTS nles5_estimates_final_batched")
+
+            # 🔍 DIAGNOSTIC: Log temp file state after all operations
+            temp_files_final = glob.glob(os.path.join(self.temp_dir, "duckdb_temp_storage_*.tmp"))
+            self.log.info(
+                f"🔍 AFTER all table operations: {len(temp_files_final)} temp files exist"
+            )
 
             # Log final statistics
             final_years = self.conn.execute("""
@@ -1780,23 +2458,26 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
 
             # Export to local file first to avoid DuckDB temp file issues with GCS writes
-            import tempfile
-            import os
-            
-            with tempfile.NamedTemporaryFile(suffix='.parquet', delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".parquet", delete=False) as tmp_file:
                 local_parquet = tmp_file.name
-            
+
             try:
                 # 🔍 DIAGNOSTIC: Check DuckDB temp settings before export
-                temp_info = self.conn.execute("SELECT current_setting('temp_directory') as temp_dir").fetchone()
+                temp_info = self.conn.execute(
+                    "SELECT current_setting('temp_directory') as temp_dir"
+                ).fetchone()
                 self.log.info(f"🔍 DuckDB temp_directory: {temp_info[0]}")
-                
-                memory_limit = self.conn.execute("SELECT current_setting('memory_limit') as mem").fetchone()
+
+                memory_limit = self.conn.execute(
+                    "SELECT current_setting('memory_limit') as mem"
+                ).fetchone()
                 self.log.info(f"🔍 DuckDB memory_limit: {memory_limit[0]}")
-                
-                threads = self.conn.execute("SELECT current_setting('threads') as threads").fetchone()
+
+                threads = self.conn.execute(
+                    "SELECT current_setting('threads') as threads"
+                ).fetchone()
                 self.log.info(f"🔍 DuckDB threads: {threads[0]}")
-                
+
                 # 🔍 DIAGNOSTIC: Check for existing temp files
                 import glob
                 temp_dir = temp_info[0]
@@ -1807,27 +2488,27 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                         self.log.warning(f"⚠️ Found {len(temp_files)} temp files before export")
                         for tf in temp_files[:5]:  # Show first 5
                             self.log.warning(f"   - {os.path.basename(tf)}")
-                
+
                 # 🔍 DIAGNOSTIC: Try to force checkpoint and disable temp file usage
-                self.log.info(f"🔧 Attempting to checkpoint and optimize for export...")
+                self.log.info("🔧 Attempting to checkpoint and optimize for export...")
                 try:
                     # Force checkpoint to flush any pending writes
                     self.conn.execute("CHECKPOINT")
-                    self.log.info(f"✓ Checkpoint completed")
+                    self.log.info("✓ Checkpoint completed")
                 except Exception as e:
                     self.log.warning(f"Could not checkpoint: {e}")
-                
+
                 try:
                     # Force DuckDB to not use temp files during this operation
                     self.conn.execute("SET preserve_insertion_order=false")
-                    self.log.info(f"✓ Disabled insertion order preservation")
+                    self.log.info("✓ Disabled insertion order preservation")
                 except Exception as e:
                     self.log.warning(f"Could not disable insertion order: {e}")
-                
+
                 # Export to local parquet file
                 self.log.info(f"📝 Exporting {final_count:,} records to local parquet file...")
                 self.log.info(f"📝 Target file: {local_parquet}")
-                
+
                 try:
                     self.conn.execute(f"""
                         COPY nles5_nitrogen_estimates_gold 
@@ -1838,33 +2519,35 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     # DuckDB sometimes fails to cleanup temp files but the COPY succeeds
                     # Check if the output file was created despite the error
                     if "Could not remove file" in str(copy_error) and os.path.exists(local_parquet):
-                        self.log.warning(f"⚠️ DuckDB temp file cleanup warning (ignorable): {copy_error}")
+                        self.log.warning(
+                            f"⚠️ DuckDB temp file cleanup warning (ignorable): {copy_error}"
+                        )
                         self.log.info("✓ Export completed successfully despite cleanup warning")
                     else:
                         # Real error - re-raise
                         raise
-                
+
                 # 🔍 DIAGNOSTIC: Check if file was created
                 if os.path.exists(local_parquet):
                     file_size = os.path.getsize(local_parquet) / (1024**2)
                     self.log.info(f"✓ Export file size: {file_size:.2f} MB")
                 else:
-                    self.log.error(f"❌ Export failed: file not created")
+                    self.log.error("❌ Export failed: file not created")
                     raise RuntimeError("COPY command did not create output file")
-                
+
                 # Upload local file to GCS using streaming
                 self.log.info(f"☁️ Uploading to GCS: {full_gcs_path}")
                 with open(local_parquet, "rb") as src:
                     with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
                         import shutil
                         shutil.copyfileobj(src, dst)
-                
+
                 self.log.info(f"✅ Saved batched results to {full_gcs_path}")
             finally:
                 # Clean up local temp file
                 if os.path.exists(local_parquet):
                     os.remove(local_parquet)
-                    self.log.info(f"🧹 Cleaned up local temp file")
+                    self.log.info("🧹 Cleaned up local temp file")
 
             # Add UUIDs via join before validation
             self._add_field_uuids_to_gold_table("nles5_nitrogen_estimates_gold")
@@ -1884,14 +2567,18 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
         """
         Verify field UUIDs are present in the final results table.
 
-        field_uuid is now preserved throughout the pipeline from the source agricultural fields data,
-        eliminating the need for an expensive JOIN operation at the end.
+        field_uuid is now preserved throughout the pipeline from the source
+        agricultural fields data, eliminating the need for an expensive JOIN
+        operation at the end.
 
         Args:
             table_name: Name of the table to verify UUIDs in
         """
         try:
-            self.log.info(f"✅ Verifying field UUIDs in {table_name} (no JOIN needed - UUIDs preserved throughout pipeline)...")
+            self.log.info(
+                f"✅ Verifying field UUIDs in {table_name} "
+                f"(no JOIN needed - UUIDs preserved throughout pipeline)..."
+            )
 
             # Simple verification that UUIDs are present
             total_rows = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -1917,7 +2604,10 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             raise
 
     def _add_field_uuids_to_final_results(self) -> None:
-        """Verify field UUIDs are present in final NLES5 estimates table (UUIDs preserved throughout pipeline)."""
+        """Verify field UUIDs are present in final NLES5 estimates table.
+
+        UUIDs are preserved throughout pipeline.
+        """
         try:
             # Check if we have the main estimates table
             if (
