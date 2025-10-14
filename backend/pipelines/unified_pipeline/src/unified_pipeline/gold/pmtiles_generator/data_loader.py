@@ -125,7 +125,7 @@ class PMTilesDataLoader:
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
             FROM read_parquet('{gcs_path}data.parquet')
-            WHERE year = {year}
+            WHERE year = {boundary_year}
             """
 
             await asyncio.to_thread(self.conn.execute, query)
