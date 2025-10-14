@@ -1,8 +1,15 @@
 """
-Company Fetching Step - Step 2 of CVR Enrichment Pipeline
+Company Raw Data Fetching Step - Step 2 of CVR Enrichment Pipeline
 
-This step fetches comprehensive company data from the CVR register for
-the collected CVR numbers, processing them in batches for parallel execution.
+This step fetches raw company data from the CVR register for the collected CVR numbers,
+saving raw JSON responses immediately to prevent memory issues. Processing and enrichment
+are handled in separate downstream steps following the Bronze→Silver→Gold pattern.
+
+Memory Efficiency:
+- Fetches raw JSON data in batches
+- Saves immediately to GCS with minimal processing
+- Keeps memory usage constant (~50MB) instead of accumulating
+- Defers all parsing/enrichment to separate steps
 """
 
 import json
@@ -22,10 +29,10 @@ from .shared.config import CVREnrichmentSharedConfig, CVREnrichmentStep, get_ste
 class CompanyFetchingConfig(BaseJobConfig):
     """Configuration for company fetching step."""
 
-    name: str = "Company Data Fetching"
-    dataset: str = "cvr_enrichment"
+    name: str = "Company Raw Data Fetching"
+    dataset: str = "cvr_raw_companies"
     type: str = "cvr_api"
-    description: str = "Fetch comprehensive company data from CVR register"
+    description: str = "Fetch raw company JSON data from CVR register with minimal processing"
     frequency: str = "monthly"
     bucket: str = "landbrugsdata-raw-data"
 
@@ -237,48 +244,36 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
         try:
             # Step 1: Load all CVR numbers from collection step
-            self.log.info("📋 Step 1/5: Loading all CVR numbers from collection")
+            self.log.info("📋 Step 1/4: Loading all CVR numbers from collection")
             all_cvr_numbers = self._load_all_cvr_numbers()
 
             # Step 2: Create memory-safe batches
-            self.log.info("📦 Step 2/5: Creating memory-safe processing batches")
+            self.log.info("📦 Step 2/4: Creating memory-safe processing batches")
             cvr_batches = self._create_memory_safe_batches(all_cvr_numbers)
 
-            # Step 3: Initialize output table
-            self.log.info("🗃️ Step 3/5: Initializing output tables")
-            table_name = self._initialize_output_tables()
+            # Step 3: Fetch all CVR batches with raw data streaming to GCS
+            self.log.info("🌐 Step 3/4: Fetching CVR batches with raw data streaming")
+            total_stats = await self._process_all_batches(cvr_batches)
 
-            # Step 4: Process each batch sequentially with memory management
-            self.log.info("🌐 Step 4/5: Processing CVR batches sequentially")
-            total_stats = await self._process_all_batches(cvr_batches, table_name)
-
-            # Step 5: Save final data and create artifacts
-            self.log.info("💾 Step 5/5: Finalizing data and creating artifacts")
-            self._finalize_data_and_artifacts(table_name, total_stats)
+            # Step 4: Consolidate raw batch files into single raw data file
+            self.log.info("🔄 Step 4/4: Consolidating raw batch files")
+            final_table_name = self._consolidate_batch_files(len(cvr_batches), total_stats)
 
             # Success summary
             self.log.info("=" * 60)
-            self.log.info("✅ COMPANY FETCHING COMPLETED SUCCESSFULLY")
+            self.log.info("✅ COMPANY RAW DATA FETCHING COMPLETED SUCCESSFULLY")
             self.log.info("=" * 60)
-            self.log.info("📊 PROCESSING SUMMARY:")
-            self.log.info(f"   • Total CVR numbers: {total_stats['total_requested']:,}")
-            self.log.info(f"   • Processing batches: {total_stats['total_batches']:,}")
-            self.log.info(f"   • Companies found: {total_stats['total_successful']:,}")
-            self.log.info(f"   • Companies not found: {total_stats['total_failed']:,}")
-            if total_stats["total_requested"] > 0:
-                success_rate = (
-                    total_stats["total_successful"] / total_stats["total_requested"] * 100
-                )
-                self.log.info(f"   • Success rate: {success_rate:.1f}%")
-            else:
-                self.log.info("   • Success rate: N/A")
+            self.log.info("📊 Final Statistics:")
+            self.log.info(f"   • Total companies fetched: {total_stats['total_successful']:,}")
+            self.log.info(f"   • Total failures: {total_stats['total_failed']:,}")
             self.log.info(f"   • Total API calls: {total_stats['total_api_calls']:,}")
-            self.log.info(f"   • Memory-safe batch size: {self.config.memory_safe_batch_size:,}")
-            self.log.info(f"   • Output table: {table_name}")
-            self.log.info("   • Ready for next step: P-Number Fetching")
+            self.log.info(f"   • Raw batch files processed: {len(cvr_batches)}")
+            self.log.info(f"   • Consolidated raw data table: {final_table_name}")
+            self.log.info("   • Memory usage: ~50MB max (raw JSON only)")
+            self.log.info("   • Next step: Create separate parsing/enrichment jobs")
             self.log.info("=" * 60)
 
-            return table_name
+            return final_table_name
 
         except Exception as e:
             self.log.error("=" * 60)
@@ -487,9 +482,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         return table_name
 
     @timed(name="Processing all batches")
-    async def _process_all_batches(
-        self, cvr_batches: List[List[str]], table_name: str
-    ) -> Dict[str, Any]:
+    async def _process_all_batches(self, cvr_batches: List[List[str]]) -> Dict[str, Any]:
         """
         Process all CVR batches sequentially with memory management.
 
@@ -517,7 +510,9 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
             try:
                 # Process this batch
-                batch_stats = await self._process_single_batch(cvr_batch, table_name, batch_idx)
+                batch_stats = await self._process_single_batch(
+                    cvr_batch, batch_idx, len(cvr_batches)
+                )
 
                 # Update total stats
                 total_stats["total_successful"] += batch_stats["successful"]
@@ -544,15 +539,15 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
     @timed(name="Processing single batch")
     async def _process_single_batch(
-        self, cvr_batch: List[str], table_name: str, batch_idx: int
+        self, cvr_batch: List[str], batch_idx: int, total_batches: int
     ) -> Dict[str, Any]:
         """
-        Process a single batch of CVR numbers.
+        Process a single batch of CVR numbers and immediately save to GCS.
 
         Args:
             cvr_batch: List of CVR numbers in this batch
-            table_name: Name of the main output table
             batch_idx: Index of this batch (for logging)
+            total_batches: Total number of batches
 
         Returns:
             Dictionary containing batch processing statistics
@@ -560,11 +555,8 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         # Fetch company data for this batch
         company_data = await self._fetch_company_data(cvr_batch)
 
-        # Process the data
-        processed_data = self._process_company_data(company_data)
-
-        # Append to existing tables
-        self._append_batch_to_tables(processed_data, table_name)
+        # Save raw data immediately to GCS (minimal processing, maximum memory efficiency)
+        self._save_raw_batch_to_gcs(company_data, batch_idx, total_batches)
 
         # Return batch stats
         return {
@@ -743,6 +735,387 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         self._append_employment_batch(json_strings)
 
         self.log.debug(f"Appended {len(companies_data)} companies to output tables")
+
+    @timed(name="Saving raw batch to GCS")
+    def _save_raw_batch_to_gcs(
+        self, company_data: Dict[str, Any], batch_idx: int, total_batches: int
+    ) -> None:
+        """
+        Save raw API response data immediately to GCS with minimal processing.
+
+        This approach saves raw JSON responses directly, keeping memory usage minimal
+        and deferring all processing to separate parsing/enrichment steps.
+
+        Args:
+            company_data: Raw company data from CVR API
+            batch_idx: Current batch index (1-based)
+            total_batches: Total number of batches
+        """
+        raw_results = company_data.get("results", {})
+
+        if not raw_results:
+            self.log.debug(f"No raw data to save for batch {batch_idx}")
+            return
+
+        # Create minimal table with raw JSON only
+        batch_table_name = f"raw_batch_{batch_idx}"
+
+        try:
+            # Drop existing batch table
+            self.conn.execute(f"DROP TABLE IF EXISTS {batch_table_name}")
+
+            # Create simple table with raw JSON data
+            raw_json_list = []
+            for cvr_number, company_result in raw_results.items():
+                if company_result and "data" in company_result:
+                    raw_entry = {
+                        "cvr_number": int(cvr_number),
+                        "raw_json": json.dumps(company_result["data"]),
+                        "fetch_timestamp": company_data.get("fetch_timestamp"),
+                        "batch_number": batch_idx,
+                    }
+                    raw_json_list.append(json.dumps(raw_entry))
+
+            if raw_json_list:
+                # Create table with minimal schema
+                self.conn.execute(
+                    f"""
+                    CREATE TABLE {batch_table_name} AS
+                    SELECT
+                        json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                        json_extract_string(json_data, '$.raw_json') as raw_json,
+                        json_extract_string(json_data, '$.fetch_timestamp') as fetch_timestamp,
+                        json_extract(json_data, '$.batch_number')::INTEGER as batch_number
+                    FROM unnest($1) as t(json_data)
+                """,
+                    [raw_json_list],
+                )
+
+                # Save to GCS immediately
+                timestamp = self.date_pattern
+                batch_path_suffix = f"raw_batch_{batch_idx:03d}_of_{total_batches:03d}"
+                raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+
+                self.gcs_access.upload_from_duckdb_table(
+                    batch_table_name,
+                    raw_gcs_path,
+                    compression="zstd",
+                    row_group_size=100000,
+                )
+
+                self.log.info(
+                    f"✅ Saved raw batch {batch_idx}/{total_batches} to GCS ({len(raw_json_list)} companies, ~{len(str(raw_json_list)) / 1024 / 1024:.1f}MB)"
+                )
+
+        finally:
+            # Clean up batch table immediately
+            try:
+                self.conn.execute(f"DROP TABLE IF EXISTS {batch_table_name}")
+            except:
+                pass  # Ignore cleanup errors
+
+    def _create_batch_companies_table(self, json_strings: List[str], table_name: str) -> None:
+        """Create companies table for a single batch."""
+        self.conn.execute(
+            f"""
+            CREATE TABLE {table_name} AS
+            SELECT
+                json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                company_uuid(json_extract(json_data, '$.cvr_number')::INTEGER) as company_uuid,
+                json_extract_string(json_data, '$.company_name') as company_name,
+                json_extract_string(json_data, '$.company_type_description') as company_type_description,
+                json_extract_string(json_data, '$.status') as status,
+                json_extract_string(json_data, '$.founded_date') as founded_date,
+                json_extract_string(json_data, '$.dissolution_date') as dissolution_date,
+                json_extract(json_data, '$.advertisement_protection')::BOOLEAN as advertisement_protection,
+                json_extract(json_data, '$.pnumber_count')::INTEGER as pnumber_count,
+                NULL::VARCHAR as current_full_address,
+                NULL::VARCHAR as current_street_name,
+                NULL::VARCHAR as current_house_number,
+                NULL::VARCHAR as current_floor,
+                NULL::VARCHAR as current_door,
+                NULL::INTEGER as current_postal_code,
+                NULL::VARCHAR as current_city,
+                NULL::INTEGER as current_municipality_code,
+                NULL::VARCHAR as current_municipality_name,
+                NULL::VARCHAR as current_address_type,
+                NULL::DOUBLE as latitude,
+                NULL::DOUBLE as longitude,
+                NULL::VARCHAR as coordinate_quality,
+                NULL::VARCHAR as coordinate_source,
+                NULL::BOOLEAN as dawa_enriched,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        json_extract_string(json_extract(json_data, '$.industries[0]'), '$.industry_code')
+                    ELSE NULL
+                END as primary_industry_code,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        json_extract_string(json_extract(json_data, '$.industries[0]'), '$.industry_description')
+                    ELSE NULL
+                END as primary_industry_description,
+                CASE
+                    WHEN json_array_length(json_extract(json_data, '$.industries')) > 0 THEN
+                        CASE
+                            WHEN json_extract_string(json_extract(json_data, '$.industries[0]'), '$.industry_code') IS NOT NULL
+                            AND json_extract(json_extract(json_data, '$.industries[0]'), '$.is_current')::BOOLEAN = true
+                            THEN
+                                CASE
+                                    WHEN json_extract_string(json_extract(json_data, '$.industries[0]'), '$.industry_code') LIKE '01%'
+                                         OR json_extract_string(json_extract(json_data, '$.industries[0]'), '$.industry_code') LIKE '02%'
+                                         OR json_extract_string(json_extract(json_data, '$.industries[0]'), '$.industry_code') LIKE '03%'
+                                    THEN true
+                                    ELSE false
+                                END
+                            ELSE false
+                        END
+                    ELSE false
+                END as is_agricultural_company,
+                json_data as company_data_json,
+                json_extract_string(json_data, '$.processing_timestamp') as processing_timestamp
+            FROM unnest($1) as t(json_data)
+        """,
+            [json_strings],
+        )
+
+    def _create_batch_persons_table(self, json_strings: List[str], table_name: str) -> None:
+        """Create persons table for a single batch."""
+        self.conn.execute(
+            f"""
+            CREATE TABLE {table_name} AS
+            WITH leadership_flattened AS (
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    idx as leadership_idx
+                FROM unnest($1) as t(json_data)
+                CROSS JOIN unnest(generate_series(0, json_array_length(json_extract(json_data, '$.leadership')) - 1)) as t2(idx)
+                WHERE json_array_length(json_extract(json_data, '$.leadership')) > 0
+            )
+            SELECT
+                uuid() as person_uuid,
+                cvr_number,
+                company_uuid(cvr_number) as company_uuid,
+                leadership_idx,
+                'leadership' as relation_type,
+                json_extract_string(json_extract(json_data, '$.leadership[' || leadership_idx || ']'), '$.relation_type') as person_relation_type,
+                json_data as person_data_json,
+                json_extract_string(json_data, '$.processing_timestamp') as processing_timestamp
+            FROM leadership_flattened lf
+            JOIN unnest($1) as t(json_data) ON json_extract(json_data, '$.cvr_number')::INTEGER = lf.cvr_number
+        """,
+            [json_strings],
+        )
+
+    def _create_batch_employment_table(self, json_strings: List[str], table_name: str) -> None:
+        """Create employment table for a single batch."""
+        self.conn.execute(
+            f"""
+            CREATE TABLE {table_name} AS
+            WITH employment_flattened AS (
+                SELECT
+                    json_extract(json_data, '$.cvr_number')::INTEGER as cvr_number,
+                    idx as employment_idx
+                FROM unnest($1) as t(json_data)
+                CROSS JOIN unnest(generate_series(0, json_array_length(json_extract(json_data, '$.employment')) - 1)) as t2(idx)
+                WHERE json_array_length(json_extract(json_data, '$.employment')) > 0
+            )
+            SELECT
+                uuid() as employment_uuid,
+                cvr_number,
+                company_uuid(cvr_number) as company_uuid,
+                employment_idx,
+                json_extract(json_extract(json_data, '$.employment[' || employment_idx || ']'), '$.employee_count')::INTEGER as employee_count,
+                json_extract_string(json_extract(json_data, '$.employment[' || employment_idx || ']'), '$.period_start') as period_start,
+                json_extract_string(json_extract(json_data, '$.employment[' || employment_idx || ']'), '$.period_end') as period_end,
+                json_extract(json_extract(json_data, '$.employment[' || employment_idx || ']'), '$.is_current')::BOOLEAN as is_current,
+                json_data as employment_data_json,
+                json_extract_string(json_data, '$.processing_timestamp') as processing_timestamp
+            FROM employment_flattened ef
+            JOIN unnest($1) as t(json_data) ON json_extract(json_data, '$.cvr_number')::INTEGER = ef.cvr_number
+        """,
+            [json_strings],
+        )
+
+    @timed(name="Consolidating raw batch files")
+    def _consolidate_batch_files(self, total_batches: int, total_stats: Dict[str, Any]) -> str:
+        """
+        Consolidate all raw batch files into a single raw data file.
+
+        This creates a consolidated raw JSON file that can be processed by
+        separate parsing/enrichment steps, maintaining the Bronze→Silver→Gold pattern.
+
+        Args:
+            total_batches: Total number of batch files created
+            total_stats: Statistics from batch processing
+
+        Returns:
+            Name of the consolidated raw data table
+        """
+        self.log.info(f"Consolidating {total_batches} raw batch files into single raw data file")
+
+        timestamp = self.date_pattern
+        consolidated_table = "cvr_raw_data_consolidated"
+
+        try:
+            # Drop existing consolidated table
+            self.conn.execute(f"DROP TABLE IF EXISTS {consolidated_table}")
+
+            # Consolidate all raw batch files
+            raw_batch_patterns = []
+            for batch_idx in range(1, total_batches + 1):
+                batch_path_suffix = f"raw_batch_{batch_idx:03d}_of_{total_batches:03d}"
+                raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+                raw_batch_patterns.append(raw_gcs_path)
+
+            if raw_batch_patterns:
+                # Create consolidated raw data table
+                self.conn.execute(f"""
+                    CREATE TABLE {consolidated_table} AS
+                    SELECT * FROM read_parquet({raw_batch_patterns})
+                    ORDER BY cvr_number, batch_number
+                """)
+
+                raw_count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {consolidated_table}"
+                ).fetchone()[0]
+                self.log.info(f"✅ Consolidated {raw_count:,} raw company records")
+
+                # Save consolidated raw data to standard bronze location
+                raw_final_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/consolidated.parquet"
+                self.gcs_access.upload_from_duckdb_table(
+                    consolidated_table,
+                    raw_final_path,
+                    compression="zstd",
+                    row_group_size=100000,
+                )
+
+                # Also save locally for GitHub Actions artifact sharing
+                import os
+
+                if os.getenv("GITHUB_ACTIONS") == "true":
+                    local_path = "/tmp/cvr_raw_data.parquet"
+                    self.conn.execute(
+                        f"COPY {consolidated_table} TO '{local_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
+                    )
+                    self.log.info(f"💾 Saved consolidated raw data to artifact: {local_path}")
+
+                self.log.info("✅ Consolidated raw data saved - ready for parsing step")
+
+            else:
+                # Create empty table with schema
+                self.conn.execute(f"""
+                    CREATE TABLE {consolidated_table} (
+                        cvr_number INTEGER,
+                        raw_json VARCHAR,
+                        fetch_timestamp VARCHAR,
+                        batch_number INTEGER
+                    )
+                """)
+                self.log.info("✅ Created empty raw data table")
+
+            # Clean up batch files to save storage
+            self._cleanup_raw_batch_files(total_batches, timestamp)
+
+            return consolidated_table
+
+        except Exception as e:
+            self.log.error(f"❌ Failed to consolidate raw batch files: {e}")
+            raise
+
+    def _create_empty_companies_table(self, table_name: str) -> None:
+        """Create empty companies table with proper schema."""
+        self.conn.execute(f"""
+            CREATE TABLE {table_name} (
+                cvr_number INTEGER,
+                company_uuid VARCHAR,
+                company_name VARCHAR,
+                company_type_description VARCHAR,
+                status VARCHAR,
+                founded_date VARCHAR,
+                dissolution_date VARCHAR,
+                advertisement_protection BOOLEAN,
+                pnumber_count INTEGER,
+                current_full_address VARCHAR,
+                current_street_name VARCHAR,
+                current_house_number VARCHAR,
+                current_floor VARCHAR,
+                current_door VARCHAR,
+                current_postal_code INTEGER,
+                current_city VARCHAR,
+                current_municipality_code INTEGER,
+                current_municipality_name VARCHAR,
+                current_address_type VARCHAR,
+                latitude DOUBLE,
+                longitude DOUBLE,
+                coordinate_quality VARCHAR,
+                coordinate_source VARCHAR,
+                dawa_enriched BOOLEAN,
+                primary_industry_code VARCHAR,
+                primary_industry_description VARCHAR,
+                is_agricultural_company BOOLEAN,
+                company_data_json VARCHAR,
+                processing_timestamp VARCHAR
+            )
+        """)
+
+    def _create_empty_persons_table(self, table_name: str) -> None:
+        """Create empty persons table with proper schema."""
+        self.conn.execute(f"""
+            CREATE TABLE {table_name} (
+                person_uuid VARCHAR,
+                cvr_number INTEGER,
+                company_uuid VARCHAR,
+                leadership_idx INTEGER,
+                relation_type VARCHAR,
+                person_relation_type VARCHAR,
+                person_data_json VARCHAR,
+                processing_timestamp VARCHAR
+            )
+        """)
+
+    def _create_empty_employment_table(self, table_name: str) -> None:
+        """Create empty employment table with proper schema."""
+        self.conn.execute(f"""
+            CREATE TABLE {table_name} (
+                employment_uuid VARCHAR,
+                cvr_number INTEGER,
+                company_uuid VARCHAR,
+                employment_idx INTEGER,
+                employee_count INTEGER,
+                period_start VARCHAR,
+                period_end VARCHAR,
+                is_current BOOLEAN,
+                employment_data_json VARCHAR,
+                processing_timestamp VARCHAR
+            )
+        """)
+
+    def _cleanup_raw_batch_files(self, total_batches: int, timestamp: str) -> None:
+        """
+        Clean up raw batch files to save storage space.
+
+        Args:
+            total_batches: Total number of batch files to clean up
+            timestamp: Timestamp for the batch files
+        """
+        try:
+            self.log.info("🧹 Cleaning up raw batch files to save storage space...")
+
+            deleted_count = 0
+            for batch_idx in range(1, total_batches + 1):
+                batch_path_suffix = f"raw_batch_{batch_idx:03d}_of_{total_batches:03d}"
+                raw_batch_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+
+                try:
+                    self.gcs_access.delete_file(raw_batch_path)
+                    deleted_count += 1
+                except:
+                    pass  # Ignore deletion errors
+
+            self.log.info(f"✅ Cleaned up {deleted_count} raw batch files")
+
+        except Exception as e:
+            self.log.warning(f"⚠️ Raw batch file cleanup failed (non-critical): {e}")
 
     @timed(name="Creating and saving ownership table")
     def _create_and_save_ownership_table(self) -> None:

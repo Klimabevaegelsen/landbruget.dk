@@ -55,7 +55,9 @@ class CloudflareR2Uploader:
                     return True
             except Exception:
                 # Ignore listremotes failures - might be write-only permissions
-                logger.info("Cannot list remotes - assuming write-only permissions, will configure anyway")
+                logger.info(
+                    "Cannot list remotes - assuming write-only permissions, will configure anyway"
+                )
 
             # Configure R2 remote using environment variables
             access_key_id = os.environ.get("R2_ACCESS_KEY_ID")

@@ -433,7 +433,7 @@ class FieldAnalysisPMTilesGenerator:
                 "--attribute-type=unique_pesticide_products:int",
                 "--attribute-type=total_pesticide_belastning:float",
                 "--attribute-type=total_pfas_belastning:float",
-                "--attribute-type=total_diquat_belastning:float", 
+                "--attribute-type=total_diquat_belastning:float",
                 "--attribute-type=total_glyphosate_belastning:float",
                 "--attribute-type=total_pfas_active_ingredient_kg:float",
                 "--attribute-type=total_glyphosate_active_ingredient_kg:float",
