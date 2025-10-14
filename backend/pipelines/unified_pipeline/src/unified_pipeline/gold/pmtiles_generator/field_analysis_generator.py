@@ -218,13 +218,13 @@ class FieldAnalysisPMTilesGenerator:
             "pesticides_used",
             # Enhanced categorized pesticide details with BMD risk data
             "pfas_products_detail",
-            "pfas_applications",
+            "pfas_applications as pfas_products_used",
             "diquat_products_detail",
-            "diquat_applications",
+            "diquat_applications as diquat_products_used",
             "glyphosate_products_detail",
-            "glyphosate_applications",
+            "glyphosate_applications as glyphosate_products_used",
             "other_products_detail",
-            "other_applications",
+            "other_applications as other_products_used",
             # Enhanced aggregated fields for visualization and details
             "total_pesticide_belastning",
             "total_pfas_belastning",
@@ -443,11 +443,11 @@ class FieldAnalysisPMTilesGenerator:
                 "--attribute-type=total_dosage_grams:float",
                 "--attribute-type=total_dosage_ml:float",
                 "--attribute-type=total_dosage_tablets:float",
-                # Application counts
-                "--attribute-type=pfas_applications:int",
-                "--attribute-type=diquat_applications:int",
-                "--attribute-type=glyphosate_applications:int",
-                "--attribute-type=other_applications:int",
+                # Product counts (number of products used)
+                "--attribute-type=pfas_products_used:int",
+                "--attribute-type=diquat_products_used:int",
+                "--attribute-type=glyphosate_products_used:int",
+                "--attribute-type=other_products_used:int",
             ]
         )
 
