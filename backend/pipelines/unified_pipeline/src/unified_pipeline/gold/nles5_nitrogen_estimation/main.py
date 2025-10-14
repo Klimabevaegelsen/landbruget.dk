@@ -219,7 +219,6 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                                 if filename.startswith(
                                     "duckdb_temp_storage_"
                                 ) and filename.endswith(".tmp"):
-                                    duckdb_files_skipped += 1
                                     if hasattr(self, "log"):
                                         self.log.debug(
                                             f"🔍 CLEANUP: Skipping active DuckDB temp file: "
