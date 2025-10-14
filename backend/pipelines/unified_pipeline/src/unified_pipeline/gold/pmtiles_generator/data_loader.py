@@ -209,10 +209,12 @@ class PMTilesDataLoader:
 
             table_name = f"field_environmental_{year}"
 
+            # Fix double slash issue in path
+            parquet_path = f"{gcs_path.rstrip('/')}/*.parquet"
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
+            FROM read_parquet('{parquet_path}')
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -628,6 +630,19 @@ class PMTilesDataLoader:
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
+                    -- Total dosage by unit (frontend expects these)
+                    SUM(CASE WHEN DosageUnit IN ('2', 'kg') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
+                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_liters,
+                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_grams,
+                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_ml,
+                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
+
+
                     -- Proximity data
                     residential_buildings_formatted,
                     educational_facilities_formatted,
@@ -707,6 +722,18 @@ class PMTilesDataLoader:
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
+                    -- Total dosage by unit (frontend expects these) - fallback version
+                    SUM(CASE WHEN DosageUnit IN ('2', 'kg') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
+                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_liters,
+                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_grams,
+                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_ml,
+                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter') 
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
+
                     -- Proximity data
                     residential_buildings_formatted,
                     educational_facilities_formatted,
@@ -718,6 +745,25 @@ class PMTilesDataLoader:
                 """
 
             await asyncio.to_thread(self.conn.execute, summary_query)
+
+            # DEBUG: Check what was created in the pesticide summary
+            summary_count = await asyncio.to_thread(
+                self.conn.execute, "SELECT COUNT(*) FROM temp_pesticide_summary"
+            )
+            summary_count_result = summary_count.fetchone()[0]
+            logger.info(f"DEBUG: Created pesticide summary with {summary_count_result:,} records")
+
+            # DEBUG: Check if key fields exist in summary
+            try:
+                sample_result = await asyncio.to_thread(
+                    self.conn.execute,
+                    "SELECT unique_pesticide_products, total_pesticide_belastning "
+                    "FROM temp_pesticide_summary LIMIT 1",
+                )
+                sample = sample_result.fetchone()
+                logger.info(f"DEBUG: Summary - products: {sample[0]}, belastning: {sample[1]}")
+            except Exception as e:
+                logger.error(f"DEBUG: Failed to read summary fields: {e}")
 
             # Add pesticide columns to integrated table
             update_query = f"""
@@ -744,6 +790,27 @@ class PMTilesDataLoader:
                 ps.pesticides_ml_detail,
                 ps.pesticides_tablets_detail,
 
+                -- BMD burden calculations (MISSING FIELDS!)
+                ps.total_pesticide_belastning,
+                ps.total_pfas_belastning,
+                ps.total_diquat_belastning,
+                ps.total_glyphosate_belastning,
+
+                -- Active ingredient calculations
+                ps.total_pfas_active_ingredient_kg,
+                ps.total_glyphosate_active_ingredient_kg,
+
+                -- Product count (MISSING FIELD!)
+                ps.unique_pesticide_products,
+
+                -- Total dosage by unit (frontend expects these)
+                ps.total_dosage_kg,
+                ps.total_dosage_liters,
+                ps.total_dosage_grams,
+                ps.total_dosage_ml,
+                ps.total_dosage_tablets,
+
+
                 -- Proximity data
                 ps.residential_buildings_formatted,
                 ps.educational_facilities_formatted,
@@ -754,6 +821,30 @@ class PMTilesDataLoader:
             """
 
             await asyncio.to_thread(self.conn.execute, update_query)
+
+            # DEBUG: Check if integration worked
+            try:
+                integration_check = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT COUNT(*) FROM {integrated_table}_updated "
+                    f"WHERE unique_pesticide_products IS NOT NULL",
+                )
+                integrated_count = integration_check.fetchone()[0]
+                logger.info(f"DEBUG: Integration - {integrated_count:,} records have products")
+
+                # Check a sample
+                sample_integration = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT field_uuid, unique_pesticide_products, total_pesticide_belastning "
+                    f"FROM {integrated_table}_updated WHERE unique_pesticide_products > 0 LIMIT 1",
+                )
+                if sample_integration.fetchone():
+                    sample = sample_integration.fetchone()
+                    logger.info(f"DEBUG: Sample data - field: {sample[0]}, products: {sample[1]}")
+                else:
+                    logger.warning("DEBUG: No records found with pesticide data after integration!")
+            except Exception as e:
+                logger.error(f"DEBUG: Failed to check integration: {e}")
 
             # Replace original table
             await asyncio.to_thread(self.conn.execute, f"DROP TABLE {integrated_table}")

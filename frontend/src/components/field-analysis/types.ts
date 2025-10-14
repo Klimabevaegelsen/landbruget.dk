@@ -23,11 +23,6 @@ export interface FieldAnalysisData {
   total_dosage_grams?: number;
   total_dosage_ml?: number;
   total_dosage_tablets?: number;
-  applications_kg?: number;
-  applications_liters?: number;
-  applications_grams?: number;
-  applications_ml?: number;
-  applications_tablets?: number;
 
   // Chemical-specific data
   total_diquat_belastning?: number;
