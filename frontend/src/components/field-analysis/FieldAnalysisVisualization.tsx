@@ -387,51 +387,67 @@ export default function FieldAnalysisVisualization() {
         )}
       </div>
 
-      {/* Right Details Panel - Desktop: sidebar, Mobile: overlay */}
+      {/* Right Details Panel - Desktop: sidebar, Mobile: bottom sheet */}
       {selectedField && (
         <>
-          <div
-            className={`bg-background fixed inset-0 z-[70] h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
-            style={{
-              paddingTop: 'env(safe-area-inset-top)',
-              paddingBottom: 'env(safe-area-inset-bottom)',
-            }}
-          >
+          {/* Desktop: Fixed sidebar */}
+          <div className="bg-background relative z-10 hidden h-full w-80 shadow-lg lg:block">
             <FieldDetailsPanel
               fieldData={selectedField}
               onClose={() => setSelectedField(null)}
             />
           </div>
 
-          {/* Mobile Details Backdrop */}
-          <div
-            className="bg-opacity-50 bg-background fixed inset-0 z-40 lg:hidden"
-            onClick={() => setSelectedField(null)}
-          />
+          {/* Mobile: Bottom sheet */}
+          <div className="lg:hidden">
+            <div
+              className="fixed inset-0 z-40 bg-black/50"
+              onClick={() => setSelectedField(null)}
+            />
+            <div
+              className="bg-background fixed inset-x-0 bottom-0 z-[70] max-h-[85vh] overflow-y-auto rounded-t-xl shadow-2xl"
+              style={{
+                paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+              }}
+            >
+              <FieldDetailsPanel
+                fieldData={selectedField}
+                onClose={() => setSelectedField(null)}
+              />
+            </div>
+          </div>
         </>
       )}
 
-      {/* Coordinate Panel - Only show when coordinates are clicked but no field is selected */}
+      {/* Coordinate Panel - Desktop: sidebar, Mobile: bottom sheet */}
       {!selectedField && clickedCoordinates && (
         <>
-          <div
-            className={`bg-background fixed inset-0 z-[70] h-full w-full overflow-y-auto shadow-lg lg:relative lg:inset-auto lg:z-10 lg:h-full lg:w-80 lg:shadow-lg`}
-            style={{
-              paddingTop: 'env(safe-area-inset-top)',
-              paddingBottom: 'env(safe-area-inset-bottom)',
-            }}
-          >
+          {/* Desktop: Fixed sidebar */}
+          <div className="bg-background relative z-10 hidden h-full w-80 shadow-lg lg:block">
             <FieldDetailsPanel
               coordinates={clickedCoordinates}
               onClose={() => setClickedCoordinates(null)}
             />
           </div>
 
-          {/* Mobile Coordinate Panel Backdrop */}
-          <div
-            className="bg-opacity-50 bg-background fixed inset-0 z-40 lg:hidden"
-            onClick={() => setClickedCoordinates(null)}
-          />
+          {/* Mobile: Bottom sheet */}
+          <div className="lg:hidden">
+            <div
+              className="fixed inset-0 z-40 bg-black/50"
+              onClick={() => setClickedCoordinates(null)}
+            />
+            <div
+              className="bg-background fixed inset-x-0 bottom-0 z-[70] max-h-[85vh] overflow-y-auto rounded-t-xl shadow-2xl"
+              style={{
+                paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+              }}
+            >
+              <FieldDetailsPanel
+                coordinates={clickedCoordinates}
+                onClose={() => setClickedCoordinates(null)}
+              />
+            </div>
+          </div>
         </>
       )}
     </div>

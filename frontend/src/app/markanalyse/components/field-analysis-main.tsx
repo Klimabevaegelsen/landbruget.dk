@@ -334,20 +334,26 @@ export default function FieldAnalysisMain() {
       >
         {/* Year Slider - positioned to avoid sidebar and panel collision */}
         <div
-          className={`pointer-events-none absolute top-4 z-30 max-h-[calc(100vh-8rem)] transition-all duration-300`}
+          className={`pointer-events-none absolute z-30 max-h-[calc(100vh-8rem)] transition-all duration-300 ${
+            isMobile
+              ? 'top-[9rem] right-4 left-4' // Mobile: below search bar with proper spacing
+              : 'top-4' // Desktop: standard top position
+          }`}
           data-testid="year-slider-container"
-          style={{
-            // Force a maximum width that ensures it stays within viewport
-            width: '15rem',
-            maxWidth: 'calc(100vw - 2rem)',
-            // When panel is open, adjust position to avoid overlap
-            right:
-              !isMobile &&
-              (selectedField || clickedCoordinates) &&
-              !isPanelCollapsed
-                ? 'calc(28rem + 1rem)' // Panel width + margin
-                : '4rem', // Leave space for zoom controls (was 1rem)
-          }}
+          style={
+            isMobile
+              ? {}
+              : {
+                  // Desktop positioning only
+                  width: '15rem',
+                  maxWidth: 'calc(100vw - 2rem)',
+                  // When panel is open, adjust position to avoid overlap
+                  right:
+                    (selectedField || clickedCoordinates) && !isPanelCollapsed
+                      ? 'calc(28rem + 1rem)' // Panel width + margin
+                      : '4rem', // Leave space for zoom controls (was 1rem)
+                }
+          }
         >
           <div className="pointer-events-auto">
             <YearSlider
