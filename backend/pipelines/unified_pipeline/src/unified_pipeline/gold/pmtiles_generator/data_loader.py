@@ -217,7 +217,7 @@ class PMTilesDataLoader:
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
+            FROM read_parquet('{gcs_path}/data.parquet')
             """
 
             await asyncio.to_thread(self.conn.execute, query)
