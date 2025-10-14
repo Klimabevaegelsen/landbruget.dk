@@ -1,37 +1,44 @@
-# Pre-commit hooks configuration
+# Pre-commit hooks configuration - Fixed sequencing and conflicts
 # Install with: uv add --dev pre-commit && pre-commit install
 # Run manually with: pre-commit run --all-files
 
 repos:
+  # Stage 1: Basic file validation (no modifications)
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v6.0.0
     hooks:
-      - id: trailing-whitespace
-        exclude: '\.md$'
-      - id: end-of-file-fixer
-        exclude: '\.md$'
       - id: check-yaml
-        args: ["--unsafe"] # Allow custom YAML tags in GitHub Actions
+        args: ["--unsafe"]
       - id: check-added-large-files
-        args: ["--maxkb=1000"] # Prevent files larger than 1MB
+        args: ["--maxkb=1000"]
       - id: check-merge-conflict
       - id: debug-statements
         language_version: python3
 
+  # Stage 2: Python formatting and linting (sequenced properly)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.0
+    rev: v0.14.0
     hooks:
-      # Linter
+      # First: Fix code issues
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        args: [--fix]  # Remove --exit-non-zero-on-fix to prevent rollbacks
         types_or: [python, pyi]
-      # Formatter
+      # Second: Format code
       - id: ruff-format
         types_or: [python, pyi]
 
-  # Secret detection
+  # Stage 3: File cleanup (after code formatting)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$|\.json$'  # Exclude files where trailing whitespace matters
+      - id: end-of-file-fixer
+        exclude: '\.md$|\.json$'
+
+  # Stage 4: Secret detection (with proper baseline)
   - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
+    rev: v1.5.0
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
@@ -50,13 +57,14 @@ repos:
             .*\.json$
           )$
 
+  # Stage 5: Frontend processing (improved reliability)
   - repo: local
     hooks:
-      # Prettier for frontend projects
+      # Frontend formatting with better error handling
       - id: prettier-frontend
         name: Prettier (Frontend)
         entry: bash
-        args: [-c, "cd frontend && npm run format"]
+        args: [-c, "cd frontend && npm ci --silent 2>/dev/null || true && npm run format"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
@@ -64,16 +72,16 @@ repos:
       - id: prettier-frontend-pesticide
         name: Prettier (Frontend Pesticide)
         entry: bash
-        args: [-c, "cd frontend-pesticide && npm run format"]
+        args: [-c, "cd frontend-pesticide && npm ci --silent 2>/dev/null || true && npm run format"]
         language: system
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx|json|md|css)$'
         pass_filenames: false
 
-      # Oxlint for frontend (much faster than ESLint)
+      # Frontend linting with dependency check
       - id: oxlint
         name: Oxlint (Frontend)
         entry: bash
-        args: [-c, "cd frontend && npm run lint"]
+        args: [-c, "cd frontend && (npm list oxlint >/dev/null 2>&1 || npm ci --silent) && npm run lint"]
         language: system
         files: '^frontend/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
@@ -81,48 +89,39 @@ repos:
       - id: oxlint-frontend-pesticide
         name: Oxlint (Frontend Pesticide)
         entry: bash
-        args: [-c, "cd frontend-pesticide && npm run lint"]
+        args: [-c, "cd frontend-pesticide && (npm list oxlint >/dev/null 2>&1 || npm ci --silent) && npm run lint"]
         language: system
         files: '^frontend-pesticide/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
-      # Playwright tests for frontend changes
+      # Playwright smoke tests (optimized for speed)
       - id: playwright-smoke-test
-        name: Playwright Smoke Test
+        name: Playwright Smoke Test (Fast)
         entry: bash
-        args: [-c, "cd frontend && npm run test:smoke || echo 'Warning: Playwright smoke tests failed. Run npm run test:debug to investigate.'"]
+        args: [-c, "cd frontend && npm run test:smoke:fast || (echo '⚠️ Smoke tests failed - check with: npm run test:debug' && exit 1)"]
         language: system
         files: '^frontend/src/.*\.(ts|tsx|js|jsx)$'
         pass_filenames: false
 
-      # Custom hook to prevent committing to data directories
+      # Essential protection hooks (improved patterns)
       - id: check-data-directories
-        name: Prevent commits to data directories
+        name: Prevent data directory commits
         entry: bash
-        args:
-          [
-            -c,
-            'if git diff --cached --name-only | grep -E "^(data_cache|data_local)/"; then echo "Error: Do not commit files in data_cache/ or data_local/"; exit 1; fi',
-          ]
+        args: [-c, 'files=$(git diff --cached --name-only | grep -E "^(data_cache|data_local)/"); if [ -n "$files" ]; then echo "❌ Cannot commit data files:"; echo "$files"; exit 1; fi']
         language: system
         pass_filenames: false
         always_run: true
 
-      # Custom hook to check for debugging code
       - id: check-debug-code
-        name: Check for debugging code
+        name: Check for debug code
         entry: bash
-        args:
-          [
-            -c,
-            'if git diff --cached --name-only -z | xargs -0 grep -l "print(" 2>/dev/null | grep -v test; then echo "Warning: Found print() statements in non-test files"; fi',
-          ]
+        args: [-c, 'if git diff --cached | grep -E "(console\.log|debugger|pdb\.set_trace|breakpoint\(\))" | grep -v -E "(test|spec|\.test\.|\.spec\.)"; then echo "⚠️ Debug code found in non-test files"; exit 1; fi']
         language: system
         pass_filenames: false
         always_run: true
         verbose: true
 
-# Configuration for specific file types
+# Exclude problematic paths
 exclude: |
   (?x)^(
     data_cache/.*|
