@@ -40,7 +40,12 @@ export function FieldDetailsPanel({
 }: FieldDetailsPanelProps) {
   const [copiedCoordinates, setCopiedCoordinates] = useState(false);
 
-  const formatNumber = (num: number, decimals: number = 2): string => {
+  const formatNumber = (
+    num: number | undefined | null,
+    decimals: number = 2
+  ): string => {
+    // Handle null, undefined, or NaN values
+    if (num == null || isNaN(num)) return '0';
     // Don't display if the value is effectively zero
     if (num < 0.001) return '< 0,001';
 
@@ -941,7 +946,7 @@ export function FieldDetailsPanel({
               Miljøområder
             </h3>
             <div className="space-y-2">
-              {fieldData.bnbo_area_hectares > 0 && (
+              {(fieldData.bnbo_area_hectares ?? 0) > 0 && (
                 <div className="bg-primary/10 rounded-lg p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-primary text-sm font-medium">
@@ -954,7 +959,7 @@ export function FieldDetailsPanel({
                 </div>
               )}
 
-              {fieldData.wetland_area_hectares > 0 && (
+              {(fieldData.wetland_area_hectares ?? 0) > 0 && (
                 <div className="bg-muted rounded-lg p-2">
                   <div className="flex items-center justify-between">
                     <span className="text-foreground text-sm font-medium">
@@ -967,8 +972,8 @@ export function FieldDetailsPanel({
                 </div>
               )}
 
-              {fieldData.bnbo_area_hectares === 0 &&
-                fieldData.wetland_area_hectares === 0 && (
+              {(fieldData.bnbo_area_hectares ?? 0) === 0 &&
+                (fieldData.wetland_area_hectares ?? 0) === 0 && (
                   <div className="text-muted-foreground p-2 text-xs italic">
                     Ingen registrerede miljøområder
                   </div>

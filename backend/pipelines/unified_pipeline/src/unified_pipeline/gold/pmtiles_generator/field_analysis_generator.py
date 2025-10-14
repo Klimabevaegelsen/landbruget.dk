@@ -192,16 +192,21 @@ class FieldAnalysisPMTilesGenerator:
             "municipality as kommune",  # Frontend expects kommune
         ]
 
-        # Environmental fields (if available)
+        # Environmental fields (if available) - mapped to frontend expectations
         environmental_fields = [
+            # Convert square meters to hectares for frontend compatibility
+            "COALESCE(field_bnbo_total_m2, 0) / 10000.0 as bnbo_area_hectares",
+            "COALESCE(field_wetland_total_m2, 0) / 10000.0 as wetland_area_hectares",
+            # Coverage percentages (keep original field names for additional data)
             "field_bnbo_coverage_pct",
             "field_bnbo_water_coverage_pct",
-            "bnbo_status_categories",
-            "bnbo_action_required_hectares",
-            "bnbo_completed_hectares",
             "field_wetland_coverage_pct",
             "field_wetland_water_coverage_pct",
             "field_soil_coverage_pct",
+            # Status and action fields (already in correct format)
+            "bnbo_status_categories",
+            "bnbo_action_required_hectares",
+            "bnbo_completed_hectares",
         ]
 
         # Production fields (if available)
@@ -222,7 +227,7 @@ class FieldAnalysisPMTilesGenerator:
             "other_applications",
             # Enhanced aggregated fields for visualization and details
             "total_pesticide_belastning",
-            "total_pfas_belastning", 
+            "total_pfas_belastning",
             "total_diquat_belastning",
             "total_glyphosate_belastning",
             "total_pfas_active_ingredient_kg",
@@ -271,8 +276,28 @@ class FieldAnalysisPMTilesGenerator:
                 nles5_fields,
             ]:
                 for field in field_group:
-                    if field in available_columns:
-                        selected_fields.append(field)
+                    # Handle SQL expressions (like COALESCE(...) as alias)
+                    if " as " in field.lower():
+                        # For aliased expressions, check if the base column exists
+                        base_column = field.split(" as ")[0].strip()
+                        # Extract column names from COALESCE expressions
+                        if "COALESCE(" in base_column:
+                            # Extract the main column name from COALESCE(column_name, default)
+                            column_start = base_column.find("(") + 1
+                            column_end = base_column.find(",", column_start)
+                            if column_end == -1:
+                                column_end = base_column.find(")", column_start)
+                            main_column = base_column[column_start:column_end].strip()
+                            if main_column in available_columns:
+                                selected_fields.append(field)
+                        else:
+                            # Simple alias case
+                            if base_column in available_columns:
+                                selected_fields.append(field)
+                    else:
+                        # Direct column name
+                        if field in available_columns:
+                            selected_fields.append(field)
 
             # Always include geometry last - convert to GeoJSON format with coordinate swap
             if "geometry" in available_columns:

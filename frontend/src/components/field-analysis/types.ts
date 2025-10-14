@@ -35,8 +35,8 @@ export interface FieldAnalysisData {
   total_glyphosate_belastning?: number;
 
   // Environmental areas
-  bnbo_area_hectares: number;
-  wetland_area_hectares: number;
+  bnbo_area_hectares?: number;
+  wetland_area_hectares?: number;
 
   // BNBO status data
   bnbo_action_required_hectares?: number;

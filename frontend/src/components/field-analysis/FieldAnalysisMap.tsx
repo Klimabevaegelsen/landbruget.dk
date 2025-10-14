@@ -95,6 +95,10 @@ function MapTooltip({
   colorUnit,
 }: TooltipInfo) {
   const formatValue = (value: unknown, unit?: string): string => {
+    // Handle null, undefined, or non-numeric values
+    if (value == null || (typeof value === 'number' && isNaN(value))) {
+      return '0';
+    }
     if (typeof value === 'number') {
       // Special formatting for different types of values
       let formatted: string;
@@ -136,7 +140,7 @@ function MapTooltip({
 
       return unit ? `${formatted} ${unit}` : formatted;
     }
-    return String(value);
+    return String(value ?? '');
   };
 
   const getRelevantData = () => {

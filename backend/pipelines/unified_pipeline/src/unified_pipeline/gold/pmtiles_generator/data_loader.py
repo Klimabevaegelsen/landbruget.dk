@@ -590,13 +590,21 @@ class PMTilesDataLoader:
 
                     -- BMD burden calculations for visualization (from BMD risk data)
                     SUM(COALESCE(samlet_belastning, 0)) as total_pesticide_belastning,
-                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_pfas_belastning,
-                    SUM(CASE WHEN COALESCE(contains_diquat, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_diquat_belastning,
-                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_glyphosate_belastning,
+                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true 
+                        THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_pfas_belastning,
+                    SUM(CASE WHEN COALESCE(contains_diquat, false) = true 
+                        THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_diquat_belastning,
+                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true 
+                        THEN COALESCE(samlet_belastning, 0) 
+                        ELSE 0 END) as total_glyphosate_belastning,
 
                     -- Active ingredient calculations
-                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_pfas_active_ingredient_kg,
-                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_glyphosate_active_ingredient_kg,
+                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true 
+                        THEN COALESCE(DosageQuantity, 0) 
+                        ELSE 0 END) as total_pfas_active_ingredient_kg,
+                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true 
+                        THEN COALESCE(DosageQuantity, 0) 
+                        ELSE 0 END) as total_glyphosate_active_ingredient_kg,
 
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
@@ -672,11 +680,11 @@ class PMTilesDataLoader:
                     0 as total_pfas_belastning,
                     0 as total_diquat_belastning,
                     0 as total_glyphosate_belastning,
-                    
+
                     -- Active ingredient calculations (fallback)
                     0 as total_pfas_active_ingredient_kg,
                     0 as total_glyphosate_active_ingredient_kg,
-                    
+
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
