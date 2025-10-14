@@ -43,11 +43,11 @@ export function FieldDetailsPanel({
   const formatNumber = (
     num: number | undefined | null,
     decimals: number = 2
-  ): string => {
+  ): string | null => {
     // Handle null, undefined, or NaN values
-    if (num == null || isNaN(num)) return '0';
+    if (num == null || isNaN(num)) return null;
     // Don't display if the value is effectively zero
-    if (num < 0.001) return '< 0,001';
+    if (num < 0.001) return null;
 
     // For very small values, show more precision
     if (num < 1 && decimals === 0) {
@@ -351,35 +351,45 @@ export function FieldDetailsPanel({
 
       {/* Basic Information - Only show for field data */}
       {fieldData && (
-        <div className="mb-4">
-          <h3 className="text-foreground mb-2 text-base font-semibold">
+        <div className="mb-6">
+          <h3 className="text-foreground mb-4 text-lg font-semibold">
             Grundoplysninger
           </h3>
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Kommune:</span>
-              <span className="font-medium">{fieldData.kommune}</span>
+          <div className="space-y-3 text-sm lg:space-y-2 lg:text-sm">
+            <div className="flex items-center justify-between py-1">
+              <span className="text-muted-foreground font-medium">
+                Kommune:
+              </span>
+              <span className="text-base font-semibold lg:text-sm">
+                {fieldData.kommune}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">CVR:</span>
-              <span className="font-mono text-xs">{fieldData.cvr_number}</span>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-muted-foreground font-medium">CVR:</span>
+              <span className="font-mono text-sm lg:text-xs">
+                {fieldData.cvr_number}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Areal:</span>
-              <span className="font-medium">
+            <div className="flex items-center justify-between py-1">
+              <span className="text-muted-foreground font-medium">Areal:</span>
+              <span className="text-base font-semibold lg:text-sm">
                 {formatNumber(fieldData.area_hectares)} ha
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Afgrøde:</span>
-              <span className="font-medium">
+            <div className="flex items-center justify-between py-1">
+              <span className="text-muted-foreground font-medium">
+                Afgrøde:
+              </span>
+              <span className="text-base font-semibold lg:text-sm">
                 {fieldData.crop_name || 'Ukendt'}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Økologisk:</span>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-muted-foreground font-medium">
+                Økologisk:
+              </span>
               <span
-                className={`font-medium ${fieldData.is_organic ? 'text-accent-foreground' : 'text-muted-foreground'}`}
+                className={`text-base font-semibold lg:text-sm ${fieldData.is_organic ? 'text-accent-foreground' : 'text-muted-foreground'}`}
               >
                 {fieldData.is_organic ? 'Ja' : 'Nej'}
               </span>
@@ -390,13 +400,13 @@ export function FieldDetailsPanel({
 
       {/* GPS Coordinates and Skråfoto */}
       {(fieldData?.click_coordinates || coordinates) && (
-        <div className="mb-4">
+        <div className="mb-6">
           {fieldData && (
-            <h3 className="text-foreground mb-2 text-base font-semibold">
+            <h3 className="text-foreground mb-4 text-lg font-semibold">
               Koordinater
             </h3>
           )}
-          <div className="bg-primary/10 rounded-lg p-3">
+          <div className="bg-primary/10 rounded-lg p-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-primary flex items-center text-sm font-medium">
                 <MapPin className="mr-1 h-4 w-4" />
