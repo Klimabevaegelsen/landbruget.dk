@@ -559,15 +559,27 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             self.log.warning("No valid data found after processing")
             return None
 
-        # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
-        # This converts UTM coordinates to WGS84 to match agricultural fields
-        self.log.info("Applying geometry validation and coordinate transformation...")
-        validate_and_transform_geometries_duckdb(
-            self.conn,
-            processed_table,
-            self.config.dataset,
-            geometry_column="geometry",
-        )
+        # Skip expensive geometry validation for cadastral data since coordinates are now fixed
+        skip_validation = os.getenv("CADASTRAL_SKIP_VALIDATION", "true").lower() == "true"
+        if skip_validation:
+            self.log.info("Skipping geometry validation (CADASTRAL_SKIP_VALIDATION=true)")
+            # Just do coordinate transformation without validation
+            self.log.info("Applying coordinate transformation from UTM to WGS84...")
+            self.conn.execute(f"""
+                UPDATE {processed_table} SET
+                    geometry = ST_Transform(geometry, 'EPSG:25832', 'EPSG:4326')
+                WHERE geometry IS NOT NULL
+            """)
+        else:
+            # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
+            # This converts UTM coordinates to WGS84 to match agricultural fields
+            self.log.info("Applying geometry validation and coordinate transformation...")
+            validate_and_transform_geometries_duckdb(
+                self.conn,
+                processed_table,
+                self.config.dataset,
+                geometry_column="geometry",
+            )
 
         # Create dissolved version (skip in bronze/silver to save time, move to gold if needed)
         create_dissolved = os.getenv("CADASTRAL_CREATE_DISSOLVED", "false").lower() == "true"
