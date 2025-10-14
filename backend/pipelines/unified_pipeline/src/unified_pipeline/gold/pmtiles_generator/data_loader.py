@@ -239,15 +239,19 @@ class PMTilesDataLoader:
 
     async def _load_field_production(self, year: int) -> Optional[str]:
         """Load field production estimates for a specific year.
+        
+        Production data uses Y+1 pattern to match field boundaries.
 
         Args:
-            year: Target year
+            year: Target pesticide year
 
         Returns:
             DuckDB table name or None if failed
         """
         try:
-            base_path = f"gs://{self.config.gcs_bucket}/gold/field_production_{year}"
+            # Production data uses Y+1 pattern to match field boundaries
+            production_year = year + 1
+            base_path = f"gs://{self.config.gcs_bucket}/gold/field_production_{production_year}"
 
             # Find the latest timestamped directory
             gcs_path = await self._find_latest_timestamped_path(base_path)
@@ -263,7 +267,7 @@ class PMTilesDataLoader:
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
             FROM read_parquet('{gcs_path}data.parquet')
-            WHERE year = {year}
+            WHERE year = {production_year}
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -273,7 +277,7 @@ class PMTilesDataLoader:
             )
             count = count_result.fetchone()[0]
 
-            logger.info(f"Loaded {count:,} field production records for year {year}")
+            logger.info(f"Loaded {count:,} field production records for year {production_year} (for pesticide year {year})")
             return table_name
 
         except Exception as e:
