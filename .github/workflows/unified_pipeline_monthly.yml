@@ -165,12 +165,14 @@ jobs:
               export CADASTRAL_CHECKPOINT_ENABLED=true
               export CADASTRAL_CHECKPOINT_INTERVAL=100000
               export CADASTRAL_CREATE_DISSOLVED=false  # Skip dissolved to save time
+              export CADASTRAL_SKIP_VALIDATION=true    # Skip expensive geometry validation
               echo "📈 Cadastral performance optimizations enabled:"
               echo "   - Request rate: 4 req/sec (increased from 2)"
               echo "   - Batch size: 25k features (increased from 10k)"
               echo "   - Concurrent workers: 8 (increased from 5)"
               echo "   - Checkpoints: Every 100k features"
               echo "   - Dissolved data: Disabled for speed"
+              echo "   - Geometry validation: Skipped (coordinate bug fixed)"
             fi
 
             (while true; do

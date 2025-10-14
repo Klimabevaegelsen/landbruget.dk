@@ -203,8 +203,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                     continue
 
                 coords = [float(x) for x in pos_list.text.strip().split()]
-                # Keep the original 3D coordinate handling - take x,y and skip z
-                pairs = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 3)]
+                # Handle 2D coordinates - take x,y pairs
+                pairs = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 2)]
 
                 if len(pairs) < 4:
                     logger.warning(f"Not enough coordinate pairs ({len(pairs)}) to form a polygon")
@@ -480,7 +480,7 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 self.log.info(
                     f"✅ SYNC COMPLETED: {total_processed:,} features processed | "
                     f"⚡ Final speed: {final_features_per_minute:,.0f} features/min | "
-                    f"⏱️  Total time: {total_duration/60:.1f} minutes"
+                    f"⏱️  Total time: {total_duration / 60:.1f} minutes"
                 )
 
                 # Clean up checkpoint file on successful completion
