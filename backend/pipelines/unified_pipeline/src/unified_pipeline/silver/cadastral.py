@@ -149,8 +149,8 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
         try:
             self.log.info("Using DuckDB bulk insert with VALUES clause for maximum performance...")
 
-            # Process in large batches to maximize DuckDB's performance
-            batch_size = 10000  # Larger batches for better performance
+            # Process in very large batches to maximize DuckDB's performance and reduce memory
+            batch_size = 50000  # Increased from 10k to 50k for better performance
             inserted_count = 0
 
             for i in range(0, len(valid_rows), batch_size):
@@ -569,8 +569,17 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             geometry_column="geometry",
         )
 
-        # Create dissolved version
-        dissolved_table = self._create_dissolved_data(processed_table)
+        # Create dissolved version (skip in bronze/silver to save time, move to gold if needed)
+        create_dissolved = os.getenv("CADASTRAL_CREATE_DISSOLVED", "false").lower() == "true"
+        if create_dissolved:
+            self.log.info("Creating dissolved data (enabled via CADASTRAL_CREATE_DISSOLVED)")
+            dissolved_table = self._create_dissolved_data(processed_table)
+        else:
+            self.log.info(
+                "Skipping dissolved data creation to save processing time "
+                "(enable with CADASTRAL_CREATE_DISSOLVED=true)"
+            )
+            dissolved_table = None
 
         # Save both versions as parquet files using table names with metadata
         # Using the new metadata-enhanced save method for complete data tracing
@@ -581,13 +590,15 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             bucket=self.config.bucket,
             stage="silver",
         )
-        self._save_data_with_metadata(
-            data=dissolved_table,
-            dataset=f"{self.config.dataset}_dissolved",
-            source_key="cadastral",  # Same source as base dataset
-            bucket=self.config.bucket,
-            stage="silver",
-        )
+        # Only save dissolved data if it was created
+        if dissolved_table:
+            self._save_data_with_metadata(
+                data=dissolved_table,
+                dataset=f"{self.config.dataset}_dissolved",
+                source_key="cadastral",  # Same source as base dataset
+                bucket=self.config.bucket,
+                stage="silver",
+            )
 
         self.log.info("Cadastral silver job completed successfully")
 

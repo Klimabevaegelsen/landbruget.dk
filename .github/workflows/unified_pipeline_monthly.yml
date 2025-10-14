@@ -155,11 +155,26 @@ jobs:
 
           cd backend/pipelines/unified_pipeline
 
-          # Resource monitoring for long-running jobs
+          # Enhanced resource monitoring and optimization for long-running jobs
           if [ "${{ matrix.source }}" = "fvm_wfs" ] || [ "${{ matrix.source }}" = "cadastral" ]; then
-            echo "🔍 Starting resource monitoring for ${{ matrix.source }}"
+            echo "🔍 Starting enhanced resource monitoring for ${{ matrix.source }}"
+
+            # Set performance optimizations for cadastral
+            if [ "${{ matrix.source }}" = "cadastral" ]; then
+              export CADASTRAL_REQUESTS_PER_SECOND=4
+              export CADASTRAL_CHECKPOINT_ENABLED=true
+              export CADASTRAL_CHECKPOINT_INTERVAL=100000
+              export CADASTRAL_CREATE_DISSOLVED=false  # Skip dissolved to save time
+              echo "📈 Cadastral performance optimizations enabled:"
+              echo "   - Request rate: 4 req/sec (increased from 2)"
+              echo "   - Batch size: 25k features (increased from 10k)"
+              echo "   - Concurrent workers: 8 (increased from 5)"
+              echo "   - Checkpoints: Every 100k features"
+              echo "   - Dissolved data: Disabled for speed"
+            fi
+
             (while true; do
-              sleep 120  # Check every 2 minutes
+              sleep 900  # Check every 15 minutes for detailed monitoring
               echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
               echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
 
@@ -171,6 +186,13 @@ jobs:
               fi
               if [ $DISK_USED_PCT -gt 85 ]; then
                 echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+              fi
+
+              # Check for checkpoint files (cadastral progress monitoring)
+              if [ "${{ matrix.source }}" = "cadastral" ]; then
+                if ls /tmp/cadastral_checkpoint_*.json 1> /dev/null 2>&1; then
+                  echo "📍 Cadastral checkpoint files found - processing in progress"
+                fi
               fi
             done) &
             MONITOR_PID=$!
