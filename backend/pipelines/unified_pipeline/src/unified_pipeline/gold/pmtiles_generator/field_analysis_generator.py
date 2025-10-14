@@ -429,6 +429,25 @@ class FieldAnalysisPMTilesGenerator:
                 "--attribute-type=is_organic:bool",
                 "--attribute-type=pesticide_applications:int",
                 "--attribute-type=avg_match_confidence:float",
+                # Pesticide summary fields
+                "--attribute-type=unique_pesticide_products:int",
+                "--attribute-type=total_pesticide_belastning:float",
+                "--attribute-type=total_pfas_belastning:float",
+                "--attribute-type=total_diquat_belastning:float", 
+                "--attribute-type=total_glyphosate_belastning:float",
+                "--attribute-type=total_pfas_active_ingredient_kg:float",
+                "--attribute-type=total_glyphosate_active_ingredient_kg:float",
+                # Dosage totals
+                "--attribute-type=total_dosage_kg:float",
+                "--attribute-type=total_dosage_liters:float",
+                "--attribute-type=total_dosage_grams:float",
+                "--attribute-type=total_dosage_ml:float",
+                "--attribute-type=total_dosage_tablets:float",
+                # Application counts
+                "--attribute-type=pfas_applications:int",
+                "--attribute-type=diquat_applications:int",
+                "--attribute-type=glyphosate_applications:int",
+                "--attribute-type=other_applications:int",
             ]
         )
 
@@ -441,6 +460,9 @@ class FieldAnalysisPMTilesGenerator:
                     "--attribute-type=field_soil_coverage_pct:float",
                     "--attribute-type=bnbo_action_required_hectares:float",
                     "--attribute-type=bnbo_completed_hectares:float",
+                    # Environmental area fields
+                    "--attribute-type=bnbo_area_hectares:float",
+                    "--attribute-type=wetland_area_hectares:float",
                 ]
             )
 
