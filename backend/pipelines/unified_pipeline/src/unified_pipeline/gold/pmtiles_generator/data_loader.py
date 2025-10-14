@@ -90,15 +90,22 @@ class PMTilesDataLoader:
 
     async def _load_fvm_marker_data(self, year: int) -> Optional[str]:
         """Load FVM marker data for a specific year.
+        
+        For 2023 pesticide data, we need 2024 field boundaries (Y+1 pattern).
+        For other years, use the same year as the pesticide data.
 
         Args:
-            year: Target year
+            year: Target pesticide year
 
         Returns:
             DuckDB table name or None if failed
         """
         try:
-            base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{year}"
+            # Pesticide data always uses Y+1 field boundaries
+            boundary_year = year + 1
+            logger.info(f"Using {boundary_year} field boundaries for {year} pesticide data (Y+1 pattern)")
+                
+            base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{boundary_year}"
 
             # Find the latest timestamped directory
             gcs_path = await self._find_latest_timestamped_path(base_path)
@@ -185,20 +192,13 @@ class PMTilesDataLoader:
             DuckDB table name or None if failed
         """
         try:
-            # Determine which environmental year to use based on pesticide year
-            env_year = None
+            # Environmental data always uses Y+1 pattern to match field boundaries
+            env_year = year + 1
+            logger.info(f"Using {env_year} environmental data for {year} pesticide data (Y+1 pattern)")
 
-            if year == 2023:
-                # Special case: 2023 pesticide uses 2024 field boundaries (Y+1 pattern)
-                # So 2024 environmental data will have matching field_uuids
-                env_year = 2024
-                logger.info("Using 2024 environmental data for 2023 pesticide data (Y+1 pattern)")
-            else:
-                # For other years, only use exact year match
-                env_year = year
-                logger.info(f"Looking for exact year match: {year} environmental data")
-
-            base_path = f"gs://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
+            base_path = (
+                f"gs://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
+            )
 
             # Find the latest timestamped directory (same pattern as production data)
             gcs_path = await self._find_latest_timestamped_path(base_path)
@@ -630,15 +630,15 @@ class PMTilesDataLoader:
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
                     -- Total dosage by unit (frontend expects these)
-                    SUM(CASE WHEN DosageUnit IN ('2', 'kg') 
+                    SUM(CASE WHEN DosageUnit IN ('2', 'kg')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
-                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter') 
+                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_liters,
-                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram') 
+                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_grams,
-                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter') 
+                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_ml,
-                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter') 
+                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
 
 
@@ -722,15 +722,15 @@ class PMTilesDataLoader:
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
 
                     -- Total dosage by unit (frontend expects these) - fallback version
-                    SUM(CASE WHEN DosageUnit IN ('2', 'kg') 
+                    SUM(CASE WHEN DosageUnit IN ('2', 'kg')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
-                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter') 
+                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_liters,
-                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram') 
+                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_grams,
-                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter') 
+                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_ml,
-                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter') 
+                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
                         THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
 
                     -- Proximity data
