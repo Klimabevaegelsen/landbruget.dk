@@ -578,12 +578,47 @@ def process_chr_data_streaming(
         # Handle VetStat JSON data separately (if exists)
         vetstat_table_name = None
 
-        # Look for VetStat JSON file (consolidated from XML in bronze layer)
-        vetstat_json_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.json"
-        vetstat_json_files = [vetstat_json_path] if gcs_access.file_exists(vetstat_json_path) else []
+        # Look for VetStat JSON files from all CHR groups and months (consolidated from XML in bronze layer)
+        vetstat_json_files = []
+
+        # First try the traditional single file approach (for backward compatibility)
+        traditional_path = f"gs://{bucket_name}/bronze/chr/{bronze_timestamp}/vetstat_antibiotics.json"
+        if gcs_access.file_exists(traditional_path):
+            vetstat_json_files.append(traditional_path)
+            logging.info(f"Found traditional VetStat file: {traditional_path}")
+        else:
+            # Look for CHR group and month-specific files
+            logging.info("Traditional VetStat file not found, looking for CHR group-specific files...")
+
+            try:
+                import gcsfs
+
+                fs = gcsfs.GCSFileSystem()
+
+                # Find all directories that match the bronze timestamp with suffixes
+                all_dirs = fs.ls(f"{bucket_name}/bronze/chr/")
+                bronze_dirs = [d for d in all_dirs if bronze_timestamp in d]
+
+                logging.info(f"Found {len(bronze_dirs)} bronze directories for timestamp {bronze_timestamp}")
+
+                # Look for vetstat_antibiotics.json in each directory
+                for bronze_dir in bronze_dirs:
+                    try:
+                        vetstat_file_path = f"gs://{bronze_dir}/vetstat_antibiotics.json"
+                        if gcs_access.file_exists(vetstat_file_path):
+                            vetstat_json_files.append(vetstat_file_path)
+                            logging.info(f"Found VetStat file: {vetstat_file_path}")
+                    except Exception as e:
+                        logging.warning(f"Error checking for VetStat file in {bronze_dir}: {e}")
+                        continue
+
+            except Exception as e:
+                logging.error(f"Error discovering CHR group VetStat files: {e}")
+
+        logging.info(f"Total VetStat JSON files found: {len(vetstat_json_files)}")
 
         if vetstat_json_files:
-            logging.info(f"Processing VetStat JSON file: {vetstat_json_path}")
+            logging.info(f"Processing {len(vetstat_json_files)} VetStat JSON files")
             try:
                 # Create temporary files for all VetStat JSON data
                 all_vetstat_data = []

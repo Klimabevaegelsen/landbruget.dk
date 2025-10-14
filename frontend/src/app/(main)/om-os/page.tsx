@@ -231,13 +231,13 @@ export default function AboutPage() {
               </h2>
               <div className="space-y-4">
                 <p className="text-muted-foreground text-lg leading-relaxed">
-                  Har du spørgsmål, forslag til forbedringer, eller har du fundet
-                  fejl i vores data? Vi hører gerne fra dig!
+                  Har du spørgsmål, forslag til forbedringer, eller har du
+                  fundet fejl i vores data? Vi hører gerne fra dig!
                 </p>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <a
                     href="mailto:info@landbruget.dk"
-                    className="touch-target inline-flex min-h-[44px] items-center justify-center rounded-lg bg-primary px-6 py-3 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    className="touch-target bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary inline-flex min-h-[44px] items-center justify-center rounded-lg px-6 py-3 text-base font-medium transition-colors focus:ring-2 focus:ring-offset-2 focus:outline-none"
                   >
                     Skriv til os: info@landbruget.dk
                   </a>

@@ -63,6 +63,24 @@ EXPORT_TIMESTAMP = os.getenv("BRONZE_EXPORT_TIMESTAMP") or datetime.utcnow().str
 timestamp_source = "environment" if os.getenv("BRONZE_EXPORT_TIMESTAMP") else "current time"
 logger.info(f"Using export timestamp: {EXPORT_TIMESTAMP} (from {timestamp_source})")
 
+
+def get_bronze_directory_path() -> str:
+    """Get the bronze directory path with appropriate suffixes for matrix job separation."""
+    base_path = EXPORT_TIMESTAMP
+
+    # Add month suffix if set (for monthly matrix jobs)
+    month_suffix = os.getenv("BRONZE_MONTH_SUFFIX", "")
+    if month_suffix:
+        base_path += month_suffix
+
+    # Add CHR group suffix if set (for CHR group matrix jobs)
+    chr_group_suffix = os.getenv("BRONZE_CHR_GROUP_SUFFIX", "")
+    if chr_group_suffix:
+        base_path += chr_group_suffix
+
+    return base_path
+
+
 # Initialize metadata manager
 _metadata_manager = None
 if METADATA_AVAILABLE:
@@ -217,8 +235,9 @@ def _serialize_data(data: Any) -> Optional[str]:
 def _save_to_gcs(blob_path: str, content: str, format_type: str):
     """Helper function to save content to GCS."""
     bucket = gcs_client.bucket(GCS_BUCKET)
-    # Add bronze/chr/{timestamp} prefix to all files
-    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}/{blob_path}")
+    # Add bronze/chr/{timestamp_with_suffixes} prefix to all files
+    bronze_dir = get_bronze_directory_path()
+    blob = bucket.blob(f"bronze/chr/{bronze_dir}/{blob_path}")
 
     # Set content type based on format
     content_type = "application/json" if format_type == "json" else "application/xml"
@@ -227,8 +246,9 @@ def _save_to_gcs(blob_path: str, content: str, format_type: str):
 
 def _save_locally(filepath: Path, content: str, format_type: str):
     """Helper function to save content locally."""
-    # Add timestamp to the path
-    timestamped_path = filepath.parent / EXPORT_TIMESTAMP / filepath.name
+    # Add timestamp with suffixes to the path
+    bronze_dir = get_bronze_directory_path()
+    timestamped_path = filepath.parent / bronze_dir / filepath.name
     timestamped_path.parent.mkdir(parents=True, exist_ok=True)
     with open(timestamped_path, "w", encoding="utf-8") as f:
         f.write(content)
@@ -352,7 +372,8 @@ def finalize_export(clear_buffer: bool = True):
                 except Exception as e:
                     logger.error(f"Error writing XML file {filepath}: {e}")
 
-    logger.info(f"Export complete: {total_files} files written using {storage_mode} in bronze/chr/{EXPORT_TIMESTAMP}/")
+    bronze_dir = get_bronze_directory_path()
+    logger.info(f"Export complete: {total_files} files written using {storage_mode} in bronze/chr/{bronze_dir}/")
     if clear_buffer:
         _data_buffer.clear()
 
@@ -391,7 +412,12 @@ def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str
         path_suffix: Optional suffix to add to the bronze directory path (for matrix job separation)
     """
     bucket = gcs_client.bucket(GCS_BUCKET)
-    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}{path_suffix}/{filename}")
+    # Use the new directory path function that includes all suffixes
+    bronze_dir = get_bronze_directory_path()
+    # If path_suffix is provided, add it to the bronze directory
+    if path_suffix:
+        bronze_dir += path_suffix
+    blob = bucket.blob(f"bronze/chr/{bronze_dir}/{filename}")
 
     # Estimate data size for logging
     import sys
@@ -455,8 +481,9 @@ def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str
 
 def _save_locally_streaming(filepath: Path, data_list: List[Any]):
     """Save large datasets locally using streaming to avoid memory issues."""
-    # Add timestamp to the path
-    timestamped_path = filepath.parent / EXPORT_TIMESTAMP / filepath.name
+    # Add timestamp with suffixes to the path
+    bronze_dir = get_bronze_directory_path()
+    timestamped_path = filepath.parent / bronze_dir / filepath.name
     timestamped_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Estimate data size for logging

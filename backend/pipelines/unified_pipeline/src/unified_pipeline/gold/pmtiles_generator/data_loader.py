@@ -90,7 +90,7 @@ class PMTilesDataLoader:
 
     async def _load_fvm_marker_data(self, year: int) -> Optional[str]:
         """Load FVM marker data for a specific year.
-        
+
         For 2023 pesticide data, we need 2024 field boundaries (Y+1 pattern).
         For other years, use the same year as the pesticide data.
 
@@ -103,8 +103,10 @@ class PMTilesDataLoader:
         try:
             # Pesticide data always uses Y+1 field boundaries
             boundary_year = year + 1
-            logger.info(f"Using {boundary_year} field boundaries for {year} pesticide data (Y+1 pattern)")
-                
+            logger.info(
+                f"Using {boundary_year} field boundaries for {year} pesticide data (Y+1 pattern)"
+            )
+
             base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{boundary_year}"
 
             # Find the latest timestamped directory
@@ -194,7 +196,9 @@ class PMTilesDataLoader:
         try:
             # Environmental data always uses Y+1 pattern to match field boundaries
             env_year = year + 1
-            logger.info(f"Using {env_year} environmental data for {year} pesticide data (Y+1 pattern)")
+            logger.info(
+                f"Using {env_year} environmental data for {year} pesticide data (Y+1 pattern)"
+            )
 
             base_path = (
                 f"gs://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"

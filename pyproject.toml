@@ -78,5 +78,6 @@ indent-style = "space"
 
 [dependency-groups]
 dev = [
+    "detect-secrets>=1.5.0",
     "pre-commit>=4.3.0",
 ]
