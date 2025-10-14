@@ -260,6 +260,24 @@ class FieldAnalysisPMTilesGenerator:
             schema_result = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
             available_columns = {row[0] for row in schema_result}
 
+            # DEBUG: Log available columns to see what's actually in the table
+            logger.info(f"DEBUG: Available columns in {table_name}: {sorted(available_columns)}")
+
+            # DEBUG: Check for key pesticide fields
+            key_pesticide_fields = [
+                "unique_pesticide_products",
+                "pesticides_kg_detail",
+                "pesticides_liters_detail",
+                "total_pesticide_belastning",
+            ]
+            missing_pesticide_fields = [
+                f for f in key_pesticide_fields if f not in available_columns
+            ]
+            if missing_pesticide_fields:
+                logger.warning(f"DEBUG: Missing key pesticide fields: {missing_pesticide_fields}")
+            else:
+                logger.info(f"DEBUG: All key pesticide fields present: {key_pesticide_fields}")
+
             # Filter fields to only those available
             selected_fields = []
 
@@ -298,6 +316,9 @@ class FieldAnalysisPMTilesGenerator:
                         # Direct column name
                         if field in available_columns:
                             selected_fields.append(field)
+
+            # DEBUG: Log what fields were actually selected
+            logger.info(f"DEBUG: Selected {len(selected_fields)} fields: {selected_fields}")
 
             # Always include geometry last - convert to GeoJSON format with coordinate swap
             if "geometry" in available_columns:

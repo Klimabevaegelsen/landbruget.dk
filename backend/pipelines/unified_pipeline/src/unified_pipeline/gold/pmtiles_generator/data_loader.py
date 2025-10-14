@@ -174,14 +174,31 @@ class PMTilesDataLoader:
     async def _load_field_environmental_analysis(self, year: int) -> Optional[str]:
         """Load field environmental analysis data for a specific year.
 
+        Environmental data (BNBO/wetlands) should only be joined for specific year pairings:
+        - Pesticide 2023 uses 2024 field boundaries, so can use 2024 environmental data
+        - Other years should only use their exact year match if available
+
         Args:
-            year: Target year
+            year: Target year (for pesticide data)
 
         Returns:
             DuckDB table name or None if failed
         """
         try:
-            path = self.config.field_environmental_path.format(year=year)
+            # Determine which environmental year to use based on pesticide year
+            env_year = None
+
+            if year == 2023:
+                # Special case: 2023 pesticide uses 2024 field boundaries (Y+1 pattern)
+                # So 2024 environmental data will have matching field_uuids
+                env_year = 2024
+                logger.info("Using 2024 environmental data for 2023 pesticide data (Y+1 pattern)")
+            else:
+                # For other years, only use exact year match
+                env_year = year
+                logger.info(f"Looking for exact year match: {year} environmental data")
+
+            path = self.config.field_environmental_path.format(year=env_year)
             gcs_path = f"gs://{self.config.gcs_bucket}/{path}"
 
             logger.info(f"Loading field environmental analysis from {gcs_path}")
@@ -196,7 +213,6 @@ class PMTilesDataLoader:
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
             FROM read_parquet('{gcs_path}/*.parquet')
-            WHERE year = {year}
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -206,7 +222,10 @@ class PMTilesDataLoader:
             )
             count = count_result.fetchone()[0]
 
-            logger.info(f"Loaded {count:,} field environmental analysis records for year {year}")
+            logger.info(
+                f"Loaded {count:,} environmental records from {env_year} "
+                f"data for pesticide year {year}"
+            )
             return table_name
 
         except Exception as e:
@@ -590,20 +609,20 @@ class PMTilesDataLoader:
 
                     -- BMD burden calculations for visualization (from BMD risk data)
                     SUM(COALESCE(samlet_belastning, 0)) as total_pesticide_belastning,
-                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true 
+                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true
                         THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_pfas_belastning,
-                    SUM(CASE WHEN COALESCE(contains_diquat, false) = true 
+                    SUM(CASE WHEN COALESCE(contains_diquat, false) = true
                         THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_diquat_belastning,
-                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true 
-                        THEN COALESCE(samlet_belastning, 0) 
+                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true
+                        THEN COALESCE(samlet_belastning, 0)
                         ELSE 0 END) as total_glyphosate_belastning,
 
                     -- Active ingredient calculations
-                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true 
-                        THEN COALESCE(DosageQuantity, 0) 
+                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true
+                        THEN COALESCE(DosageQuantity, 0)
                         ELSE 0 END) as total_pfas_active_ingredient_kg,
-                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true 
-                        THEN COALESCE(DosageQuantity, 0) 
+                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true
+                        THEN COALESCE(DosageQuantity, 0)
                         ELSE 0 END) as total_glyphosate_active_ingredient_kg,
 
                     -- Product count
