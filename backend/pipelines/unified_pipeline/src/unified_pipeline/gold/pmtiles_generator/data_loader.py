@@ -198,23 +198,22 @@ class PMTilesDataLoader:
                 env_year = year
                 logger.info(f"Looking for exact year match: {year} environmental data")
 
-            path = self.config.field_environmental_path.format(year=env_year)
-            gcs_path = f"gs://{self.config.gcs_bucket}/{path}"
+            base_path = f"gs://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
+
+            # Find the latest timestamped directory (same pattern as production data)
+            gcs_path = await self._find_latest_timestamped_path(base_path)
+            if not gcs_path:
+                logger.warning(f"Environmental analysis data not found in: {base_path}")
+                return None
 
             logger.info(f"Loading field environmental analysis from {gcs_path}")
 
-            if not await asyncio.to_thread(self.gcs.file_exists, gcs_path):
-                logger.warning(f"Field environmental analysis data not found: {gcs_path}")
-                return None
-
             table_name = f"field_environmental_{year}"
 
-            # Fix double slash issue in path
-            parquet_path = f"{gcs_path.rstrip('/')}/*.parquet"
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{parquet_path}')
+            FROM read_parquet('{gcs_path}/*.parquet')
             """
 
             await asyncio.to_thread(self.conn.execute, query)
