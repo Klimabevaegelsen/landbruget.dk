@@ -233,6 +233,13 @@ class FieldAnalysisPMTilesGenerator:
             "total_pfas_active_ingredient_kg",
             "total_glyphosate_active_ingredient_kg",
             "unique_pesticide_products",
+            # Total dosage by unit
+            "total_dosage_kg",
+            "total_dosage_liters",
+            "total_dosage_grams",
+            "total_dosage_ml",
+            "total_dosage_tablets",
+            # Legacy detailed strings
             "pesticides_kg_detail",
             "pesticides_liters_detail",
             "pesticides_grams_detail",
@@ -281,10 +288,34 @@ class FieldAnalysisPMTilesGenerator:
             # Filter fields to only those available
             selected_fields = []
 
-            # Always include base fields that exist
+            # Always include base fields that exist (using same logic as optional fields)
+            logger.info(f"DEBUG: Processing {len(base_fields)} base fields")
             for field in base_fields:
-                if field in available_columns:
-                    selected_fields.append(field)
+                # Handle SQL expressions (like COALESCE(...) as alias)
+                if " as " in field.lower():
+                    # For aliased expressions, check if the base column exists
+                    base_column = field.split(" as ")[0].strip()
+                    logger.info(f"DEBUG: Checking aliased field -> base: '{base_column}'")
+                    # Handle expressions like "area_ha * 100"
+                    if "*" in base_column:
+                        main_column = base_column.split("*")[0].strip()
+                        if main_column in available_columns:
+                            selected_fields.append(field)
+                            logger.info(f"DEBUG: Added expression field (main: '{main_column}')")
+                        else:
+                            logger.warning(f"DEBUG: Skipped expression ('{main_column}' missing)")
+                    elif base_column in available_columns:
+                        selected_fields.append(field)
+                        logger.info(f"DEBUG: Added aliased field (base: '{base_column}')")
+                    else:
+                        logger.warning(f"DEBUG: Skipped aliased (base: '{base_column}' missing)")
+                else:
+                    # Direct column name
+                    if field in available_columns:
+                        selected_fields.append(field)
+                        logger.info(f"DEBUG: Added direct field '{field}'")
+                    else:
+                        logger.warning(f"DEBUG: Skipped direct field '{field}' (not found)")
 
             # Add optional fields if they exist
             for field_group in [
