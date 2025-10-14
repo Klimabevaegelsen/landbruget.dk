@@ -1391,6 +1391,25 @@ class NLES5SpatialOperations:
                     f"Creating soil_types_prepared from soil_types ({soil_count:,} records)"
                 )
 
+                # DIAGNOSTIC: Check original soil geometry coordinates before transformation
+                original_coord_check = self.conn.execute("""
+                    SELECT 
+                        MIN(ST_X(ST_Centroid(geometry))) as min_x,
+                        MAX(ST_X(ST_Centroid(geometry))) as max_x,
+                        MIN(ST_Y(ST_Centroid(geometry))) as min_y,
+                        MAX(ST_Y(ST_Centroid(geometry))) as max_y
+                    FROM soil_types
+                    WHERE geometry IS NOT NULL
+                """).fetchone()
+
+                self.log.info("🔍 ORIGINAL soil geometry coordinates (before fix):")
+                self.log.info(
+                    f"   X range: {original_coord_check[0]:.2f}° to {original_coord_check[1]:.2f}°"
+                )
+                self.log.info(
+                    f"   Y range: {original_coord_check[2]:.2f}° to {original_coord_check[3]:.2f}°"
+                )
+
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE soil_types_prepared AS
                     SELECT
@@ -1474,10 +1493,12 @@ class NLES5SpatialOperations:
                         -- FIXED: Soil data has lat/lon swapped
                         -- flip coordinates to match WGS84 (lon, lat) order
                         UNNEST(ST_Dump(
-                            CASE 
-                                WHEN ST_IsValid(geometry) THEN geometry
-                                ELSE ST_MakeValid(geometry)
-                            END
+                            ST_FlipCoordinates(
+                                CASE 
+                                    WHEN ST_IsValid(geometry) THEN geometry
+                                    ELSE ST_MakeValid(geometry)
+                                END
+                            )
                         )).geom as geom
                     FROM soil_types
                     WHERE geometry IS NOT NULL

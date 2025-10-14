@@ -38,8 +38,11 @@ OUTPUT:
 - Full audit trail of all model components and data sources
 """
 
+import glob
 import json
 import os
+import re
+import tempfile
 from typing import Any, Dict, List, Optional
 
 from unified_pipeline.common.base import BaseSource, GoldJobInterface
@@ -2050,6 +2053,9 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             self.log.info("🔍 Phase 3.3: Joining soil data back to fields...")
 
             # Phase 3: Join back to original fields table to get final result
+            # FIXED: Use closest_soil_temp instead of re-joining with soil_types_prepared
+            # This preserves all the work done in Phases 3.1-3.2.5 (batched processing, 
+            # largest overlap selection, nearest neighbor fallback)
             self.conn.execute(f"""
                 CREATE OR REPLACE TEMPORARY TABLE {result_table} AS
                 SELECT
@@ -2059,7 +2065,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     COALESCE(s.clay_content, 15.0) as clay_content,
                     CASE WHEN s.soil_code IS NOT NULL THEN true ELSE false END as has_soil_data
                 FROM {fields_climate_table} f
-                LEFT JOIN soil_types_prepared s ON ST_Intersects(f.geom, s.geom)
+                LEFT JOIN closest_soil_temp s ON f.field_uuid = s.field_uuid
             """)
 
             # Clean up temporary table
@@ -2479,7 +2485,6 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 self.log.info(f"🔍 DuckDB threads: {threads[0]}")
 
                 # 🔍 DIAGNOSTIC: Check for existing temp files
-                import glob
                 temp_dir = temp_info[0]
                 if temp_dir and os.path.exists(temp_dir):
                     temp_files = glob.glob(os.path.join(temp_dir, "duckdb_temp_storage_*.tmp"))
