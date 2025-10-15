@@ -47,6 +47,31 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
     pesticides_tablets_detail: field.pesticides_tablets_detail,
   });
 
+  // DEBUG: Check for literal "000" or "00" in any field
+  const allDetailFields = [
+    field.pesticides_kg_detail,
+    field.pesticides_liters_detail,
+    field.pesticides_grams_detail,
+    field.pesticides_ml_detail,
+    field.pesticides_tablets_detail,
+  ];
+  allDetailFields.forEach((fieldValue, index) => {
+    if (fieldValue === '000' || fieldValue === '00') {
+      console.error(
+        `🚨🚨🚨 FOUND LITERAL "${fieldValue}" in field index ${index}!`,
+        ['pesticides_kg_detail', 'pesticides_liters_detail', 'pesticides_grams_detail', 'pesticides_ml_detail', 'pesticides_tablets_detail'][index]
+      );
+    }
+  });
+
+  // DEBUG: Log ALL fields in the field object to find any unexpected "00" or "000"
+  console.log('🔍 ALL FIELD PROPERTIES:', field);
+  Object.entries(field).forEach(([key, value]) => {
+    if (value === '000' || value === '00') {
+      console.error(`🚨🚨🚨 FOUND LITERAL "${value}" IN FIELD: ${key}`);
+    }
+  });
+
   const formatNumber = (
     num: number | undefined | null,
     decimals: number = 2
