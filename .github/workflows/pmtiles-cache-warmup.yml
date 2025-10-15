@@ -169,15 +169,11 @@ jobs:
 
       - name: Notify on Failure
         if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ PMTiles cache warmup failed. Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.'
-            })
+        run: |
+          echo "❌ PMTiles cache warmup failed"
+          echo "Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "This failure will be visible in the Actions tab"
+          exit 1
 
   # Optional: Warm specific regions based on user analytics
   warmup-popular-regions:
