@@ -2229,19 +2229,22 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
 
-      {/* Color Legend - positioned for mobile visibility and desktop sidebar avoidance, hidden when search is active */}
-      {!isSearchActive && (
-        <div
-          className="pointer-events-auto absolute right-4 left-4 z-30 max-h-[40vh] max-w-[calc(100vw-2rem)] overflow-auto md:top-20 md:right-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs"
-          style={{
-            // Mobile: position below search bar, accounting for safe areas
-            top: 'max(8rem, calc(env(safe-area-inset-top) + 7rem))',
-          }}
-          data-testid="color-legend-container"
-        >
-          <ColorLegend filterState={filterState} />
-        </div>
-      )}
+      {/* Color Legend - positioned for mobile visibility and desktop sidebar avoidance, pushed down when search is active */}
+      <div
+        className={`pointer-events-auto absolute right-4 left-4 z-30 max-h-[40vh] max-w-[calc(100vw-2rem)] overflow-auto transition-all duration-200 md:right-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs ${
+          isSearchActive ? 'md:top-[22rem]' : 'md:top-20'
+        }`}
+        style={{
+          // Mobile: position below search bar, accounting for safe areas
+          // When search is active, push it down to make room for the dropdown (max-h-64 = 16rem)
+          top: isSearchActive
+            ? 'max(25rem, calc(env(safe-area-inset-top) + 24rem))'
+            : 'max(8rem, calc(env(safe-area-inset-top) + 7rem))',
+        }}
+        data-testid="color-legend-container"
+      >
+        <ColorLegend filterState={filterState} />
+      </div>
 
       {hoverInfo && <MapTooltip {...hoverInfo} />}
     </div>
