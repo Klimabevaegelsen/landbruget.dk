@@ -699,7 +699,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
       onMapReadyRef.current?.();
-    }, 10000);
+    }, 3000); // Reduced from 10s to 3s - data loads quickly
   }, []); // No dependencies - uses ref
 
   // OPTIMIZED - Check if all required sources are loaded
@@ -725,13 +725,22 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
 
   // Handle source data events to detect when PMTiles are loaded
   const handleSourceData = useCallback(
-    (e: { sourceId: string; isSourceLoaded: boolean }) => {
+    (e: { sourceId: string; isSourceLoaded: boolean; dataType?: string }) => {
+      // Log ALL sourcedata events for debugging
+      if (Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)) {
+        console.log(`📡 sourcedata event: ${e.sourceId}`, {
+          isSourceLoaded: e.isSourceLoaded,
+          dataType: e.dataType,
+          alreadyTracked: loadedSourcesRef.current.has(e.sourceId),
+        });
+      }
+
       if (
         e.isSourceLoaded &&
         Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)
       ) {
         loadedSourcesRef.current.add(e.sourceId);
-        console.log(`PMTiles source loaded: ${e.sourceId}`);
+        console.log(`✅ PMTiles source loaded: ${e.sourceId}`);
         checkAllSourcesLoaded();
       }
     },
@@ -1541,8 +1550,24 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           event: string,
           handler: (e: { sourceId: string; isSourceLoaded: boolean }) => void
         ) => void;
+        once: (event: string, handler: () => void) => void;
       };
       mapWithEvents.on('sourcedata', handleSourceData);
+
+      // Also listen for 'idle' event as a backup - fires when map finishes rendering
+      mapWithEvents.once('idle', () => {
+        console.log('🎯 Map idle event fired - all rendering complete');
+        // Small delay to ensure layers are rendered, then clear loading
+        setTimeout(() => {
+          console.log('✅ Map ready via idle event');
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+            loadingTimeoutRef.current = null;
+          }
+          setIsLoading(false);
+          onMapReadyRef.current?.();
+        }, 500);
+      });
 
       // Add PMTiles sources with better error handling
       const sourceErrors: string[] = [];

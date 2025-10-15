@@ -163,7 +163,7 @@ export default function FieldAnalysisMain() {
       console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
       loadingTimeoutRef.current = null;
-    }, 5000); // 5 second fallback timeout
+    }, 2000); // 2 second fallback timeout (reduced from 5s)
 
     return () => {
       if (loadingTimeoutRef.current) {
