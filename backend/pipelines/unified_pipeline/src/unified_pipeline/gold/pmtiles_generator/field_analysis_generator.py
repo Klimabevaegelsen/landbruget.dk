@@ -162,7 +162,7 @@ class FieldAnalysisPMTilesGenerator:
             "year as field_year",  # Frontend expects field_year
             "area_ha * 100 as area_hectares",  # Convert ha to hectares for frontend
             "crop_name",
-            "crop_code",
+            # Removed crop_code - not used by frontend and might be source of "00"/"000" display
             "is_organic",
             "municipality as kommune",  # Frontend expects kommune
         ]
