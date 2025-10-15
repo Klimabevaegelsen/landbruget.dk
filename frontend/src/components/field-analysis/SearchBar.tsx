@@ -22,12 +22,14 @@ interface SearchBarProps {
   }) => void;
   placeholder?: string;
   className?: string;
+  onSearchStateChange?: (isOpen: boolean) => void;
 }
 
 export function SearchBar({
   onLocationSelect,
   placeholder = 'Søg adresser, byer, regioner...',
   className = '',
+  onSearchStateChange,
 }: SearchBarProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<DAWAResult[]>([]);
@@ -114,6 +116,11 @@ export function SearchBar({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Notify parent when search state changes
+  useEffect(() => {
+    onSearchStateChange?.(isOpen);
+  }, [isOpen, onSearchStateChange]);
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -247,7 +254,7 @@ export function SearchBar({
 
       {/* Results Dropdown */}
       {isOpen && (
-        <div className="bg-background/95 absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 shadow-xl backdrop-blur-sm">
+        <div className="bg-background/95 absolute z-[100] mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-gray-200 shadow-xl backdrop-blur-sm">
           {isLoading && (
             <div className="px-4 py-3 text-center">
               <div className="text-muted-foreground inline-flex items-center space-x-2">
