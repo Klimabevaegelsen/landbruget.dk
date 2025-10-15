@@ -1642,6 +1642,22 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     layerVisibility.bnbo,
   ]);
 
+  // Ensure sources are added when map and URLs are both ready
+  useEffect(() => {
+    if (!mapRef.current || !pmtilesUrls.fields) return;
+
+    const map = mapRef.current.getMap();
+    if (!map || !map.loaded()) return;
+
+    const fieldsSource = map.getSource('fields');
+
+    // If sources don't exist yet, call onMapLoad to set everything up
+    if (!fieldsSource) {
+      onMapLoad();
+      return;
+    }
+  }, [pmtilesUrls.fields, onMapLoad]);
+
   // Handle PMTiles URL changes (e.g., year selection) - optimized approach
   useEffect(() => {
     if (!mapRef.current) return;

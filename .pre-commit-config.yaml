@@ -115,7 +115,7 @@ repos:
       - id: check-debug-code
         name: Check for debug code
         entry: bash
-        args: [-c, 'if git diff --cached | grep -E "(console\.log|debugger|pdb\.set_trace|breakpoint\(\))" | grep -v -E "(test|spec|\.test\.|\.spec\.)"; then echo "⚠️ Debug code found in non-test files"; exit 1; fi']
+        args: [-c, 'files=$(git diff --cached --name-only | grep -v -E "(tests?/|__tests__/|\.test\.|\.spec\.|\.yaml$|\.yml$)"); if [ -n "$files" ]; then if git diff --cached -- $files | grep -E "^\+.*(console\.log|debugger|pdb\.set_trace|breakpoint\(\))"; then echo "⚠️ Debug code found in non-test files"; exit 1; fi; fi']
         language: system
         pass_filenames: false
         always_run: true
@@ -130,5 +130,7 @@ exclude: |
     .*\.pyc|
     __pycache__/.*|
     \.pytest_cache/.*|
-    \.ruff_cache/.*
+    \.ruff_cache/.*|
+    frontend/playwright-report/.*|
+    frontend/scripts/smoke-test-fast\.sh
   )$

@@ -587,7 +587,8 @@ export function FieldDetailsPanel({
                         Total dosering:
                       </span>
                       <span className="font-medium">
-                        {formatNumber(fieldData.total_dosage_tablets, 0)} tabletter
+                        {formatNumber(fieldData.total_dosage_tablets, 0)}{' '}
+                        tabletter
                       </span>
                     </div>
                   )}
