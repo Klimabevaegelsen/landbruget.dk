@@ -59,7 +59,13 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
     if (fieldValue === '000' || fieldValue === '00') {
       console.error(
         `🚨🚨🚨 FOUND LITERAL "${fieldValue}" in field index ${index}!`,
-        ['pesticides_kg_detail', 'pesticides_liters_detail', 'pesticides_grams_detail', 'pesticides_ml_detail', 'pesticides_tablets_detail'][index]
+        [
+          'pesticides_kg_detail',
+          'pesticides_liters_detail',
+          'pesticides_grams_detail',
+          'pesticides_ml_detail',
+          'pesticides_tablets_detail',
+        ][index]
       );
     }
   });
@@ -589,34 +595,42 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
                     </span>
                   </div>
                 )}
-              {field.total_dosage_grams && field.total_dosage_grams > 0.001 && (
-                <div className="flex items-center justify-between text-sm lg:text-base">
-                  <span className="text-muted-foreground">
-                    Total dosering (g):
-                  </span>
-                  <span className="font-medium">
-                    {formatNumber(field.total_dosage_grams, 0)} g
-                  </span>
-                </div>
-              )}
-              {field.total_dosage_ml && field.total_dosage_ml > 0.001 && (
-                <div className="flex items-center justify-between text-sm lg:text-base">
-                  <span className="text-muted-foreground">
-                    Total dosering (ml):
-                  </span>
-                  <span className="font-medium">
-                    {formatNumber(field.total_dosage_ml, 0)} ml
-                  </span>
-                </div>
-              )}
-              {field.total_dosage_tablets && field.total_dosage_tablets > 0 && (
-                <div className="flex items-center justify-between text-sm lg:text-base">
-                  <span className="text-muted-foreground">Total dosering:</span>
-                  <span className="font-medium">
-                    {field.total_dosage_tablets} tabletter
-                  </span>
-                </div>
-              )}
+              {field.total_dosage_grams &&
+                field.total_dosage_grams > 0.001 &&
+                formatNumber(field.total_dosage_grams, 0) && (
+                  <div className="flex items-center justify-between text-sm lg:text-base">
+                    <span className="text-muted-foreground">
+                      Total dosering (g):
+                    </span>
+                    <span className="font-medium">
+                      {formatNumber(field.total_dosage_grams, 0)} g
+                    </span>
+                  </div>
+                )}
+              {field.total_dosage_ml &&
+                field.total_dosage_ml > 0.001 &&
+                formatNumber(field.total_dosage_ml, 0) && (
+                  <div className="flex items-center justify-between text-sm lg:text-base">
+                    <span className="text-muted-foreground">
+                      Total dosering (ml):
+                    </span>
+                    <span className="font-medium">
+                      {formatNumber(field.total_dosage_ml, 0)} ml
+                    </span>
+                  </div>
+                )}
+              {field.total_dosage_tablets &&
+                field.total_dosage_tablets > 0 &&
+                formatNumber(field.total_dosage_tablets, 0) && (
+                  <div className="flex items-center justify-between text-sm lg:text-base">
+                    <span className="text-muted-foreground">
+                      Total dosering:
+                    </span>
+                    <span className="font-medium">
+                      {formatNumber(field.total_dosage_tablets, 0)} tabletter
+                    </span>
+                  </div>
+                )}
             </div>
           )}
 
