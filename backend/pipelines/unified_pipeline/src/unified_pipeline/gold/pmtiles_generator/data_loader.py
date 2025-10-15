@@ -793,8 +793,8 @@ class PMTilesDataLoader:
             ]
             if excluded_cols:
                 logger.warning(
-                    f"DEBUG: Excluding {len(excluded_cols)} pesticide columns from integrated table: "
-                    f"{excluded_cols}"
+                    f"Excluding {len(excluded_cols)} pesticide columns "
+                    f"from integrated table: {excluded_cols}"
                 )
 
             integrated_col_list = ", ".join(
