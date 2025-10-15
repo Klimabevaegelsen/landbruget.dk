@@ -556,7 +556,8 @@ export function FieldDetailsPanel({
                     </div>
                   )}
                 {fieldData.total_dosage_grams &&
-                  fieldData.total_dosage_grams > 0.001 && (
+                  fieldData.total_dosage_grams > 0.001 &&
+                  formatNumber(fieldData.total_dosage_grams, 0) && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">
                         Total dosering (g):
@@ -567,7 +568,8 @@ export function FieldDetailsPanel({
                     </div>
                   )}
                 {fieldData.total_dosage_ml &&
-                  fieldData.total_dosage_ml > 0.001 && (
+                  fieldData.total_dosage_ml > 0.001 &&
+                  formatNumber(fieldData.total_dosage_ml, 0) && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">
                         Total dosering (ml):
@@ -578,13 +580,14 @@ export function FieldDetailsPanel({
                     </div>
                   )}
                 {fieldData.total_dosage_tablets &&
-                  fieldData.total_dosage_tablets > 0 && (
+                  fieldData.total_dosage_tablets > 0 &&
+                  formatNumber(fieldData.total_dosage_tablets, 0) && (
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">
                         Total dosering:
                       </span>
                       <span className="font-medium">
-                        {fieldData.total_dosage_tablets} tabletter
+                        {formatNumber(fieldData.total_dosage_tablets, 0)} tabletter
                       </span>
                     </div>
                   )}

@@ -726,21 +726,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   // Handle source data events to detect when PMTiles are loaded
   const handleSourceData = useCallback(
     (e: { sourceId: string; isSourceLoaded: boolean; dataType?: string }) => {
-      // Log ALL sourcedata events for debugging
-      if (Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)) {
-        console.log(`📡 sourcedata event: ${e.sourceId}`, {
-          isSourceLoaded: e.isSourceLoaded,
-          dataType: e.dataType,
-          alreadyTracked: loadedSourcesRef.current.has(e.sourceId),
-        });
-      }
-
       if (
         e.isSourceLoaded &&
         Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)
       ) {
         loadedSourcesRef.current.add(e.sourceId);
-        console.log(`✅ PMTiles source loaded: ${e.sourceId}`);
         checkAllSourcesLoaded();
       }
     },
@@ -1555,11 +1545,10 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       mapWithEvents.on('sourcedata', handleSourceData);
 
       // Also listen for 'idle' event as a backup - fires when map finishes rendering
+      // This is more reliable than waiting for individual sourcedata events
       mapWithEvents.once('idle', () => {
-        console.log('🎯 Map idle event fired - all rendering complete');
         // Small delay to ensure layers are rendered, then clear loading
         setTimeout(() => {
-          console.log('✅ Map ready via idle event');
           if (loadingTimeoutRef.current) {
             clearTimeout(loadingTimeoutRef.current);
             loadingTimeoutRef.current = null;

@@ -239,7 +239,7 @@ class PMTilesDataLoader:
 
     async def _load_field_production(self, year: int) -> Optional[str]:
         """Load field production estimates for a specific year.
-        
+
         Production data uses Y+1 pattern to match field boundaries.
 
         Args:
@@ -277,7 +277,10 @@ class PMTilesDataLoader:
             )
             count = count_result.fetchone()[0]
 
-            logger.info(f"Loaded {count:,} field production records for year {production_year} (for pesticide year {year})")
+            logger.info(
+                f"Loaded {count:,} field production records for year {production_year} "
+                f"(for pesticide year {year})"
+            )
             return table_name
 
         except Exception as e:
@@ -772,11 +775,41 @@ class PMTilesDataLoader:
             except Exception as e:
                 logger.error(f"DEBUG: Failed to read summary fields: {e}")
 
+            # Get columns from integrated table to avoid wildcard collision
+            integrated_columns = await asyncio.to_thread(
+                self.conn.execute, f"DESCRIBE {integrated_table}"
+            )
+            integrated_col_names = [row[0] for row in integrated_columns.fetchall()]
+
+            logger.info(f"DEBUG: Integrated table has {len(integrated_col_names)} columns")
+            logger.info(f"DEBUG: Column names: {integrated_col_names}")
+
+            # Exclude any pesticide columns that might already exist (shouldn't, but defensive)
+            pesticide_col_patterns = ["pesticide", "belastning", "pfas", "diquat", "glyphosate"]
+            excluded_cols = [
+                col
+                for col in integrated_col_names
+                if any(pattern in col.lower() for pattern in pesticide_col_patterns)
+            ]
+            if excluded_cols:
+                logger.warning(
+                    f"DEBUG: Excluding {len(excluded_cols)} pesticide columns from integrated table: "
+                    f"{excluded_cols}"
+                )
+
+            integrated_col_list = ", ".join(
+                [
+                    f"i.{col}"
+                    for col in integrated_col_names
+                    if not any(pattern in col.lower() for pattern in pesticide_col_patterns)
+                ]
+            )
+
             # Add pesticide columns to integrated table
             update_query = f"""
             CREATE OR REPLACE TABLE {integrated_table}_updated AS
             SELECT
-                i.*,
+                {integrated_col_list},
                 ps.pesticide_applications,
                 ps.pesticides_used,
 
@@ -884,12 +917,23 @@ class PMTilesDataLoader:
             if bmd_table:
                 logger.info("Enhancing pesticide data with BMD classifications and risk data")
                 # Join with BMD data for classifications and risk information
+                # Get pesticide table columns to avoid wildcard issues
+                pest_columns = await asyncio.to_thread(
+                    self.conn.execute, f"DESCRIBE {pesticide_table}"
+                )
+                pest_col_names = [row[0] for row in pest_columns.fetchall()]
+
+                # Build explicit column list (exclude samlet_belastning column)
+                pest_col_list = ", ".join(
+                    [f"p.{col}" for col in pest_col_names if col != "samlet_belastning"]
+                )
+
                 await asyncio.to_thread(
                     self.conn.execute,
                     f"""
                     CREATE OR REPLACE TABLE {enhanced_table} AS
                     SELECT
-                        p.*,
+                        {pest_col_list},
                         COALESCE(b.contains_pfas, false) as contains_pfas,
                         COALESCE(b.contains_diquat, false) as contains_diquat,
                         COALESCE(b.contains_glyphosate, false) as contains_glyphosate,
@@ -897,10 +941,10 @@ class PMTilesDataLoader:
                         b.farebetegnelse_miljø as environmental_risk,
                         b.signalord as signal_word,
                         -- BMD burden calculation fields
-                        COALESCE(b.samlet_belastning, 0) as samlet_belastning,
-                        COALESCE(b.belastning_sundhed, 0) as belastning_sundhed,
-                        COALESCE(b.belastning_miljøeffekt, 0) as belastning_miljøeffekt,
-                        COALESCE(b.belastning_miljøadfærd, 0) as belastning_miljøadfærd
+                        COALESCE(b.samlet_belastning, 0.0) as samlet_belastning,
+                        COALESCE(b.belastning_sundhed, 0.0) as belastning_sundhed,
+                        COALESCE(b.belastning_miljøeffekt, 0.0) as belastning_miljøeffekt,
+                        COALESCE(b.belastning_miljøadfærd, 0.0) as belastning_miljøadfærd
                     FROM {pesticide_table} p
                     LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registrerings_nr
                     """,
