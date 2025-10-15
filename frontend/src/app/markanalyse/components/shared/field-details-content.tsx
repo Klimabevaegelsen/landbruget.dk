@@ -34,6 +34,19 @@ interface FieldDetailsContentProps {
 export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
   const [copiedCoordinates, setCopiedCoordinates] = useState(false);
 
+  // DEBUG: Log all detail fields to find "00" or "000"
+  console.log('🔍 DEBUG Field Details:', {
+    pfas_products_detail: field.pfas_products_detail,
+    diquat_products_detail: field.diquat_products_detail,
+    glyphosate_products_detail: field.glyphosate_products_detail,
+    other_products_detail: field.other_products_detail,
+    pesticides_kg_detail: field.pesticides_kg_detail,
+    pesticides_liters_detail: field.pesticides_liters_detail,
+    pesticides_grams_detail: field.pesticides_grams_detail,
+    pesticides_ml_detail: field.pesticides_ml_detail,
+    pesticides_tablets_detail: field.pesticides_tablets_detail,
+  });
+
   const formatNumber = (
     num: number | undefined | null,
     decimals: number = 2
@@ -73,20 +86,37 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
   ): Array<{ name: string; dosage: number }> => {
     if (!detailString || detailString.trim() === '') return [];
 
+    // DEBUG: Check if detailString is literally "00" or "000"
+    if (detailString === '00' || detailString === '000') {
+      console.error(`🚨 FOUND LITERAL "${detailString}" IN parsePesticideDetail!`);
+    }
+
     try {
-      return detailString
+      const items = detailString
         .split(';')
         .map((item) => item.trim())
         .filter((item) => item.length > 0)
         .map((item) => {
           const [name, dosageStr] = item.split(':');
-          return {
+          const parsedItem = {
             name: name?.trim() || 'Ukendt produkt',
             dosage: parseFloat(dosageStr?.trim() || '0'),
           };
+          // DEBUG: Log malformed items
+          if (!name || name.trim() === '') {
+            console.warn('⚠️  Malformed pesticide item (empty name):', item, parsedItem);
+          }
+          return parsedItem;
         })
         .filter((item) => item.dosage > 0)
         .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
+      
+      // DEBUG: Log if we filtered everything out but had input
+      if (items.length === 0 && detailString.trim() !== '') {
+        console.warn('⚠️  All items filtered out from:', detailString);
+      }
+      
+      return items;
     } catch (e) {
       console.warn('Error parsing pesticide detail:', detailString, e);
       return [];
@@ -106,8 +136,13 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
   }> => {
     if (!detailString || detailString.trim() === '') return [];
 
+    // DEBUG: Check if detailString is literally "00" or "000"
+    if (detailString === '00' || detailString === '000') {
+      console.error(`🚨 FOUND LITERAL "${detailString}" IN parsePesticideDetailWithUnit!`);
+    }
+
     try {
-      return detailString
+      const items = detailString
         .split(';')
         .map((item) => item.trim())
         .filter((item) => item.length > 0)
@@ -134,6 +169,11 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
                       ? 'tabletter'
                       : rawUnit;
 
+          // DEBUG: Log malformed items
+          if (!name || name.trim() === '') {
+            console.warn('⚠️  Malformed enhanced pesticide item (empty name):', item, parts);
+          }
+
           return {
             name,
             dosage,
@@ -147,6 +187,13 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
         })
         .filter((item) => item.dosage > 0)
         .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
+      
+      // DEBUG: Log if we filtered everything out but had input
+      if (items.length === 0 && detailString.trim() !== '') {
+        console.warn('⚠️  All enhanced items filtered out from:', detailString);
+      }
+      
+      return items;
     } catch (e) {
       console.warn('Error parsing enhanced pesticide detail:', detailString, e);
       return [];
