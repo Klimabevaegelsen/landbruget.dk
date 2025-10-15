@@ -88,7 +88,9 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
 
     // DEBUG: Check if detailString is literally "00" or "000"
     if (detailString === '00' || detailString === '000') {
-      console.error(`🚨 FOUND LITERAL "${detailString}" IN parsePesticideDetail!`);
+      console.error(
+        `🚨 FOUND LITERAL "${detailString}" IN parsePesticideDetail!`
+      );
     }
 
     try {
@@ -104,18 +106,22 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
           };
           // DEBUG: Log malformed items
           if (!name || name.trim() === '') {
-            console.warn('⚠️  Malformed pesticide item (empty name):', item, parsedItem);
+            console.warn(
+              '⚠️  Malformed pesticide item (empty name):',
+              item,
+              parsedItem
+            );
           }
           return parsedItem;
         })
         .filter((item) => item.dosage > 0)
         .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
-      
+
       // DEBUG: Log if we filtered everything out but had input
       if (items.length === 0 && detailString.trim() !== '') {
         console.warn('⚠️  All items filtered out from:', detailString);
       }
-      
+
       return items;
     } catch (e) {
       console.warn('Error parsing pesticide detail:', detailString, e);
@@ -138,7 +144,9 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
 
     // DEBUG: Check if detailString is literally "00" or "000"
     if (detailString === '00' || detailString === '000') {
-      console.error(`🚨 FOUND LITERAL "${detailString}" IN parsePesticideDetailWithUnit!`);
+      console.error(
+        `🚨 FOUND LITERAL "${detailString}" IN parsePesticideDetailWithUnit!`
+      );
     }
 
     try {
@@ -171,7 +179,11 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
 
           // DEBUG: Log malformed items
           if (!name || name.trim() === '') {
-            console.warn('⚠️  Malformed enhanced pesticide item (empty name):', item, parts);
+            console.warn(
+              '⚠️  Malformed enhanced pesticide item (empty name):',
+              item,
+              parts
+            );
           }
 
           return {
@@ -187,12 +199,12 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
         })
         .filter((item) => item.dosage > 0)
         .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
-      
+
       // DEBUG: Log if we filtered everything out but had input
       if (items.length === 0 && detailString.trim() !== '') {
         console.warn('⚠️  All enhanced items filtered out from:', detailString);
       }
-      
+
       return items;
     } catch (e) {
       console.warn('Error parsing enhanced pesticide detail:', detailString, e);
