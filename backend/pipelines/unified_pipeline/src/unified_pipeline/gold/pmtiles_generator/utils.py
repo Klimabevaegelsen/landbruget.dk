@@ -145,13 +145,9 @@ class GeoJSONWriter:
             True if successful, False otherwise
         """
         try:
-            # Execute query
-            result = duckdb_conn.execute(query).fetchall()
+            # Execute query but don't fetchall() - stream results instead
+            result = duckdb_conn.execute(query)
             columns = [desc[0] for desc in duckdb_conn.description]
-
-            if not result:
-                logger.warning(f"Query returned no results for {output_path}")
-                return False
 
             # Find geometry column
             geometry_col = None
@@ -168,54 +164,67 @@ class GeoJSONWriter:
             if properties_columns is None:
                 properties_columns = [col for col in columns if col != geometry_col]
 
-            # Build GeoJSON
+            # Stream and build GeoJSON features
             features = []
             geometry_col_idx = columns.index(geometry_col)
 
             skipped_count = 0
             geometry_errors = []
+            row_count = 0
 
-            for row in result:
-                # Parse geometry (assuming WKT format)
-                geometry_wkt = row[geometry_col_idx]
-                if not geometry_wkt:
-                    skipped_count += 1
-                    continue
+            # Stream rows instead of loading all into memory
+            while True:
+                batch = result.fetchmany(10000)  # Process in batches of 10k
+                if not batch:
+                    break
 
-                # Handle geometry - could be WKT, WKB, or already GeoJSON string
-                if isinstance(geometry_wkt, str):
-                    try:
-                        # Try to parse as GeoJSON first (from ST_AsGeoJSON)
-                        geometry = json.loads(geometry_wkt)
-                    except json.JSONDecodeError:
-                        # Fall back to WKT parsing
-                        geometry = GeoJSONWriter._wkt_to_geojson_geometry(geometry_wkt)
+                for row in batch:
+                    row_count += 1
+                    # Parse geometry (assuming WKT format)
+                    geometry_wkt = row[geometry_col_idx]
+                    if not geometry_wkt:
+                        skipped_count += 1
+                        continue
+
+                    # Handle geometry - could be WKT, WKB, or already GeoJSON string
+                    if isinstance(geometry_wkt, str):
+                        try:
+                            # Try to parse as GeoJSON first (from ST_AsGeoJSON)
+                            geometry = json.loads(geometry_wkt)
+                        except json.JSONDecodeError:
+                            # Fall back to WKT parsing
+                            geometry = GeoJSONWriter._wkt_to_geojson_geometry(geometry_wkt)
+                            if not geometry and len(geometry_errors) < 5:
+                                geometry_errors.append(
+                                    f"Failed to parse WKT: {str(geometry_wkt)[:100]}..."
+                                )
+                    else:
+                        # Handle WKB or other formats
+                        geometry = GeoJSONWriter._wkt_to_geojson_geometry(str(geometry_wkt))
                         if not geometry and len(geometry_errors) < 5:
                             geometry_errors.append(
-                                f"Failed to parse WKT: {str(geometry_wkt)[:100]}..."
+                                f"Failed to parse non-string geometry: {type(geometry_wkt)}"
                             )
-                else:
-                    # Handle WKB or other formats
-                    geometry = GeoJSONWriter._wkt_to_geojson_geometry(str(geometry_wkt))
-                    if not geometry and len(geometry_errors) < 5:
-                        geometry_errors.append(
-                            f"Failed to parse non-string geometry: {type(geometry_wkt)}"
-                        )
 
-                if not geometry:
-                    skipped_count += 1
-                    continue
+                    if not geometry:
+                        skipped_count += 1
+                        continue
 
-                # Build properties
-                properties = {}
-                for prop_col in properties_columns:
-                    if prop_col in columns:
-                        col_idx = columns.index(prop_col)
-                        properties[prop_col] = row[col_idx]
+                    # Build properties
+                    properties = {}
+                    for prop_col in properties_columns:
+                        if prop_col in columns:
+                            col_idx = columns.index(prop_col)
+                            properties[prop_col] = row[col_idx]
 
-                # Create feature
-                feature = {"type": "Feature", "geometry": geometry, "properties": properties}
-                features.append(feature)
+                    # Create feature
+                    feature = {"type": "Feature", "geometry": geometry, "properties": properties}
+                    features.append(feature)
+
+            # Check if we got any features
+            if not features:
+                logger.warning(f"Query returned no valid features for {output_path}")
+                return False
 
             # Create GeoJSON FeatureCollection
             geojson = {"type": "FeatureCollection", "features": features}
