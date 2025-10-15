@@ -558,6 +558,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
+  const [isSearchActive, setIsSearchActive] = useState(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadedSourcesRef = useRef<Set<string>>(new Set());
   const [styleLoadFailed, setStyleLoadFailed] = useState(false);
@@ -2178,6 +2179,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           onLocationSelect={handleLocationSelect}
           placeholder="Søg efter adresser, byer, regioner..."
           className="w-full"
+          onSearchStateChange={setIsSearchActive}
         />
       </div>
 
@@ -2227,17 +2229,19 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
 
-      {/* Color Legend - positioned for mobile visibility and desktop sidebar avoidance */}
-      <div
-        className="pointer-events-auto absolute right-4 left-4 z-30 max-h-[40vh] max-w-[calc(100vw-2rem)] overflow-auto md:top-20 md:right-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs"
-        style={{
-          // Mobile: position below search bar, accounting for safe areas
-          top: 'max(8rem, calc(env(safe-area-inset-top) + 7rem))',
-        }}
-        data-testid="color-legend-container"
-      >
-        <ColorLegend filterState={filterState} />
-      </div>
+      {/* Color Legend - positioned for mobile visibility and desktop sidebar avoidance, hidden when search is active */}
+      {!isSearchActive && (
+        <div
+          className="pointer-events-auto absolute right-4 left-4 z-30 max-h-[40vh] max-w-[calc(100vw-2rem)] overflow-auto md:top-20 md:right-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs"
+          style={{
+            // Mobile: position below search bar, accounting for safe areas
+            top: 'max(8rem, calc(env(safe-area-inset-top) + 7rem))',
+          }}
+          data-testid="color-legend-container"
+        >
+          <ColorLegend filterState={filterState} />
+        </div>
+      )}
 
       {hoverInfo && <MapTooltip {...hoverInfo} />}
     </div>
