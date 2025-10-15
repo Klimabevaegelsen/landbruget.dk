@@ -131,36 +131,11 @@ class FieldAnalysisPMTilesGenerator:
             # Build the export query with all available fields
             query = self._build_field_analysis_query(table_name, year)
 
-            # Execute query and get column information
-            result = await asyncio.to_thread(self.conn.execute, query)
-            rows = result.fetchall()
-            columns = [desc[0] for desc in self.conn.description]
-
-            if not rows:
-                logger.warning(f"No field data found for year {year}")
-                return False
-
-            # Find geometry column
-            geometry_col = None
-            for col in columns:
-                if col.lower() in ["geometry", "geom", "wkt", "geometry_wkt"]:
-                    geometry_col = col
-                    break
-
-            if not geometry_col:
-                logger.error("No geometry column found in field data")
-                return False
-
-            # Get property columns (exclude geometry)
-            property_columns = [col for col in columns if col != geometry_col]
-
-            # Write GeoJSON using utility
+            # Write GeoJSON using utility (this will stream the results)
+            # The write function handles column detection and geometry parsing
             success = await GeoJSONWriter.write_geojson_from_query(
-                self.conn, query, output_path, property_columns
+                self.conn, query, output_path, properties_columns=None
             )
-
-            if success:
-                logger.info(f"Exported {len(rows):,} field features to GeoJSON")
 
             return success
 
