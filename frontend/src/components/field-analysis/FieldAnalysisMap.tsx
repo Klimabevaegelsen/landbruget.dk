@@ -2001,9 +2001,93 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     }
   }, [queryVisibleFields, queryVisibleFieldsRef]);
 
+  // Check if mouse is over UI elements (search bar or legend)
+  const isOverUIElement = useCallback(
+    (x: number, y: number): boolean => {
+      // Mobile breakpoint (md: 768px)
+      const isMobile = window.innerWidth < 768;
+      const screenWidth = window.innerWidth;
+
+      if (isMobile) {
+        // Mobile: Search at top ~4-5rem from top, full width minus padding
+        // Legend below search at ~8rem or ~25rem when search is active
+        const searchTop = 64; // ~4rem
+        const searchBottom = 144; // ~9rem (search + dropdown space)
+        const legendTop = isSearchActive ? 400 : 128; // ~25rem or ~8rem
+        const legendBottom = legendTop + 300; // Approximate legend height
+
+        // Check if over search area (full width with 1rem padding on each side)
+        if (
+          y >= searchTop &&
+          y <= searchBottom &&
+          x >= 16 &&
+          x <= screenWidth - 16
+        ) {
+          return true;
+        }
+
+        // Check if over legend area
+        if (
+          y >= legendTop &&
+          y <= legendBottom &&
+          x >= 16 &&
+          x <= screenWidth - 16
+        ) {
+          return true;
+        }
+      } else {
+        // Desktop: Search at left: 90px, top: 16px, width: 320px (md) / 384px (lg) / 448px (xl)
+        const searchLeft = 90;
+        const searchTop = 16;
+        const searchWidth =
+          window.innerWidth >= 1280
+            ? 448
+            : window.innerWidth >= 1024
+              ? 384
+              : 320;
+        const searchBottom = 80; // Approximate height
+
+        // Legend: same left position, top: 80px (md:top-20) or ~352px when search active
+        const legendLeft = 90;
+        const legendTop = isSearchActive ? 352 : 80;
+        const legendWidth = 384; // max-w-xs
+        const legendBottom = legendTop + 400; // Approximate max height
+
+        // Check if over search area
+        if (
+          x >= searchLeft &&
+          x <= searchLeft + searchWidth &&
+          y >= searchTop &&
+          y <= searchBottom
+        ) {
+          return true;
+        }
+
+        // Check if over legend area
+        if (
+          x >= legendLeft &&
+          x <= legendLeft + legendWidth &&
+          y >= legendTop &&
+          y <= legendBottom
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    },
+    [isSearchActive]
+  );
+
   // Handle hover events
   const onHover = useCallback(
     async (event: MapLayerMouseEvent) => {
+      // Don't show tooltip if mouse is over UI elements
+      if (isOverUIElement(event.point.x, event.point.y)) {
+        setHoverInfo(null);
+        return;
+      }
+
       const feature = event.features && event.features[0];
       if (feature) {
         const layerName = getLayerDisplayName(feature.layer.id);
@@ -2047,6 +2131,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     [
       filterState.visualizationMode,
       filterState.colorUnit,
+      isOverUIElement,
       queryFieldDataAtCoordinate,
     ]
   );
