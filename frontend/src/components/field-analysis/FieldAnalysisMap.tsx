@@ -1544,20 +1544,6 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       };
       mapWithEvents.on('sourcedata', handleSourceData);
 
-      // Also listen for 'idle' event as a backup - fires when map finishes rendering
-      // This is more reliable than waiting for individual sourcedata events
-      mapWithEvents.once('idle', () => {
-        // Small delay to ensure layers are rendered, then clear loading
-        setTimeout(() => {
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-            loadingTimeoutRef.current = null;
-          }
-          setIsLoading(false);
-          onMapReadyRef.current?.();
-        }, 500);
-      });
-
       // Add PMTiles sources with better error handling
       const sourceErrors: string[] = [];
       let sourcesAdded = 0;
@@ -1619,7 +1605,23 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       addWaterProjectsLayers(map as unknown as MapInstance);
       addBuildingsLayers(map as unknown as MapInstance);
 
-      // Don't set loading to false here - wait for sourcedata events
+      // Listen for 'idle' event AFTER adding sources - fires when map finishes rendering
+      // This is more reliable than waiting for individual sourcedata events
+      mapWithEvents.once('idle', () => {
+        console.log('🎯 Map idle event fired - rendering complete'); // TEMP DEBUG
+        // Map has finished loading and rendering all layers
+        setTimeout(() => {
+          console.log('✅ Clearing loading state via idle event'); // TEMP DEBUG
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+            loadingTimeoutRef.current = null;
+          }
+          setIsLoading(false);
+          onMapReadyRef.current?.();
+        }, 100); // Small delay to ensure everything is settled
+      });
+
+      // Don't set loading to false here - wait for idle event or sourcedata events
       console.log(`Waiting for ${sourcesAdded} PMTiles sources to load...`);
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
