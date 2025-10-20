@@ -87,14 +87,14 @@ class DataSourceYearDetector:
             # Extract years using regex like pesticide_proximity does
             years = set()
             base_name = path_pattern.split("/")[-1]  # e.g., "fvm_marker_"
-            
+
             # Create regex pattern: "fvm_marker_(\d{4})"
             year_pattern = re.compile(rf"{re.escape(base_name)}(\d{{4}})/?$")
-            
+
             for path in all_paths:
                 # Get just the directory name (last part of path)
                 dir_name = path.split("/")[-1]
-                
+
                 # Match the pattern
                 match = year_pattern.match(dir_name)
                 if match:
@@ -253,18 +253,16 @@ class DataSourceYearDetector:
             # Auto-detect based on available data
             # Use FVM marker as the base since it's required for all PMTiles
             fvm_years = set(available_years.get("fvm_marker", []))
-            
+
             # For field analysis, we only need FVM marker + production data
             # Pesticide and environmental data are optional enhancements
             production_years = set(available_years.get("field_production", []))
-            
+
             # Take intersection of FVM and production (both required for meaningful analysis)
             target_years = fvm_years & production_years
             logger.info(f"FVM marker years: {sorted(fvm_years)}")
             logger.info(f"Field production years: {sorted(production_years)}")
-            logger.info(
-                f"Auto-detected years (FVM + production): {sorted(target_years)}"
-            )
+            logger.info(f"Auto-detected years (FVM + production): {sorted(target_years)}")
 
         # Apply exclusions
         if self.config.exclude_years:

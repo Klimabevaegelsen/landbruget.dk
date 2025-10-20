@@ -91,14 +91,23 @@ class PMTilesDataLoader:
     async def _load_fvm_marker_data(self, year: int) -> Optional[str]:
         """Load FVM marker data for a specific year.
 
+        For 2023 pesticide data, we need 2024 field boundaries (Y+1 pattern).
+        For other years, use the same year as the pesticide data.
+
         Args:
-            year: Target year
+            year: Target pesticide year
 
         Returns:
             DuckDB table name or None if failed
         """
         try:
-            base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{year}"
+            # Pesticide data always uses Y+1 field boundaries
+            boundary_year = year + 1
+            logger.info(
+                f"Using {boundary_year} field boundaries for {year} pesticide data (Y+1 pattern)"
+            )
+
+            base_path = f"gs://{self.config.gcs_bucket}/silver/fvm_marker_{boundary_year}"
 
             # Find the latest timestamped directory
             gcs_path = await self._find_latest_timestamped_path(base_path)
@@ -116,7 +125,7 @@ class PMTilesDataLoader:
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
             FROM read_parquet('{gcs_path}data.parquet')
-            WHERE year = {year}
+            WHERE year = {boundary_year}
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -174,29 +183,41 @@ class PMTilesDataLoader:
     async def _load_field_environmental_analysis(self, year: int) -> Optional[str]:
         """Load field environmental analysis data for a specific year.
 
+        Environmental data (BNBO/wetlands) should only be joined for specific year pairings:
+        - Pesticide 2023 uses 2024 field boundaries, so can use 2024 environmental data
+        - Other years should only use their exact year match if available
+
         Args:
-            year: Target year
+            year: Target year (for pesticide data)
 
         Returns:
             DuckDB table name or None if failed
         """
         try:
-            path = self.config.field_environmental_path.format(year=year)
-            gcs_path = f"gs://{self.config.gcs_bucket}/{path}"
+            # Environmental data always uses Y+1 pattern to match field boundaries
+            env_year = year + 1
+            logger.info(
+                f"Using {env_year} environmental data for {year} pesticide data (Y+1 pattern)"
+            )
+
+            base_path = (
+                f"gs://{self.config.gcs_bucket}/gold/field_environmental_analysis_fields_{env_year}"
+            )
+
+            # Find the latest timestamped directory (same pattern as production data)
+            gcs_path = await self._find_latest_timestamped_path(base_path)
+            if not gcs_path:
+                logger.warning(f"Environmental analysis data not found in: {base_path}")
+                return None
 
             logger.info(f"Loading field environmental analysis from {gcs_path}")
-
-            if not await asyncio.to_thread(self.gcs.file_exists, gcs_path):
-                logger.warning(f"Field environmental analysis data not found: {gcs_path}")
-                return None
 
             table_name = f"field_environmental_{year}"
 
             query = f"""
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
-            FROM read_parquet('{gcs_path}/*.parquet')
-            WHERE year = {year}
+            FROM read_parquet('{gcs_path}/data.parquet')
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -206,7 +227,10 @@ class PMTilesDataLoader:
             )
             count = count_result.fetchone()[0]
 
-            logger.info(f"Loaded {count:,} field environmental analysis records for year {year}")
+            logger.info(
+                f"Loaded {count:,} environmental records from {env_year} "
+                f"data for pesticide year {year}"
+            )
             return table_name
 
         except Exception as e:
@@ -216,14 +240,18 @@ class PMTilesDataLoader:
     async def _load_field_production(self, year: int) -> Optional[str]:
         """Load field production estimates for a specific year.
 
+        Production data uses Y+1 pattern to match field boundaries.
+
         Args:
-            year: Target year
+            year: Target pesticide year
 
         Returns:
             DuckDB table name or None if failed
         """
         try:
-            base_path = f"gs://{self.config.gcs_bucket}/gold/field_production_{year}"
+            # Production data uses Y+1 pattern to match field boundaries
+            production_year = year + 1
+            base_path = f"gs://{self.config.gcs_bucket}/gold/field_production_{production_year}"
 
             # Find the latest timestamped directory
             gcs_path = await self._find_latest_timestamped_path(base_path)
@@ -239,7 +267,7 @@ class PMTilesDataLoader:
             CREATE OR REPLACE TABLE {table_name} AS
             SELECT *
             FROM read_parquet('{gcs_path}data.parquet')
-            WHERE year = {year}
+            WHERE year = {production_year}
             """
 
             await asyncio.to_thread(self.conn.execute, query)
@@ -249,7 +277,10 @@ class PMTilesDataLoader:
             )
             count = count_result.fetchone()[0]
 
-            logger.info(f"Loaded {count:,} field production records for year {year}")
+            logger.info(
+                f"Loaded {count:,} field production records for year {production_year} "
+                f"(for pesticide year {year})"
+            )
             return table_name
 
         except Exception as e:
@@ -590,16 +621,37 @@ class PMTilesDataLoader:
 
                     -- BMD burden calculations for visualization (from BMD risk data)
                     SUM(COALESCE(samlet_belastning, 0)) as total_pesticide_belastning,
-                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_pfas_belastning,
-                    SUM(CASE WHEN COALESCE(contains_diquat, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_diquat_belastning,
-                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_glyphosate_belastning,
+                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true
+                        THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_pfas_belastning,
+                    SUM(CASE WHEN COALESCE(contains_diquat, false) = true
+                        THEN COALESCE(samlet_belastning, 0) ELSE 0 END) as total_diquat_belastning,
+                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true
+                        THEN COALESCE(samlet_belastning, 0)
+                        ELSE 0 END) as total_glyphosate_belastning,
 
                     -- Active ingredient calculations
-                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_pfas_active_ingredient_kg,
-                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_glyphosate_active_ingredient_kg,
+                    SUM(CASE WHEN COALESCE(contains_pfas, false) = true
+                        THEN COALESCE(DosageQuantity, 0)
+                        ELSE 0 END) as total_pfas_active_ingredient_kg,
+                    SUM(CASE WHEN COALESCE(contains_glyphosate, false) = true
+                        THEN COALESCE(DosageQuantity, 0)
+                        ELSE 0 END) as total_glyphosate_active_ingredient_kg,
 
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
+
+                    -- Total dosage by unit (frontend expects these)
+                    SUM(CASE WHEN DosageUnit IN ('2', 'kg')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
+                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_liters,
+                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_grams,
+                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_ml,
+                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
+
 
                     -- Proximity data
                     residential_buildings_formatted,
@@ -672,13 +724,25 @@ class PMTilesDataLoader:
                     0 as total_pfas_belastning,
                     0 as total_diquat_belastning,
                     0 as total_glyphosate_belastning,
-                    
+
                     -- Active ingredient calculations (fallback)
                     0 as total_pfas_active_ingredient_kg,
                     0 as total_glyphosate_active_ingredient_kg,
-                    
+
                     -- Product count
                     COUNT(DISTINCT PesticideName) as unique_pesticide_products,
+
+                    -- Total dosage by unit (frontend expects these) - fallback version
+                    SUM(CASE WHEN DosageUnit IN ('2', 'kg')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_kg,
+                    SUM(CASE WHEN DosageUnit IN ('4', 'L', 'liter')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_liters,
+                    SUM(CASE WHEN DosageUnit IN ('1', 'g', 'gram')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_grams,
+                    SUM(CASE WHEN DosageUnit IN ('5', 'ml', 'milliliter')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_ml,
+                    SUM(CASE WHEN DosageUnit IN ('3', 'tablet', 'tabletter')
+                        THEN COALESCE(DosageQuantity, 0) ELSE 0 END) as total_dosage_tablets,
 
                     -- Proximity data
                     residential_buildings_formatted,
@@ -692,11 +756,60 @@ class PMTilesDataLoader:
 
             await asyncio.to_thread(self.conn.execute, summary_query)
 
+            # DEBUG: Check what was created in the pesticide summary
+            summary_count = await asyncio.to_thread(
+                self.conn.execute, "SELECT COUNT(*) FROM temp_pesticide_summary"
+            )
+            summary_count_result = summary_count.fetchone()[0]
+            logger.info(f"DEBUG: Created pesticide summary with {summary_count_result:,} records")
+
+            # DEBUG: Check if key fields exist in summary
+            try:
+                sample_result = await asyncio.to_thread(
+                    self.conn.execute,
+                    "SELECT unique_pesticide_products, total_pesticide_belastning "
+                    "FROM temp_pesticide_summary LIMIT 1",
+                )
+                sample = sample_result.fetchone()
+                logger.info(f"DEBUG: Summary - products: {sample[0]}, belastning: {sample[1]}")
+            except Exception as e:
+                logger.error(f"DEBUG: Failed to read summary fields: {e}")
+
+            # Get columns from integrated table to avoid wildcard collision
+            integrated_columns = await asyncio.to_thread(
+                self.conn.execute, f"DESCRIBE {integrated_table}"
+            )
+            integrated_col_names = [row[0] for row in integrated_columns.fetchall()]
+
+            logger.info(f"DEBUG: Integrated table has {len(integrated_col_names)} columns")
+            logger.info(f"DEBUG: Column names: {integrated_col_names}")
+
+            # Exclude any pesticide columns that might already exist (shouldn't, but defensive)
+            pesticide_col_patterns = ["pesticide", "belastning", "pfas", "diquat", "glyphosate"]
+            excluded_cols = [
+                col
+                for col in integrated_col_names
+                if any(pattern in col.lower() for pattern in pesticide_col_patterns)
+            ]
+            if excluded_cols:
+                logger.warning(
+                    f"Excluding {len(excluded_cols)} pesticide columns "
+                    f"from integrated table: {excluded_cols}"
+                )
+
+            integrated_col_list = ", ".join(
+                [
+                    f"i.{col}"
+                    for col in integrated_col_names
+                    if not any(pattern in col.lower() for pattern in pesticide_col_patterns)
+                ]
+            )
+
             # Add pesticide columns to integrated table
             update_query = f"""
             CREATE OR REPLACE TABLE {integrated_table}_updated AS
             SELECT
-                i.*,
+                {integrated_col_list},
                 ps.pesticide_applications,
                 ps.pesticides_used,
 
@@ -717,6 +830,27 @@ class PMTilesDataLoader:
                 ps.pesticides_ml_detail,
                 ps.pesticides_tablets_detail,
 
+                -- BMD burden calculations (MISSING FIELDS!)
+                ps.total_pesticide_belastning,
+                ps.total_pfas_belastning,
+                ps.total_diquat_belastning,
+                ps.total_glyphosate_belastning,
+
+                -- Active ingredient calculations
+                ps.total_pfas_active_ingredient_kg,
+                ps.total_glyphosate_active_ingredient_kg,
+
+                -- Product count (MISSING FIELD!)
+                ps.unique_pesticide_products,
+
+                -- Total dosage by unit (frontend expects these)
+                ps.total_dosage_kg,
+                ps.total_dosage_liters,
+                ps.total_dosage_grams,
+                ps.total_dosage_ml,
+                ps.total_dosage_tablets,
+
+
                 -- Proximity data
                 ps.residential_buildings_formatted,
                 ps.educational_facilities_formatted,
@@ -727,6 +861,30 @@ class PMTilesDataLoader:
             """
 
             await asyncio.to_thread(self.conn.execute, update_query)
+
+            # DEBUG: Check if integration worked
+            try:
+                integration_check = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT COUNT(*) FROM {integrated_table}_updated "
+                    f"WHERE unique_pesticide_products IS NOT NULL",
+                )
+                integrated_count = integration_check.fetchone()[0]
+                logger.info(f"DEBUG: Integration - {integrated_count:,} records have products")
+
+                # Check a sample
+                sample_integration = await asyncio.to_thread(
+                    self.conn.execute,
+                    f"SELECT field_uuid, unique_pesticide_products, total_pesticide_belastning "
+                    f"FROM {integrated_table}_updated WHERE unique_pesticide_products > 0 LIMIT 1",
+                )
+                if sample_integration.fetchone():
+                    sample = sample_integration.fetchone()
+                    logger.info(f"DEBUG: Sample data - field: {sample[0]}, products: {sample[1]}")
+                else:
+                    logger.warning("DEBUG: No records found with pesticide data after integration!")
+            except Exception as e:
+                logger.error(f"DEBUG: Failed to check integration: {e}")
 
             # Replace original table
             await asyncio.to_thread(self.conn.execute, f"DROP TABLE {integrated_table}")
@@ -759,12 +917,23 @@ class PMTilesDataLoader:
             if bmd_table:
                 logger.info("Enhancing pesticide data with BMD classifications and risk data")
                 # Join with BMD data for classifications and risk information
+                # Get pesticide table columns to avoid wildcard issues
+                pest_columns = await asyncio.to_thread(
+                    self.conn.execute, f"DESCRIBE {pesticide_table}"
+                )
+                pest_col_names = [row[0] for row in pest_columns.fetchall()]
+
+                # Build explicit column list (exclude samlet_belastning column)
+                pest_col_list = ", ".join(
+                    [f"p.{col}" for col in pest_col_names if col != "samlet_belastning"]
+                )
+
                 await asyncio.to_thread(
                     self.conn.execute,
                     f"""
                     CREATE OR REPLACE TABLE {enhanced_table} AS
                     SELECT
-                        p.*,
+                        {pest_col_list},
                         COALESCE(b.contains_pfas, false) as contains_pfas,
                         COALESCE(b.contains_diquat, false) as contains_diquat,
                         COALESCE(b.contains_glyphosate, false) as contains_glyphosate,
@@ -772,10 +941,10 @@ class PMTilesDataLoader:
                         b.farebetegnelse_miljø as environmental_risk,
                         b.signalord as signal_word,
                         -- BMD burden calculation fields
-                        COALESCE(b.samlet_belastning, 0) as samlet_belastning,
-                        COALESCE(b.belastning_sundhed, 0) as belastning_sundhed,
-                        COALESCE(b.belastning_miljøeffekt, 0) as belastning_miljøeffekt,
-                        COALESCE(b.belastning_miljøadfærd, 0) as belastning_miljøadfærd
+                        COALESCE(b.samlet_belastning, 0.0) as samlet_belastning,
+                        COALESCE(b.belastning_sundhed, 0.0) as belastning_sundhed,
+                        COALESCE(b.belastning_miljøeffekt, 0.0) as belastning_miljøeffekt,
+                        COALESCE(b.belastning_miljøadfærd, 0.0) as belastning_miljøadfærd
                     FROM {pesticide_table} p
                     LEFT JOIN {bmd_table} b ON p.PesticideRegistrationNumber = b.registrerings_nr
                     """,

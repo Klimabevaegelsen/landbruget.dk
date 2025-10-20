@@ -256,9 +256,7 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
 
         if not input_paths:
             # Provide more debugging information
-            expected_path = (
-                f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{self.date_pattern}/consolidated.parquet"
-            )
+            expected_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{self.date_pattern}/consolidated.parquet"
             self.log.error(f"Expected Bronze layer data at: {expected_path}")
             self.log.error(f"Date pattern used: {self.date_pattern}")
             self.log.error("This usually means:")
@@ -267,7 +265,7 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                 "2. The data_parsing step is running independently without Bronze layer data"
             )
             self.log.error("3. There's a timestamp mismatch between steps")
-            
+
             raise ValueError(
                 f"No Bronze layer data found at expected path: {expected_path}. "
                 "Ensure the company_fetching step has completed successfully."
@@ -375,10 +373,10 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
         """Get SQL for agricultural company classification."""
         # Extract industry code for readability
         industry_code_expr = (
-            "json_extract_string(json_extract(raw_json, '$.industries[0]'), " "'$.industry_code')"
+            "json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code')"
         )
         is_current_expr = (
-            "json_extract(json_extract(raw_json, '$.industries[0]'), " "'$.is_current')::BOOLEAN"
+            "json_extract(json_extract(raw_json, '$.industries[0]'), '$.is_current')::BOOLEAN"
         )
 
         return f"""

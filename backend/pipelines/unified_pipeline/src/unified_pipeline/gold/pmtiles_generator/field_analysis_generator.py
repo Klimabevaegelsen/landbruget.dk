@@ -131,36 +131,11 @@ class FieldAnalysisPMTilesGenerator:
             # Build the export query with all available fields
             query = self._build_field_analysis_query(table_name, year)
 
-            # Execute query and get column information
-            result = await asyncio.to_thread(self.conn.execute, query)
-            rows = result.fetchall()
-            columns = [desc[0] for desc in self.conn.description]
-
-            if not rows:
-                logger.warning(f"No field data found for year {year}")
-                return False
-
-            # Find geometry column
-            geometry_col = None
-            for col in columns:
-                if col.lower() in ["geometry", "geom", "wkt", "geometry_wkt"]:
-                    geometry_col = col
-                    break
-
-            if not geometry_col:
-                logger.error("No geometry column found in field data")
-                return False
-
-            # Get property columns (exclude geometry)
-            property_columns = [col for col in columns if col != geometry_col]
-
-            # Write GeoJSON using utility
+            # Write GeoJSON using utility (this will stream the results)
+            # The write function handles column detection and geometry parsing
             success = await GeoJSONWriter.write_geojson_from_query(
-                self.conn, query, output_path, property_columns
+                self.conn, query, output_path, properties_columns=None
             )
-
-            if success:
-                logger.info(f"Exported {len(rows):,} field features to GeoJSON")
 
             return success
 
@@ -187,21 +162,26 @@ class FieldAnalysisPMTilesGenerator:
             "year as field_year",  # Frontend expects field_year
             "area_ha * 100 as area_hectares",  # Convert ha to hectares for frontend
             "crop_name",
-            "crop_code",
+            # Removed crop_code - not used by frontend and might be source of "00"/"000" display
             "is_organic",
             "municipality as kommune",  # Frontend expects kommune
         ]
 
-        # Environmental fields (if available)
+        # Environmental fields (if available) - mapped to frontend expectations
         environmental_fields = [
+            # Convert square meters to hectares for frontend compatibility
+            "COALESCE(field_bnbo_total_m2, 0) / 10000.0 as bnbo_area_hectares",
+            "COALESCE(field_wetland_total_m2, 0) / 10000.0 as wetland_area_hectares",
+            # Coverage percentages (keep original field names for additional data)
             "field_bnbo_coverage_pct",
             "field_bnbo_water_coverage_pct",
-            "bnbo_status_categories",
-            "bnbo_action_required_hectares",
-            "bnbo_completed_hectares",
             "field_wetland_coverage_pct",
             "field_wetland_water_coverage_pct",
             "field_soil_coverage_pct",
+            # Status and action fields (already in correct format)
+            "bnbo_status_categories",
+            "bnbo_action_required_hectares",
+            "bnbo_completed_hectares",
         ]
 
         # Production fields (if available)
@@ -222,12 +202,19 @@ class FieldAnalysisPMTilesGenerator:
             "other_applications",
             # Enhanced aggregated fields for visualization and details
             "total_pesticide_belastning",
-            "total_pfas_belastning", 
+            "total_pfas_belastning",
             "total_diquat_belastning",
             "total_glyphosate_belastning",
             "total_pfas_active_ingredient_kg",
             "total_glyphosate_active_ingredient_kg",
             "unique_pesticide_products",
+            # Total dosage by unit
+            "total_dosage_kg",
+            "total_dosage_liters",
+            "total_dosage_grams",
+            "total_dosage_ml",
+            "total_dosage_tablets",
+            # Legacy detailed strings
             "pesticides_kg_detail",
             "pesticides_liters_detail",
             "pesticides_grams_detail",
@@ -255,13 +242,55 @@ class FieldAnalysisPMTilesGenerator:
             schema_result = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
             available_columns = {row[0] for row in schema_result}
 
+            # DEBUG: Log available columns to see what's actually in the table
+            logger.info(f"DEBUG: Available columns in {table_name}: {sorted(available_columns)}")
+
+            # DEBUG: Check for key pesticide fields
+            key_pesticide_fields = [
+                "unique_pesticide_products",
+                "pesticides_kg_detail",
+                "pesticides_liters_detail",
+                "total_pesticide_belastning",
+            ]
+            missing_pesticide_fields = [
+                f for f in key_pesticide_fields if f not in available_columns
+            ]
+            if missing_pesticide_fields:
+                logger.warning(f"DEBUG: Missing key pesticide fields: {missing_pesticide_fields}")
+            else:
+                logger.info(f"DEBUG: All key pesticide fields present: {key_pesticide_fields}")
+
             # Filter fields to only those available
             selected_fields = []
 
-            # Always include base fields that exist
+            # Always include base fields that exist (using same logic as optional fields)
+            logger.info(f"DEBUG: Processing {len(base_fields)} base fields")
             for field in base_fields:
-                if field in available_columns:
-                    selected_fields.append(field)
+                # Handle SQL expressions (like COALESCE(...) as alias)
+                if " as " in field.lower():
+                    # For aliased expressions, check if the base column exists
+                    base_column = field.split(" as ")[0].strip()
+                    logger.info(f"DEBUG: Checking aliased field -> base: '{base_column}'")
+                    # Handle expressions like "area_ha * 100"
+                    if "*" in base_column:
+                        main_column = base_column.split("*")[0].strip()
+                        if main_column in available_columns:
+                            selected_fields.append(field)
+                            logger.info(f"DEBUG: Added expression field (main: '{main_column}')")
+                        else:
+                            logger.warning(f"DEBUG: Skipped expression ('{main_column}' missing)")
+                    elif base_column in available_columns:
+                        selected_fields.append(field)
+                        logger.info(f"DEBUG: Added aliased field (base: '{base_column}')")
+                    else:
+                        logger.warning(f"DEBUG: Skipped aliased (base: '{base_column}' missing)")
+                else:
+                    # Direct column name
+                    if field in available_columns:
+                        selected_fields.append(field)
+                        logger.info(f"DEBUG: Added direct field '{field}'")
+                    else:
+                        logger.warning(f"DEBUG: Skipped direct field '{field}' (not found)")
 
             # Add optional fields if they exist
             for field_group in [
@@ -271,8 +300,31 @@ class FieldAnalysisPMTilesGenerator:
                 nles5_fields,
             ]:
                 for field in field_group:
-                    if field in available_columns:
-                        selected_fields.append(field)
+                    # Handle SQL expressions (like COALESCE(...) as alias)
+                    if " as " in field.lower():
+                        # For aliased expressions, check if the base column exists
+                        base_column = field.split(" as ")[0].strip()
+                        # Extract column names from COALESCE expressions
+                        if "COALESCE(" in base_column:
+                            # Extract the main column name from COALESCE(column_name, default)
+                            column_start = base_column.find("(") + 1
+                            column_end = base_column.find(",", column_start)
+                            if column_end == -1:
+                                column_end = base_column.find(")", column_start)
+                            main_column = base_column[column_start:column_end].strip()
+                            if main_column in available_columns:
+                                selected_fields.append(field)
+                        else:
+                            # Simple alias case
+                            if base_column in available_columns:
+                                selected_fields.append(field)
+                    else:
+                        # Direct column name
+                        if field in available_columns:
+                            selected_fields.append(field)
+
+            # DEBUG: Log what fields were actually selected
+            logger.info(f"DEBUG: Selected {len(selected_fields)} fields: {selected_fields}")
 
             # Always include geometry last - convert to GeoJSON format with coordinate swap
             if "geometry" in available_columns:
@@ -352,6 +404,25 @@ class FieldAnalysisPMTilesGenerator:
                 "--attribute-type=is_organic:bool",
                 "--attribute-type=pesticide_applications:int",
                 "--attribute-type=avg_match_confidence:float",
+                # Pesticide summary fields
+                "--attribute-type=unique_pesticide_products:int",
+                "--attribute-type=total_pesticide_belastning:float",
+                "--attribute-type=total_pfas_belastning:float",
+                "--attribute-type=total_diquat_belastning:float",
+                "--attribute-type=total_glyphosate_belastning:float",
+                "--attribute-type=total_pfas_active_ingredient_kg:float",
+                "--attribute-type=total_glyphosate_active_ingredient_kg:float",
+                # Dosage totals
+                "--attribute-type=total_dosage_kg:float",
+                "--attribute-type=total_dosage_liters:float",
+                "--attribute-type=total_dosage_grams:float",
+                "--attribute-type=total_dosage_ml:float",
+                "--attribute-type=total_dosage_tablets:float",
+                # Application counts
+                "--attribute-type=pfas_applications:int",
+                "--attribute-type=diquat_applications:int",
+                "--attribute-type=glyphosate_applications:int",
+                "--attribute-type=other_applications:int",
             ]
         )
 
@@ -364,6 +435,9 @@ class FieldAnalysisPMTilesGenerator:
                     "--attribute-type=field_soil_coverage_pct:float",
                     "--attribute-type=bnbo_action_required_hectares:float",
                     "--attribute-type=bnbo_completed_hectares:float",
+                    # Environmental area fields
+                    "--attribute-type=bnbo_area_hectares:float",
+                    "--attribute-type=wetland_area_hectares:float",
                 ]
             )
 

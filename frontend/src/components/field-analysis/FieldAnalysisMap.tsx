@@ -95,6 +95,10 @@ function MapTooltip({
   colorUnit,
 }: TooltipInfo) {
   const formatValue = (value: unknown, unit?: string): string => {
+    // Handle null, undefined, or non-numeric values
+    if (value == null || (typeof value === 'number' && isNaN(value))) {
+      return '0';
+    }
     if (typeof value === 'number') {
       // Special formatting for different types of values
       let formatted: string;
@@ -136,7 +140,7 @@ function MapTooltip({
 
       return unit ? `${formatted} ${unit}` : formatted;
     }
-    return String(value);
+    return String(value ?? '');
   };
 
   const getRelevantData = () => {
@@ -554,6 +558,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<TooltipInfo | null>(null);
+  const [isSearchActive, setIsSearchActive] = useState(false);
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const loadedSourcesRef = useRef<Set<string>>(new Set());
   const [styleLoadFailed, setStyleLoadFailed] = useState(false);
@@ -694,7 +699,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       console.warn('Map loading timeout - forcing loading state to false');
       setIsLoading(false);
       onMapReadyRef.current?.();
-    }, 10000);
+    }, 3000); // Reduced from 10s to 3s - data loads quickly
   }, []); // No dependencies - uses ref
 
   // OPTIMIZED - Check if all required sources are loaded
@@ -720,13 +725,12 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
 
   // Handle source data events to detect when PMTiles are loaded
   const handleSourceData = useCallback(
-    (e: { sourceId: string; isSourceLoaded: boolean }) => {
+    (e: { sourceId: string; isSourceLoaded: boolean; dataType?: string }) => {
       if (
         e.isSourceLoaded &&
         Object.keys(pmtilesUrlsRef.current).includes(e.sourceId)
       ) {
         loadedSourcesRef.current.add(e.sourceId);
-        console.log(`PMTiles source loaded: ${e.sourceId}`);
         checkAllSourcesLoaded();
       }
     },
@@ -1536,6 +1540,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           event: string,
           handler: (e: { sourceId: string; isSourceLoaded: boolean }) => void
         ) => void;
+        once: (event: string, handler: () => void) => void;
       };
       mapWithEvents.on('sourcedata', handleSourceData);
 
@@ -1600,7 +1605,23 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       addWaterProjectsLayers(map as unknown as MapInstance);
       addBuildingsLayers(map as unknown as MapInstance);
 
-      // Don't set loading to false here - wait for sourcedata events
+      // Listen for 'idle' event AFTER adding sources - fires when map finishes rendering
+      // This is more reliable than waiting for individual sourcedata events
+      mapWithEvents.once('idle', () => {
+        console.log('🎯 Map idle event fired - rendering complete'); // TEMP DEBUG
+        // Map has finished loading and rendering all layers
+        setTimeout(() => {
+          console.log('✅ Clearing loading state via idle event'); // TEMP DEBUG
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+            loadingTimeoutRef.current = null;
+          }
+          setIsLoading(false);
+          onMapReadyRef.current?.();
+        }, 100); // Small delay to ensure everything is settled
+      });
+
+      // Don't set loading to false here - wait for idle event or sourcedata events
       console.log(`Waiting for ${sourcesAdded} PMTiles sources to load...`);
     } catch (err) {
       console.error('Error adding map sources/layers:', err);
@@ -1622,6 +1643,22 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     handleSourceData,
     layerVisibility.bnbo,
   ]);
+
+  // Ensure sources are added when map and URLs are both ready
+  useEffect(() => {
+    if (!mapRef.current || !pmtilesUrls.fields) return;
+
+    const map = mapRef.current.getMap();
+    if (!map || !map.loaded()) return;
+
+    const fieldsSource = map.getSource('fields');
+
+    // If sources don't exist yet, call onMapLoad to set everything up
+    if (!fieldsSource) {
+      onMapLoad();
+      return;
+    }
+  }, [pmtilesUrls.fields, onMapLoad]);
 
   // Handle PMTiles URL changes (e.g., year selection) - optimized approach
   useEffect(() => {
@@ -1966,9 +2003,93 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     }
   }, [queryVisibleFields, queryVisibleFieldsRef]);
 
+  // Check if mouse is over UI elements (search bar or legend)
+  const isOverUIElement = useCallback(
+    (x: number, y: number): boolean => {
+      // Mobile breakpoint (md: 768px)
+      const isMobile = window.innerWidth < 768;
+      const screenWidth = window.innerWidth;
+
+      if (isMobile) {
+        // Mobile: Search at top ~4-5rem from top, full width minus padding
+        // Legend below search at ~8rem or ~25rem when search is active
+        const searchTop = 64; // ~4rem
+        const searchBottom = 144; // ~9rem (search + dropdown space)
+        const legendTop = isSearchActive ? 400 : 128; // ~25rem or ~8rem
+        const legendBottom = legendTop + 300; // Approximate legend height
+
+        // Check if over search area (full width with 1rem padding on each side)
+        if (
+          y >= searchTop &&
+          y <= searchBottom &&
+          x >= 16 &&
+          x <= screenWidth - 16
+        ) {
+          return true;
+        }
+
+        // Check if over legend area
+        if (
+          y >= legendTop &&
+          y <= legendBottom &&
+          x >= 16 &&
+          x <= screenWidth - 16
+        ) {
+          return true;
+        }
+      } else {
+        // Desktop: Search at left: 90px, top: 16px, width: 320px (md) / 384px (lg) / 448px (xl)
+        const searchLeft = 90;
+        const searchTop = 16;
+        const searchWidth =
+          window.innerWidth >= 1280
+            ? 448
+            : window.innerWidth >= 1024
+              ? 384
+              : 320;
+        const searchBottom = 80; // Approximate height
+
+        // Legend: same left position, top: 80px (md:top-20) or ~352px when search active
+        const legendLeft = 90;
+        const legendTop = isSearchActive ? 352 : 80;
+        const legendWidth = 384; // max-w-xs
+        const legendBottom = legendTop + 400; // Approximate max height
+
+        // Check if over search area
+        if (
+          x >= searchLeft &&
+          x <= searchLeft + searchWidth &&
+          y >= searchTop &&
+          y <= searchBottom
+        ) {
+          return true;
+        }
+
+        // Check if over legend area
+        if (
+          x >= legendLeft &&
+          x <= legendLeft + legendWidth &&
+          y >= legendTop &&
+          y <= legendBottom
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    },
+    [isSearchActive]
+  );
+
   // Handle hover events
   const onHover = useCallback(
     async (event: MapLayerMouseEvent) => {
+      // Don't show tooltip if mouse is over UI elements
+      if (isOverUIElement(event.point.x, event.point.y)) {
+        setHoverInfo(null);
+        return;
+      }
+
       const feature = event.features && event.features[0];
       if (feature) {
         const layerName = getLayerDisplayName(feature.layer.id);
@@ -2012,6 +2133,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     [
       filterState.visualizationMode,
       filterState.colorUnit,
+      isOverUIElement,
       queryFieldDataAtCoordinate,
     ]
   );
@@ -2174,6 +2296,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           onLocationSelect={handleLocationSelect}
           placeholder="Søg efter adresser, byer, regioner..."
           className="w-full"
+          onSearchStateChange={setIsSearchActive}
         />
       </div>
 
@@ -2223,12 +2346,17 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         {/* PMTiles sources and layers are added programmatically in onMapLoad */}
       </Map>
 
-      {/* Color Legend - positioned for mobile visibility and desktop sidebar avoidance */}
+      {/* Color Legend - positioned for mobile visibility and desktop sidebar avoidance, pushed down when search is active */}
       <div
-        className="pointer-events-auto absolute right-4 left-4 z-30 max-h-[40vh] max-w-[calc(100vw-2rem)] overflow-auto md:top-20 md:right-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs"
+        className={`pointer-events-auto absolute right-4 left-4 z-30 max-h-[40vh] max-w-[calc(100vw-2rem)] overflow-auto transition-all duration-200 md:right-auto md:left-[90px] md:max-h-[calc(100vh-12rem)] md:max-w-xs ${
+          isSearchActive ? 'md:top-[22rem]' : 'md:top-20'
+        }`}
         style={{
           // Mobile: position below search bar, accounting for safe areas
-          top: 'max(8rem, calc(env(safe-area-inset-top) + 7rem))',
+          // When search is active, push it down to make room for the dropdown (max-h-64 = 16rem)
+          top: isSearchActive
+            ? 'max(25rem, calc(env(safe-area-inset-top) + 24rem))'
+            : 'max(8rem, calc(env(safe-area-inset-top) + 7rem))',
         }}
         data-testid="color-legend-container"
       >

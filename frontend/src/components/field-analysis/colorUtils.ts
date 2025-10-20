@@ -309,13 +309,25 @@ export function getLinearColor(
  * Format value for display with appropriate units
  */
 export function formatVisualizationValue(
-  value: number,
+  value: number | undefined | null,
   mode: VisualizationMode,
   unit: ColorUnit
 ): string {
-  const formatNumber = (num: number, decimals: number = 2): string => {
+  const formatNumber = (
+    num: number | undefined | null,
+    decimals: number = 2
+  ): string => {
+    if (num == null || isNaN(num)) return '0';
     return num.toLocaleString('da-DK', { maximumFractionDigits: decimals });
   };
+
+  // Handle null/undefined values
+  if (value == null || isNaN(value)) {
+    if (mode === 'organic_status') {
+      return 'Ukendt';
+    }
+    return '0';
+  }
 
   if (mode === 'organic_status') {
     return value === 1 ? 'Økologisk' : 'Konventionel';

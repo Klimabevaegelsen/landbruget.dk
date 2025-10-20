@@ -34,9 +34,15 @@ interface FieldDetailsContentProps {
 export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
   const [copiedCoordinates, setCopiedCoordinates] = useState(false);
 
-  const formatNumber = (num: number, decimals: number = 2): string => {
+  const formatNumber = (
+    num: number | undefined | null,
+    decimals: number = 2
+  ): string | null => {
+    // Handle null, undefined, or NaN values
+    if (num == null || isNaN(num)) return null;
+
     // Don't display if the value is effectively zero
-    if (num < 0.001) return '< 0,001';
+    if (num < 0.001) return null;
 
     // For very small values, show more precision
     if (num < 1 && decimals === 0) {
@@ -67,20 +73,43 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
   ): Array<{ name: string; dosage: number }> => {
     if (!detailString || detailString.trim() === '') return [];
 
+    // DEBUG: Check if detailString is literally "00" or "000"
+    if (detailString === '00' || detailString === '000') {
+      console.error(
+        `🚨 FOUND LITERAL "${detailString}" IN parsePesticideDetail!`
+      );
+    }
+
     try {
-      return detailString
+      const items = detailString
         .split(';')
         .map((item) => item.trim())
         .filter((item) => item.length > 0)
         .map((item) => {
           const [name, dosageStr] = item.split(':');
-          return {
+          const parsedItem = {
             name: name?.trim() || 'Ukendt produkt',
             dosage: parseFloat(dosageStr?.trim() || '0'),
           };
+          // DEBUG: Log malformed items
+          if (!name || name.trim() === '') {
+            console.warn(
+              '⚠️  Malformed pesticide item (empty name):',
+              item,
+              parsedItem
+            );
+          }
+          return parsedItem;
         })
         .filter((item) => item.dosage > 0)
         .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
+
+      // DEBUG: Log if we filtered everything out but had input
+      if (items.length === 0 && detailString.trim() !== '') {
+        console.warn('⚠️  All items filtered out from:', detailString);
+      }
+
+      return items;
     } catch (e) {
       console.warn('Error parsing pesticide detail:', detailString, e);
       return [];
@@ -100,8 +129,15 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
   }> => {
     if (!detailString || detailString.trim() === '') return [];
 
+    // DEBUG: Check if detailString is literally "00" or "000"
+    if (detailString === '00' || detailString === '000') {
+      console.error(
+        `🚨 FOUND LITERAL "${detailString}" IN parsePesticideDetailWithUnit!`
+      );
+    }
+
     try {
-      return detailString
+      const items = detailString
         .split(';')
         .map((item) => item.trim())
         .filter((item) => item.length > 0)
@@ -128,6 +164,15 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
                       ? 'tabletter'
                       : rawUnit;
 
+          // DEBUG: Log malformed items
+          if (!name || name.trim() === '') {
+            console.warn(
+              '⚠️  Malformed enhanced pesticide item (empty name):',
+              item,
+              parts
+            );
+          }
+
           return {
             name,
             dosage,
@@ -141,6 +186,13 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
         })
         .filter((item) => item.dosage > 0)
         .sort((a, b) => b.dosage - a.dosage); // Sort by dosage descending
+
+      // DEBUG: Log if we filtered everything out but had input
+      if (items.length === 0 && detailString.trim() !== '') {
+        console.warn('⚠️  All enhanced items filtered out from:', detailString);
+      }
+
+      return items;
     } catch (e) {
       console.warn('Error parsing enhanced pesticide detail:', detailString, e);
       return [];
@@ -287,6 +339,28 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
 
   const riskLevel = getPesticideRiskLevel(field.total_pesticide_belastning);
 
+  // Check if there's any meaningful pesticide data
+  const hasPesticideData =
+    (field.total_pesticide_belastning &&
+      field.total_pesticide_belastning > 0.001) ||
+    (field.unique_pesticide_products && field.unique_pesticide_products > 0) ||
+    (field.total_pesticide_applications &&
+      field.total_pesticide_applications > 0) ||
+    field.pesticides_kg_detail ||
+    field.pesticides_liters_detail ||
+    field.pesticides_grams_detail ||
+    field.pesticides_ml_detail ||
+    field.pesticides_tablets_detail ||
+    field.pfas_products_detail ||
+    field.diquat_products_detail ||
+    field.glyphosate_products_detail ||
+    field.other_products_detail;
+
+  // Check if there's any meaningful environmental data
+  const hasEnvironmentalData =
+    (field.bnbo_area_hectares && field.bnbo_area_hectares > 0.001) ||
+    (field.wetland_area_hectares && field.wetland_area_hectares > 0.001);
+
   return (
     <div className="space-y-4 lg:space-y-6">
       {/* Basic Information */}
@@ -308,7 +382,7 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
           <div className="flex justify-between">
             <span className="text-muted-foreground">Areal:</span>
             <span className="font-medium">
-              {formatNumber(field.area_hectares)} ha
+              {formatNumber(field.area_hectares) || '0'} ha
             </span>
           </div>
           <div className="flex justify-between">
@@ -397,527 +471,485 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
       )}
 
       {/* Pesticide Information */}
-      <Card className="p-4 lg:p-6">
-        <h3 className="text-foreground mb-3 text-base font-semibold lg:text-lg">
-          Pesticidforbrug
-        </h3>
-        <div className="bg-muted mb-3 rounded-lg p-3 lg:p-4">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-medium lg:text-base">
-              Samlet belastning
-            </span>
-            <span className={`text-lg font-bold lg:text-xl ${riskLevel.color}`}>
-              {formatNumber(field.total_pesticide_belastning)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-xs lg:text-sm">
-              Risikoniveau
-            </span>
-            <Badge variant={riskLevel.variant} className="text-xs lg:text-sm">
-              {riskLevel.level}
-            </Badge>
-          </div>
-        </div>
-
-        {/* Pesticide Products Summary */}
-        {field.unique_pesticide_products &&
-          field.unique_pesticide_products > 0 && (
-            <div className="bg-primary/10 mb-3 rounded-lg p-3 lg:p-4">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-primary text-sm font-medium lg:text-base">
-                  Produkter anvendt
-                </span>
-                <span className="text-primary text-lg font-bold lg:text-xl">
-                  {field.unique_pesticide_products}
-                </span>
-              </div>
-              {field.total_pesticide_applications &&
-                field.total_pesticide_applications > 0 && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-primary/80 text-xs lg:text-sm">
-                      Total pesticider
-                    </span>
-                    <span className="text-primary text-xs font-medium lg:text-sm">
-                      {field.total_pesticide_applications}
-                    </span>
-                  </div>
-                )}
+      {hasPesticideData && (
+        <Card className="p-4 lg:p-6">
+          <h3 className="text-foreground mb-3 text-base font-semibold lg:text-lg">
+            Pesticidforbrug
+          </h3>
+          <div className="bg-muted mb-3 rounded-lg p-3 lg:p-4">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm font-medium lg:text-base">
+                Samlet belastning
+              </span>
+              <span
+                className={`text-lg font-bold lg:text-xl ${riskLevel.color}`}
+              >
+                {formatNumber(field.total_pesticide_belastning) || '0'}
+              </span>
             </div>
-          )}
-
-        {/* Dosage Information - only show if there are meaningful values */}
-        {((field.total_dosage_kg && field.total_dosage_kg > 0.001) ||
-          (field.total_dosage_liters && field.total_dosage_liters > 0.001) ||
-          (field.total_dosage_grams && field.total_dosage_grams > 0.001) ||
-          (field.total_dosage_ml && field.total_dosage_ml > 0.001) ||
-          (field.total_dosage_tablets && field.total_dosage_tablets > 0)) && (
-          <div className="mb-3 space-y-2 lg:space-y-3">
-            {field.total_dosage_kg && field.total_dosage_kg > 0.001 && (
-              <div className="flex items-center justify-between text-sm lg:text-base">
-                <span className="text-muted-foreground">
-                  Total dosering (kg):
-                </span>
-                <span className="font-medium">
-                  {formatNumber(field.total_dosage_kg, 2)} kg
-                </span>
-              </div>
-            )}
-            {field.total_dosage_liters && field.total_dosage_liters > 0.001 && (
-              <div className="flex items-center justify-between text-sm lg:text-base">
-                <span className="text-muted-foreground">
-                  Total dosering (L):
-                </span>
-                <span className="font-medium">
-                  {formatNumber(field.total_dosage_liters, 1)} L
-                </span>
-              </div>
-            )}
-            {field.total_dosage_grams && field.total_dosage_grams > 0.001 && (
-              <div className="flex items-center justify-between text-sm lg:text-base">
-                <span className="text-muted-foreground">
-                  Total dosering (g):
-                </span>
-                <span className="font-medium">
-                  {formatNumber(field.total_dosage_grams, 0)} g
-                </span>
-              </div>
-            )}
-            {field.total_dosage_ml && field.total_dosage_ml > 0.001 && (
-              <div className="flex items-center justify-between text-sm lg:text-base">
-                <span className="text-muted-foreground">
-                  Total dosering (ml):
-                </span>
-                <span className="font-medium">
-                  {formatNumber(field.total_dosage_ml, 0)} ml
-                </span>
-              </div>
-            )}
-            {field.total_dosage_tablets && field.total_dosage_tablets > 0 && (
-              <div className="flex items-center justify-between text-sm lg:text-base">
-                <span className="text-muted-foreground">Total dosering:</span>
-                <span className="font-medium">
-                  {field.total_dosage_tablets} tabletter
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Detailed Pesticide Products */}
-        {(field.pesticides_kg_detail ||
-          field.pesticides_liters_detail ||
-          field.pesticides_grams_detail ||
-          field.pesticides_ml_detail ||
-          field.pesticides_tablets_detail) && (
-          <div className="mb-3">
-            <h4 className="text-foreground mb-2 text-sm font-medium lg:text-base">
-              Anvendte produkter
-            </h4>
-            <div className="max-h-48 space-y-2 overflow-y-auto lg:max-h-64">
-              {/* Kg products */}
-              {parsePesticideDetail(field.pesticides_kg_detail).map(
-                (product, index) => (
-                  <div
-                    key={`kg-${index}`}
-                    className="bg-muted flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
-                  >
-                    <span className="truncate font-medium">{product.name}</span>
-                    <span className="text-muted-foreground ml-2 flex-shrink-0">
-                      {formatNumber(product.dosage, 2)} kg
-                    </span>
-                  </div>
-                )
-              )}
-
-              {/* Liter products */}
-              {parsePesticideDetail(field.pesticides_liters_detail).map(
-                (product, index) => (
-                  <div
-                    key={`l-${index}`}
-                    className="bg-primary/10 flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
-                  >
-                    <span className="text-primary truncate font-medium">
-                      {product.name}
-                    </span>
-                    <span className="text-primary/80 ml-2 flex-shrink-0">
-                      {formatNumber(product.dosage, 1)} L
-                    </span>
-                  </div>
-                )
-              )}
-
-              {/* Gram products */}
-              {parsePesticideDetail(field.pesticides_grams_detail).map(
-                (product, index) => (
-                  <div
-                    key={`g-${index}`}
-                    className="bg-muted/50 flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
-                  >
-                    <span className="truncate font-medium text-green-800">
-                      {product.name}
-                    </span>
-                    <span className="ml-2 flex-shrink-0 text-green-600">
-                      {formatNumber(product.dosage, 0)} g
-                    </span>
-                  </div>
-                )
-              )}
-
-              {/* ML products */}
-              {parsePesticideDetail(field.pesticides_ml_detail).map(
-                (product, index) => (
-                  <div
-                    key={`ml-${index}`}
-                    className="bg-bnbo/10 flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
-                  >
-                    <span className="text-bnbo truncate font-medium">
-                      {product.name}
-                    </span>
-                    <span className="text-bnbo/80 ml-2 flex-shrink-0">
-                      {formatNumber(product.dosage, 0)} ml
-                    </span>
-                  </div>
-                )
-              )}
-
-              {/* Tablet products */}
-              {parsePesticideDetail(field.pesticides_tablets_detail).map(
-                (product, index) => (
-                  <div
-                    key={`tablet-${index}`}
-                    className="bg-conventional/10 flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
-                  >
-                    <span className="text-conventional truncate font-medium">
-                      {product.name}
-                    </span>
-                    <span className="text-conventional/80 ml-2 flex-shrink-0">
-                      {formatNumber(product.dosage, 0)} tabletter
-                    </span>
-                  </div>
-                )
-              )}
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground text-xs lg:text-sm">
+                Risikoniveau
+              </span>
+              <Badge variant={riskLevel.variant} className="text-xs lg:text-sm">
+                {riskLevel.level}
+              </Badge>
             </div>
           </div>
-        )}
 
-        {/* Categorized Pesticide Products */}
-        {(field.pfas_products_detail ||
-          field.diquat_products_detail ||
-          field.glyphosate_products_detail ||
-          field.other_products_detail) && (
-          <Card className="p-4 lg:p-6">
-            <h3 className="text-foreground mb-3 text-base font-semibold lg:text-lg">
-              Anvendte pesticider (kategoriseret)
-            </h3>
-            <div className="max-h-64 space-y-3 overflow-y-auto lg:max-h-80">
-              {/* PFAS Products */}
-              {field.pfas_products_detail && (
-                <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
-                  <div className="mb-2 text-sm font-medium text-orange-700">
-                    🚨 PFAS-holdige produkter ({field.pfas_applications || 0})
-                  </div>
-                  <div className="space-y-2">
-                    {parsePesticideDetailWithUnit(
-                      field.pfas_products_detail
-                    ).map((product, index) => {
-                      const riskIcon = getRiskIcon(
-                        product.healthRisk,
-                        product.envRisk,
-                        product.signalWord
-                      );
-                      return (
-                        <div
-                          key={`pfas-${index}`}
-                          className="rounded border-l-4 border-orange-400 bg-orange-100 p-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1">
-                              <div className="font-medium text-orange-800">
-                                {product.name}
-                              </div>
-                              <div className="text-sm text-orange-600">
-                                {formatNumber(product.dosage, 2)} {product.unit}
-                              </div>
-                            </div>
-                            {riskIcon && (
-                              <div
-                                className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
-                                title={`${riskIcon.ghs} - ${riskIcon.level}`}
-                              >
-                                <riskIcon.Icon
-                                  className={`h-4 w-4 ${riskIcon.color}`}
-                                />
-                                <span
-                                  className={`text-xs font-medium ${riskIcon.color}`}
-                                >
-                                  {riskIcon.level}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Diquat Products */}
-              {field.diquat_products_detail && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
-                  <div className="mb-2 text-sm font-medium text-red-700">
-                    ⚠️ Diquat-holdige produkter (
-                    {field.diquat_applications || 0})
-                  </div>
-                  <div className="space-y-2">
-                    {parsePesticideDetailWithUnit(
-                      field.diquat_products_detail
-                    ).map((product, index) => {
-                      const riskIcon = getRiskIcon(
-                        product.healthRisk,
-                        product.envRisk,
-                        product.signalWord
-                      );
-                      return (
-                        <div
-                          key={`diquat-${index}`}
-                          className="rounded border-l-4 border-red-400 bg-red-100 p-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1">
-                              <div className="font-medium text-red-800">
-                                {product.name}
-                              </div>
-                              <div className="text-sm text-red-600">
-                                {formatNumber(product.dosage, 2)} {product.unit}
-                              </div>
-                            </div>
-                            {riskIcon && (
-                              <div
-                                className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
-                                title={`${riskIcon.ghs} - ${riskIcon.level}`}
-                              >
-                                <riskIcon.Icon
-                                  className={`h-4 w-4 ${riskIcon.color}`}
-                                />
-                                <span
-                                  className={`text-xs font-medium ${riskIcon.color}`}
-                                >
-                                  {riskIcon.level}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Glyphosate Products */}
-              {field.glyphosate_products_detail && (
-                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-                  <div className="mb-2 text-sm font-medium text-yellow-700">
-                    🌾 Glyphosat-holdige produkter (
-                    {field.glyphosate_applications || 0})
-                  </div>
-                  <div className="space-y-2">
-                    {parsePesticideDetailWithUnit(
-                      field.glyphosate_products_detail
-                    ).map((product, index) => {
-                      const riskIcon = getRiskIcon(
-                        product.healthRisk,
-                        product.envRisk,
-                        product.signalWord
-                      );
-                      return (
-                        <div
-                          key={`glyphosate-${index}`}
-                          className="rounded border-l-4 border-yellow-400 bg-yellow-100 p-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1">
-                              <div className="font-medium text-yellow-800">
-                                {product.name}
-                              </div>
-                              <div className="text-sm text-yellow-600">
-                                {formatNumber(product.dosage, 2)} {product.unit}
-                              </div>
-                            </div>
-                            {riskIcon && (
-                              <div
-                                className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
-                                title={`${riskIcon.ghs} - ${riskIcon.level}`}
-                              >
-                                <riskIcon.Icon
-                                  className={`h-4 w-4 ${riskIcon.color}`}
-                                />
-                                <span
-                                  className={`text-xs font-medium ${riskIcon.color}`}
-                                >
-                                  {riskIcon.level}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Other Products */}
-              {field.other_products_detail && (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <div className="mb-2 text-sm font-medium text-gray-700">
-                    🧪 Øvrige produkter ({field.other_applications || 0})
-                  </div>
-                  <div className="space-y-2">
-                    {parsePesticideDetailWithUnit(
-                      field.other_products_detail
-                    ).map((product, index) => {
-                      const riskIcon = getRiskIcon(
-                        product.healthRisk,
-                        product.envRisk,
-                        product.signalWord
-                      );
-                      return (
-                        <div
-                          key={`other-${index}`}
-                          className="rounded border-l-4 border-gray-400 bg-gray-100 p-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1">
-                              <div className="font-medium text-gray-800">
-                                {product.name}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                {formatNumber(product.dosage, 2)} {product.unit}
-                              </div>
-                            </div>
-                            {riskIcon && (
-                              <div
-                                className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
-                                title={`${riskIcon.ghs} - ${riskIcon.level}`}
-                              >
-                                <riskIcon.Icon
-                                  className={`h-4 w-4 ${riskIcon.color}`}
-                                />
-                                <span
-                                  className={`text-xs font-medium ${riskIcon.color}`}
-                                >
-                                  {riskIcon.level}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
-        )}
-
-        {/* Chemical-specific information */}
-        <div className="space-y-2 lg:space-y-3">
-          {/* PFAS Information */}
-          {field.pfas_applications && field.pfas_applications > 0 && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 lg:p-3 dark:border-amber-800 dark:bg-amber-950/20">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="flex items-center text-sm font-medium text-amber-700 lg:text-base dark:text-amber-300">
-                  <TestTube className="mr-1 h-4 w-4" />
-                  PFAS
-                </span>
-                <span className="text-sm font-bold text-amber-800 lg:text-base dark:text-amber-200">
-                  {field.pfas_applications} apps
-                </span>
-              </div>
-              <div className="space-y-1 text-xs text-amber-700/80 lg:text-sm dark:text-amber-300/80">
-                {field.total_pfas_active_ingredient_kg &&
-                  field.total_pfas_active_ingredient_kg > 0 && (
-                    <div className="flex justify-between">
-                      <span>Aktivstof:</span>
-                      <span className="font-medium">
-                        {formatNumber(field.total_pfas_active_ingredient_kg, 3)}{' '}
-                        kg
-                      </span>
-                    </div>
-                  )}
-                {field.total_pfas_belastning &&
-                  field.total_pfas_belastning > 0 && (
-                    <div className="flex justify-between">
-                      <span>Belastning:</span>
-                      <span className="font-medium">
-                        {formatNumber(field.total_pfas_belastning)}
-                      </span>
-                    </div>
-                  )}
-              </div>
-            </div>
-          )}
-
-          {/* Diquat Information */}
-          {field.diquat_applications && field.diquat_applications > 0 && (
-            <div className="rounded-lg border border-purple-200 bg-purple-50 p-2 lg:p-3 dark:border-purple-800 dark:bg-purple-950/20">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="text-sm font-medium text-purple-700 lg:text-base dark:text-purple-300">
-                  💧 Diquat
-                </span>
-                <span className="text-sm font-bold text-purple-800 lg:text-base dark:text-purple-200">
-                  {field.diquat_applications} apps
-                </span>
-              </div>
-              {field.total_diquat_belastning &&
-                field.total_diquat_belastning > 0 && (
-                  <div className="flex justify-between text-xs text-purple-700/80 lg:text-sm dark:text-purple-300/80">
-                    <span>Belastning:</span>
-                    <span className="font-medium">
-                      {formatNumber(field.total_diquat_belastning)}
-                    </span>
-                  </div>
-                )}
-            </div>
-          )}
-
-          {/* Glyphosate Information */}
-          {field.glyphosate_applications &&
-            field.glyphosate_applications > 0 && (
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 lg:p-3 dark:border-blue-800 dark:bg-blue-950/20">
+          {/* Pesticide Products Summary */}
+          {field.unique_pesticide_products &&
+            field.unique_pesticide_products > 0 && (
+              <div className="bg-primary/10 mb-3 rounded-lg p-3 lg:p-4">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="flex items-center text-sm font-medium text-blue-700 lg:text-base dark:text-blue-300">
-                    <Leaf className="mr-1 h-4 w-4" />
-                    Glyphosate
+                  <span className="text-primary text-sm font-medium lg:text-base">
+                    Produkter anvendt
                   </span>
-                  <span className="text-sm font-bold text-blue-800 lg:text-base dark:text-blue-200">
-                    {field.glyphosate_applications} apps
+                  <span className="text-primary text-lg font-bold lg:text-xl">
+                    {field.unique_pesticide_products}
                   </span>
                 </div>
-                <div className="space-y-1 text-xs text-blue-700/80 lg:text-sm dark:text-blue-300/80">
-                  {field.total_glyphosate_active_ingredient_kg &&
-                    field.total_glyphosate_active_ingredient_kg > 0 && (
+                {field.total_pesticide_applications &&
+                  field.total_pesticide_applications > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-primary/80 text-xs lg:text-sm">
+                        Total pesticider
+                      </span>
+                      <span className="text-primary text-xs font-medium lg:text-sm">
+                        {field.total_pesticide_applications}
+                      </span>
+                    </div>
+                  )}
+              </div>
+            )}
+
+          {/* Dosage Information - only show if there are meaningful values */}
+          {((field.total_dosage_kg && field.total_dosage_kg > 0.001) ||
+            (field.total_dosage_liters && field.total_dosage_liters > 0.001) ||
+            (field.total_dosage_grams && field.total_dosage_grams > 0.001) ||
+            (field.total_dosage_ml && field.total_dosage_ml > 0.001) ||
+            (field.total_dosage_tablets && field.total_dosage_tablets > 0)) && (
+            <div className="mb-3 space-y-2 lg:space-y-3">
+              {field.total_dosage_kg && field.total_dosage_kg > 0.001 && (
+                <div className="flex items-center justify-between text-sm lg:text-base">
+                  <span className="text-muted-foreground">
+                    Total dosering (kg):
+                  </span>
+                  <span className="font-medium">
+                    {formatNumber(field.total_dosage_kg, 2)} kg
+                  </span>
+                </div>
+              )}
+              {field.total_dosage_liters &&
+                field.total_dosage_liters > 0.001 && (
+                  <div className="flex items-center justify-between text-sm lg:text-base">
+                    <span className="text-muted-foreground">
+                      Total dosering (L):
+                    </span>
+                    <span className="font-medium">
+                      {formatNumber(field.total_dosage_liters, 1)} L
+                    </span>
+                  </div>
+                )}
+              {field.total_dosage_grams &&
+                field.total_dosage_grams > 0.001 &&
+                formatNumber(field.total_dosage_grams, 0) !== null && (
+                  <div className="flex items-center justify-between text-sm lg:text-base">
+                    <span className="text-muted-foreground">
+                      Total dosering (g):
+                    </span>
+                    <span className="font-medium">
+                      {formatNumber(field.total_dosage_grams, 0)} g
+                    </span>
+                  </div>
+                )}
+              {field.total_dosage_ml &&
+                field.total_dosage_ml > 0.001 &&
+                formatNumber(field.total_dosage_ml, 0) !== null && (
+                  <div className="flex items-center justify-between text-sm lg:text-base">
+                    <span className="text-muted-foreground">
+                      Total dosering (ml):
+                    </span>
+                    <span className="font-medium">
+                      {formatNumber(field.total_dosage_ml, 0)} ml
+                    </span>
+                  </div>
+                )}
+              {field.total_dosage_tablets &&
+                field.total_dosage_tablets > 0 &&
+                formatNumber(field.total_dosage_tablets, 0) !== null && (
+                  <div className="flex items-center justify-between text-sm lg:text-base">
+                    <span className="text-muted-foreground">
+                      Total dosering:
+                    </span>
+                    <span className="font-medium">
+                      {formatNumber(field.total_dosage_tablets, 0)} tabletter
+                    </span>
+                  </div>
+                )}
+            </div>
+          )}
+
+          {/* Detailed Pesticide Products */}
+          {(field.pesticides_kg_detail ||
+            field.pesticides_liters_detail ||
+            field.pesticides_grams_detail ||
+            field.pesticides_ml_detail ||
+            field.pesticides_tablets_detail) && (
+            <div className="mb-3">
+              <h4 className="text-foreground mb-2 text-sm font-medium lg:text-base">
+                Anvendte produkter
+              </h4>
+              <div className="max-h-48 space-y-2 overflow-y-auto lg:max-h-64">
+                {/* Kg products */}
+                {parsePesticideDetail(field.pesticides_kg_detail).map(
+                  (product, index) => (
+                    <div
+                      key={`kg-${index}`}
+                      className="bg-muted flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
+                    >
+                      <span className="truncate font-medium">
+                        {product.name}
+                      </span>
+                      <span className="text-muted-foreground ml-2 flex-shrink-0">
+                        {formatNumber(product.dosage, 2)} kg
+                      </span>
+                    </div>
+                  )
+                )}
+
+                {/* Liter products */}
+                {parsePesticideDetail(field.pesticides_liters_detail).map(
+                  (product, index) => (
+                    <div
+                      key={`l-${index}`}
+                      className="bg-primary/10 flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
+                    >
+                      <span className="text-primary truncate font-medium">
+                        {product.name}
+                      </span>
+                      <span className="text-primary/80 ml-2 flex-shrink-0">
+                        {formatNumber(product.dosage, 1)} L
+                      </span>
+                    </div>
+                  )
+                )}
+
+                {/* Gram products */}
+                {parsePesticideDetail(field.pesticides_grams_detail).map(
+                  (product, index) => (
+                    <div
+                      key={`g-${index}`}
+                      className="bg-muted/50 flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
+                    >
+                      <span className="truncate font-medium text-green-800">
+                        {product.name}
+                      </span>
+                      <span className="ml-2 flex-shrink-0 text-green-600">
+                        {formatNumber(product.dosage, 0)} g
+                      </span>
+                    </div>
+                  )
+                )}
+
+                {/* ML products */}
+                {parsePesticideDetail(field.pesticides_ml_detail).map(
+                  (product, index) => (
+                    <div
+                      key={`ml-${index}`}
+                      className="bg-bnbo/10 flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
+                    >
+                      <span className="text-bnbo truncate font-medium">
+                        {product.name}
+                      </span>
+                      <span className="text-bnbo/80 ml-2 flex-shrink-0">
+                        {formatNumber(product.dosage, 0)} ml
+                      </span>
+                    </div>
+                  )
+                )}
+
+                {/* Tablet products */}
+                {parsePesticideDetail(field.pesticides_tablets_detail).map(
+                  (product, index) => (
+                    <div
+                      key={`tablet-${index}`}
+                      className="bg-conventional/10 flex items-center justify-between rounded p-2 text-xs lg:p-3 lg:text-sm"
+                    >
+                      <span className="text-conventional truncate font-medium">
+                        {product.name}
+                      </span>
+                      <span className="text-conventional/80 ml-2 flex-shrink-0">
+                        {formatNumber(product.dosage, 0)} tabletter
+                      </span>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Categorized Pesticide Products */}
+          {(field.pfas_products_detail ||
+            field.diquat_products_detail ||
+            field.glyphosate_products_detail ||
+            field.other_products_detail) && (
+            <Card className="p-4 lg:p-6">
+              <h3 className="text-foreground mb-3 text-base font-semibold lg:text-lg">
+                Anvendte pesticider (kategoriseret)
+              </h3>
+              <div className="max-h-64 space-y-3 overflow-y-auto lg:max-h-80">
+                {/* PFAS Products */}
+                {field.pfas_products_detail && (
+                  <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+                    <div className="mb-2 text-sm font-medium text-orange-700">
+                      🚨 PFAS-holdige produkter ({field.pfas_applications || 0})
+                    </div>
+                    <div className="space-y-2">
+                      {parsePesticideDetailWithUnit(
+                        field.pfas_products_detail
+                      ).map((product, index) => {
+                        const riskIcon = getRiskIcon(
+                          product.healthRisk,
+                          product.envRisk,
+                          product.signalWord
+                        );
+                        return (
+                          <div
+                            key={`pfas-${index}`}
+                            className="rounded border-l-4 border-orange-400 bg-orange-100 p-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="font-medium text-orange-800">
+                                  {product.name}
+                                </div>
+                                <div className="text-sm text-orange-600">
+                                  {formatNumber(product.dosage, 2)}{' '}
+                                  {product.unit}
+                                </div>
+                              </div>
+                              {riskIcon && (
+                                <div
+                                  className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
+                                  title={`${riskIcon.ghs} - ${riskIcon.level}`}
+                                >
+                                  <riskIcon.Icon
+                                    className={`h-4 w-4 ${riskIcon.color}`}
+                                  />
+                                  <span
+                                    className={`text-xs font-medium ${riskIcon.color}`}
+                                  >
+                                    {riskIcon.level}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Diquat Products */}
+                {field.diquat_products_detail && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                    <div className="mb-2 text-sm font-medium text-red-700">
+                      ⚠️ Diquat-holdige produkter (
+                      {field.diquat_applications || 0})
+                    </div>
+                    <div className="space-y-2">
+                      {parsePesticideDetailWithUnit(
+                        field.diquat_products_detail
+                      ).map((product, index) => {
+                        const riskIcon = getRiskIcon(
+                          product.healthRisk,
+                          product.envRisk,
+                          product.signalWord
+                        );
+                        return (
+                          <div
+                            key={`diquat-${index}`}
+                            className="rounded border-l-4 border-red-400 bg-red-100 p-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="font-medium text-red-800">
+                                  {product.name}
+                                </div>
+                                <div className="text-sm text-red-600">
+                                  {formatNumber(product.dosage, 2)}{' '}
+                                  {product.unit}
+                                </div>
+                              </div>
+                              {riskIcon && (
+                                <div
+                                  className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
+                                  title={`${riskIcon.ghs} - ${riskIcon.level}`}
+                                >
+                                  <riskIcon.Icon
+                                    className={`h-4 w-4 ${riskIcon.color}`}
+                                  />
+                                  <span
+                                    className={`text-xs font-medium ${riskIcon.color}`}
+                                  >
+                                    {riskIcon.level}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Glyphosate Products */}
+                {field.glyphosate_products_detail && (
+                  <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                    <div className="mb-2 text-sm font-medium text-yellow-700">
+                      🌾 Glyphosat-holdige produkter (
+                      {field.glyphosate_applications || 0})
+                    </div>
+                    <div className="space-y-2">
+                      {parsePesticideDetailWithUnit(
+                        field.glyphosate_products_detail
+                      ).map((product, index) => {
+                        const riskIcon = getRiskIcon(
+                          product.healthRisk,
+                          product.envRisk,
+                          product.signalWord
+                        );
+                        return (
+                          <div
+                            key={`glyphosate-${index}`}
+                            className="rounded border-l-4 border-yellow-400 bg-yellow-100 p-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="font-medium text-yellow-800">
+                                  {product.name}
+                                </div>
+                                <div className="text-sm text-yellow-600">
+                                  {formatNumber(product.dosage, 2)}{' '}
+                                  {product.unit}
+                                </div>
+                              </div>
+                              {riskIcon && (
+                                <div
+                                  className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
+                                  title={`${riskIcon.ghs} - ${riskIcon.level}`}
+                                >
+                                  <riskIcon.Icon
+                                    className={`h-4 w-4 ${riskIcon.color}`}
+                                  />
+                                  <span
+                                    className={`text-xs font-medium ${riskIcon.color}`}
+                                  >
+                                    {riskIcon.level}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Other Products */}
+                {field.other_products_detail && (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div className="mb-2 text-sm font-medium text-gray-700">
+                      🧪 Øvrige produkter ({field.other_applications || 0})
+                    </div>
+                    <div className="space-y-2">
+                      {parsePesticideDetailWithUnit(
+                        field.other_products_detail
+                      ).map((product, index) => {
+                        const riskIcon = getRiskIcon(
+                          product.healthRisk,
+                          product.envRisk,
+                          product.signalWord
+                        );
+                        return (
+                          <div
+                            key={`other-${index}`}
+                            className="rounded border-l-4 border-gray-400 bg-gray-100 p-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="font-medium text-gray-800">
+                                  {product.name}
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  {formatNumber(product.dosage, 2)}{' '}
+                                  {product.unit}
+                                </div>
+                              </div>
+                              {riskIcon && (
+                                <div
+                                  className={`flex items-center gap-1 rounded px-2 py-1 ${riskIcon.bgColor}`}
+                                  title={`${riskIcon.ghs} - ${riskIcon.level}`}
+                                >
+                                  <riskIcon.Icon
+                                    className={`h-4 w-4 ${riskIcon.color}`}
+                                  />
+                                  <span
+                                    className={`text-xs font-medium ${riskIcon.color}`}
+                                  >
+                                    {riskIcon.level}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Chemical-specific information */}
+          <div className="space-y-2 lg:space-y-3">
+            {/* PFAS Information */}
+            {field.pfas_applications && field.pfas_applications > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 lg:p-3 dark:border-amber-800 dark:bg-amber-950/20">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="flex items-center text-sm font-medium text-amber-700 lg:text-base dark:text-amber-300">
+                    <TestTube className="mr-1 h-4 w-4" />
+                    PFAS
+                  </span>
+                  <span className="text-sm font-bold text-amber-800 lg:text-base dark:text-amber-200">
+                    {field.pfas_applications} produkter
+                  </span>
+                </div>
+                <div className="space-y-1 text-xs text-amber-700/80 lg:text-sm dark:text-amber-300/80">
+                  {field.total_pfas_active_ingredient_kg &&
+                    field.total_pfas_active_ingredient_kg > 0 && (
                       <div className="flex justify-between">
                         <span>Aktivstof:</span>
                         <span className="font-medium">
                           {formatNumber(
-                            field.total_glyphosate_active_ingredient_kg,
+                            field.total_pfas_active_ingredient_kg,
                             3
                           )}{' '}
                           kg
                         </span>
                       </div>
                     )}
-                  {field.total_glyphosate_belastning &&
-                    field.total_glyphosate_belastning > 0 && (
+                  {field.total_pfas_belastning &&
+                    field.total_pfas_belastning > 0 && (
                       <div className="flex justify-between">
                         <span>Belastning:</span>
                         <span className="font-medium">
-                          {formatNumber(field.total_glyphosate_belastning)}
+                          {formatNumber(field.total_pfas_belastning)}
                         </span>
                       </div>
                     )}
@@ -925,58 +957,117 @@ export function FieldDetailsContent({ field }: FieldDetailsContentProps) {
               </div>
             )}
 
-          {/* Partial coverage warning */}
-          {field.is_partial_coverage && (
-            <div className="bg-conventional/10 flex items-center space-x-2 rounded-lg p-2 lg:p-3">
-              <AlertTriangle className="text-conventional h-4 w-4" />
-              <span className="text-conventional/80 text-xs lg:text-sm">
-                Delvis markdækning
-              </span>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      {/* Environmental Areas */}
-      <Card className="p-4 lg:p-6">
-        <h3 className="text-foreground mb-3 text-base font-semibold lg:text-lg">
-          Miljøområder
-        </h3>
-        <div className="space-y-2 lg:space-y-3">
-          {field.bnbo_area_hectares > 0 && (
-            <div className="bg-primary/10 rounded-lg p-2 lg:p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-primary text-sm font-medium lg:text-base">
-                  💧 BNBO
-                </span>
-                <span className="text-primary text-sm font-bold lg:text-base">
-                  {formatNumber(field.bnbo_area_hectares)} ha
-                </span>
-              </div>
-            </div>
-          )}
-
-          {field.wetland_area_hectares > 0 && (
-            <div className="bg-muted rounded-lg p-2 lg:p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-foreground text-sm font-medium lg:text-base">
-                  💨 Lavbund
-                </span>
-                <span className="text-foreground text-sm font-bold lg:text-base">
-                  {formatNumber(field.wetland_area_hectares)} ha
-                </span>
-              </div>
-            </div>
-          )}
-
-          {field.bnbo_area_hectares === 0 &&
-            field.wetland_area_hectares === 0 && (
-              <div className="text-muted-foreground p-2 text-xs italic lg:text-sm">
-                Ingen registrerede miljøområder
+            {/* Diquat Information */}
+            {field.diquat_applications && field.diquat_applications > 0 && (
+              <div className="rounded-lg border border-purple-200 bg-purple-50 p-2 lg:p-3 dark:border-purple-800 dark:bg-purple-950/20">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-sm font-medium text-purple-700 lg:text-base dark:text-purple-300">
+                    💧 Diquat
+                  </span>
+                  <span className="text-sm font-bold text-purple-800 lg:text-base dark:text-purple-200">
+                    {field.diquat_applications} produkter
+                  </span>
+                </div>
+                {field.total_diquat_belastning &&
+                  field.total_diquat_belastning > 0 && (
+                    <div className="flex justify-between text-xs text-purple-700/80 lg:text-sm dark:text-purple-300/80">
+                      <span>Belastning:</span>
+                      <span className="font-medium">
+                        {formatNumber(field.total_diquat_belastning)}
+                      </span>
+                    </div>
+                  )}
               </div>
             )}
-        </div>
-      </Card>
+
+            {/* Glyphosate Information */}
+            {field.glyphosate_applications &&
+              field.glyphosate_applications > 0 && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-2 lg:p-3 dark:border-blue-800 dark:bg-blue-950/20">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="flex items-center text-sm font-medium text-blue-700 lg:text-base dark:text-blue-300">
+                      <Leaf className="mr-1 h-4 w-4" />
+                      Glyphosate
+                    </span>
+                    <span className="text-sm font-bold text-blue-800 lg:text-base dark:text-blue-200">
+                      {field.glyphosate_applications} produkter
+                    </span>
+                  </div>
+                  <div className="space-y-1 text-xs text-blue-700/80 lg:text-sm dark:text-blue-300/80">
+                    {field.total_glyphosate_active_ingredient_kg &&
+                      field.total_glyphosate_active_ingredient_kg > 0 && (
+                        <div className="flex justify-between">
+                          <span>Aktivstof:</span>
+                          <span className="font-medium">
+                            {formatNumber(
+                              field.total_glyphosate_active_ingredient_kg,
+                              3
+                            )}{' '}
+                            kg
+                          </span>
+                        </div>
+                      )}
+                    {field.total_glyphosate_belastning &&
+                      field.total_glyphosate_belastning > 0 && (
+                        <div className="flex justify-between">
+                          <span>Belastning:</span>
+                          <span className="font-medium">
+                            {formatNumber(field.total_glyphosate_belastning)}
+                          </span>
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
+
+            {/* Partial coverage warning */}
+            {field.is_partial_coverage && (
+              <div className="bg-conventional/10 flex items-center space-x-2 rounded-lg p-2 lg:p-3">
+                <AlertTriangle className="text-conventional h-4 w-4" />
+                <span className="text-conventional/80 text-xs lg:text-sm">
+                  Delvis markdækning
+                </span>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Environmental Areas */}
+      {hasEnvironmentalData && (
+        <Card className="p-4 lg:p-6">
+          <h3 className="text-foreground mb-3 text-base font-semibold lg:text-lg">
+            Miljøområder
+          </h3>
+          <div className="space-y-2 lg:space-y-3">
+            {(field.bnbo_area_hectares ?? 0) > 0.001 && (
+              <div className="bg-primary/10 rounded-lg p-2 lg:p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-primary text-sm font-medium lg:text-base">
+                    💧 BNBO
+                  </span>
+                  <span className="text-primary text-sm font-bold lg:text-base">
+                    {formatNumber(field.bnbo_area_hectares) || '0'} ha
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {(field.wetland_area_hectares ?? 0) > 0.001 && (
+              <div className="bg-muted rounded-lg p-2 lg:p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-foreground text-sm font-medium lg:text-base">
+                    💨 Lavbund
+                  </span>
+                  <span className="text-foreground text-sm font-bold lg:text-base">
+                    {formatNumber(field.wetland_area_hectares) || '0'} ha
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Proximity Information */}
       <Card className="p-4 lg:p-6">

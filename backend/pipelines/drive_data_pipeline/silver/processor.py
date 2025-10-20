@@ -123,6 +123,7 @@ class SilverProcessor:
 
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
+        from .transformers.csv_transformer import CSVTransformer
         from .transformers.excel_transformer import ExcelTransformer
         from .transformers.fertiliser_transformer import FertiliserTransformer
         from .transformers.work_permits_transformer import WorkPermitsTransformer
@@ -131,6 +132,10 @@ class SilverProcessor:
         excel_transformer = ExcelTransformer()
         excel_transformer.conn = shared_conn
         excel_transformer._owns_connection = False
+
+        csv_transformer = CSVTransformer()
+        csv_transformer.conn = shared_conn
+        csv_transformer._owns_connection = False
 
         pdf_transformer = AdvancedPDFTransformer(
             use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
@@ -149,6 +154,7 @@ class SilverProcessor:
 
         self.transformers = {
             "Excel": excel_transformer,
+            "CSV": csv_transformer,
             "PDF": pdf_transformer,
             "Fertiliser": fertiliser_transformer,
             "WorkPermits": work_permits_transformer,

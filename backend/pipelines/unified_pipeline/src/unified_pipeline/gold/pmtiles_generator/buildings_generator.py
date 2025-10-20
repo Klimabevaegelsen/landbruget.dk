@@ -153,7 +153,7 @@ class BuildingsProximityPMTilesGenerator:
                     buildings_need_flip = False  # Already in lon,lat format - don't flip!
                 else:
                     logger.warning(
-                        f"DEBUG: Buildings coordinates don't match Denmark bounds - using default"
+                        "DEBUG: Buildings coordinates don't match Denmark bounds - using default"
                     )
                     buildings_need_flip = False
 
@@ -228,10 +228,10 @@ class BuildingsProximityPMTilesGenerator:
                     )
                     fields_format = "lon,lat"
                 else:
-                    logger.error(f"DEBUG: Fields coordinates don't match Denmark bounds!")
+                    logger.error("DEBUG: Fields coordinates don't match Denmark bounds!")
                     fields_format = "unknown"
 
-                # Check if coordinate systems match for spatial join  
+                # Check if coordinate systems match for spatial join
                 buildings_format = "lon,lat" if buildings_need_flip else "lat,lon"
                 logger.info(
                     f"DEBUG: Coordinate system status - Buildings: {buildings_format}, Fields: {fields_format}"

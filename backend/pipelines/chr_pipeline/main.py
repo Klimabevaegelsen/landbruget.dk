@@ -231,6 +231,68 @@ def generate_monthly_date_ranges(start_date: date, end_date: date) -> List[tuple
     return monthly_ranges
 
 
+def create_chr_groups(chr_to_species: Dict[int, set], num_groups: int = 4) -> Dict[int, Dict[int, set]]:
+    """
+    Divide CHR numbers into balanced groups for parallel processing.
+
+    Args:
+        chr_to_species: Dictionary mapping CHR numbers to their species sets
+        num_groups: Number of groups to create (default: 4)
+
+    Returns:
+        Dictionary mapping group number (1-based) to CHR-to-species mappings for that group
+    """
+    if not chr_to_species:
+        return {}
+
+    # Sort CHR numbers for deterministic grouping
+    sorted_chrs = sorted(chr_to_species.keys())
+
+    # Calculate group assignments based on CHR number ranges for balanced distribution
+    chr_groups = {}
+    for i in range(num_groups):
+        chr_groups[i + 1] = {}
+
+    # Distribute CHRs across groups using modulo for even distribution
+    for idx, chr_num in enumerate(sorted_chrs):
+        group_id = (idx % num_groups) + 1
+        chr_groups[group_id][chr_num] = chr_to_species[chr_num]
+
+    # Log group statistics
+    for group_id, group_chrs in chr_groups.items():
+        total_combinations = sum(len(species_set) for species_set in group_chrs.values())
+        logging.info(f"CHR Group {group_id}: {len(group_chrs)} CHRs, {total_combinations} CHR/species combinations")
+
+    return chr_groups
+
+
+def filter_chr_by_group(chr_to_species: Dict[int, set], chr_group: int, num_groups: int = 4) -> Dict[int, set]:
+    """
+    Filter CHR numbers to only include those assigned to the specified group.
+
+    Args:
+        chr_to_species: Dictionary mapping CHR numbers to their species sets
+        chr_group: Group number to filter for (1-based)
+        num_groups: Total number of groups (default: 4)
+
+    Returns:
+        Filtered dictionary containing only CHRs for the specified group
+    """
+    if chr_group < 1 or chr_group > num_groups:
+        logging.warning(f"Invalid CHR group {chr_group}. Must be between 1 and {num_groups}")
+        return {}
+
+    chr_groups = create_chr_groups(chr_to_species, num_groups)
+    filtered_chrs = chr_groups.get(chr_group, {})
+
+    total_combinations = sum(len(species_set) for species_set in filtered_chrs.values())
+    logging.info(
+        f"Filtered to CHR group {chr_group}: {len(filtered_chrs)} CHRs, {total_combinations} CHR/species combinations"
+    )
+
+    return filtered_chrs
+
+
 def parse_args() -> Dict[str, Any]:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="CHR Data Pipeline")
@@ -258,6 +320,7 @@ def parse_args() -> Dict[str, Any]:
     parser.add_argument(
         "--skip-dependencies", action="store_true", help="Skip running dependency steps (for parallel job execution)"
     )
+    parser.add_argument("--chr-group", type=int, help="CHR group number for parallel processing (1-4)")
 
     args = parser.parse_args()
 
@@ -294,6 +357,7 @@ def parse_args() -> Dict[str, Any]:
         "end_date": end_date,
         "discovery_year": args.discovery_year or datetime.now().year,
         "skip_dependencies": args.skip_dependencies,
+        "chr_group": args.chr_group,
     }
 
 
@@ -507,10 +571,10 @@ def process_parallel(func, tasks: List, workers: int, desc: str = None) -> List:
                         eta_seconds = remaining_tasks / rate if rate > 0 else 0
                         logger.info(
                             f"Progress: {completed_count}/{len(futures)} tasks completed "
-                            f"({completed_count/len(futures)*100:.1f}%) - "
+                            f"({completed_count / len(futures) * 100:.1f}%) - "
                             f"Rate: {rate:.2f} tasks/sec - "
                             f"Success: {success_count}, Errors: {error_count} - "
-                            f"ETA: {eta_seconds/3600:.1f}h"
+                            f"ETA: {eta_seconds / 3600:.1f}h"
                         )
                         last_log_time = current_time
 
@@ -815,12 +879,20 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
         logging.info(f"VetStat will process {len(monthly_ranges)} monthly chunks from {start_date} to {end_date}")
         for i, (month_start, month_end) in enumerate(monthly_ranges):
-            logging.debug(f"  Month {i+1}: {month_start} to {month_end}")
+            logging.debug(f"  Month {i + 1}: {month_start} to {month_end}")
+
+        # Filter CHRs by group if CHR group is specified
+        chr_to_species_filtered = context["chr_to_species"]
+        if context["args"]["chr_group"] is not None:
+            chr_to_species_filtered = filter_chr_by_group(context["chr_to_species"], context["args"]["chr_group"])
+            if not chr_to_species_filtered:
+                logging.warning(f"No CHRs found for group {context['args']['chr_group']}")
+                return context
 
         # Create tasks for each CHR/species/month combination
         vetstat_tasks = [
             (chr_num, species, month_start, month_end)
-            for chr_num, species_set in context["chr_to_species"].items()
+            for chr_num, species_set in chr_to_species_filtered.items()
             for species in species_set
             for month_start, month_end in monthly_ranges
         ]
@@ -828,9 +900,10 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if not vetstat_tasks:
             logging.warning("No valid CHR number and species code combinations found for VetStat data")
         elif context["args"]["progress"]:
-            combinations = sum(len(species_set) for species_set in context["chr_to_species"].values())
+            combinations = sum(len(species_set) for species_set in chr_to_species_filtered.values())
+            group_info = f" (CHR group {context['args']['chr_group']})" if context["args"]["chr_group"] else ""
             logging.info(
-                f"Processing {len(vetstat_tasks)} VetStat tasks "
+                f"Processing {len(vetstat_tasks)} VetStat tasks{group_info} "
                 f"({combinations} CHR/species combinations × {len(monthly_ranges)} months)"
             )
 

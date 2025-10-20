@@ -14,7 +14,8 @@
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
-    "test:smoke": "./scripts/smoke-test.sh"
+    "test:smoke": "./scripts/smoke-test.sh",
+    "test:smoke:fast": "./scripts/smoke-test-fast.sh"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.2",

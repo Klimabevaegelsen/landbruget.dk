@@ -1,9 +1,7 @@
-"""Excel file transformer using pandas for reading, then DuckDB for processing."""
+"""CSV file transformer using DuckDB for reading and processing."""
 
 import time
 from pathlib import Path
-
-import pandas as pd
 
 # Handle imports for both standalone and package usage
 try:
@@ -23,13 +21,13 @@ except ImportError:
 logger = get_logger()
 
 
-class ExcelTransformer(BaseTransformer, DuckDBProcessor):
-    """Transform Excel files using pandas for reading, then DuckDB for processing."""
+class CSVTransformer(BaseTransformer, DuckDBProcessor):
+    """Transform CSV files using DuckDB for reading and processing."""
 
     def __init__(self) -> None:
         BaseTransformer.__init__(self)
         DuckDBProcessor.__init__(self)
-        logger.info("Initialized ExcelTransformer with DuckDB")
+        logger.info("Initialized CSVTransformer with DuckDB")
 
     def transform(
         self,
@@ -37,10 +35,10 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
         metadata: FileMetadata,
         output_dir: Path,
     ) -> TransformResult:
-        """Transform Excel file to standardized format using pandas + DuckDB.
+        """Transform CSV file to standardized format using DuckDB.
 
         Args:
-            file_path: Path to the Excel file
+            file_path: Path to the CSV file
             metadata: File metadata
             output_dir: Output directory for transformed files
 
@@ -48,216 +46,177 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             TransformResult with success status and metadata
         """
         try:
-            logger.info(f"Transforming Excel file using pandas + DuckDB: {file_path}")
+            logger.info(f"Transforming CSV file using DuckDB: {file_path}")
 
             # Create output directory for this file
-            file_output_dir = output_dir / "Excel"
+            file_output_dir = output_dir / "CSV"
             file_output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Read Excel file and get all sheets using pandas
-            sheets_data = self._read_excel_sheets_pandas(file_path)
+            # Read CSV file using DuckDB
+            table_name = self._read_csv_with_duckdb(file_path)
 
-            if not sheets_data:
-                logger.warning(f"No valid sheets found in Excel file: {file_path}")
+            if not table_name:
+                logger.warning(f"No valid data found in CSV file: {file_path}")
                 return TransformResult(
                     success=False,
-                    error="No valid sheets found in Excel file",
+                    error="No valid data found in CSV file",
                 )
 
-            output_paths = []
-            total_rows = 0
-            last_standardized_table = None
-            standardized_tables = []  # Track all standardized tables for cleanup
+            # Clean column names using DuckDB
+            cleaned_table = self._standardize_column_names_duckdb(table_name)
 
-            for sheet_name, table_name in sheets_data:
-                # Clean column names using DuckDB
-                cleaned_table = self._standardize_column_names_duckdb(table_name)
+            # Apply data type standardization using DuckDB
+            standardized_table = self._standardize_data_types_duckdb(cleaned_table)
 
-                # Apply data type standardization using DuckDB
-                standardized_table = self._standardize_data_types_duckdb(cleaned_table)
+            # Generate output filename
+            base_filename = Path(metadata.original_filename).stem
+            output_filename = f"{base_filename}.parquet"
+            output_path = file_output_dir / output_filename
 
-                # Keep track of standardized tables
-                last_standardized_table = standardized_table
-                standardized_tables.append(standardized_table)
+            # Save as Parquet using DuckDB
+            self.save_table_to_parquet(standardized_table, output_path)
 
-                # Generate output filename
-                base_filename = Path(metadata.original_filename).stem
-                sheet_filename = f"{base_filename}_{sheet_name}"
+            # Get row count
+            row_count = self.conn.execute(f"SELECT COUNT(*) FROM {standardized_table}").fetchone()[
+                0
+            ]
 
-                # Save as Parquet using DuckDB
-                output_path = file_output_dir / f"{sheet_filename}.parquet"
-                self.save_table_to_parquet(standardized_table, output_path)
-
-                output_paths.append(output_path)
-
-                # Get row count
-                row_count = self.conn.execute(
-                    f"SELECT COUNT(*) FROM {standardized_table}"
-                ).fetchone()[0]
-                total_rows += row_count
-
-                # Clean up intermediate tables (but keep standardized tables for schema)
-                self.drop_table(table_name)
-                # Only drop cleaned_table if it's different from standardized_table
-                if cleaned_table != standardized_table:
-                    self.drop_table(cleaned_table)
-
-            # Create schema dictionary from the last table (for compatibility)
+            # Create schema dictionary
             schema = {"columns": [], "data_types": []}
-            if sheets_data and last_standardized_table:
-                # Check if the table still exists before trying to get schema
-                try:
-                    table_info = self.get_table_info(last_standardized_table)
-                    schema = {
-                        "columns": [col[0] for col in table_info],
-                        "data_types": [col[1] for col in table_info],
-                    }
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to get schema from table {last_standardized_table}: {str(e)}"
-                    )
-                    # Use basic schema as fallback
-                    schema = {"columns": [], "data_types": []}
+            try:
+                table_info = self.get_table_info(standardized_table)
+                schema = {
+                    "columns": [col[0] for col in table_info],
+                    "data_types": [col[1] for col in table_info],
+                }
+            except Exception as e:
+                logger.warning(f"Failed to get schema from table {standardized_table}: {str(e)}")
+                schema = {"columns": [], "data_types": []}
 
-                # Now clean up all standardized tables
-                for standardized_table in standardized_tables:
-                    self.drop_table(standardized_table)
+            # Clean up intermediate tables
+            self.drop_table(table_name)
+            if cleaned_table != standardized_table:
+                self.drop_table(cleaned_table)
+            self.drop_table(standardized_table)
 
             return TransformResult(
                 success=True,
-                output_path=output_paths[0] if len(output_paths) == 1 else None,
-                row_count=total_rows,
+                output_path=output_path,
+                row_count=row_count,
                 schema=schema,
                 metadata={
-                    "sheet_count": len(sheets_data),
-                    "output_paths": [str(p) for p in output_paths],
+                    "file_type": "CSV",
+                    "output_path": str(output_path),
                 },
             )
 
         except Exception as e:
-            error_msg = f"Failed to transform Excel file {file_path}: {str(e)}"
+            error_msg = f"Failed to transform CSV file {file_path}: {str(e)}"
             logger.error(error_msg)
             return TransformResult(
                 success=False,
                 error=error_msg,
             )
 
-    def _read_excel_sheets_pandas(self, file_path: Path) -> list[tuple[str, str]]:
-        """Read Excel file sheets using pandas, then register as DuckDB tables.
+    def _read_csv_with_duckdb(self, file_path: Path) -> str | None:
+        """Read CSV file using DuckDB with auto-detection and encoding fallback.
 
         Args:
-            file_path: Path to the Excel file
+            file_path: Path to the CSV file
 
         Returns:
-            List of tuples containing (sheet_name, table_name)
+            Table name in DuckDB or None if failed
         """
         try:
-            logger.debug(f"Reading Excel file sheets using pandas: {file_path}")
+            logger.debug(f"Reading CSV file using DuckDB: {file_path}")
 
-            # Use pandas ExcelFile to get sheet names and read data
-            excel_file = pd.ExcelFile(file_path)
-            sheets_data = []
+            # Generate unique table name
+            table_name = f"csv_data_{int(time.time())}"
 
-            logger.info(f"Found {len(excel_file.sheet_names)} sheets: {excel_file.sheet_names}")
+            # Try different encodings in order of likelihood for Danish data
+            encodings_to_try = [
+                "UTF-8",  # Most common
+                "UTF-16",  # Windows Unicode
+                "ISO-8859-1",  # Latin-1 (common in Europe)
+                "Windows-1252",  # Windows Western European
+                "CP1252",  # Alternative name for Windows-1252
+            ]
 
-            for sheet_name in excel_file.sheet_names:
+            last_error = None
+            for encoding in encodings_to_try:
                 try:
-                    # Read the sheet with pandas with specific options to handle problematic data
-                    df = pd.read_excel(
-                        excel_file,
-                        sheet_name=sheet_name,
-                        dtype=str,  # Read all columns as strings to avoid type inference issues
-                        na_filter=False,  # Don't convert empty strings to NaN
-                    )
+                    logger.debug(f"Trying encoding: {encoding}")
 
-                    # Skip empty sheets
-                    if df.empty:
-                        logger.debug(f"Skipping empty sheet: {sheet_name}")
-                        continue
-
-                    # Clean column names to avoid issues with special characters
-                    original_columns = df.columns.tolist()
-                    clean_columns = []
-
-                    for i, col in enumerate(original_columns):
-                        # Convert column name to string and clean it
-                        col_str = str(col).strip()
-
-                        # Handle unnamed columns
-                        if col_str.startswith("Unnamed:") or col_str == "":
-                            col_str = f"column_{i}"
-
-                        # Replace problematic characters temporarily for DuckDB
-                        clean_col = col_str.replace('"', "'").replace("\n", " ").replace("\r", " ")
-                        clean_columns.append(clean_col)
-
-                    # Update DataFrame column names
-                    df.columns = clean_columns
-
-                    # Remove completely empty rows
-                    df = df.dropna(how="all")
-
-                    if df.empty:
-                        logger.debug(f"Skipping empty sheet after cleaning: {sheet_name}")
-                        continue
-
-                    # Clean sheet name for table name
-                    clean_sheet_name = (
-                        "".join(c if c.isalnum() else "_" for c in str(sheet_name))
-                        .lower()
-                        .strip("_")
-                    )
-
-                    if not clean_sheet_name:
-                        clean_sheet_name = f"sheet_{len(sheets_data) + 1}"
-
-                    # Register DataFrame as DuckDB table with error handling
-                    table_name = f"excel_{clean_sheet_name}_{int(time.time())}"
-
-                    try:
-                        self.register_table(df, table_name)
-                        logger.debug(f"Successfully registered table: {table_name}")
-                    except Exception as reg_error:
-                        logger.error(
-                            f"Failed to register DataFrame as table {table_name}: {str(reg_error)}"
+                    # Use DuckDB's read_csv with specific encoding and delimiter
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name} AS
+                        SELECT * FROM read_csv('{file_path}',
+                            AUTO_DETECT=TRUE,
+                            HEADER=TRUE,
+                            ENCODING='{encoding}',
+                            DELIMITER=';',
+                            IGNORE_ERRORS=true
                         )
-                        # Try to create table manually with explicit column types
-                        try:
-                            # Create table manually using DuckDB's CREATE TABLE AS
+                    """)
 
-                            # Convert DataFrame to a format DuckDB can handle
-                            df_clean = df.copy()
+                    # Check if table has data
+                    row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[
+                        0
+                    ]
 
-                            # Ensure all values are strings and handle nulls
-                            for col in df_clean.columns:
-                                df_clean[col] = df_clean[col].astype(str).replace("nan", "")
-
-                            # Register the cleaned DataFrame
-                            self.register_table(df_clean, table_name)
-                            logger.debug(f"Successfully registered cleaned table: {table_name}")
-
-                        except Exception as manual_error:
-                            logger.error(
-                                f"Failed to manually create table {table_name}: {str(manual_error)}"
-                            )
-                            continue
-
-                    sheets_data.append((clean_sheet_name, table_name))
-                    logger.debug(
-                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' "
-                        f"with {len(df)} rows"
-                    )
+                    if row_count > 0:
+                        logger.info(
+                            f"Successfully read CSV file with {row_count} rows "
+                            f"using encoding: {encoding}"
+                        )
+                        return table_name
+                    else:
+                        logger.debug(f"Encoding {encoding} produced empty table, trying next")
+                        self.drop_table(table_name)
+                        continue
 
                 except Exception as e:
-                    logger.warning(f"Failed to read sheet '{sheet_name}': {str(e)}")
+                    logger.debug(f"Encoding {encoding} failed: {str(e)}")
+                    last_error = e
+                    # Clean up failed table
+                    try:
+                        self.drop_table(table_name)
+                    except Exception:
+                        pass
                     continue
 
-            logger.info(f"Successfully processed {len(sheets_data)} sheets from Excel file")
-            return sheets_data
+            # If all encodings failed, try with ignore_errors=true as last resort
+            logger.warning("All encodings failed, trying with ignore_errors=true")
+            try:
+                self.conn.execute(f"""
+                    CREATE TABLE {table_name} AS
+                    SELECT * FROM read_csv('{file_path}',
+                        AUTO_DETECT=TRUE,
+                        HEADER=TRUE,
+                        DELIMITER=';',
+                        IGNORE_ERRORS=true
+                    )
+                """)
+
+                row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                if row_count > 0:
+                    logger.warning(
+                        f"Read CSV file with {row_count} rows using ignore_errors=true "
+                        f"(some data may be lost)"
+                    )
+                    return table_name
+                else:
+                    self.drop_table(table_name)
+            except Exception as ignore_error:
+                logger.debug(f"ignore_errors approach also failed: {str(ignore_error)}")
+
+            # All approaches failed
+            logger.error(f"Failed to read CSV file with any encoding: {str(last_error)}")
+            return None
 
         except Exception as e:
-            logger.error(f"Failed to read Excel file with pandas: {str(e)}")
-            return []
+            logger.error(f"Failed to read CSV file with DuckDB: {str(e)}")
+            return None
 
     def _standardize_column_names_duckdb(self, table_name: str) -> str:
         """Standardize column names using DuckDB operations.
@@ -364,7 +323,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Return original table if standardization fails
             return table_name
 
-    def _apply_domain_specific_mappings(self, col_name: str) -> str:
+    def _apply_domain_specific_mappings(self, col_name: str) -> str | None:
         """Apply domain-specific column name mappings for known data types.
 
         Args:
