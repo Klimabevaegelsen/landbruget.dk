@@ -1,5 +1,34 @@
 # Landbruget.dk - Agent Development Guide
 
+## IMPORTANT: Agent Memory with Beads
+
+**BEFORE ANYTHING ELSE**: This project uses Beads for agent memory and task management.
+
+### First Action in Every Session
+```bash
+bd ready --json
+```
+
+This command shows you what tasks are ready to work on. Always start here.
+
+### Key Beads Commands
+- `bd new <title>` - Create a new issue
+- `bd ready` - Show unblocked tasks
+- `bd done <id>` - Mark task complete
+- `bd blocks <id> <blocker-id>` - Set dependencies
+- `bd ls` - List all issues
+- `bd show <id>` - Show issue details
+
+### When to Create Issues
+- **Discovered work**: If you find bugs or necessary refactors, create an issue immediately
+- **Complex features**: Break down into smaller, trackable tasks
+- **Dependencies**: Use `bd blocks` to establish task order
+
+### Never Use Markdown TODO Lists
+Beads replaces markdown checklists. Always use `bd` commands for task tracking.
+
+---
+
 ## Project Overview
 
 **Mission**: Organize information about the Danish agricultural sector and make it universally accessible and useful.
