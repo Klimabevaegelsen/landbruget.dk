@@ -38,7 +38,7 @@ function DesktopNav() {
           Analyser
           <ChevronDownIcon className="ml-1 h-4 w-4" aria-hidden="true" />
         </MenuButton>
-        <MenuItems className="ring-opacity-5 bg-card border-border absolute right-0 z-10 mt-2 w-48 origin-top-right rounded-md border py-1 shadow-lg focus:outline-none">
+        <MenuItems className="ring-opacity-5 bg-card border-border absolute right-0 z-40 mt-2 w-48 origin-top-right rounded-md border py-1 shadow-lg focus:outline-none">
           {analyserLinks.map(({ href, label }) => (
             <MenuItem key={href}>
               <Link
