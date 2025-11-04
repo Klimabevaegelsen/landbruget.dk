@@ -246,14 +246,14 @@ serve(async (req) => {
             "Virksomheder med det største samlede landbrugsareal i 2025",
           unit: "hektar",
           company_count: landAreaCount || 0,
-          items: landAreaData.map((item, index) => {
+          items: landAreaData.map((item) => {
             const company = companyMap.get(item.company_id);
             return {
               company_id: item.company_id,
               cvr_number: company?.cvr_number?.toString() || "N/A",
               company_name: company?.company_name || "Ukendt virksomhed",
               municipality: company?.municipality || "Ukendt kommune",
-              rank: index + 1,
+              rank: item.rank_dk_total_area,
               value: item.total_area_ha,
               formatted_value: `${item.total_area_ha.toFixed(1)} ha`,
               year: item.year,
