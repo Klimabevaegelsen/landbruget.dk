@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { DEFAULT_VIEWPORT } from '@/lib/utils';
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { DEFAULT_VIEWPORT } from "@/lib/utils";
 
 export interface ViewState {
   latitude: number;
@@ -23,7 +23,7 @@ export interface ViewportBounds {
 export interface ViewportInfo {
   viewport: ViewState;
   bounds: ViewportBounds | null;
-  zoomLevel: 'country' | 'region' | 'city' | 'street';
+  zoomLevel: "country" | "region" | "city" | "street";
   isTransitioning: boolean;
   center: [number, number];
 }
@@ -42,7 +42,7 @@ export function useViewport() {
   const [isMoving, setIsMoving] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionStartTime, setTransitionStartTime] = useState<number | null>(
-    null
+    null,
   );
 
   // Calculate bounds from viewport
@@ -91,7 +91,7 @@ export function useViewport() {
         zoom,
       }));
     },
-    []
+    [],
   );
 
   // Zoom to bounds
@@ -113,7 +113,7 @@ export function useViewport() {
         zoom,
       }));
     },
-    []
+    [],
   );
 
   // Reset to default viewport
@@ -133,16 +133,16 @@ export function useViewport() {
         lng <= bounds.east + buffer
       );
     },
-    [bounds]
+    [bounds],
   );
 
   // Get zoom level category for performance optimization
   const zoomLevel = useMemo(() => {
     const zoom = viewport.zoom;
-    if (zoom < 8) return 'country';
-    if (zoom < 12) return 'region';
-    if (zoom < 16) return 'city';
-    return 'street';
+    if (zoom < 8) return "country";
+    if (zoom < 12) return "region";
+    if (zoom < 16) return "city";
+    return "street";
   }, [viewport.zoom]);
 
   // Check if viewport is within Denmark bounds
@@ -187,7 +187,7 @@ export function useViewport() {
       latitude: number,
       longitude: number,
       zoom?: number,
-      duration: number = 1000
+      duration: number = 1000,
     ) => {
       updateViewport({
         latitude,
@@ -198,7 +198,7 @@ export function useViewport() {
         pitch: 0,
       });
     },
-    [viewport.zoom, updateViewport]
+    [viewport.zoom, updateViewport],
   );
 
   // Zoom in/out by steps
@@ -206,14 +206,14 @@ export function useViewport() {
     (steps: number = 1) => {
       zoomTo(viewport.latitude, viewport.longitude, viewport.zoom + steps);
     },
-    [viewport.latitude, viewport.longitude, viewport.zoom, zoomTo]
+    [viewport.latitude, viewport.longitude, viewport.zoom, zoomTo],
   );
 
   const zoomOut = useCallback(
     (steps: number = 1) => {
       zoomTo(viewport.latitude, viewport.longitude, viewport.zoom - steps);
     },
-    [viewport.latitude, viewport.longitude, viewport.zoom, zoomTo]
+    [viewport.latitude, viewport.longitude, viewport.zoom, zoomTo],
   );
 
   // Fit bounds to show specific area
@@ -221,7 +221,7 @@ export function useViewport() {
     (
       bounds: ViewportBounds,
       padding: number = 0.1,
-      duration: number = 1000
+      duration: number = 1000,
     ) => {
       const { north, south, east, west } = bounds;
 
@@ -237,12 +237,12 @@ export function useViewport() {
       // Approximate zoom calculation (would need proper implementation)
       const zoom = Math.max(
         1,
-        Math.min(18, Math.log2(360 / (maxDiff * (1 + padding))))
+        Math.min(18, Math.log2(360 / (maxDiff * (1 + padding)))),
       );
 
       flyTo(centerLat, centerLng, zoom, duration);
     },
-    [flyTo]
+    [flyTo],
   );
 
   // Get viewport info for performance monitoring
@@ -250,11 +250,11 @@ export function useViewport() {
     (): ViewportInfo => ({
       viewport,
       bounds,
-      zoomLevel: zoomLevel as 'country' | 'region' | 'city' | 'street',
+      zoomLevel: zoomLevel as "country" | "region" | "city" | "street",
       isTransitioning,
       center: [viewport.longitude, viewport.latitude],
     }),
-    [viewport, bounds, zoomLevel, isTransitioning]
+    [viewport, bounds, zoomLevel, isTransitioning],
   );
 
   // Calculate distance between two points (Haversine formula)
@@ -274,7 +274,7 @@ export function useViewport() {
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
       return R * c;
     },
-    []
+    [],
   );
 
   // Performance monitoring

@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
 import {
   useMapStore,
   useAvailableYearOptions,
   useSelectedYear,
   type YearSelection,
-} from '@/stores/map-store';
-import { useUIStore } from '@/stores/ui-store';
-import { ChevronLeft, ChevronRight, Play, Pause } from 'lucide-react';
-import { useEffect, useState } from 'react';
+} from "@/stores/map-store";
+import { useUIStore } from "@/stores/ui-store";
+import { ChevronLeft, ChevronRight, Play, Pause } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface StepSliderProps {
   className?: string;
 }
 
-export function StepSlider({ className = '' }: StepSliderProps) {
+export function StepSlider({ className = "" }: StepSliderProps) {
   const selectedYear = useSelectedYear();
   const availableYearOptions = useAvailableYearOptions();
   const { setSelectedYear } = useMapStore();
@@ -26,14 +26,14 @@ export function StepSlider({ className = '' }: StepSliderProps) {
 
   // Get numeric years for animation and display
   const numericYears = availableYearOptions
-    .filter((year): year is number => typeof year === 'number')
+    .filter((year): year is number => typeof year === "number")
     .sort((a, b) => a - b);
-  const hasTotal = availableYearOptions.includes('total');
+  const hasTotal = availableYearOptions.includes("total");
 
   // All options in order: years + total
   const allOptions = [
     ...numericYears,
-    ...(hasTotal ? ['total'] : []),
+    ...(hasTotal ? ["total"] : []),
   ] as YearSelection[];
 
   const currentIndex = allOptions.indexOf(selectedYear);
@@ -89,7 +89,7 @@ export function StepSlider({ className = '' }: StepSliderProps) {
   if (availableYearOptions.length === 0) {
     return (
       <div className={`${className} flex items-center justify-center`}>
-        <div className="text-sm text-gray-400">Loading...</div>
+        <div className="text-gray-400 text-sm">Loading...</div>
       </div>
     );
   }
@@ -104,21 +104,21 @@ export function StepSlider({ className = '' }: StepSliderProps) {
           <button
             onClick={goToPrevious}
             disabled={!canGoPrevious || isAnimating}
-            className="touch-manipulation rounded-lg bg-slate-800 p-2 text-slate-300 transition-all hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="w-4 h-4" />
           </button>
 
           {/* Play/Pause Button */}
           <button
             onClick={isAnimating ? stopAnimation : startAnimation}
             disabled={numericYears.length <= 1}
-            className="touch-manipulation rounded-lg bg-blue-600 p-2 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-30"
+            className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation"
           >
             {isAnimating ? (
-              <Pause className="h-4 w-4" />
+              <Pause className="w-4 h-4" />
             ) : (
-              <Play className="h-4 w-4" />
+              <Play className="w-4 h-4" />
             )}
           </button>
 
@@ -126,25 +126,25 @@ export function StepSlider({ className = '' }: StepSliderProps) {
           <button
             onClick={goToNext}
             disabled={!canGoNext || isAnimating}
-            className="touch-manipulation rounded-lg bg-slate-800 p-2 text-slate-300 transition-all hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
 
         {/* Year Buttons - Mobile Grid */}
-        <div className="flex flex-wrap justify-center gap-2">
+        <div className="flex flex-wrap gap-2 justify-center">
           {/* Year Buttons */}
           {numericYears.map((year) => (
             <button
               key={year}
               onClick={() => setSelectedYear(year)}
               disabled={isAnimating}
-              className={`touch-manipulation rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 ${
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 touch-manipulation ${
                 selectedYear === year
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-              } disabled:cursor-not-allowed disabled:opacity-30`}
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+              } disabled:opacity-30 disabled:cursor-not-allowed`}
             >
               {year}
             </button>
@@ -153,13 +153,13 @@ export function StepSlider({ className = '' }: StepSliderProps) {
           {/* Total Button */}
           {hasTotal && (
             <button
-              onClick={() => setSelectedYear('total')}
+              onClick={() => setSelectedYear("total")}
               disabled={isAnimating}
-              className={`touch-manipulation rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 ${
-                selectedYear === 'total'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-              } disabled:cursor-not-allowed disabled:opacity-30`}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 touch-manipulation ${
+                selectedYear === "total"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+              } disabled:opacity-30 disabled:cursor-not-allowed`}
             >
               Total
             </button>
@@ -176,21 +176,21 @@ export function StepSlider({ className = '' }: StepSliderProps) {
       <button
         onClick={goToPrevious}
         disabled={!canGoPrevious || isAnimating}
-        className="rounded-lg bg-slate-800 p-2 text-slate-300 transition-all hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
       >
-        <ChevronLeft className="h-4 w-4" />
+        <ChevronLeft className="w-4 h-4" />
       </button>
 
       {/* Play/Pause Button */}
       <button
         onClick={isAnimating ? stopAnimation : startAnimation}
         disabled={numericYears.length <= 1}
-        className="rounded-lg bg-blue-600 p-2 text-white transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-30"
+        className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
       >
         {isAnimating ? (
-          <Pause className="h-4 w-4" />
+          <Pause className="w-4 h-4" />
         ) : (
-          <Play className="h-4 w-4" />
+          <Play className="w-4 h-4" />
         )}
       </button>
 
@@ -202,11 +202,11 @@ export function StepSlider({ className = '' }: StepSliderProps) {
             key={year}
             onClick={() => setSelectedYear(year)}
             disabled={isAnimating}
-            className={`min-w-[50px] rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 min-w-[50px] ${
               selectedYear === year
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-            } disabled:cursor-not-allowed disabled:opacity-30`}
+                ? "bg-blue-600 text-white"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+            } disabled:opacity-30 disabled:cursor-not-allowed`}
           >
             {year}
           </button>
@@ -215,13 +215,13 @@ export function StepSlider({ className = '' }: StepSliderProps) {
         {/* Total Button */}
         {hasTotal && (
           <button
-            onClick={() => setSelectedYear('total')}
+            onClick={() => setSelectedYear("total")}
             disabled={isAnimating}
-            className={`min-w-[60px] rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-200 ${
-              selectedYear === 'total'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
-            } disabled:cursor-not-allowed disabled:opacity-30`}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 min-w-[60px] ${
+              selectedYear === "total"
+                ? "bg-blue-600 text-white"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
+            } disabled:opacity-30 disabled:cursor-not-allowed`}
           >
             Total
           </button>
@@ -232,9 +232,9 @@ export function StepSlider({ className = '' }: StepSliderProps) {
       <button
         onClick={goToNext}
         disabled={!canGoNext || isAnimating}
-        className="rounded-lg bg-slate-800 p-2 text-slate-300 transition-all hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
       >
-        <ChevronRight className="h-4 w-4" />
+        <ChevronRight className="w-4 h-4" />
       </button>
     </div>
   );

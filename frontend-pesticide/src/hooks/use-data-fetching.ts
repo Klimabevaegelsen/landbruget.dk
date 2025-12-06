@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect, useCallback } from 'react';
-import { useMapStore } from '@/stores/map-store';
-import { useDataStore } from '@/stores/data-store';
+import { useEffect, useCallback } from "react";
+import { useMapStore } from "@/stores/map-store";
+import { useDataStore } from "@/stores/data-store";
 
 export function useDataFetching() {
   const { selectedYear, cumulativeMode } = useMapStore();
@@ -36,8 +36,8 @@ export function useDataFetching() {
       // Preload adjacent years for smooth transitions
       preloadAdjacentYears();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch data');
-      console.error('Data fetching error:', err);
+      setError(err instanceof Error ? err.message : "Failed to fetch data");
+      console.error("Data fetching error:", err);
     } finally {
       setLoading(false);
     }

@@ -33,6 +33,7 @@ Components must be **presentational only**:
 - ✅ Focus on rendering and user interaction
 
 **Business logic belongs in**:
+
 - Server Components (`app/page.tsx`)
 - Custom hooks (`hooks/useFields.ts`)
 - Services (`services/fields.ts`)
@@ -54,6 +55,7 @@ Components must be **presentational only**:
 ```
 
 **Rules**:
+
 - No inline `style` prop (except dynamic values like `left: ${position}px`)
 - No CSS modules or styled-components
 - Always use `cn()` helper for conditional classes
@@ -76,6 +78,7 @@ Components must be **presentational only**:
 ```
 
 **Requirements**:
+
 - Semantic HTML (`button` not `div onClick`)
 - ARIA labels where text isn't visible
 - Keyboard navigation support
@@ -94,6 +97,7 @@ Components must be **presentational only**:
 ```
 
 **Rules**:
+
 - Add `data-testid` to key elements
 - Use descriptive, unique IDs
 - Test user interactions, not implementation
@@ -120,6 +124,7 @@ export function DataComponent({ data, source }: DataComponentProps) {
 ```
 
 **Components requiring source prop**:
+
 - Anything with "Data", "Metric", "Stat" in the name
 - Components in `fields/`, `companies/`, `farms/`
 - Any component displaying agricultural data
@@ -157,6 +162,7 @@ components/
 ```
 
 **Naming**:
+
 - PascalCase for components: `FieldCard.tsx`
 - Kebab-case for non-components: `use-fields.ts`
 - Descriptive, specific names: `FieldDataTable` not `Table`
@@ -166,6 +172,7 @@ components/
 **Use Radix for interactive components**:
 
 Already installed primitives:
+
 - `@radix-ui/react-dialog` - Modals, popovers
 - `@radix-ui/react-dropdown-menu` - Dropdowns
 - `@radix-ui/react-tabs` - Tabs
@@ -183,27 +190,26 @@ Already installed primitives:
 // Memoize expensive components
 const ExpensiveComponent = memo(function ExpensiveComponent({ data }) {
   // Heavy rendering
-})
+});
 
 // Memoize callbacks
 const handleClick = useCallback(() => {
-  doSomething(id)
-}, [id])
+  doSomething(id);
+}, [id]);
 
 // Memoize computed values
-const filteredData = useMemo(() =>
-  data.filter(item => item.active),
-  [data]
-)
+const filteredData = useMemo(() => data.filter((item) => item.active), [data]);
 ```
 
 **When to optimize**:
+
 - Large lists (100+ items)
 - Complex calculations
 - Frequent re-renders
 - Animation loops
 
 **When NOT to optimize**:
+
 - Simple components
 - Static data
 - Premature optimization
@@ -213,9 +219,9 @@ const filteredData = useMemo(() =>
 **Special rules for map components**:
 
 ```typescript
-'use client'  // Map must be client component
-import Map from 'react-map-gl/maplibre'
-import 'maplibre-gl/dist/maplibre-gl.css'
+'use client'; // Map must be client component
+import Map from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 
 export function FieldMap() {
   // Use PMTiles for large datasets
@@ -226,6 +232,7 @@ export function FieldMap() {
 ```
 
 **Requirements**:
+
 - Lazy load map component
 - Show loading skeleton
 - Handle geolocation errors
@@ -240,14 +247,14 @@ export function FieldMap() {
 const schema = z.object({
   fieldName: z.string().min(1),
   area: z.number().positive(),
-})
+});
 
-type FormData = z.infer<typeof schema>
+type FormData = z.infer<typeof schema>;
 
 export function FieldForm() {
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-  })
+  });
 
   // ...
 }
@@ -287,6 +294,7 @@ Before committing a component:
 ## Common Patterns
 
 ### Loading State
+
 ```typescript
 if (loading) return <Skeleton />
 if (error) return <ErrorState error={error} />
@@ -295,12 +303,14 @@ return <DataDisplay data={data} />
 ```
 
 ### Conditional Rendering
+
 ```typescript
 {condition && <Component />}
 {condition ? <ComponentA /> : <ComponentB />}
 ```
 
 ### List Rendering
+
 ```typescript
 {items.map(item => (
   <Item key={item.id} data={item} />

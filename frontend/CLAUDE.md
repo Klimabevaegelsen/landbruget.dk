@@ -100,6 +100,7 @@ export function ComponentName({
 5. **No Inline Styles**: Avoid `style` prop unless absolutely necessary
 
 Example:
+
 ```typescript
 <div className={cn(
   'flex items-center gap-2',
@@ -115,20 +116,22 @@ Example:
 ### When to Use Zustand
 
 Use Zustand stores for:
+
 - Global UI state (map viewport, filters, selections)
 - Cross-component shared state
 - State that persists across route changes
 
 Example:
+
 ```typescript
 // stores/mapStore.ts
-import { create } from 'zustand'
+import { create } from 'zustand';
 
 interface MapState {
-  viewport: { latitude: number; longitude: number; zoom: number }
-  selectedFieldId: string | null
-  setViewport: (viewport: MapState['viewport']) => void
-  setSelectedFieldId: (id: string | null) => void
+  viewport: { latitude: number; longitude: number; zoom: number };
+  selectedFieldId: string | null;
+  setViewport: (viewport: MapState['viewport']) => void;
+  setSelectedFieldId: (id: string | null) => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -136,17 +139,19 @@ export const useMapStore = create<MapState>((set) => ({
   selectedFieldId: null,
   setViewport: (viewport) => set({ viewport }),
   setSelectedFieldId: (id) => set({ selectedFieldId: id }),
-}))
+}));
 ```
 
 ### When to Use React State
 
 Use `useState` for:
+
 - Local component state
 - Form inputs
 - UI toggles (modals, dropdowns, etc.)
 
 Use `useReducer` for:
+
 - Complex state logic with multiple sub-values
 - State transitions based on actions
 
@@ -156,29 +161,29 @@ Use `useReducer` for:
 
 ```typescript
 // lib/supabase.ts
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
 
 export const supabase = createClient(
   process.env.NEXT_PUBLIC_API_URL!,
   process.env.NEXT_PUBLIC_API_KEY!
-)
+);
 ```
 
 ### Fetching Data
 
 ```typescript
 // services/fields.ts
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/lib/supabase';
 
 export async function getFields(filters?: FieldFilters) {
   const { data, error } = await supabase
     .from('fields')
     .select('*')
     .eq('crop_type', filters?.cropType)
-    .limit(100)
+    .limit(100);
 
-  if (error) throw error
-  return data
+  if (error) throw error;
+  return data;
 }
 ```
 
@@ -229,17 +234,17 @@ export function FieldMap() {
 ### PMTiles for Large Datasets
 
 ```typescript
-import { Protocol } from 'pmtiles'
+import { Protocol } from 'pmtiles';
 
 // Initialize PMTiles protocol once
-const protocol = new Protocol()
-maplibregl.addProtocol('pmtiles', protocol.tile)
+const protocol = new Protocol();
+maplibregl.addProtocol('pmtiles', protocol.tile);
 
 // Use in map source
 const source = {
   type: 'vector',
-  url: 'pmtiles://https://storage.googleapis.com/landbruget-data/fields.pmtiles'
-}
+  url: 'pmtiles://https://storage.googleapis.com/landbruget-data/fields.pmtiles',
+};
 ```
 
 ## Forms & Validation
@@ -283,21 +288,21 @@ export function FieldForm() {
 
 ```typescript
 // e2e/field-search.spec.ts
-import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test';
 
 test.describe('Field Search', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-  })
+    await page.goto('/');
+  });
 
   test('should display search results', async ({ page }) => {
-    await page.fill('[data-testid="search-input"]', '12345')
-    await page.click('[data-testid="search-button"]')
+    await page.fill('[data-testid="search-input"]', '12345');
+    await page.click('[data-testid="search-button"]');
 
-    await expect(page.locator('[data-testid="results"]')).toBeVisible()
-    await expect(page.locator('.field-card')).toHaveCount(1)
-  })
-})
+    await expect(page.locator('[data-testid="results"]')).toBeVisible();
+    await expect(page.locator('.field-card')).toHaveCount(1);
+  });
+});
 ```
 
 ### Testing Best Practices
@@ -340,19 +345,19 @@ import Image from 'next/image'
 ### Memoization
 
 ```typescript
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback } from 'react';
 
 // Expensive calculations
 const filteredFields = useMemo(
-  () => fields.filter(f => f.crop === selectedCrop),
+  () => fields.filter((f) => f.crop === selectedCrop),
   [fields, selectedCrop]
-)
+);
 
 // Stable function references
 const handleSelect = useCallback(
   (id: string) => setSelectedFieldId(id),
   [setSelectedFieldId]
-)
+);
 ```
 
 ## Common Patterns
@@ -421,10 +426,10 @@ All environment variables must be prefixed with `NEXT_PUBLIC_` to be accessible 
 
 ```typescript
 // ✅ Good - available in browser
-const apiUrl = process.env.NEXT_PUBLIC_API_URL
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 // ❌ Bad - only available server-side
-const apiUrl = process.env.API_URL
+const apiUrl = process.env.API_URL;
 ```
 
 ## Linting & Formatting
@@ -440,6 +445,7 @@ npm test         # Run E2E tests
 ### oxlint Configuration
 
 See `.oxlintrc.json` for custom rules. oxlint is configured to:
+
 - Enforce TypeScript best practices
 - Catch React anti-patterns
 - Ensure accessibility standards
@@ -448,30 +454,38 @@ See `.oxlintrc.json` for custom rules. oxlint is configured to:
 ## Common Issues & Solutions
 
 ### Issue: "Hydration mismatch" errors
+
 **Solution**: Ensure server and client render the same HTML. Check for:
+
 - Date/time formatting (use UTC consistently)
 - Random values (move to client component)
 - Browser-specific APIs (use `useEffect`)
 
 ### Issue: "Module not found" errors
+
 **Solution**: Check import paths. Use `@/` alias for `src/`:
+
 ```typescript
 // ✅ Good
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/ui/button';
 
 // ❌ Bad
-import { Button } from '../../../components/ui/button'
+import { Button } from '../../../components/ui/button';
 ```
 
 ### Issue: Slow map rendering
+
 **Solution**:
+
 - Use PMTiles for large datasets
 - Implement proper memoization
 - Lazy load map component
 - Use vector tiles, not raster
 
 ### Issue: Type errors with Supabase
+
 **Solution**: Generate types from database:
+
 ```bash
 supabase gen types typescript --local > src/types/supabase.ts
 ```
@@ -492,5 +506,5 @@ npm run format:check     # Check formatting
 
 ---
 
-*For backend integration, see `../backend/CLAUDE.md`*
-*For general project guidelines, see `../CLAUDE.md`*
+_For backend integration, see `../backend/CLAUDE.md`_
+_For general project guidelines, see `../CLAUDE.md`_

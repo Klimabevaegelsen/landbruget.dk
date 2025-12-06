@@ -236,7 +236,7 @@ Each H3 hexagon contains:
 python -c "
 from supabase import create_client
 client = create_client('YOUR_URL', 'YOUR_KEY')
-# Connection successful if no errors
+print('Connection successful!')
 "
 ```
 

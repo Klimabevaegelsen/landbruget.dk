@@ -1,48 +1,48 @@
-import type { Metadata } from 'next';
-import { Inter, Fira_Code } from 'next/font/google';
-import './globals.css';
+import type { Metadata } from "next";
+import { Inter, Fira_Code } from "next/font/google";
+import "./globals.css";
 
 const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
+  subsets: ["latin"],
+  variable: "--font-inter",
 });
 
 const firaCode = Fira_Code({
-  subsets: ['latin'],
-  variable: '--font-fira-code',
+  subsets: ["latin"],
+  variable: "--font-fira-code",
 });
 
 export const metadata: Metadata = {
-  title: 'H3 PFAS Exposure Visualization',
+  title: "H3 PFAS Exposure Visualization",
   description:
-    'Interactive visualization of PFAS exposure data across Denmark using H3 hexagonal grids',
+    "Interactive visualization of PFAS exposure data across Denmark using H3 hexagonal grids",
   keywords: [
-    'PFAS',
-    'pesticide',
-    'Denmark',
-    'environmental',
-    'visualization',
-    'H3',
+    "PFAS",
+    "pesticide",
+    "Denmark",
+    "environmental",
+    "visualization",
+    "H3",
   ],
-  authors: [{ name: 'Landbrugsdata Team' }],
-  robots: 'index, follow',
+  authors: [{ name: "Landbrugsdata Team" }],
+  robots: "index, follow",
   openGraph: {
-    title: 'H3 PFAS Exposure Visualization',
+    title: "H3 PFAS Exposure Visualization",
     description:
-      'Interactive visualization of PFAS exposure data across Denmark',
-    type: 'website',
-    locale: 'en_US',
+      "Interactive visualization of PFAS exposure data across Denmark",
+    type: "website",
+    locale: "en_US",
   },
   twitter: {
-    card: 'summary_large_image',
-    title: 'H3 PFAS Exposure Visualization',
+    card: "summary_large_image",
+    title: "H3 PFAS Exposure Visualization",
     description:
-      'Interactive visualization of PFAS exposure data across Denmark',
+      "Interactive visualization of PFAS exposure data across Denmark",
   },
 };
 
 export const viewport = {
-  width: 'device-width',
+  width: "device-width",
   initialScale: 1,
 };
 
@@ -59,7 +59,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#ffffff" />
       </head>
-      <body className="bg-background min-h-screen font-sans antialiased">
+      <body className="min-h-screen bg-background font-sans antialiased">
         <div className="relative flex min-h-screen flex-col">
           <main className="flex-1">{children}</main>
         </div>

@@ -1,24 +1,24 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { PMTilesMap } from '@/components/map/PMTilesMap';
-import { DataModeSelector } from '@/components/controls/DataModeSelector';
-import { TopBar } from '@/components/layout/TopBar';
-import { DataSidebar } from '@/components/overlays/DataSidebar';
-import { MobileBottomPanel } from '@/components/overlays/MobileBottomPanel';
+import { useEffect, useState } from "react";
+import { PMTilesMap } from "@/components/map/PMTilesMap";
+import { DataModeSelector } from "@/components/controls/DataModeSelector";
+import { TopBar } from "@/components/layout/TopBar";
+import { DataSidebar } from "@/components/overlays/DataSidebar";
+import { MobileBottomPanel } from "@/components/overlays/MobileBottomPanel";
 import {
   useMapStore,
   useDataState,
   useLoadingState,
   useTooltipState,
   type YearSelection,
-} from '@/stores/map-store';
-import { useUIStore } from '@/stores/ui-store';
-import { pmtilesDiscovery } from '@/services/pmtiles-discovery';
+} from "@/stores/map-store";
+import { useUIStore } from "@/stores/ui-store";
+import { pmtilesDiscovery } from "@/services/pmtiles-discovery";
 
 // Define HoverInfo interface to match the sidebar component
 interface HoverInfo {
-  layer: 'h3' | 'bnbo' | 'bbr';
+  layer: "h3" | "bnbo" | "bbr";
   data: Record<string, unknown>;
   coordinate: [number, number];
   pixel: [number, number];
@@ -31,7 +31,7 @@ export default function Home() {
   const [showSidebar, setShowSidebar] = useState(true); // Start with sidebar visible
 
   // Store state
-  const { selectedYear: _selectedYear } = useDataState();
+  const { selectedYear } = useDataState();
   const { error } = useLoadingState();
   const { showTooltip, tooltipData, tooltipPosition } = useTooltipState();
   const { isMobile, setIsMobile, showMobilePanel, setShowMobilePanel } =
@@ -66,33 +66,33 @@ export default function Home() {
     };
 
     checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
   }, []); // Remove dependencies to prevent infinite loops
 
   // Initialize the application
   useEffect(() => {
     const initialize = async () => {
       try {
-        console.log('🚀 Starting initialization...');
+        console.log("🚀 Starting initialization...");
         setIsInitializing(true);
 
-        console.log('📡 Getting data availability...');
+        console.log("📡 Getting data availability...");
         const availability = await pmtilesDiscovery.getDataAvailability();
-        console.log('✅ Data availability:', availability);
+        console.log("✅ Data availability:", availability);
 
         // Create year options including 'total' option
-        const yearOptions: YearSelection[] = [...availability.years, 'total'];
+        const yearOptions: YearSelection[] = [...availability.years, "total"];
         setAvailableYearOptions(yearOptions);
 
         setIsInitialized(true);
         mapClearError();
-        console.log('✅ Initialization complete');
+        console.log("✅ Initialization complete");
       } catch (err) {
-        console.error('❌ Error initializing application:', err);
-        mapSetError('Failed to initialize application');
+        console.error("❌ Error initializing application:", err);
+        mapSetError("Failed to initialize application");
       } finally {
-        console.log('🏁 Setting loading to false');
+        console.log("🏁 Setting loading to false");
         setIsInitializing(false);
       }
     };
@@ -103,18 +103,18 @@ export default function Home() {
   // Convert tooltip data to HoverInfo format for sidebar
   const convertToHoverInfo = (
     tooltipData: Record<string, unknown>,
-    position: { x: number; y: number }
+    position: { x: number; y: number },
   ): HoverInfo | null => {
     if (!tooltipData) return null;
 
     // Determine layer type based on data
-    let layer: 'h3' | 'bnbo' | 'bbr';
+    let layer: "h3" | "bnbo" | "bbr";
     if (tooltipData.bnbo_id || tooltipData.status) {
-      layer = 'bnbo';
+      layer = "bnbo";
     } else if (tooltipData.kommune_code || tooltipData.kommune_name) {
-      layer = 'h3'; // Kommune data is shown as h3 for now
+      layer = "h3"; // Kommune data is shown as h3 for now
     } else {
-      layer = 'h3';
+      layer = "h3";
     }
 
     return {
@@ -148,7 +148,7 @@ export default function Home() {
     lng: number;
     address: string;
   }) => {
-    console.log('Selected location:', location);
+    console.log("Selected location:", location);
     // Navigate to the selected location on the map
     flyToLocation({
       lat: location.lat,
@@ -160,19 +160,19 @@ export default function Home() {
   // Loading state with mobile-optimized layout
   if (isInitializing || !isInitialized) {
     console.log(
-      '🔄 Still loading - isInitializing:',
+      "🔄 Still loading - isInitializing:",
       isInitializing,
-      'isInitialized:',
-      isInitialized
+      "isInitialized:",
+      isInitialized,
     );
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black px-4">
-        <div className="max-w-sm text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-white/40 border-t-transparent"></div>
-          <p className="text-base font-medium text-white sm:text-lg">
+      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+        <div className="text-center max-w-sm">
+          <div className="w-8 h-8 border-2 border-white/40 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-white text-base sm:text-lg font-medium">
             Loading PMTiles Map...
           </p>
-          <p className="mt-2 text-sm text-white/60">
+          <p className="text-white/60 text-sm mt-2">
             Discovering latest data from GCS bucket
           </p>
         </div>
@@ -183,20 +183,20 @@ export default function Home() {
   // Error state with mobile-optimized layout
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black px-4">
-        <div className="max-w-sm text-center">
-          <div className="mb-4 text-4xl text-red-400">⚠️</div>
-          <p className="text-base font-medium text-white sm:text-lg">
+      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+        <div className="text-center max-w-sm">
+          <div className="text-red-400 text-4xl mb-4">⚠️</div>
+          <p className="text-white text-base sm:text-lg font-medium">
             Error Loading Map
           </p>
-          <p className="mt-2 text-sm break-words text-white/60">{error}</p>
+          <p className="text-white/60 text-sm mt-2 break-words">{error}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col overflow-hidden bg-black">
+    <div className="min-h-screen bg-black flex flex-col overflow-hidden">
       {/* Top Bar - Mobile Optimized */}
       <TopBar
         showControls={showControls}
@@ -209,18 +209,18 @@ export default function Home() {
       />
 
       {/* Main Content Area - Mobile Optimized */}
-      <div className="relative flex min-h-0 flex-1">
+      <div className="flex-1 flex relative min-h-0">
         {/* Left Sidebar - Advanced Controls (hidden by default, desktop only) */}
         {showControls && !isMobile && (
-          <div className="w-80 flex-shrink-0 overflow-y-auto border-r border-white/10 bg-black/80 backdrop-blur-md">
-            <div className="space-y-6 p-4">
-              <h3 className="mb-4 text-lg font-semibold text-white">
+          <div className="w-80 bg-black/80 backdrop-blur-md border-r border-white/10 overflow-y-auto flex-shrink-0">
+            <div className="p-4 space-y-6">
+              <h3 className="text-lg font-semibold text-white mb-4">
                 Advanced Controls
               </h3>
 
               {/* Data Mode Selector */}
               <div>
-                <h4 className="mb-2 text-sm font-medium text-gray-300">
+                <h4 className="text-sm font-medium text-gray-300 mb-2">
                   Data Mode
                 </h4>
                 <DataModeSelector variant="sidebar" />
@@ -228,7 +228,7 @@ export default function Home() {
 
               {/* Layer Visibility Controls */}
               <div>
-                <h4 className="mb-3 text-sm font-medium text-gray-300">
+                <h4 className="text-sm font-medium text-gray-300 mb-3">
                   Layer Visibility
                 </h4>
                 <div className="space-y-3">
@@ -243,9 +243,9 @@ export default function Home() {
         )}
 
         {/* Map Container - Mobile Optimized */}
-        <div className="relative min-h-0 flex-1 transition-all duration-300 ease-in-out">
-          <div className="relative h-full w-full">
-            <PMTilesMap className="h-full w-full" />
+        <div className="flex-1 relative transition-all duration-300 ease-in-out min-h-0">
+          <div className="w-full h-full relative">
+            <PMTilesMap className="w-full h-full" />
           </div>
         </div>
 

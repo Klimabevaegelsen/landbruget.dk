@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useTooltipState, BNBO_STATUS_CONFIG } from '@/stores/map-store';
+import React from "react";
+import { useTooltipState, BNBO_STATUS_CONFIG } from "@/stores/map-store";
 
 interface TooltipData {
   // H3 data fields - both old and new field names
@@ -86,30 +86,30 @@ interface TooltipData {
 
 const formatNumber = (
   value: number | undefined,
-  decimals: number = 2
+  decimals: number = 2,
 ): string => {
-  if (value === undefined || value === null) return 'N/A';
-  if (value === 0) return '0';
+  if (value === undefined || value === null) return "N/A";
+  if (value === 0) return "0";
 
   if (value < 0.01 && value > 0) {
     return value.toExponential(2);
   }
 
-  return value.toLocaleString('en-US', {
+  return value.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: decimals,
   });
 };
 
 const formatPercentage = (value: number | undefined): string => {
-  if (value === undefined || value === null) return 'N/A';
+  if (value === undefined || value === null) return "N/A";
   return `${formatNumber(value * 100, 1)}%`;
 };
 
-function getTooltipType(data: TooltipData): 'h3' | 'kommune' | 'bnbo' {
-  if (data.bnbo_id || data.status) return 'bnbo';
-  if (data.kommune_code || data.kommune_name) return 'kommune';
-  return 'h3';
+function getTooltipType(data: TooltipData): "h3" | "kommune" | "bnbo" {
+  if (data.bnbo_id || data.status) return "bnbo";
+  if (data.kommune_code || data.kommune_name) return "kommune";
+  return "h3";
 }
 
 const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
@@ -151,38 +151,38 @@ const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
 
   return (
     <div
-      className="max-w-xs space-y-3 rounded-lg border-0 bg-white/95 shadow-2xl backdrop-blur-sm"
-      style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+      className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs space-y-3"
+      style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
     >
-      <div className="space-y-3 p-4">
+      <div className="p-4 space-y-3">
         {/* Header - Clean and minimal */}
-        <div className="rounded-md bg-slate-900 px-3 py-2">
-          <div className="text-sm font-medium text-white">
+        <div className="bg-slate-900 rounded-md px-3 py-2">
+          <div className="text-white text-sm font-medium">
             Agricultural Area
           </div>
-          <div className="text-xs text-slate-300">
+          <div className="text-slate-300 text-xs">
             {area > 0
               ? `${formatNumber(area, 1)} hectares`
-              : 'Area data unavailable'}
+              : "Area data unavailable"}
           </div>
         </div>
 
         {/* Total Pesticide Load - Primary metric */}
-        <div className="rounded-md border-l-4 border-orange-400 bg-orange-50 px-3 py-2">
-          <div className="mb-1 flex items-center justify-between">
-            <div className="text-sm font-medium text-orange-800">
+        <div className="bg-orange-50 rounded-md px-3 py-2 border-l-4 border-orange-400">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-orange-800 text-sm font-medium">
               Total Pesticide Load
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-orange-900">
+              <div className="text-orange-900 font-semibold text-base">
                 {formatNumber(pesticideLoad, 2)}
               </div>
               <div className="text-orange-600">kg total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-orange-900">
+              <div className="text-orange-900 font-semibold text-base">
                 {formatNumber(pesticideIntensity, 2)}
               </div>
               <div className="text-orange-600">kg per hectare</div>
@@ -191,43 +191,43 @@ const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         </div>
 
         {/* PFAS - Clean warning design */}
-        <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
-          <div className="mb-1 flex items-center justify-between">
-            <div className="text-sm font-medium text-amber-800">
+        <div className="bg-red-50 rounded-md px-3 py-2 border-l-4 border-red-400">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-red-800 text-sm font-medium">
               PFAS Active Ingredients
             </div>
-            <div className="text-xs font-medium text-amber-600">Persistent</div>
+            <div className="text-red-600 text-xs font-medium">Persistent</div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-amber-900">
+              <div className="text-red-900 font-semibold text-base">
                 {formatNumber(pfasGrams, 2)}
               </div>
-              <div className="text-amber-600">grams total</div>
+              <div className="text-red-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-amber-900">
+              <div className="text-red-900 font-semibold text-base">
                 {formatNumber(pfasIntensity, 2)}
               </div>
-              <div className="text-amber-600">grams per hectare</div>
+              <div className="text-red-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Glyphosate - Clean design */}
-        <div className="rounded-md border-l-4 border-green-400 bg-green-50 px-3 py-2">
-          <div className="mb-1 text-sm font-medium text-green-800">
+        <div className="bg-green-50 rounded-md px-3 py-2 border-l-4 border-green-400">
+          <div className="text-green-800 text-sm font-medium mb-1">
             Glyphosate Active Ingredients
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-green-900">
+              <div className="text-green-900 font-semibold text-base">
                 {formatNumber(glyphosateGrams, 2)}
               </div>
               <div className="text-green-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-green-900">
+              <div className="text-green-900 font-semibold text-base">
                 {formatNumber(glyphosateIntensity, 2)}
               </div>
               <div className="text-green-600">grams per hectare</div>
@@ -236,46 +236,46 @@ const H3Tooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         </div>
 
         {/* Diquat - Clean design */}
-        <div className="rounded-md border-l-4 border-purple-400 bg-purple-50 px-3 py-2">
-          <div className="mb-1 text-sm font-medium text-purple-800">
+        <div className="bg-amber-50 rounded-md px-3 py-2 border-l-4 border-amber-400">
+          <div className="text-amber-800 text-sm font-medium mb-1">
             Diquat Active Ingredients
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-purple-900">
+              <div className="text-amber-900 font-semibold text-base">
                 {formatNumber(diquatGrams, 2)}
               </div>
-              <div className="text-purple-600">grams total</div>
+              <div className="text-amber-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-purple-900">
+              <div className="text-amber-900 font-semibold text-base">
                 {formatNumber(diquatIntensity, 2)}
               </div>
-              <div className="text-purple-600">grams per hectare</div>
+              <div className="text-amber-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Agricultural Activity - Minimal stats */}
-        <div className="rounded-md bg-slate-50 px-3 py-2">
-          <div className="mb-2 text-sm font-medium text-slate-700">
+        <div className="bg-slate-50 rounded-md px-3 py-2">
+          <div className="text-slate-700 text-sm font-medium mb-2">
             Activity
           </div>
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="text-center">
-              <div className="text-sm font-semibold text-slate-900">
+              <div className="font-semibold text-slate-900 text-sm">
                 {applications}
               </div>
               <div className="text-slate-600">Applications</div>
             </div>
             <div className="text-center">
-              <div className="text-sm font-semibold text-slate-900">
+              <div className="font-semibold text-slate-900 text-sm">
                 {fieldCount}
               </div>
               <div className="text-slate-600">Fields</div>
             </div>
             <div className="text-center">
-              <div className="text-sm font-semibold text-slate-900">
+              <div className="font-semibold text-slate-900 text-sm">
                 {formatPercentage(coverage)}
               </div>
               <div className="text-slate-600">Coverage</div>
@@ -323,38 +323,38 @@ const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
 
   return (
     <div
-      className="max-w-xs space-y-3 rounded-lg border-0 bg-white/95 shadow-2xl backdrop-blur-sm"
-      style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+      className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs space-y-3"
+      style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
     >
-      <div className="space-y-3 p-4">
+      <div className="p-4 space-y-3">
         {/* Header - Clean and minimal */}
-        <div className="rounded-md bg-slate-900 px-3 py-2">
-          <div className="text-sm font-medium text-white">
-            Municipality: {data.kommune_name || 'Unknown'}
+        <div className="bg-slate-900 rounded-md px-3 py-2">
+          <div className="text-white text-sm font-medium">
+            Municipality: {data.kommune_name || "Unknown"}
           </div>
-          <div className="text-xs text-slate-300">
+          <div className="text-slate-300 text-xs">
             {area > 0
               ? `${formatNumber(area, 1)} hectares agricultural area`
-              : 'Area data unavailable'}
+              : "Area data unavailable"}
           </div>
         </div>
 
         {/* Total Pesticide Load - Primary metric */}
-        <div className="rounded-md border-l-4 border-orange-400 bg-orange-50 px-3 py-2">
-          <div className="mb-1 flex items-center justify-between">
-            <div className="text-sm font-medium text-orange-800">
+        <div className="bg-orange-50 rounded-md px-3 py-2 border-l-4 border-orange-400">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-orange-800 text-sm font-medium">
               Total Pesticide Load
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-orange-900">
+              <div className="text-orange-900 font-semibold text-base">
                 {formatNumber(pesticideLoad, 2)}
               </div>
               <div className="text-orange-600">kg total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-orange-900">
+              <div className="text-orange-900 font-semibold text-base">
                 {formatNumber(pesticideIntensity, 2)}
               </div>
               <div className="text-orange-600">kg per hectare</div>
@@ -363,43 +363,43 @@ const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         </div>
 
         {/* PFAS - Clean warning design */}
-        <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
-          <div className="mb-1 flex items-center justify-between">
-            <div className="text-sm font-medium text-amber-800">
+        <div className="bg-red-50 rounded-md px-3 py-2 border-l-4 border-red-400">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-red-800 text-sm font-medium">
               PFAS Active Ingredients
             </div>
-            <div className="text-xs font-medium text-amber-600">Persistent</div>
+            <div className="text-red-600 text-xs font-medium">Persistent</div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-amber-900">
+              <div className="text-red-900 font-semibold text-base">
                 {formatNumber(pfasGrams, 2)}
               </div>
-              <div className="text-amber-600">grams total</div>
+              <div className="text-red-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-amber-900">
+              <div className="text-red-900 font-semibold text-base">
                 {formatNumber(pfasIntensity, 2)}
               </div>
-              <div className="text-amber-600">grams per hectare</div>
+              <div className="text-red-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Glyphosate - Clean design */}
-        <div className="rounded-md border-l-4 border-green-400 bg-green-50 px-3 py-2">
-          <div className="mb-1 text-sm font-medium text-green-800">
+        <div className="bg-green-50 rounded-md px-3 py-2 border-l-4 border-green-400">
+          <div className="text-green-800 text-sm font-medium mb-1">
             Glyphosate Active Ingredients
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-green-900">
+              <div className="text-green-900 font-semibold text-base">
                 {formatNumber(glyphosateGrams, 2)}
               </div>
               <div className="text-green-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-green-900">
+              <div className="text-green-900 font-semibold text-base">
                 {formatNumber(glyphosateIntensity, 2)}
               </div>
               <div className="text-green-600">grams per hectare</div>
@@ -408,46 +408,46 @@ const KommuneTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
         </div>
 
         {/* Diquat - Clean design */}
-        <div className="rounded-md border-l-4 border-purple-400 bg-purple-50 px-3 py-2">
-          <div className="mb-1 text-sm font-medium text-purple-800">
+        <div className="bg-amber-50 rounded-md px-3 py-2 border-l-4 border-amber-400">
+          <div className="text-amber-800 text-sm font-medium mb-1">
             Diquat Active Ingredients
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-base font-semibold text-purple-900">
+              <div className="text-amber-900 font-semibold text-base">
                 {formatNumber(diquatGrams, 2)}
               </div>
-              <div className="text-purple-600">grams total</div>
+              <div className="text-amber-600">grams total</div>
             </div>
             <div>
-              <div className="text-base font-semibold text-purple-900">
+              <div className="text-amber-900 font-semibold text-base">
                 {formatNumber(diquatIntensity, 2)}
               </div>
-              <div className="text-purple-600">grams per hectare</div>
+              <div className="text-amber-600">grams per hectare</div>
             </div>
           </div>
         </div>
 
         {/* Agricultural Activity - Minimal stats */}
-        <div className="rounded-md bg-slate-50 px-3 py-2">
-          <div className="mb-2 text-sm font-medium text-slate-700">
+        <div className="bg-slate-50 rounded-md px-3 py-2">
+          <div className="text-slate-700 text-sm font-medium mb-2">
             Activity
           </div>
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="text-center">
-              <div className="text-sm font-semibold text-slate-900">
+              <div className="font-semibold text-slate-900 text-sm">
                 {applications}
               </div>
               <div className="text-slate-600">Applications</div>
             </div>
             <div className="text-center">
-              <div className="text-sm font-semibold text-slate-900">
+              <div className="font-semibold text-slate-900 text-sm">
                 {fieldCount}
               </div>
               <div className="text-slate-600">Fields</div>
             </div>
             <div className="text-center">
-              <div className="text-sm font-semibold text-slate-900">
+              <div className="font-semibold text-slate-900 text-sm">
                 {formatPercentage(coverage)}
               </div>
               <div className="text-slate-600">Coverage</div>
@@ -476,16 +476,16 @@ const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
                 ENVIRONMENTAL PROTECTION ZONE
               </h3>
               <p className="font-mono text-xs text-gray-300">
-                BNBO SECTOR{' '}
+                BNBO SECTOR{" "}
                 {data.bnbo_id
                   ? data.bnbo_id.substring(0, 8).toUpperCase()
-                  : 'UNKNOWN'}
+                  : "UNKNOWN"}
               </p>
             </div>
             <div className="text-right">
               <div className="font-mono text-xs text-gray-400">AREA</div>
               <div className="font-mono text-sm font-bold text-white">
-                {data.area_ha ? `${formatNumber(data.area_ha, 1)} ha` : 'N/A'}
+                {data.area_ha ? `${formatNumber(data.area_ha, 1)} ha` : "N/A"}
               </div>
             </div>
           </div>
@@ -493,11 +493,11 @@ const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
       </div>
 
       {/* Protection Status */}
-      <div className="rounded border border-gray-300 bg-gray-50 p-3">
+      <div className="border border-gray-300 bg-gray-50 rounded p-3">
         {statusConfig && (
-          <div className="mb-3 flex items-center space-x-3">
+          <div className="flex items-center space-x-3 mb-3">
             <div
-              className="h-4 w-4 rounded border border-gray-400"
+              className="w-4 h-4 rounded border border-gray-400"
               style={{ backgroundColor: statusConfig.color }}
             />
             <div>
@@ -513,10 +513,10 @@ const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
 
         {data.description && (
           <div className="mt-3">
-            <div className="mb-1 font-mono text-xs font-semibold text-gray-900">
+            <div className="font-mono text-xs font-semibold text-gray-900 mb-1">
               DESCRIPTION:
             </div>
-            <p className="font-mono text-xs break-words text-gray-600">
+            <p className="font-mono text-xs text-gray-600 break-words">
               {data.description}
             </p>
           </div>
@@ -527,8 +527,8 @@ const BNBOTooltip: React.FC<{ data: TooltipData }> = ({ data }) => {
       <div className="border-t border-gray-300 pt-2">
         <div className="font-mono text-xs text-gray-500">
           <span className="font-semibold">BNBO ID:</span>
-          <span className="ml-1 rounded bg-gray-200 px-1 py-0.5 font-mono">
-            {data.bnbo_id || 'UNKNOWN'}
+          <span className="ml-1 bg-gray-200 px-1 py-0.5 rounded font-mono">
+            {data.bnbo_id || "UNKNOWN"}
           </span>
         </div>
       </div>
@@ -599,35 +599,38 @@ export const MapTooltip: React.FC = () => {
   // Final bounds checking to ensure tooltip stays on screen
   adjustedPosition.left = Math.max(
     padding,
-    Math.min(adjustedPosition.left, window.innerWidth - tooltipWidth - padding)
+    Math.min(adjustedPosition.left, window.innerWidth - tooltipWidth - padding),
   );
 
   adjustedPosition.top = Math.max(
     padding,
-    Math.min(adjustedPosition.top, window.innerHeight - tooltipHeight - padding)
+    Math.min(
+      adjustedPosition.top,
+      window.innerHeight - tooltipHeight - padding,
+    ),
   );
 
   return (
     <div
-      className="pointer-events-none fixed z-50"
+      className="fixed z-50 pointer-events-none"
       style={{
         left: adjustedPosition.left,
         top: adjustedPosition.top,
       }}
     >
-      <div className="max-w-sm rounded-lg border border-gray-400 bg-white shadow-xl">
+      <div className="bg-white border border-gray-400 rounded-lg shadow-xl max-w-sm">
         <div className="p-4">
-          {tooltipType === 'h3' && <H3Tooltip data={tooltipData} />}
-          {tooltipType === 'kommune' && <KommuneTooltip data={tooltipData} />}
-          {tooltipType === 'bnbo' && <BNBOTooltip data={tooltipData} />}
+          {tooltipType === "h3" && <H3Tooltip data={tooltipData} />}
+          {tooltipType === "kommune" && <KommuneTooltip data={tooltipData} />}
+          {tooltipType === "bnbo" && <BNBOTooltip data={tooltipData} />}
 
           {/* Raw data debug section - more scientific */}
-          {process.env.NODE_ENV === 'development' && (
+          {process.env.NODE_ENV === "development" && (
             <details className="mt-3">
-              <summary className="cursor-pointer font-mono text-xs text-gray-500 hover:text-gray-700">
+              <summary className="font-mono text-xs text-gray-500 cursor-pointer hover:text-gray-700">
                 RAW DATA DEBUG
               </summary>
-              <pre className="mt-2 max-h-32 overflow-auto rounded bg-gray-100 p-2 font-mono text-xs text-gray-700">
+              <pre className="font-mono text-xs mt-2 p-2 bg-gray-100 rounded overflow-auto max-h-32 text-gray-700">
                 {JSON.stringify(tooltipData, null, 2)}
               </pre>
             </details>
