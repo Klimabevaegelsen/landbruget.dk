@@ -14,30 +14,20 @@ const firaCode = Fira_Code({
 
 export const metadata: Metadata = {
   title: 'H3 PFAS Exposure Visualization',
-  description:
-    'Interactive visualization of PFAS exposure data across Denmark using H3 hexagonal grids',
-  keywords: [
-    'PFAS',
-    'pesticide',
-    'Denmark',
-    'environmental',
-    'visualization',
-    'H3',
-  ],
+  description: 'Interactive visualization of PFAS exposure data across Denmark using H3 hexagonal grids',
+  keywords: ['PFAS', 'pesticide', 'Denmark', 'environmental', 'visualization', 'H3'],
   authors: [{ name: 'Landbrugsdata Team' }],
   robots: 'index, follow',
   openGraph: {
     title: 'H3 PFAS Exposure Visualization',
-    description:
-      'Interactive visualization of PFAS exposure data across Denmark',
+    description: 'Interactive visualization of PFAS exposure data across Denmark',
     type: 'website',
     locale: 'en_US',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'H3 PFAS Exposure Visualization',
-    description:
-      'Interactive visualization of PFAS exposure data across Denmark',
+    description: 'Interactive visualization of PFAS exposure data across Denmark',
   },
 };
 
@@ -59,11 +49,13 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#ffffff" />
       </head>
-      <body className="bg-background min-h-screen font-sans antialiased">
+      <body className="min-h-screen bg-background font-sans antialiased">
         <div className="relative flex min-h-screen flex-col">
-          <main className="flex-1">{children}</main>
+          <main className="flex-1">
+            {children}
+          </main>
         </div>
       </body>
     </html>
   );
-}
+} 

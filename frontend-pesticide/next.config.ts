@@ -5,12 +5,12 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-
+  
   // ESLint configuration
   eslint: {
     ignoreDuringBuilds: true,
   },
-
+  
   // Webpack configuration for better bundling
   webpack: (config, { dev, isServer }) => {
     // Handle Node.js modules that shouldn't be bundled for the client
@@ -46,15 +46,15 @@ const nextConfig: NextConfig = {
         },
       };
     }
-
+    
     return config;
   },
-
+  
   // Image optimization
   images: {
     formats: ['image/webp', 'image/avif'],
   },
-
+  
   // Headers for security and performance
   async headers() {
     return [
@@ -79,4 +79,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default nextConfig; 
