@@ -6,10 +6,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   
-  // ESLint configuration
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   
   // Webpack configuration for better bundling
   webpack: (config, { dev, isServer }) => {
