@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useMapStore } from '@/stores/map-store';
-import { Eye, EyeOff, Map } from 'lucide-react';
+import { useMapStore } from "@/stores/map-store";
+import { Eye, EyeOff, Map } from "lucide-react";
 
 export function BasemapToggle() {
   const showBasemap = useMapStore((state) => state.showBasemap);
@@ -13,16 +13,18 @@ export function BasemapToggle() {
         <Map className="w-4 h-4 text-gray-400" />
         <div>
           <div className="text-sm font-medium text-white">Basemap Details</div>
-          <div className="text-xs text-gray-400">Buildings, Roads & Land Use</div>
+          <div className="text-xs text-gray-400">
+            Buildings, Roads & Land Use
+          </div>
         </div>
       </div>
-      
+
       <button
         onClick={() => setShowBasemap(!showBasemap)}
         className={`p-2 rounded-md transition-colors ${
-          showBasemap 
-            ? 'bg-blue-600 text-white hover:bg-blue-700' 
-            : 'bg-gray-600 text-gray-300 hover:bg-gray-500'
+          showBasemap
+            ? "bg-blue-600 text-white hover:bg-blue-700"
+            : "bg-gray-600 text-gray-300 hover:bg-gray-500"
         }`}
       >
         {showBasemap ? (
@@ -33,4 +35,4 @@ export function BasemapToggle() {
       </button>
     </div>
   );
-} 
+}

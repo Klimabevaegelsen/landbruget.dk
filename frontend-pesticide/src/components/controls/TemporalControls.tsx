@@ -1,20 +1,15 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useTemporalStore } from '@/stores/temporal-store'
-import { usePMTilesStore } from '@/stores/pmtiles-store'
-import { 
-  Play, 
-  Pause, 
-  ChevronLeft, 
-  ChevronRight
-} from 'lucide-react'
+import { useEffect } from "react";
+import { useTemporalStore } from "@/stores/temporal-store";
+import { usePMTilesStore } from "@/stores/pmtiles-store";
+import { Play, Pause, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface TemporalControlsProps {
-  className?: string
+  className?: string;
 }
 
-export function TemporalControls({ className = '' }: TemporalControlsProps) {
+export function TemporalControls({ className = "" }: TemporalControlsProps) {
   const {
     currentYear,
     availableYears,
@@ -26,19 +21,19 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
     canGoNext,
     canGoPrevious,
     getYearRange,
-  } = useTemporalStore()
-  
-  const { metadata } = usePMTilesStore()
-  
+  } = useTemporalStore();
+
+  const { metadata } = usePMTilesStore();
+
   // Update available years from metadata
   useEffect(() => {
     if (metadata?.years) {
-      useTemporalStore.getState().setAvailableYears(metadata.years)
+      useTemporalStore.getState().setAvailableYears(metadata.years);
     }
-  }, [metadata])
-  
-  const yearRange = getYearRange()
-  
+  }, [metadata]);
+
+  const yearRange = getYearRange();
+
   return (
     <div className={`${className}`}>
       {/* Simple Controls */}
@@ -51,16 +46,20 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
         >
           <ChevronLeft className="w-4 h-4 text-white" />
         </button>
-        
+
         {/* Play/Pause */}
         <button
           onClick={isAnimating ? stopAnimation : startAnimation}
           disabled={availableYears.length <= 1}
           className="p-2 rounded-full bg-white text-black hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
         >
-          {isAnimating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          {isAnimating ? (
+            <Pause className="w-4 h-4" />
+          ) : (
+            <Play className="w-4 h-4" />
+          )}
         </button>
-        
+
         {/* Next */}
         <button
           onClick={goToNextYear}
@@ -70,7 +69,7 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
           <ChevronRight className="w-4 h-4 text-white" />
         </button>
       </div>
-      
+
       {/* Year Progress Bar */}
       {yearRange && (
         <div>
@@ -82,12 +81,12 @@ export function TemporalControls({ className = '' }: TemporalControlsProps) {
             <div
               className="bg-white h-0.5 rounded-full transition-all duration-300"
               style={{
-                width: `${((currentYear - yearRange[0]) / (yearRange[1] - yearRange[0])) * 100}%`
+                width: `${((currentYear - yearRange[0]) / (yearRange[1] - yearRange[0])) * 100}%`,
               }}
             />
           </div>
         </div>
       )}
     </div>
-  )
-} 
+  );
+}

@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, X, MapPin } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Search, X, MapPin } from "lucide-react";
 
 interface DAWAResult {
   tekst: string;
@@ -14,70 +14,80 @@ interface DAWAResult {
 }
 
 interface SearchBarProps {
-  onLocationSelect?: (location: { lat: number; lng: number; address: string }) => void;
+  onLocationSelect?: (location: {
+    lat: number;
+    lng: number;
+    address: string;
+  }) => void;
   placeholder?: string;
   className?: string;
 }
 
-export function SearchBar({ 
-  onLocationSelect, 
+export function SearchBar({
+  onLocationSelect,
   placeholder = "Search address...",
-  className = ""
+  className = "",
 }: SearchBarProps) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<DAWAResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  
+
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
-  const handleSelectResult = useCallback(async (result: DAWAResult) => {
-    setQuery(result.tekst);
-    setIsOpen(false);
-    setSelectedIndex(-1);
+  const handleSelectResult = useCallback(
+    async (result: DAWAResult) => {
+      setQuery(result.tekst);
+      setIsOpen(false);
+      setSelectedIndex(-1);
 
-    // Get detailed address information including coordinates
-    if (result.adresse?.href) {
-      try {
-        const response = await fetch(result.adresse.href);
-        if (response.ok) {
-          const detailData = await response.json();
-          if (detailData.adgangsadresse?.koordinater) {
-            const [lng, lat] = detailData.adgangsadresse.koordinater;
-            onLocationSelect?.({
-              lat,
-              lng,
-              address: result.tekst
-            });
+      // Get detailed address information including coordinates
+      if (result.adresse?.href) {
+        try {
+          const response = await fetch(result.adresse.href);
+          if (response.ok) {
+            const detailData = await response.json();
+            if (detailData.adgangsadresse?.koordinater) {
+              const [lng, lat] = detailData.adgangsadresse.koordinater;
+              onLocationSelect?.({
+                lat,
+                lng,
+                address: result.tekst,
+              });
+            }
           }
+        } catch (error) {
+          console.error("Error fetching address details:", error);
         }
-      } catch (error) {
-        console.error('Error fetching address details:', error);
+      } else if (result.adresse?.x && result.adresse?.y) {
+        // Use coordinates from autocomplete result if available
+        onLocationSelect?.({
+          lat: result.adresse.y,
+          lng: result.adresse.x,
+          address: result.tekst,
+        });
       }
-    } else if (result.adresse?.x && result.adresse?.y) {
-      // Use coordinates from autocomplete result if available
-      onLocationSelect?.({
-        lat: result.adresse.y,
-        lng: result.adresse.x,
-        address: result.tekst
-      });
-    }
-  }, [onLocationSelect]);
+    },
+    [onLocationSelect],
+  );
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+      if (
+        searchRef.current &&
+        !searchRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
         setSelectedIndex(-1);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   // Handle keyboard navigation
@@ -86,23 +96,23 @@ export function SearchBar({
       if (!isOpen) return;
 
       switch (event.key) {
-        case 'ArrowDown':
+        case "ArrowDown":
           event.preventDefault();
-          setSelectedIndex(prev => 
-            prev < results.length - 1 ? prev + 1 : prev
+          setSelectedIndex((prev) =>
+            prev < results.length - 1 ? prev + 1 : prev,
           );
           break;
-        case 'ArrowUp':
+        case "ArrowUp":
           event.preventDefault();
-          setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
           break;
-        case 'Enter':
+        case "Enter":
           event.preventDefault();
           if (selectedIndex >= 0 && results[selectedIndex]) {
             handleSelectResult(results[selectedIndex]);
           }
           break;
-        case 'Escape':
+        case "Escape":
           setIsOpen(false);
           setSelectedIndex(-1);
           inputRef.current?.blur();
@@ -110,8 +120,8 @@ export function SearchBar({
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, results, selectedIndex, handleSelectResult]);
 
   const searchDAWA = async (searchQuery: string) => {
@@ -126,22 +136,22 @@ export function SearchBar({
       const response = await fetch(
         `https://api.dataforsyningen.dk/adresser/autocomplete?q=${encodeURIComponent(searchQuery)}&fuzzy=true&per_side=8`,
         {
-          method: 'GET',
+          method: "GET",
           headers: {
-            'Accept': 'application/json',
-          }
-        }
+            Accept: "application/json",
+          },
+        },
       );
 
       if (response.ok) {
         const data = await response.json();
         setResults(data || []);
       } else {
-        console.error('DAWA API error:', response.status);
+        console.error("DAWA API error:", response.status);
         setResults([]);
       }
     } catch (error) {
-      console.error('Error searching DAWA:', error);
+      console.error("Error searching DAWA:", error);
       setResults([]);
     } finally {
       setIsLoading(false);
@@ -167,7 +177,7 @@ export function SearchBar({
   };
 
   const clearSearch = () => {
-    setQuery('');
+    setQuery("");
     setResults([]);
     setIsOpen(false);
     setSelectedIndex(-1);
@@ -180,7 +190,7 @@ export function SearchBar({
         <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400">
           <Search className="w-5 h-5" />
         </div>
-        
+
         <input
           ref={inputRef}
           type="text"
@@ -190,7 +200,7 @@ export function SearchBar({
           placeholder={placeholder}
           className="w-full pl-12 pr-12 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-base"
         />
-        
+
         {query && (
           <button
             onClick={clearSearch}
@@ -217,7 +227,7 @@ export function SearchBar({
                 key={index}
                 onClick={() => handleSelectResult(result)}
                 className={`w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors border-b border-slate-600 last:border-b-0 ${
-                  index === selectedIndex ? 'bg-slate-700' : ''
+                  index === selectedIndex ? "bg-slate-700" : ""
                 }`}
               >
                 <div className="flex items-start space-x-3">
@@ -239,4 +249,4 @@ export function SearchBar({
       )}
     </div>
   );
-} 
+}

@@ -1,42 +1,54 @@
-'use client';
+"use client";
 
-import { useMapStore, useAvailableYearOptions, useSelectedYear, type YearSelection } from '@/stores/map-store';
-import { useUIStore } from '@/stores/ui-store';
-import { ChevronLeft, ChevronRight, Play, Pause } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  useMapStore,
+  useAvailableYearOptions,
+  useSelectedYear,
+  type YearSelection,
+} from "@/stores/map-store";
+import { useUIStore } from "@/stores/ui-store";
+import { ChevronLeft, ChevronRight, Play, Pause } from "lucide-react";
+import { useEffect, useState } from "react";
 
 interface StepSliderProps {
   className?: string;
 }
 
-export function StepSlider({ className = '' }: StepSliderProps) {
+export function StepSlider({ className = "" }: StepSliderProps) {
   const selectedYear = useSelectedYear();
   const availableYearOptions = useAvailableYearOptions();
   const { setSelectedYear } = useMapStore();
   const { isMobile } = useUIStore();
-  
+
   const [isAnimating, setIsAnimating] = useState(false);
-  const [animationInterval, setAnimationInterval] = useState<NodeJS.Timeout | null>(null);
+  const [animationInterval, setAnimationInterval] =
+    useState<NodeJS.Timeout | null>(null);
 
   // Get numeric years for animation and display
-  const numericYears = availableYearOptions.filter((year): year is number => typeof year === 'number').sort((a, b) => a - b);
-  const hasTotal = availableYearOptions.includes('total');
-  
+  const numericYears = availableYearOptions
+    .filter((year): year is number => typeof year === "number")
+    .sort((a, b) => a - b);
+  const hasTotal = availableYearOptions.includes("total");
+
   // All options in order: years + total
-  const allOptions = [...numericYears, ...(hasTotal ? ['total'] : [])] as YearSelection[];
-  
+  const allOptions = [
+    ...numericYears,
+    ...(hasTotal ? ["total"] : []),
+  ] as YearSelection[];
+
   const currentIndex = allOptions.indexOf(selectedYear);
 
   const startAnimation = () => {
     if (numericYears.length <= 1) return;
-    
+
     setIsAnimating(true);
     const interval = setInterval(() => {
       const currentIndex = numericYears.indexOf(selectedYear as number);
-      const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % numericYears.length : 0;
+      const nextIndex =
+        currentIndex >= 0 ? (currentIndex + 1) % numericYears.length : 0;
       setSelectedYear(numericYears[nextIndex]);
     }, 1500);
-    
+
     setAnimationInterval(interval);
   };
 
@@ -103,7 +115,11 @@ export function StepSlider({ className = '' }: StepSliderProps) {
             disabled={numericYears.length <= 1}
             className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation"
           >
-            {isAnimating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isAnimating ? (
+              <Pause className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4" />
+            )}
           </button>
 
           {/* Next Button */}
@@ -126,23 +142,23 @@ export function StepSlider({ className = '' }: StepSliderProps) {
               disabled={isAnimating}
               className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 touch-manipulation ${
                 selectedYear === year
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
               } disabled:opacity-30 disabled:cursor-not-allowed`}
             >
               {year}
             </button>
           ))}
-          
+
           {/* Total Button */}
           {hasTotal && (
             <button
-              onClick={() => setSelectedYear('total')}
+              onClick={() => setSelectedYear("total")}
               disabled={isAnimating}
               className={`px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 touch-manipulation ${
-                selectedYear === 'total'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                selectedYear === "total"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
               } disabled:opacity-30 disabled:cursor-not-allowed`}
             >
               Total
@@ -171,7 +187,11 @@ export function StepSlider({ className = '' }: StepSliderProps) {
         disabled={numericYears.length <= 1}
         className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all"
       >
-        {isAnimating ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+        {isAnimating ? (
+          <Pause className="w-4 h-4" />
+        ) : (
+          <Play className="w-4 h-4" />
+        )}
       </button>
 
       {/* Step Buttons */}
@@ -184,23 +204,23 @@ export function StepSlider({ className = '' }: StepSliderProps) {
             disabled={isAnimating}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 min-w-[50px] ${
               selectedYear === year
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                ? "bg-blue-600 text-white"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
             } disabled:opacity-30 disabled:cursor-not-allowed`}
           >
             {year}
           </button>
         ))}
-        
+
         {/* Total Button */}
         {hasTotal && (
           <button
-            onClick={() => setSelectedYear('total')}
+            onClick={() => setSelectedYear("total")}
             disabled={isAnimating}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 min-w-[60px] ${
-              selectedYear === 'total'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+              selectedYear === "total"
+                ? "bg-blue-600 text-white"
+                : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
             } disabled:opacity-30 disabled:cursor-not-allowed`}
           >
             Total
@@ -218,4 +238,4 @@ export function StepSlider({ className = '' }: StepSliderProps) {
       </button>
     </div>
   );
-} 
+}

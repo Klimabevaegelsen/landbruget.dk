@@ -1,11 +1,8 @@
-import { supabase, handleSupabaseError } from './supabase';
-import type { 
-  H3RawData, 
-  H3DataQuality 
-} from '@/types/h3-data';
-import type { BNBORawData } from '@/types/bnbo-data';
-import type { BBRRawData } from '@/types/bbr-data';
-import { GCS_CONFIG } from './shared-constants';
+import { supabase, handleSupabaseError } from "./supabase";
+import type { H3RawData, H3DataQuality } from "@/types/h3-data";
+import type { BNBORawData } from "@/types/bnbo-data";
+import type { BBRRawData } from "@/types/bbr-data";
+import { GCS_CONFIG } from "./shared-constants";
 
 // Data sync configuration
 interface DataSyncConfig {
@@ -21,7 +18,7 @@ interface DataSyncConfig {
 interface SyncStatus {
   table: string;
   year?: number;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: "pending" | "running" | "completed" | "failed";
   records_processed: number;
   records_total: number;
   started_at?: string;
@@ -48,12 +45,12 @@ export class H3DataSyncer {
   constructor(config?: Partial<DataSyncConfig>) {
     this.config = {
       gcs_bucket: GCS_CONFIG.BUCKET,
-      supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-      supabase_key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-      sync_schedule: '0 2 * * *', // Daily at 2 AM
+      supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+      supabase_key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+      sync_schedule: "0 2 * * *", // Daily at 2 AM
       batch_size: 1000,
       max_retries: 3,
-      ...config
+      ...config,
     };
   }
 
@@ -63,26 +60,26 @@ export class H3DataSyncer {
   async syncH3Data(year: number): Promise<SyncResult> {
     const syncKey = `h3_${year}`;
     const startTime = Date.now();
-    
+
     this.updateSyncStatus(syncKey, {
-      table: 'h3_pfas_exposure',
+      table: "h3_pfas_exposure",
       year,
-      status: 'running',
+      status: "running",
       records_processed: 0,
       records_total: 0,
-      started_at: new Date().toISOString()
+      started_at: new Date().toISOString(),
     });
 
     try {
       // 1. Fetch data from GCS (simulated - in production would use actual GCS client)
       const gcsPath = `gs://${this.config.gcs_bucket}/${GCS_CONFIG.H3_DATA_PATH}/${year}/data.parquet`;
       console.log(`Fetching H3 data from: ${gcsPath}`);
-      
+
       const h3RawData = await this.fetchH3DataFromGCS(gcsPath);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        records_total: h3RawData.length
+        records_total: h3RawData.length,
       });
 
       // 2. Transform data for Supabase PostGIS
@@ -90,44 +87,45 @@ export class H3DataSyncer {
 
       // 3. Sync data in batches
       const syncResult = await this.syncDataInBatches(
-        'h3_pfas_exposure',
+        "h3_pfas_exposure",
         transformedData,
-        ['h3_id', 'year'], // Conflict columns
-        syncKey
+        ["h3_id", "year"], // Conflict columns
+        syncKey,
       );
 
       // 4. Update sync status
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        status: syncResult.success ? 'completed' : 'failed',
+        status: syncResult.success ? "completed" : "failed",
         records_processed: syncResult.records_synced,
         completed_at: new Date().toISOString(),
-        error_message: syncResult.errors.join('; ')
+        error_message: syncResult.errors.join("; "),
       });
 
       const duration = Date.now() - startTime;
-      console.log(`H3 data sync completed for year ${year}: ${syncResult.records_synced} records in ${duration}ms`);
+      console.log(
+        `H3 data sync completed for year ${year}: ${syncResult.records_synced} records in ${duration}ms`,
+      );
 
       return {
         ...syncResult,
-        duration_ms: duration
+        duration_ms: duration,
       };
-
     } catch (error) {
       console.error(`H3 data sync failed for year ${year}:`, error);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        status: 'failed',
+        status: "failed",
         completed_at: new Date().toISOString(),
-        error_message: error instanceof Error ? error.message : 'Unknown error'
+        error_message: error instanceof Error ? error.message : "Unknown error",
       });
 
       return {
         success: false,
         records_synced: 0,
-        errors: [error instanceof Error ? error.message : 'Unknown error'],
-        duration_ms: Date.now() - startTime
+        errors: [error instanceof Error ? error.message : "Unknown error"],
+        duration_ms: Date.now() - startTime,
       };
     }
   }
@@ -136,65 +134,64 @@ export class H3DataSyncer {
    * Sync BNBO status areas data
    */
   async syncBNBOData(): Promise<SyncResult> {
-    const syncKey = 'bnbo_areas';
+    const syncKey = "bnbo_areas";
     const startTime = Date.now();
-    
+
     this.updateSyncStatus(syncKey, {
-      table: 'bnbo_status_areas',
-      status: 'running',
+      table: "bnbo_status_areas",
+      status: "running",
       records_processed: 0,
       records_total: 0,
-      started_at: new Date().toISOString()
+      started_at: new Date().toISOString(),
     });
 
     try {
       const gcsPath = `gs://${this.config.gcs_bucket}/${GCS_CONFIG.BNBO_DATA_PATH}/data.parquet`;
       console.log(`Fetching BNBO data from: ${gcsPath}`);
-      
+
       const bnboRawData = await this.fetchBNBODataFromGCS(gcsPath);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        records_total: bnboRawData.length
+        records_total: bnboRawData.length,
       });
 
       const transformedData = this.transformBNBODataForSupabase(bnboRawData);
 
       const syncResult = await this.syncDataInBatches(
-        'bnbo_status_areas',
+        "bnbo_status_areas",
         transformedData,
-        ['bnbo_id'], // Conflict columns
-        syncKey
+        ["bnbo_id"], // Conflict columns
+        syncKey,
       );
 
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        status: syncResult.success ? 'completed' : 'failed',
+        status: syncResult.success ? "completed" : "failed",
         records_processed: syncResult.records_synced,
         completed_at: new Date().toISOString(),
-        error_message: syncResult.errors.join('; ')
+        error_message: syncResult.errors.join("; "),
       });
 
       return {
         ...syncResult,
-        duration_ms: Date.now() - startTime
+        duration_ms: Date.now() - startTime,
       };
-
     } catch (error) {
-      console.error('BNBO data sync failed:', error);
-      
+      console.error("BNBO data sync failed:", error);
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        status: 'failed',
+        status: "failed",
         completed_at: new Date().toISOString(),
-        error_message: error instanceof Error ? error.message : 'Unknown error'
+        error_message: error instanceof Error ? error.message : "Unknown error",
       });
 
       return {
         success: false,
         records_synced: 0,
-        errors: [error instanceof Error ? error.message : 'Unknown error'],
-        duration_ms: Date.now() - startTime
+        errors: [error instanceof Error ? error.message : "Unknown error"],
+        duration_ms: Date.now() - startTime,
       };
     }
   }
@@ -203,65 +200,64 @@ export class H3DataSyncer {
    * Sync BBR buildings data
    */
   async syncBBRData(): Promise<SyncResult> {
-    const syncKey = 'bbr_buildings';
+    const syncKey = "bbr_buildings";
     const startTime = Date.now();
-    
+
     this.updateSyncStatus(syncKey, {
-      table: 'bbr_buildings',
-      status: 'running',
+      table: "bbr_buildings",
+      status: "running",
       records_processed: 0,
       records_total: 0,
-      started_at: new Date().toISOString()
+      started_at: new Date().toISOString(),
     });
 
     try {
       const gcsPath = `gs://${this.config.gcs_bucket}/${GCS_CONFIG.BBR_DATA_PATH}/data.parquet`;
       console.log(`Fetching BBR data from: ${gcsPath}`);
-      
+
       const bbrRawData = await this.fetchBBRDataFromGCS(gcsPath);
-      
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        records_total: bbrRawData.length
+        records_total: bbrRawData.length,
       });
 
       const transformedData = this.transformBBRDataForSupabase(bbrRawData);
 
       const syncResult = await this.syncDataInBatches(
-        'bbr_buildings',
+        "bbr_buildings",
         transformedData,
-        ['bbr_id'], // Conflict columns
-        syncKey
+        ["bbr_id"], // Conflict columns
+        syncKey,
       );
 
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        status: syncResult.success ? 'completed' : 'failed',
+        status: syncResult.success ? "completed" : "failed",
         records_processed: syncResult.records_synced,
         completed_at: new Date().toISOString(),
-        error_message: syncResult.errors.join('; ')
+        error_message: syncResult.errors.join("; "),
       });
 
       return {
         ...syncResult,
-        duration_ms: Date.now() - startTime
+        duration_ms: Date.now() - startTime,
       };
-
     } catch (error) {
-      console.error('BBR data sync failed:', error);
-      
+      console.error("BBR data sync failed:", error);
+
       this.updateSyncStatus(syncKey, {
         ...this.syncStatus.get(syncKey)!,
-        status: 'failed',
+        status: "failed",
         completed_at: new Date().toISOString(),
-        error_message: error instanceof Error ? error.message : 'Unknown error'
+        error_message: error instanceof Error ? error.message : "Unknown error",
       });
 
       return {
         success: false,
         records_synced: 0,
-        errors: [error instanceof Error ? error.message : 'Unknown error'],
-        duration_ms: Date.now() - startTime
+        errors: [error instanceof Error ? error.message : "Unknown error"],
+        duration_ms: Date.now() - startTime,
       };
     }
   }
@@ -269,31 +265,35 @@ export class H3DataSyncer {
   /**
    * Sync all data types for all available years
    */
-  async syncAllData(): Promise<{ h3: SyncResult[]; bnbo: SyncResult; bbr: SyncResult }> {
-    console.log('Starting full data synchronization...');
-    
+  async syncAllData(): Promise<{
+    h3: SyncResult[];
+    bnbo: SyncResult;
+    bbr: SyncResult;
+  }> {
+    console.log("Starting full data synchronization...");
+
     // Sync H3 data for all years
     const h3Results: SyncResult[] = [];
     const years = [2020, 2021, 2022, 2023, 2024, 2025];
-    
+
     for (const year of years) {
       const result = await this.syncH3Data(year);
       h3Results.push(result);
-      
+
       // Add delay between years to avoid overwhelming the database
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     // Sync BNBO and BBR data
     const bnboResult = await this.syncBNBOData();
     const bbrResult = await this.syncBBRData();
 
-    console.log('Full data synchronization completed');
-    
+    console.log("Full data synchronization completed");
+
     return {
       h3: h3Results,
       bnbo: bnboResult,
-      bbr: bbrResult
+      bbr: bbrResult,
     };
   }
 
@@ -317,9 +317,9 @@ export class H3DataSyncer {
   async validateDataIntegrity(year: number): Promise<H3DataQuality> {
     try {
       const { data, error } = await supabase
-        .from('h3_pfas_exposure')
-        .select('*')
-        .eq('year', year);
+        .from("h3_pfas_exposure")
+        .select("*")
+        .eq("year", year);
 
       if (error) {
         handleSupabaseError(error);
@@ -332,29 +332,40 @@ export class H3DataSyncer {
       // Calculate quality metrics
       const quality: H3DataQuality = {
         totalRecords: data.length,
-        recordsWithGeometry: data.filter(row => row.geometry).length,
-        recordsWithPesticideData: data.filter(row => row.total_pesticide_load !== null && row.total_pesticide_load > 0).length,
-        recordsWithPfasData: data.filter(row => row.total_pfas_grams !== null && row.total_pfas_grams > 0).length,
+        recordsWithGeometry: data.filter((row) => row.geometry).length,
+        recordsWithPesticideData: data.filter(
+          (row) =>
+            row.total_pesticide_load !== null && row.total_pesticide_load > 0,
+        ).length,
+        recordsWithPfasData: data.filter(
+          (row) => row.total_pfas_grams !== null && row.total_pfas_grams > 0,
+        ).length,
         yearRange: { min: year, max: year },
         spatialExtent: {
           minLon: 8.0, // Denmark approximate bounds
           maxLon: 15.0,
           minLat: 54.5,
-          maxLat: 57.8
+          maxLat: 57.8,
         },
-        dataCompleteness: (data.filter(row => 
-          row.total_pesticide_load !== null && 
-          row.total_pfas_grams !== null && 
-          row.geometry
-        ).length / data.length) * 100,
-        lastUpdated: new Date().toISOString()
+        dataCompleteness:
+          (data.filter(
+            (row) =>
+              row.total_pesticide_load !== null &&
+              row.total_pfas_grams !== null &&
+              row.geometry,
+          ).length /
+            data.length) *
+          100,
+        lastUpdated: new Date().toISOString(),
       };
 
       console.log(`Data integrity validation for year ${year}:`, quality);
       return quality;
-
     } catch (error) {
-      console.error(`Data integrity validation failed for year ${year}:`, error);
+      console.error(
+        `Data integrity validation failed for year ${year}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -366,7 +377,7 @@ export class H3DataSyncer {
   private async fetchH3DataFromGCS(gcsPath: string): Promise<H3RawData[]> {
     // DEBUG: Simulated data - remove when implementing actual GCS integration
     console.log(`DEBUG: Simulating fetch from ${gcsPath}`);
-    
+
     // Return mock data for development
     return [
       {
@@ -378,11 +389,12 @@ export class H3DataSyncer {
         field_count: 5,
         agricultural_area_ha: 15.2,
         avg_field_coverage: 0.85,
-        geometry_wkt: 'POLYGON((9.5 56.2, 9.6 56.2, 9.6 56.3, 9.5 56.3, 9.5 56.2))',
+        geometry_wkt:
+          "POLYGON((9.5 56.2, 9.6 56.2, 9.6 56.3, 9.5 56.3, 9.5 56.2))",
         h3_centroid_lat: 56.25,
         h3_centroid_lon: 9.55,
-        h3_resolution: 10
-      }
+        h3_resolution: 10,
+      },
     ];
   }
 
@@ -391,16 +403,17 @@ export class H3DataSyncer {
    */
   private async fetchBNBODataFromGCS(gcsPath: string): Promise<BNBORawData[]> {
     console.log(`DEBUG: Simulating BNBO fetch from ${gcsPath}`);
-    
+
     return [
       {
-        bnbo_id: 'BNBO_001',
-        status_code: 'protected',
-        status_description: 'Fully Protected Area',
+        bnbo_id: "BNBO_001",
+        status_code: "protected",
+        status_description: "Fully Protected Area",
         area_ha: 125.5,
-        geometry_wkt: 'POLYGON((9.4 56.1, 9.7 56.1, 9.7 56.4, 9.4 56.4, 9.4 56.1))',
-        year: 2023
-      }
+        geometry_wkt:
+          "POLYGON((9.4 56.1, 9.7 56.1, 9.7 56.4, 9.4 56.4, 9.4 56.1))",
+        year: 2023,
+      },
     ];
   }
 
@@ -409,25 +422,27 @@ export class H3DataSyncer {
    */
   private async fetchBBRDataFromGCS(gcsPath: string): Promise<BBRRawData[]> {
     console.log(`DEBUG: Simulating BBR fetch from ${gcsPath}`);
-    
+
     return [
       {
-        bbr_id: 'BBR_001',
-        building_code: '110',
-        building_type: 'Residential',
+        bbr_id: "BBR_001",
+        building_code: "110",
+        building_type: "Residential",
         construction_year: 1995,
         floor_area: 150.0,
-        geometry_wkt: 'POINT(9.55 56.25)',
-        address: 'Test Address 1, 8000 Aarhus'
-      }
+        geometry_wkt: "POINT(9.55 56.25)",
+        address: "Test Address 1, 8000 Aarhus",
+      },
     ];
   }
 
   /**
    * Transform H3 raw data for Supabase insertion
    */
-  private transformH3DataForSupabase(rawData: H3RawData[]): Record<string, unknown>[] {
-    return rawData.map(row => ({
+  private transformH3DataForSupabase(
+    rawData: H3RawData[],
+  ): Record<string, unknown>[] {
+    return rawData.map((row) => ({
       h3_id: row.h3_id,
       year: row.year,
       total_pesticide_load: row.total_pesticide_load,
@@ -439,36 +454,40 @@ export class H3DataSyncer {
       h3_resolution: row.h3_resolution || 10,
       // Transform geometry from WKT to PostGIS
       geometry: `ST_GeomFromText('${row.geometry_wkt}', 4326)`,
-      h3_centroid: `ST_Point(${row.h3_centroid_lon}, ${row.h3_centroid_lat})`
+      h3_centroid: `ST_Point(${row.h3_centroid_lon}, ${row.h3_centroid_lat})`,
     }));
   }
 
   /**
    * Transform BNBO raw data for Supabase insertion
    */
-  private transformBNBODataForSupabase(rawData: BNBORawData[]): Record<string, unknown>[] {
-    return rawData.map(row => ({
+  private transformBNBODataForSupabase(
+    rawData: BNBORawData[],
+  ): Record<string, unknown>[] {
+    return rawData.map((row) => ({
       bnbo_id: row.bnbo_id,
       status_code: row.status_code,
       status_description: row.status_description,
       area_ha: row.area_ha,
       year: row.year,
-      geometry: `ST_GeomFromText('${row.geometry_wkt}', 4326)`
+      geometry: `ST_GeomFromText('${row.geometry_wkt}', 4326)`,
     }));
   }
 
   /**
    * Transform BBR raw data for Supabase insertion
    */
-  private transformBBRDataForSupabase(rawData: BBRRawData[]): Record<string, unknown>[] {
-    return rawData.map(row => ({
+  private transformBBRDataForSupabase(
+    rawData: BBRRawData[],
+  ): Record<string, unknown>[] {
+    return rawData.map((row) => ({
       bbr_id: row.bbr_id,
       building_code: row.building_code,
       building_type: row.building_type,
       construction_year: row.construction_year,
       floor_area: row.floor_area,
       address: row.address,
-      geometry: `ST_GeomFromText('${row.geometry_wkt}', 4326)`
+      geometry: `ST_GeomFromText('${row.geometry_wkt}', 4326)`,
     }));
   }
 
@@ -479,25 +498,25 @@ export class H3DataSyncer {
     tableName: string,
     data: Record<string, unknown>[],
     conflictColumns: string[],
-    syncKey: string
+    syncKey: string,
   ): Promise<SyncResult> {
     const errors: string[] = [];
     let recordsSynced = 0;
-    
+
     for (let i = 0; i < data.length; i += this.config.batch_size) {
       const batch = data.slice(i, i + this.config.batch_size);
-      
+
       try {
-        const { error } = await supabase
-          .from(tableName)
-          .upsert(batch, { 
-            onConflict: conflictColumns.join(','),
-            ignoreDuplicates: false 
-          });
+        const { error } = await supabase.from(tableName).upsert(batch, {
+          onConflict: conflictColumns.join(","),
+          ignoreDuplicates: false,
+        });
 
         if (error) {
           console.error(`Batch sync error for ${tableName}:`, error);
-          errors.push(`Batch ${Math.floor(i / this.config.batch_size) + 1}: ${error.message}`);
+          errors.push(
+            `Batch ${Math.floor(i / this.config.batch_size) + 1}: ${error.message}`,
+          );
         } else {
           recordsSynced += batch.length;
         }
@@ -505,13 +524,15 @@ export class H3DataSyncer {
         // Update progress
         this.updateSyncStatus(syncKey, {
           ...this.syncStatus.get(syncKey)!,
-          records_processed: recordsSynced
+          records_processed: recordsSynced,
         });
-
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
         console.error(`Batch sync exception for ${tableName}:`, error);
-        errors.push(`Batch ${Math.floor(i / this.config.batch_size) + 1}: ${errorMessage}`);
+        errors.push(
+          `Batch ${Math.floor(i / this.config.batch_size) + 1}: ${errorMessage}`,
+        );
       }
     }
 
@@ -519,7 +540,7 @@ export class H3DataSyncer {
       success: errors.length === 0,
       records_synced: recordsSynced,
       errors,
-      duration_ms: 0 // Duration will be calculated by the calling method
+      duration_ms: 0, // Duration will be calculated by the calling method
     };
   }
 
@@ -529,4 +550,4 @@ export class H3DataSyncer {
   private updateSyncStatus(key: string, status: SyncStatus): void {
     this.syncStatus.set(key, status);
   }
-} 
+}

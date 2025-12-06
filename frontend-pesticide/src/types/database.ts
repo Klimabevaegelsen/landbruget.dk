@@ -144,4 +144,4 @@ export type DatabaseResponse<T> = {
   data: T | null;
   error: DatabaseError | null;
   count?: number;
-}; 
+};
