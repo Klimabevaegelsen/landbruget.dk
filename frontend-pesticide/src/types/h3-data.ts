@@ -73,10 +73,10 @@ export interface H3DataFilter {
 
 // Data processing configuration
 export interface H3ProcessingConfig {
-  aggregationMethod: 'sum' | 'average' | 'max';
+  aggregationMethod: "sum" | "average" | "max";
   includeIntensityCalculations: boolean;
-  geometryFormat: 'geojson' | 'wkt';
-  coordinateSystem: 'EPSG:4326' | 'EPSG:3857';
+  geometryFormat: "geojson" | "wkt";
+  coordinateSystem: "EPSG:4326" | "EPSG:3857";
 }
 
 // Data quality metadata

@@ -1,17 +1,18 @@
-'use client';
+"use client";
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { BarChart3, Download, Filter, X, Info } from 'lucide-react';
-import { useMapStore } from '@/stores/map-store';
-import { useDataStore } from '@/stores/data-store';
-import { useUIStore } from '@/stores/ui-store';
-import { formatNumber } from '@/lib/utils';
+import { motion, AnimatePresence } from "framer-motion";
+import { BarChart3, Download, Filter, X, Info } from "lucide-react";
+import { useMapStore } from "@/stores/map-store";
+import { useDataStore } from "@/stores/data-store";
+import { useUIStore } from "@/stores/ui-store";
+import { formatNumber } from "@/lib/utils";
 
 export function DataPanel() {
   const { selectedYear, cumulativeMode, heatmapMode } = useMapStore();
-  const { currentH3Data, currentBNBOData, currentBBRData, isLoading } = useDataStore();
+  const { currentH3Data, currentBNBOData, currentBBRData, isLoading } =
+    useDataStore();
   const { showDataPanel, setShowDataPanel } = useUIStore();
-  
+
   if (!showDataPanel) {
     return (
       <motion.button
@@ -24,20 +25,33 @@ export function DataPanel() {
       </motion.button>
     );
   }
-  
+
   // Calculate statistics from current data
   const stats = {
     totalHexagons: currentH3Data.length,
-    totalPesticideLoad: currentH3Data.reduce((sum, item) => sum + (item.total_pesticide_load || 0), 0),
-    totalPFASMass: currentH3Data.reduce((sum, item) => sum + (item.total_pfas_grams || 0), 0),
-    totalArea: currentH3Data.reduce((sum, item) => sum + (item.agricultural_area_ha || 0), 0),
-    avgCoverage: currentH3Data.length > 0 
-      ? currentH3Data.reduce((sum, item) => sum + (item.avg_field_coverage || 0), 0) / currentH3Data.length 
-      : 0,
+    totalPesticideLoad: currentH3Data.reduce(
+      (sum, item) => sum + (item.total_pesticide_load || 0),
+      0,
+    ),
+    totalPFASMass: currentH3Data.reduce(
+      (sum, item) => sum + (item.total_pfas_grams || 0),
+      0,
+    ),
+    totalArea: currentH3Data.reduce(
+      (sum, item) => sum + (item.agricultural_area_ha || 0),
+      0,
+    ),
+    avgCoverage:
+      currentH3Data.length > 0
+        ? currentH3Data.reduce(
+            (sum, item) => sum + (item.avg_field_coverage || 0),
+            0,
+          ) / currentH3Data.length
+        : 0,
     protectedAreas: currentBNBOData.length,
-    buildings: currentBBRData.length
+    buildings: currentBBRData.length,
   };
-  
+
   const exportData = () => {
     const dataToExport = {
       metadata: {
@@ -45,20 +59,20 @@ export function DataPanel() {
         selectedYear,
         cumulativeMode,
         heatmapMode,
-        totalRecords: currentH3Data.length
+        totalRecords: currentH3Data.length,
       },
       h3Data: currentH3Data,
       bnboData: currentBNBOData,
       bbrData: currentBBRData,
-      statistics: stats
+      statistics: stats,
     };
-    
+
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
-      type: 'application/json'
+      type: "application/json",
     });
-    
+
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `pfas-data-${selectedYear}-${Date.now()}.json`;
     document.body.appendChild(a);
@@ -66,7 +80,7 @@ export function DataPanel() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
-  
+
   return (
     <AnimatePresence>
       <motion.div
@@ -89,74 +103,96 @@ export function DataPanel() {
             <X size={16} className="text-gray-400" />
           </button>
         </div>
-        
+
         {/* Current Selection Info */}
         <div className="mb-4 p-3 bg-blue-50 rounded-lg">
           <div className="text-sm font-medium text-blue-900 mb-1">
             Current View
           </div>
           <div className="text-xs text-blue-700 space-y-1">
-            <div>Year: {cumulativeMode ? `2020-${selectedYear}` : selectedYear}</div>
-            <div>Mode: {heatmapMode === 'pesticide' ? 'Pesticide Load' : 'PFAS Mass'}</div>
-            <div>Type: {cumulativeMode ? 'Cumulative' : 'Single Year'}</div>
+            <div>
+              Year: {cumulativeMode ? `2020-${selectedYear}` : selectedYear}
+            </div>
+            <div>
+              Mode:{" "}
+              {heatmapMode === "pesticide" ? "Pesticide Load" : "PFAS Mass"}
+            </div>
+            <div>Type: {cumulativeMode ? "Cumulative" : "Single Year"}</div>
           </div>
         </div>
-        
+
         {/* Statistics */}
         <div className="space-y-3 mb-4">
           <div className="text-sm font-medium text-gray-700 flex items-center space-x-1">
             <Info size={14} />
             <span>Statistics</span>
           </div>
-          
+
           {isLoading ? (
             <div className="space-y-2">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-4 bg-gray-200 rounded animate-pulse"></div>
+                <div
+                  key={i}
+                  className="h-4 bg-gray-200 rounded animate-pulse"
+                ></div>
               ))}
             </div>
           ) : (
             <div className="space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-gray-600">H3 Hexagons:</span>
-                <span className="font-medium">{formatNumber(stats.totalHexagons, 0)}</span>
+                <span className="font-medium">
+                  {formatNumber(stats.totalHexagons, 0)}
+                </span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Area:</span>
-                <span className="font-medium">{formatNumber(stats.totalArea)} ha</span>
+                <span className="font-medium">
+                  {formatNumber(stats.totalArea)} ha
+                </span>
               </div>
-              
-              {heatmapMode === 'pesticide' ? (
+
+              {heatmapMode === "pesticide" ? (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Pesticide Load:</span>
-                  <span className="font-medium">{formatNumber(stats.totalPesticideLoad)} kg</span>
+                  <span className="font-medium">
+                    {formatNumber(stats.totalPesticideLoad)} kg
+                  </span>
                 </div>
               ) : (
                 <div className="flex justify-between">
                   <span className="text-gray-600">PFAS Mass:</span>
-                  <span className="font-medium">{formatNumber(stats.totalPFASMass)} g</span>
+                  <span className="font-medium">
+                    {formatNumber(stats.totalPFASMass)} g
+                  </span>
                 </div>
               )}
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Avg Coverage:</span>
-                <span className="font-medium">{formatNumber(stats.avgCoverage * 100, 1)}%</span>
+                <span className="font-medium">
+                  {formatNumber(stats.avgCoverage * 100, 1)}%
+                </span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Protected Areas:</span>
-                <span className="font-medium">{formatNumber(stats.protectedAreas, 0)}</span>
+                <span className="font-medium">
+                  {formatNumber(stats.protectedAreas, 0)}
+                </span>
               </div>
-              
+
               <div className="flex justify-between">
                 <span className="text-gray-600">Buildings:</span>
-                <span className="font-medium">{formatNumber(stats.buildings, 0)}</span>
+                <span className="font-medium">
+                  {formatNumber(stats.buildings, 0)}
+                </span>
               </div>
             </div>
           )}
         </div>
-        
+
         {/* Quick Actions */}
         <div className="space-y-2">
           <motion.button
@@ -169,7 +205,7 @@ export function DataPanel() {
             <Download size={14} />
             <span>Export Data</span>
           </motion.button>
-          
+
           <motion.button
             className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
             whileHover={{ scale: 1.02 }}
@@ -179,7 +215,7 @@ export function DataPanel() {
             <span>Advanced Filters</span>
           </motion.button>
         </div>
-        
+
         {/* Data Quality Indicator */}
         <div className="mt-4 pt-3 border-t border-gray-200">
           <div className="text-xs text-gray-500">
@@ -198,4 +234,4 @@ export function DataPanel() {
       </motion.div>
     </AnimatePresence>
   );
-} 
+}

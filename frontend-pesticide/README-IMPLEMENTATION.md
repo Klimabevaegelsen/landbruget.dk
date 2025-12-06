@@ -15,6 +15,7 @@ Next.js Frontend (Visualization)
 ```
 
 ### Data Flow
+
 1. **H3 Pipeline** generates PFAS exposure data → **GCS** (parquet files)
 2. **Sync Script** loads data from GCS → **Supabase** (PostGIS database)
 3. **Frontend** queries Supabase → **Interactive Map** (Kepler.gl + React)
@@ -30,15 +31,18 @@ Next.js Frontend (Visualization)
 ## Step 1: Set Up Supabase Project
 
 ### 1.1 Create Supabase Project
+
 1. Go to [supabase.com](https://supabase.com)
 2. Create a new project
 3. Note down your project URL and anon key
 
 ### 1.2 Enable PostGIS Extension
+
 1. Go to SQL Editor in Supabase Dashboard
 2. Run: `CREATE EXTENSION IF NOT EXISTS postgis;`
 
 ### 1.3 Set Up Database Schema
+
 ```bash
 # Install dependencies
 pip install supabase loguru
@@ -52,11 +56,13 @@ python scripts/analysis/setup_supabase_h3_db.py \
 ## Step 2: Sync Data from GCS to Supabase
 
 ### 2.1 Install Python Dependencies
+
 ```bash
 pip install pandas pyarrow supabase loguru numpy
 ```
 
 ### 2.2 Sync H3 Data (Using DuckDB H3 Extension)
+
 ```bash
 # Install DuckDB (if not already installed)
 pip install duckdb
@@ -79,12 +85,14 @@ python scripts/analysis/sync_h3_data_to_supabase_duckdb.py \
 ## Step 3: Configure Frontend
 
 ### 3.1 Install Frontend Dependencies
+
 ```bash
 cd frontend-pesticide
 npm install
 ```
 
 ### 3.2 Configure Environment Variables
+
 ```bash
 # Copy example environment file
 cp env.example .env.local
@@ -95,7 +103,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 ```
 
 ### 3.3 Install Required Packages
+
 The frontend uses these key packages:
+
 - **Next.js 15** with React 19
 - **Kepler.gl** for map visualization
 - **Supabase** for database connection
@@ -110,17 +120,20 @@ npm install @supabase/supabase-js kepler.gl deck.gl zustand
 ## Step 4: Run the Application
 
 ### 4.1 Start Development Server
+
 ```bash
 cd frontend-pesticide
 npm run dev
 ```
 
 ### 4.2 Access the Application
+
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Step 5: Verify Implementation
 
 ### 5.1 Check Database Connection
+
 ```bash
 # Verify Supabase setup
 python scripts/analysis/setup_supabase_h3_db.py \
@@ -130,6 +143,7 @@ python scripts/analysis/setup_supabase_h3_db.py \
 ```
 
 ### 5.2 Test API Endpoints
+
 ```bash
 # Test H3 data API
 curl "http://localhost:3000/api/h3-data?year=2023&bbox=8.0,54.5,15.2,57.8"
@@ -142,6 +156,7 @@ curl "http://localhost:3000/api/bbr-data"
 ```
 
 ### 5.3 Check Map Visualization
+
 1. Open the frontend in your browser
 2. Verify that the map loads with Denmark in view
 3. Check that H3 hexagons are visible
@@ -151,7 +166,9 @@ curl "http://localhost:3000/api/bbr-data"
 ## Data Structure
 
 ### H3 PFAS Exposure Data
+
 Each H3 hexagon contains:
+
 - **Spatial**: H3 ID, center coordinates, geometry
 - **Agricultural**: Field count, crop diversity, area coverage
 - **PFAS**: Total PFAS-containing active ingredients (grams)
@@ -159,6 +176,7 @@ Each H3 hexagon contains:
 - **Temporal**: Year, created timestamp
 
 ### API Response Format
+
 ```json
 {
   "data": [
@@ -188,18 +206,21 @@ Each H3 hexagon contains:
 ## Performance Optimization
 
 ### Database Optimization
+
 - **Spatial indexes** on geometry columns
 - **Composite indexes** on year + h3_id
 - **Viewport filtering** using PostGIS bounding box queries
 - **Data pagination** with limit/offset
 
 ### Frontend Optimization
+
 - **Viewport-based loading** - Only load visible hexagons
 - **Data caching** with React Query
 - **Progressive loading** as users pan/zoom
 - **Streaming responses** for large datasets
 
 ### Recommended Limits
+
 - **H3 hexagons**: 10,000 per request
 - **BNBO polygons**: 1,000 per request
 - **BBR buildings**: 5,000 per request
@@ -209,6 +230,7 @@ Each H3 hexagon contains:
 ### Common Issues
 
 #### 1. Database Connection Failed
+
 ```bash
 # Check Supabase credentials
 python -c "
@@ -219,18 +241,21 @@ print('Connection successful!')
 ```
 
 #### 2. No Data Visible on Map
+
 - Check if data sync completed successfully
 - Verify API endpoints return data
 - Check browser console for JavaScript errors
 - Ensure PostGIS extension is enabled
 
 #### 3. Slow Map Performance
+
 - Reduce viewport data limits in environment variables
 - Check network tab for slow API responses
 - Verify spatial indexes are created
 - Consider implementing data virtualization
 
 #### 4. GCS Access Issues
+
 ```bash
 # Check GCS authentication
 gsutil ls gs://landbrugsdata-raw-data/gold/h3_pesticide_2023/
@@ -240,7 +265,9 @@ gcloud auth application-default login
 ```
 
 ### Debug Mode
+
 Enable debug logging:
+
 ```bash
 # Backend
 export LOG_LEVEL=DEBUG
@@ -252,6 +279,7 @@ NEXT_PUBLIC_DEBUG=true npm run dev
 ## Data Updates
 
 ### Automated Sync
+
 For production, set up automated data sync:
 
 ```bash
@@ -260,6 +288,7 @@ For production, set up automated data sync:
 ```
 
 ### Manual Sync
+
 ```bash
 # Sync new data after pipeline runs (with proper H3 geometries)
 python scripts/analysis/sync_h3_data_to_supabase_duckdb.py \
@@ -271,16 +300,19 @@ python scripts/analysis/sync_h3_data_to_supabase_duckdb.py \
 ## Security Considerations
 
 ### Environment Variables
+
 - Never commit `.env.local` to version control
 - Use Supabase service key only for server-side operations
 - Use anon key for client-side operations
 
 ### Database Security
+
 - Enable Row Level Security (RLS) in Supabase
 - Create appropriate policies for data access
 - Use read-only access for frontend
 
 ### API Security
+
 - Implement rate limiting
 - Add request validation
 - Use CORS appropriately
@@ -288,6 +320,7 @@ python scripts/analysis/sync_h3_data_to_supabase_duckdb.py \
 ## Deployment
 
 ### Vercel Deployment
+
 ```bash
 # Install Vercel CLI
 npm i -g vercel
@@ -297,7 +330,9 @@ vercel --prod
 ```
 
 ### Environment Variables for Production
+
 Set these in your deployment platform:
+
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_KEY`
@@ -305,11 +340,13 @@ Set these in your deployment platform:
 ## Monitoring
 
 ### Database Monitoring
+
 - Monitor query performance in Supabase dashboard
 - Set up alerts for slow queries
 - Track API response times
 
 ### Frontend Monitoring
+
 - Use browser dev tools for performance profiling
 - Monitor bundle size and loading times
 - Track user interactions and errors
@@ -317,6 +354,7 @@ Set these in your deployment platform:
 ## Next Steps
 
 ### Enhanced Features
+
 1. **Temporal Analysis**: Implement year-over-year comparisons
 2. **Advanced Filtering**: Add crop type and pesticide filters
 3. **Export Functionality**: Allow data export in various formats
@@ -324,6 +362,7 @@ Set these in your deployment platform:
 5. **Real-time Updates**: Implement live data updates
 
 ### Advanced Visualizations
+
 1. **3D Visualization**: Add elevation-based PFAS visualization
 2. **Heatmap Overlays**: Implement smooth heatmap rendering
 3. **Animation**: Add temporal animation controls
@@ -332,6 +371,7 @@ Set these in your deployment platform:
 ## Support
 
 For issues or questions:
+
 1. Check the troubleshooting section above
 2. Review the logs for error messages
 3. Verify all prerequisites are met
@@ -370,4 +410,4 @@ scripts/analysis/
 └── sync_h3_data_to_supabase_duckdb.py   # Data sync (with DuckDB H3 extension)
 ```
 
-This implementation provides a solid foundation for the H3 PFAS visualization frontend with proper data architecture, performance optimization, and scalability considerations. 
+This implementation provides a solid foundation for the H3 PFAS visualization frontend with proper data architecture, performance optimization, and scalability considerations.
