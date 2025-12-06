@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     // Revalidate each specified cache tag
     for (const tag of tags) {
-      revalidateTag(tag.trim());
+      revalidateTag(tag.trim(), 'max');
       console.log(`✅ Revalidated cache tag: ${tag.trim()}`);
     }
 

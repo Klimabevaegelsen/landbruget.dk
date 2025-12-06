@@ -181,9 +181,9 @@ export const invalidateAllCaches = async () => {
   const { revalidateTag } = await import('next/cache');
 
   console.log('🔄 Invalidating all server caches for Tuesday update...');
-  revalidateTag('homepage-stats');
-  revalidateTag('homepage-rankings');
-  revalidateTag('municipality-rankings');
+  revalidateTag('homepage-stats', 'max');
+  revalidateTag('homepage-rankings', 'max');
+  revalidateTag('municipality-rankings', 'max');
   console.log('✅ All server caches invalidated');
 };
 
@@ -191,7 +191,7 @@ export const invalidateHomepageCache = async () => {
   const { revalidateTag } = await import('next/cache');
 
   console.log('🔄 Invalidating homepage caches...');
-  revalidateTag('homepage-stats');
-  revalidateTag('homepage-rankings');
+  revalidateTag('homepage-stats', 'max');
+  revalidateTag('homepage-rankings', 'max');
   console.log('✅ Homepage caches invalidated');
 };

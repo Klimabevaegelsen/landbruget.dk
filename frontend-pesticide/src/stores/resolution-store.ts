@@ -1,30 +1,30 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface ResolutionState {
   // Current resolution - 'kommune' | 8 | 10
-  currentResolution: 'kommune' | 8 | 10;
+  currentResolution: "kommune" | 8 | 10;
 
   // Auto-resolution settings
   autoResolution: boolean;
 
   // Resolution history for smooth transitions
-  previousResolution: 'kommune' | 8 | 10 | null;
+  previousResolution: "kommune" | 8 | 10 | null;
 
   // Zoom level tracking
   currentZoom: number;
 
   // Actions
-  setResolution: (resolution: 'kommune' | 8 | 10) => void;
+  setResolution: (resolution: "kommune" | 8 | 10) => void;
   setAutoResolution: (auto: boolean) => void;
   setZoom: (zoom: number) => void;
 
   // Utility functions
-  getResolutionForZoom: (zoom: number) => 'kommune' | 8 | 10;
+  getResolutionForZoom: (zoom: number) => "kommune" | 8 | 10;
   shouldUpdateResolution: (newZoom: number) => boolean;
 
   // Resolution info
-  getResolutionInfo: (resolution: 'kommune' | 8 | 10) => {
+  getResolutionInfo: (resolution: "kommune" | 8 | 10) => {
     name: string;
     description: string;
     zoomRange: [number, number];
@@ -36,7 +36,7 @@ export const useResolutionStore = create<ResolutionState>()(
   persist(
     (set, get) => ({
       // Initial state - start with kommune
-      currentResolution: 'kommune',
+      currentResolution: "kommune",
       autoResolution: true,
       previousResolution: null,
       currentZoom: 7,
@@ -70,7 +70,7 @@ export const useResolutionStore = create<ResolutionState>()(
         // Simplified zoom-to-resolution mapping
         if (zoom >= 12) return 10; // High zoom = field-level detail (res10)
         if (zoom >= 9) return 8; // Medium zoom = sub-regional detail (res8)
-        return 'kommune'; // Low zoom = municipal boundaries
+        return "kommune"; // Low zoom = municipal boundaries
       },
 
       shouldUpdateResolution: (newZoom) => {
@@ -84,42 +84,42 @@ export const useResolutionStore = create<ResolutionState>()(
       getResolutionInfo: (resolution) => {
         const resolutionInfo = {
           kommune: {
-            name: 'Municipal',
-            description: 'Municipal boundaries with aggregated data',
+            name: "Municipal",
+            description: "Municipal boundaries with aggregated data",
             zoomRange: [4, 8] as [number, number],
-            cellSize: '~Municipal area',
+            cellSize: "~Municipal area",
           },
           8: {
-            name: 'Sub-regional',
-            description: 'Large areas for regional analysis',
+            name: "Sub-regional",
+            description: "Large areas for regional analysis",
             zoomRange: [9, 11] as [number, number],
-            cellSize: '~700 ha',
+            cellSize: "~700 ha",
           },
           10: {
-            name: 'Field-level',
-            description: 'Individual field analysis',
+            name: "Field-level",
+            description: "Individual field analysis",
             zoomRange: [12, 15] as [number, number],
-            cellSize: '~15 ha',
+            cellSize: "~15 ha",
           },
         };
 
         return (
           resolutionInfo[resolution] || {
-            name: 'Unknown',
-            description: 'Unknown resolution',
+            name: "Unknown",
+            description: "Unknown resolution",
             zoomRange: [0, 15] as [number, number],
-            cellSize: 'Unknown',
+            cellSize: "Unknown",
           }
         );
       },
     }),
     {
-      name: 'resolution-store',
+      name: "resolution-store",
       // Persist resolution preferences
       partialize: (state) => ({
         currentResolution: state.currentResolution,
         autoResolution: state.autoResolution,
       }),
-    }
-  )
+    },
+  ),
 );

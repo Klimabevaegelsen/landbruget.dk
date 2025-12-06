@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { DEFAULT_VIEWPORT } from '@/lib/utils';
+import { useState, useEffect, useCallback } from "react";
+import { DEFAULT_VIEWPORT } from "@/lib/utils";
 
 interface SimpleViewportState {
   latitude: number;
@@ -36,7 +36,7 @@ export function useSimpleViewport() {
         west: Math.max(-180, vp.longitude - lngRange / 2),
       };
     },
-    []
+    [],
   );
 
   // Update bounds when viewport changes
@@ -50,7 +50,7 @@ export function useSimpleViewport() {
     (newViewport: SimpleViewportState) => {
       setViewport(newViewport);
     },
-    []
+    [],
   );
 
   // Movement handlers
@@ -71,7 +71,7 @@ export function useSimpleViewport() {
         zoom,
       });
     },
-    []
+    [],
   );
 
   // Reset to default viewport
@@ -91,7 +91,7 @@ export function useSimpleViewport() {
         lng <= bounds.east + buffer
       );
     },
-    [bounds]
+    [bounds],
   );
 
   return {

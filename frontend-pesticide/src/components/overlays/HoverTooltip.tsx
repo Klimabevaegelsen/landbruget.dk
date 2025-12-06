@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 
 // Define HoverInfo interface
 interface HoverInfo {
-  layer: 'h3' | 'bnbo' | 'bbr';
+  layer: "h3" | "bnbo" | "bbr";
   data: Record<string, unknown>;
   coordinate: [number, number];
   pixel: [number, number];
@@ -15,25 +15,25 @@ interface HoverInfo {
 // Color mapping functions
 const getBNBOStatusColor = (statusCode: string): string => {
   const colorMap: Record<string, string> = {
-    protected: '#22c55e',
-    buffer: '#3b82f6',
-    agricultural: '#eab308',
-    transition: '#f97316',
-    unprotected: '#6b7280',
+    protected: "#22c55e",
+    buffer: "#3b82f6",
+    agricultural: "#eab308",
+    transition: "#f97316",
+    unprotected: "#6b7280",
   };
-  return colorMap[statusCode] || '#6b7280';
+  return colorMap[statusCode] || "#6b7280";
 };
 
 const getBBRTypeColor = (buildingType: string): string => {
   const colorMap: Record<string, string> = {
-    Residential: '#3b82f6',
-    Agricultural: '#22c55e',
-    Industrial: '#ef4444',
-    Commercial: '#a855f7',
-    Public: '#eab308',
-    Other: '#6b7280',
+    Residential: "#3b82f6",
+    Agricultural: "#22c55e",
+    Industrial: "#ef4444",
+    Commercial: "#a855f7",
+    Public: "#eab308",
+    Other: "#6b7280",
   };
-  return colorMap[buildingType] || '#6b7280';
+  return colorMap[buildingType] || "#6b7280";
 };
 
 interface HoverTooltipProps {
@@ -43,7 +43,7 @@ interface HoverTooltipProps {
 export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(
-    null
+    null,
   );
 
   // Update visibility and position when hoverInfo changes
@@ -64,23 +64,23 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
   // Format functions
   const formatNumber = useCallback(
     (value: number | unknown, decimals: number = 2): string => {
-      const numValue = typeof value === 'number' ? value : Number(value) || 0;
-      if (numValue === 0) return '0';
-      if (numValue < 0.01 && numValue > 0) return '<0.01';
+      const numValue = typeof value === "number" ? value : Number(value) || 0;
+      if (numValue === 0) return "0";
+      if (numValue < 0.01 && numValue > 0) return "<0.01";
       return numValue.toLocaleString(undefined, {
         minimumFractionDigits: 0,
         maximumFractionDigits: decimals,
       });
     },
-    []
+    [],
   );
 
   const formatPercentage = useCallback(
     (value: number | unknown): string => {
-      const numValue = typeof value === 'number' ? value : Number(value) || 0;
+      const numValue = typeof value === "number" ? value : Number(value) || 0;
       return `${formatNumber(numValue * 100, 1)}%`;
     },
-    [formatNumber]
+    [formatNumber],
   );
 
   // Render tooltip content based on layer type
@@ -88,21 +88,21 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
     if (!hoverInfo) return null;
 
     switch (hoverInfo.layer) {
-      case 'h3':
+      case "h3":
         const pfasGrams = Number(
-          hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams || 0
+          hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams || 0,
         );
         const pesticideLoad = Number(
           hoverInfo.data.pesticide_load ||
             hoverInfo.data.total_pesticide_load ||
-            0
+            0,
         );
         const diquatGrams = Number(hoverInfo.data.diquat_grams || 0);
         const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams || 0);
         const area = Number(
           hoverInfo.data.agricultural_area_ha ||
             hoverInfo.data.h3_cell_area_ha ||
-            0
+            0,
         );
 
         // Calculate intensities
@@ -121,38 +121,38 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
 
         return (
           <div
-            className="max-w-xs rounded-lg border-0 bg-white/95 shadow-2xl backdrop-blur-sm"
-            style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+            className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs"
+            style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
           >
-            <div className="space-y-3 p-4">
+            <div className="p-4 space-y-3">
               {/* Header - Clean and minimal */}
-              <div className="rounded-md bg-slate-900 px-3 py-2">
-                <div className="text-sm font-medium text-white">
+              <div className="bg-slate-900 rounded-md px-3 py-2">
+                <div className="text-white text-sm font-medium">
                   Agricultural Area
                 </div>
-                <div className="text-xs text-slate-300">
+                <div className="text-slate-300 text-xs">
                   {area > 0
                     ? `${formatNumber(area, 1)} hectares`
-                    : 'Area data unavailable'}
+                    : "Area data unavailable"}
                 </div>
               </div>
 
               {/* Total Pesticide Load - Primary metric */}
-              <div className="rounded-md border-l-4 border-orange-400 bg-orange-50 px-3 py-2">
-                <div className="mb-1 flex items-center justify-between">
-                  <div className="text-sm font-medium text-orange-800">
+              <div className="bg-orange-50 rounded-md px-3 py-2 border-l-4 border-orange-400">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-orange-800 text-sm font-medium">
                     Total Pesticide Load
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <div className="text-base font-semibold text-orange-900">
+                    <div className="text-orange-900 font-semibold text-base">
                       {formatNumber(pesticideLoad, 2)}
                     </div>
                     <div className="text-orange-600">kg total</div>
                   </div>
                   <div>
-                    <div className="text-base font-semibold text-orange-900">
+                    <div className="text-orange-900 font-semibold text-base">
                       {formatNumber(pesticideIntensity, 2)}
                     </div>
                     <div className="text-orange-600">kg per hectare</div>
@@ -160,88 +160,82 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                 </div>
               </div>
 
-              {/* PFAS - only show if there are PFAS values > 0 */}
-              {pfasGrams > 0 && (
-                <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
-                  <div className="mb-1 flex items-center justify-between">
-                    <div className="text-sm font-medium text-amber-800">
-                      PFAS Active Ingredients
-                    </div>
-                    <div className="text-xs font-medium text-amber-600">
-                      Persistent
-                    </div>
+              {/* PFAS - Clean warning design */}
+              <div className="bg-red-50 rounded-md px-3 py-2 border-l-4 border-red-400">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-red-800 text-sm font-medium">
+                    PFAS Active Ingredients
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <div className="text-base font-semibold text-amber-900">
-                        {formatNumber(pfasGrams, 2)}
-                      </div>
-                      <div className="text-amber-600">grams total</div>
-                    </div>
-                    <div>
-                      <div className="text-base font-semibold text-amber-900">
-                        {formatNumber(pfasIntensity, 2)}
-                      </div>
-                      <div className="text-amber-600">grams per hectare</div>
-                    </div>
+                  <div className="text-red-600 text-xs font-medium">
+                    Persistent
                   </div>
                 </div>
-              )}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-red-900 font-semibold text-base">
+                      {formatNumber(pfasGrams, 2)}
+                    </div>
+                    <div className="text-red-600">grams total</div>
+                  </div>
+                  <div>
+                    <div className="text-red-900 font-semibold text-base">
+                      {formatNumber(pfasIntensity, 2)}
+                    </div>
+                    <div className="text-red-600">grams per hectare</div>
+                  </div>
+                </div>
+              </div>
 
-              {/* Glyphosate - only show if there are glyphosate values > 0 */}
-              {glyphosateGrams > 0 && (
-                <div className="rounded-md border-l-4 border-green-400 bg-green-50 px-3 py-2">
-                  <div className="mb-1 text-sm font-medium text-green-800">
-                    Glyphosate Active Ingredients
+              {/* Glyphosate - Clean design */}
+              <div className="bg-green-50 rounded-md px-3 py-2 border-l-4 border-green-400">
+                <div className="text-green-800 text-sm font-medium mb-1">
+                  Glyphosate Active Ingredients
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-green-900 font-semibold text-base">
+                      {formatNumber(glyphosateGrams, 2)}
+                    </div>
+                    <div className="text-green-600">grams total</div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <div className="text-base font-semibold text-green-900">
-                        {formatNumber(glyphosateGrams, 2)}
-                      </div>
-                      <div className="text-green-600">grams total</div>
+                  <div>
+                    <div className="text-green-900 font-semibold text-base">
+                      {formatNumber(glyphosateIntensity, 2)}
                     </div>
-                    <div>
-                      <div className="text-base font-semibold text-green-900">
-                        {formatNumber(glyphosateIntensity, 2)}
-                      </div>
-                      <div className="text-green-600">grams per hectare</div>
-                    </div>
+                    <div className="text-green-600">grams per hectare</div>
                   </div>
                 </div>
-              )}
+              </div>
 
-              {/* Diquat - only show if there are diquat values > 0 */}
-              {diquatGrams > 0 && (
-                <div className="rounded-md border-l-4 border-purple-400 bg-purple-50 px-3 py-2">
-                  <div className="mb-1 text-sm font-medium text-purple-800">
-                    Diquat Active Ingredients
+              {/* Diquat - Clean design */}
+              <div className="bg-amber-50 rounded-md px-3 py-2 border-l-4 border-amber-400">
+                <div className="text-amber-800 text-sm font-medium mb-1">
+                  Diquat Active Ingredients
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-amber-900 font-semibold text-base">
+                      {formatNumber(diquatGrams, 2)}
+                    </div>
+                    <div className="text-amber-600">grams total</div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <div className="text-base font-semibold text-purple-900">
-                        {formatNumber(diquatGrams, 2)}
-                      </div>
-                      <div className="text-purple-600">grams total</div>
+                  <div>
+                    <div className="text-amber-900 font-semibold text-base">
+                      {formatNumber(diquatIntensity, 2)}
                     </div>
-                    <div>
-                      <div className="text-base font-semibold text-purple-900">
-                        {formatNumber(diquatIntensity, 2)}
-                      </div>
-                      <div className="text-purple-600">grams per hectare</div>
-                    </div>
+                    <div className="text-amber-600">grams per hectare</div>
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Agricultural Activity - Minimal stats */}
-              <div className="rounded-md bg-slate-50 px-3 py-2">
-                <div className="mb-2 text-sm font-medium text-slate-700">
+              <div className="bg-slate-50 rounded-md px-3 py-2">
+                <div className="text-slate-700 text-sm font-medium mb-2">
                   Activity
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="text-center">
-                    <div className="text-sm font-semibold text-slate-900">
+                    <div className="font-semibold text-slate-900 text-sm">
                       {hoverInfo.data.applications ||
                         hoverInfo.data.pesticide_application_count ||
                         0}
@@ -249,7 +243,7 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                     <div className="text-slate-600">Applications</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-sm font-semibold text-slate-900">
+                    <div className="font-semibold text-slate-900 text-sm">
                       {hoverInfo.data.field_count ||
                         hoverInfo.data.unique_field_count ||
                         0}
@@ -257,11 +251,11 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                     <div className="text-slate-600">Fields</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-sm font-semibold text-slate-900">
+                    <div className="font-semibold text-slate-900 text-sm">
                       {formatPercentage(
                         hoverInfo.data.avg_field_coverage ||
                           hoverInfo.data.actual_coverage_ratio ||
-                          0
+                          0,
                       )}
                     </div>
                     <div className="text-slate-600">Coverage</div>
@@ -272,91 +266,91 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
           </div>
         );
 
-      case 'bnbo':
+      case "bnbo":
         return (
           <div
-            className="max-w-xs rounded-lg border-0 bg-white/95 shadow-2xl backdrop-blur-sm"
-            style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+            className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs"
+            style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
           >
-            <div className="space-y-3 p-4">
+            <div className="p-4 space-y-3">
               {/* Header - Environmental Protection */}
-              <div className="rounded-md bg-slate-900 px-3 py-2">
-                <div className="text-sm font-medium text-white">
+              <div className="bg-slate-900 rounded-md px-3 py-2">
+                <div className="text-white text-sm font-medium">
                   Environmental Protection Zone
                 </div>
-                <div className="text-xs text-slate-300">
+                <div className="text-slate-300 text-xs">
                   {hoverInfo.data.area_ha
                     ? `${formatNumber(hoverInfo.data.area_ha, 1)} hectares`
-                    : 'Area data unavailable'}
+                    : "Area data unavailable"}
                 </div>
               </div>
 
               {/* Protection Status */}
-              <div className="rounded-md bg-slate-50 px-3 py-2">
-                <div className="mb-2 flex items-center space-x-2">
+              <div className="bg-slate-50 rounded-md px-3 py-2">
+                <div className="flex items-center space-x-2 mb-2">
                   <div
-                    className="h-3 w-3 rounded border"
+                    className="w-3 h-3 rounded border"
                     style={{
                       backgroundColor: getBNBOStatusColor(
-                        hoverInfo.data.status_code
+                        hoverInfo.data.status_code,
                       ),
                     }}
                   ></div>
-                  <div className="text-sm font-medium text-slate-700">
+                  <div className="text-slate-700 text-sm font-medium">
                     {hoverInfo.data.status_description ||
                       hoverInfo.data.status_code?.toUpperCase() ||
-                      'Unknown'}
+                      "Unknown"}
                   </div>
                 </div>
-                <div className="text-xs text-slate-600">
-                  {hoverInfo.data.status_code === 'protected' &&
-                    'Fully protected environmental area'}
-                  {hoverInfo.data.status_code === 'buffer' &&
-                    'Buffer zone around protected area'}
-                  {hoverInfo.data.status_code === 'agricultural' &&
-                    'Agricultural buffer zone'}
-                  {hoverInfo.data.status_code === 'transition' &&
-                    'Transition zone'}
-                  {hoverInfo.data.status_code === 'unprotected' &&
-                    'No environmental protection'}
+                <div className="text-slate-600 text-xs">
+                  {hoverInfo.data.status_code === "protected" &&
+                    "Fully protected environmental area"}
+                  {hoverInfo.data.status_code === "buffer" &&
+                    "Buffer zone around protected area"}
+                  {hoverInfo.data.status_code === "agricultural" &&
+                    "Agricultural buffer zone"}
+                  {hoverInfo.data.status_code === "transition" &&
+                    "Transition zone"}
+                  {hoverInfo.data.status_code === "unprotected" &&
+                    "No environmental protection"}
                 </div>
               </div>
             </div>
           </div>
         );
 
-      case 'bbr':
+      case "bbr":
         return (
           <div
-            className="max-w-xs rounded-lg border-0 bg-white/95 shadow-2xl backdrop-blur-sm"
-            style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+            className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs"
+            style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
           >
-            <div className="space-y-3 p-4">
+            <div className="p-4 space-y-3">
               {/* Header - Building */}
-              <div className="rounded-md bg-slate-900 px-3 py-2">
-                <div className="text-sm font-medium text-white">Building</div>
-                <div className="text-xs text-slate-300">
+              <div className="bg-slate-900 rounded-md px-3 py-2">
+                <div className="text-white text-sm font-medium">Building</div>
+                <div className="text-slate-300 text-xs">
                   {formatNumber(hoverInfo.data.floor_area, 0)} m² floor area
                 </div>
               </div>
 
               {/* Building Details */}
-              <div className="rounded-md bg-slate-50 px-3 py-2">
-                <div className="mb-2 flex items-center space-x-2">
+              <div className="bg-slate-50 rounded-md px-3 py-2">
+                <div className="flex items-center space-x-2 mb-2">
                   <div
-                    className="h-3 w-3 rounded border"
+                    className="w-3 h-3 rounded border"
                     style={{
                       backgroundColor: getBBRTypeColor(
-                        hoverInfo.data.building_type
+                        hoverInfo.data.building_type,
                       ),
                     }}
                   ></div>
-                  <div className="text-sm font-medium text-slate-700">
-                    {hoverInfo.data.building_type || 'Unknown Type'}
+                  <div className="text-slate-700 text-sm font-medium">
+                    {hoverInfo.data.building_type || "Unknown Type"}
                   </div>
                 </div>
-                <div className="text-xs text-slate-600">
-                  Built {hoverInfo.data.construction_year || 'Unknown'}
+                <div className="text-slate-600 text-xs">
+                  Built {hoverInfo.data.construction_year || "Unknown"}
                 </div>
               </div>
             </div>
@@ -366,13 +360,13 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
       default:
         return (
           <div
-            className="max-w-xs rounded-lg border-0 bg-white/95 shadow-2xl backdrop-blur-sm"
-            style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+            className="bg-white/95 backdrop-blur-sm border-0 rounded-lg shadow-2xl max-w-xs"
+            style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
           >
             <div className="p-4">
-              <div className="rounded-md bg-slate-900 px-3 py-2">
-                <div className="text-sm font-medium text-white">Data Point</div>
-                <div className="text-xs text-slate-300">Unknown data type</div>
+              <div className="bg-slate-900 rounded-md px-3 py-2">
+                <div className="text-white text-sm font-medium">Data Point</div>
+                <div className="text-slate-300 text-xs">Unknown data type</div>
               </div>
             </div>
           </div>
@@ -436,17 +430,20 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
   // Final bounds checking
   adjustedPosition.left = Math.max(
     padding,
-    Math.min(adjustedPosition.left, window.innerWidth - tooltipWidth - padding)
+    Math.min(adjustedPosition.left, window.innerWidth - tooltipWidth - padding),
   );
 
   adjustedPosition.top = Math.max(
     padding,
-    Math.min(adjustedPosition.top, window.innerHeight - tooltipHeight - padding)
+    Math.min(
+      adjustedPosition.top,
+      window.innerHeight - tooltipHeight - padding,
+    ),
   );
 
   return (
     <div
-      className="pointer-events-none fixed z-50"
+      className="fixed z-50 pointer-events-none"
       style={{
         left: adjustedPosition.left,
         top: adjustedPosition.top,
@@ -464,14 +461,14 @@ export function useHoverTooltip() {
   const handleHover = useCallback((info: Record<string, unknown>) => {
     if (info?.object && info?.coordinate && info?.pixel) {
       // Determine layer type based on data structure
-      let layer: 'h3' | 'bnbo' | 'bbr' = 'h3';
+      let layer: "h3" | "bnbo" | "bbr" = "h3";
 
       if (info.object.bnbo_id) {
-        layer = 'bnbo';
+        layer = "bnbo";
       } else if (info.object.bbr_id) {
-        layer = 'bbr';
+        layer = "bbr";
       } else if (info.object.h3_id) {
-        layer = 'h3';
+        layer = "h3";
       }
 
       setHoverInfo({

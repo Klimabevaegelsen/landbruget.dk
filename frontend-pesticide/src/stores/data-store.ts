@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
 // Type definitions (these will be provided by Developer 1)
 interface H3DataPoint {
@@ -63,7 +63,7 @@ interface DataStore {
   setCurrentData: (
     h3?: H3DataPoint[],
     bnbo?: BNBOArea[],
-    bbr?: BBRBuilding[]
+    bbr?: BBRBuilding[],
   ) => void;
 }
 
@@ -110,7 +110,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
       set({
         isLoading: false,
         loadingProgress: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       });
       throw error;
     }
@@ -146,7 +146,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
   setCurrentData: (
     h3?: H3DataPoint[],
     bnbo?: BNBOArea[],
-    bbr?: BBRBuilding[]
+    bbr?: BBRBuilding[],
   ) => {
     const updates: Partial<DataStore> = {};
     if (h3) updates.currentH3Data = h3;

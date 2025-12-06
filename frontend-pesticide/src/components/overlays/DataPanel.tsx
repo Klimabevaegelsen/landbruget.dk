@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { BarChart3, Download, Filter, X, Info } from 'lucide-react';
-import { useMapStore } from '@/stores/map-store';
-import { useDataStore } from '@/stores/data-store';
-import { useUIStore } from '@/stores/ui-store';
-import { formatNumber } from '@/lib/utils';
+import { motion, AnimatePresence } from "framer-motion";
+import { BarChart3, Download, Filter, X, Info } from "lucide-react";
+import { useMapStore } from "@/stores/map-store";
+import { useDataStore } from "@/stores/data-store";
+import { useUIStore } from "@/stores/ui-store";
+import { formatNumber } from "@/lib/utils";
 
 export function DataPanel() {
   const { selectedYear, cumulativeMode, heatmapMode } = useMapStore();
@@ -17,7 +17,7 @@ export function DataPanel() {
     return (
       <motion.button
         onClick={() => setShowDataPanel(true)}
-        className="absolute top-6 right-6 z-50 rounded-lg bg-white p-3 shadow-lg transition-shadow hover:shadow-xl"
+        className="absolute top-6 right-6 bg-white rounded-lg shadow-lg p-3 z-50 hover:shadow-xl transition-shadow"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
       >
@@ -31,21 +31,21 @@ export function DataPanel() {
     totalHexagons: currentH3Data.length,
     totalPesticideLoad: currentH3Data.reduce(
       (sum, item) => sum + (item.total_pesticide_load || 0),
-      0
+      0,
     ),
     totalPFASMass: currentH3Data.reduce(
       (sum, item) => sum + (item.total_pfas_grams || 0),
-      0
+      0,
     ),
     totalArea: currentH3Data.reduce(
       (sum, item) => sum + (item.agricultural_area_ha || 0),
-      0
+      0,
     ),
     avgCoverage:
       currentH3Data.length > 0
         ? currentH3Data.reduce(
             (sum, item) => sum + (item.avg_field_coverage || 0),
-            0
+            0,
           ) / currentH3Data.length
         : 0,
     protectedAreas: currentBNBOData.length,
@@ -68,11 +68,11 @@ export function DataPanel() {
     };
 
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], {
-      type: 'application/json',
+      type: "application/json",
     });
 
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `pfas-data-${selectedYear}-${Date.now()}.json`;
     document.body.appendChild(a);
@@ -91,39 +91,39 @@ export function DataPanel() {
         transition={{ duration: 0.3 }}
       >
         {/* Header */}
-        <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <BarChart3 size={16} className="text-gray-600" />
             <h3 className="text-sm font-medium text-gray-700">Data Overview</h3>
           </div>
           <button
             onClick={() => setShowDataPanel(false)}
-            className="rounded p-1 transition-colors hover:bg-gray-100"
+            className="p-1 hover:bg-gray-100 rounded transition-colors"
           >
             <X size={16} className="text-gray-400" />
           </button>
         </div>
 
         {/* Current Selection Info */}
-        <div className="mb-4 rounded-lg bg-blue-50 p-3">
-          <div className="mb-1 text-sm font-medium text-blue-900">
+        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+          <div className="text-sm font-medium text-blue-900 mb-1">
             Current View
           </div>
-          <div className="space-y-1 text-xs text-blue-700">
+          <div className="text-xs text-blue-700 space-y-1">
             <div>
               Year: {cumulativeMode ? `2020-${selectedYear}` : selectedYear}
             </div>
             <div>
-              Mode:{' '}
-              {heatmapMode === 'pesticide' ? 'Pesticide Load' : 'PFAS Mass'}
+              Mode:{" "}
+              {heatmapMode === "pesticide" ? "Pesticide Load" : "PFAS Mass"}
             </div>
-            <div>Type: {cumulativeMode ? 'Cumulative' : 'Single Year'}</div>
+            <div>Type: {cumulativeMode ? "Cumulative" : "Single Year"}</div>
           </div>
         </div>
 
         {/* Statistics */}
-        <div className="mb-4 space-y-3">
-          <div className="flex items-center space-x-1 text-sm font-medium text-gray-700">
+        <div className="space-y-3 mb-4">
+          <div className="text-sm font-medium text-gray-700 flex items-center space-x-1">
             <Info size={14} />
             <span>Statistics</span>
           </div>
@@ -133,7 +133,7 @@ export function DataPanel() {
               {[...Array(6)].map((_, i) => (
                 <div
                   key={i}
-                  className="h-4 animate-pulse rounded bg-gray-200"
+                  className="h-4 bg-gray-200 rounded animate-pulse"
                 ></div>
               ))}
             </div>
@@ -153,7 +153,7 @@ export function DataPanel() {
                 </span>
               </div>
 
-              {heatmapMode === 'pesticide' ? (
+              {heatmapMode === "pesticide" ? (
                 <div className="flex justify-between">
                   <span className="text-gray-600">Pesticide Load:</span>
                   <span className="font-medium">
@@ -198,7 +198,7 @@ export function DataPanel() {
           <motion.button
             onClick={exportData}
             disabled={isLoading || currentH3Data.length === 0}
-            className="flex w-full items-center justify-center space-x-2 rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
@@ -207,7 +207,7 @@ export function DataPanel() {
           </motion.button>
 
           <motion.button
-            className="flex w-full items-center justify-center space-x-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200"
+            className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
           >
@@ -217,13 +217,13 @@ export function DataPanel() {
         </div>
 
         {/* Data Quality Indicator */}
-        <div className="mt-4 border-t border-gray-200 pt-3">
+        <div className="mt-4 pt-3 border-t border-gray-200">
           <div className="text-xs text-gray-500">
-            <div className="mb-1 flex items-center justify-between">
+            <div className="flex items-center justify-between mb-1">
               <span>Data Quality</span>
               <div className="flex items-center space-x-1">
-                <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                <span className="font-medium text-green-600">Good</span>
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-green-600 font-medium">Good</span>
               </div>
             </div>
             <div className="text-gray-400">

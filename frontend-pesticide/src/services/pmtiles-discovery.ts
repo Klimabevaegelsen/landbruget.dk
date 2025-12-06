@@ -1,7 +1,7 @@
 // PMTiles Discovery Service - Browser Compatible Version
 // This service handles discovery of PMTiles files from GCS bucket
 
-export type YearSelection = number | 'total';
+export type YearSelection = number | "total";
 
 interface DataAvailability {
   years: number[];
@@ -19,18 +19,12 @@ interface PMTilesUrls {
 
 class PMTilesDiscoveryService {
   private cache: Map<string, unknown> = new Map();
-  private readonly baseUrl = 'https://data.pesticidkortet.dk';
-
-  constructor() {
-    console.log(
-      '🔧 PMTilesDiscoveryService initialized with baseUrl:',
-      this.baseUrl
-    );
-  }
+  private readonly baseUrl =
+    "https://storage.googleapis.com/landbrugsdata-raw-data";
 
   // Discover available data by checking GCS bucket structure
   async getDataAvailability(): Promise<DataAvailability> {
-    const cacheKey = 'data_availability';
+    const cacheKey = "data_availability";
 
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey) as DataAvailability;
@@ -49,8 +43,8 @@ class PMTilesDiscoveryService {
       return availability;
     } catch (error) {
       console.warn(
-        'Failed to discover data availability, using fallback:',
-        error
+        "Failed to discover data availability, using fallback:",
+        error,
       );
       // Fallback to known structure
       const fallback: DataAvailability = {
@@ -73,7 +67,7 @@ class PMTilesDiscoveryService {
 
   async discoverLatestH3Tiles(
     year: YearSelection,
-    resolution: number
+    resolution: number,
   ): Promise<string> {
     const cacheKey = `h3_${year}_${resolution}`;
 
@@ -81,10 +75,20 @@ class PMTilesDiscoveryService {
       return this.cache.get(cacheKey) as string;
     }
 
-    // Direct R2 URL - files are now stored with simple names
-    const url = `${this.baseUrl}/pmtiles/h3_pfas_${year}_res${resolution}.pmtiles`;
-    this.cache.set(cacheKey, url);
-    return url;
+    try {
+      const pattern = `gold/pmtiles/h3_pfas_${year}_res${resolution}`;
+      const latestTimestamp = await this._discoverLatestTimestamp(pattern);
+
+      const url = `${this.baseUrl}/${pattern}/${latestTimestamp}/h3_pfas_${year}_res${resolution}.pmtiles`;
+      this.cache.set(cacheKey, url);
+      return url;
+    } catch (error) {
+      console.error(
+        `Failed to discover H3 tiles for ${year} res${resolution}:`,
+        error,
+      );
+      throw error;
+    }
   }
 
   async discoverLatestKommuneTiles(year: YearSelection): Promise<string> {
@@ -94,10 +98,17 @@ class PMTilesDiscoveryService {
       return this.cache.get(cacheKey) as string;
     }
 
-    // Direct R2 URL - files are now stored with simple names
-    const url = `${this.baseUrl}/pmtiles/kommune_pfas_${year}.pmtiles`;
-    this.cache.set(cacheKey, url);
-    return url;
+    try {
+      const pattern = `gold/pmtiles/kommune_pfas_${year}`;
+      const latestTimestamp = await this._discoverLatestTimestamp(pattern);
+
+      const url = `${this.baseUrl}/${pattern}/${latestTimestamp}/kommune_pfas_${year}.pmtiles`;
+      this.cache.set(cacheKey, url);
+      return url;
+    } catch (error) {
+      console.error(`Failed to discover kommune tiles for ${year}:`, error);
+      throw error;
+    }
   }
 
   private async _discoverLatestTimestamp(pattern: string): Promise<string> {
@@ -121,7 +132,7 @@ class PMTilesDiscoveryService {
         // Extract timestamps from prefixes like "gold/pmtiles/h3_pfas_2023_res10/20250705_181521/"
         const timestamps = data.prefixes
           .map((prefix: string) => {
-            const parts = prefix.split('/');
+            const parts = prefix.split("/");
             return parts[parts.length - 2]; // Get the timestamp part
           })
           .filter((ts: string) => /^\d{8}_\d{6}$/.test(ts)) // Validate timestamp format
@@ -133,7 +144,7 @@ class PMTilesDiscoveryService {
         }
       }
 
-      throw new Error('No timestamps found');
+      throw new Error("No timestamps found");
     } catch (error) {
       console.warn(`Failed to discover timestamp for ${pattern}:`, error);
       throw error;
@@ -151,11 +162,11 @@ class PMTilesDiscoveryService {
   }
 
   // Helper method to get PMTiles URL for a specific type
-  async getPMTilesUrl(type: 'basemap' | 'bnbo'): Promise<string> {
+  async getPMTilesUrl(type: "basemap" | "bnbo"): Promise<string> {
     switch (type) {
-      case 'basemap':
+      case "basemap":
         return this.discoverBasemapTiles();
-      case 'bnbo':
+      case "bnbo":
         return this.discoverLatestBNBOTiles();
       default:
         throw new Error(`Unknown PMTiles type: ${type}`);
@@ -180,7 +191,7 @@ class PMTilesDiscoveryService {
       } catch (error) {
         console.warn(
           `Failed to get H3 URL for ${year} res${resolution}:`,
-          error
+          error,
         );
       }
     }
@@ -210,7 +221,7 @@ class PMTilesDiscoveryService {
   // Test if a URL is accessible
   async testUrl(url: string): Promise<boolean> {
     try {
-      const response = await fetch(url, { method: 'HEAD' });
+      const response = await fetch(url, { method: "HEAD" });
       return response.ok;
     } catch (error) {
       console.warn(`URL test failed for ${url}:`, error);
@@ -221,7 +232,7 @@ class PMTilesDiscoveryService {
   // Get URLs directly without validation
   async discoverAndValidateUrls(
     year: YearSelection,
-    resolution: number
+    resolution: number,
   ): Promise<{
     h3: string | null;
     kommune: string | null;
@@ -243,7 +254,7 @@ class PMTilesDiscoveryService {
         kommune: kommuneUrl,
       };
     } catch (error) {
-      console.error('URL discovery failed:', error);
+      console.error("URL discovery failed:", error);
       return {
         h3: null,
         kommune: null,

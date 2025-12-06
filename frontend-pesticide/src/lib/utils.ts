@@ -1,14 +1,14 @@
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 export function formatNumber(value: number, decimals: number = 2): string {
-  if (value === 0) return '0';
-  if (value < 0.01) return '<0.01';
-  return value.toLocaleString('en-US', {
+  if (value === 0) return "0";
+  if (value < 0.01) return "<0.01";
+  return value.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: decimals,
   });
@@ -27,7 +27,7 @@ export const DEFAULT_VIEWPORT = {
 };
 
 export const API_ENDPOINTS = {
-  H3_DATA: '/api/h3-data',
-  BNBO_DATA: '/api/bnbo-data',
-  BBR_DATA: '/api/bbr-data',
+  H3_DATA: "/api/h3-data",
+  BNBO_DATA: "/api/bnbo-data",
+  BBR_DATA: "/api/bbr-data",
 };

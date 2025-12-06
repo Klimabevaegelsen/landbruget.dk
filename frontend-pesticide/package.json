@@ -7,8 +7,7 @@
     "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "lint": "oxlint .",
-    "lint:eslint": "next lint",
+    "lint": "next lint",
     "type-check": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -45,7 +44,6 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.0.0",
-    "oxlint": "^1.15.0",
     "postcss": "^8.4.47",
     "prettier": "^3.3.0",
     "prettier-plugin-tailwindcss": "^0.6.0"

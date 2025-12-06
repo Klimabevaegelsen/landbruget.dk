@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -93,16 +93,16 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings:
-      'rlig' 1,
-      'calt' 1;
+      "rlig" 1,
+      "calt" 1;
   }
 }
 
 /* Clean, minimal base styles */
 body {
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica',
-    'Arial', sans-serif;
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Helvetica",
+    "Arial", sans-serif;
   font-weight: 300;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -111,8 +111,8 @@ body {
 /* Scientific monospace font stack for data displays */
 .font-mono {
   font-family:
-    'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro',
-    'Menlo', 'Consolas', 'DejaVu Sans Mono', monospace;
+    "SF Mono", "Monaco", "Inconsolata", "Roboto Mono", "Source Code Pro",
+    "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.025em;
 }
