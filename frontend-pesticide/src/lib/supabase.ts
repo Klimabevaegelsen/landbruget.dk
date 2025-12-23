@@ -1,6 +1,6 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { cache } from "react";
-import type { Database } from "@/types/database";
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { cache } from 'react';
+import type { Database } from '@/types/database';
 
 // React 19 cache function for automatic deduplication
 const getCachedSupabaseClient = cache(() => {
@@ -8,7 +8,7 @@ const getCachedSupabaseClient = cache(() => {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error("Missing Supabase environment variables");
+    throw new Error('Missing Supabase environment variables');
   }
 
   return createClient<Database>(supabaseUrl, supabaseAnonKey, {
@@ -17,11 +17,11 @@ const getCachedSupabaseClient = cache(() => {
     },
     global: {
       headers: {
-        "Cache-Control": "max-age=300, stale-while-revalidate=60",
+        'Cache-Control': 'max-age=300, stale-while-revalidate=60',
       },
     },
     db: {
-      schema: "public",
+      schema: 'public',
     },
     realtime: {
       enabled: false, // Disable realtime for better performance
@@ -34,64 +34,64 @@ export const supabase: SupabaseClient<Database> = getCachedSupabaseClient();
 
 // Utility function for error handling
 export function handleSupabaseError(error: unknown): never {
-  console.error("Supabase error:", error);
+  console.error('Supabase error:', error);
 
-  if (error && typeof error === "object" && "code" in error) {
-    if (error.code === "PGRST116") {
-      throw new Error("No data found for the specified criteria");
+  if (error && typeof error === 'object' && 'code' in error) {
+    if (error.code === 'PGRST116') {
+      throw new Error('No data found for the specified criteria');
     }
 
-    if (error.code === "PGRST301") {
-      throw new Error("Database connection error");
+    if (error.code === 'PGRST301') {
+      throw new Error('Database connection error');
     }
   }
 
-  if (error && typeof error === "object" && "message" in error) {
+  if (error && typeof error === 'object' && 'message' in error) {
     throw new Error(`Database error: ${error.message}`);
   }
 
-  throw new Error("An unexpected database error occurred");
+  throw new Error('An unexpected database error occurred');
 }
 
 // Utility function for geometry transformation
 export function transformWKTToGeoJSON(wkt: string): GeoJSON.Geometry {
   try {
     // Simple WKT parser for POINT, POLYGON, and MULTIPOLYGON
-    if (wkt.startsWith("POINT")) {
+    if (wkt.startsWith('POINT')) {
       const coords = wkt.match(/POINT\(([^)]+)\)/)?.[1];
       if (coords) {
-        const [lon, lat] = coords.split(" ").map(Number);
+        const [lon, lat] = coords.split(' ').map(Number);
         return {
-          type: "Point",
+          type: 'Point',
           coordinates: [lon, lat],
         };
       }
     }
 
-    if (wkt.startsWith("POLYGON")) {
+    if (wkt.startsWith('POLYGON')) {
       const coords = wkt.match(/POLYGON\(\(([^)]+)\)\)/)?.[1];
       if (coords) {
-        const points = coords.split(",").map((point) => {
-          const [lon, lat] = point.trim().split(" ").map(Number);
+        const points = coords.split(',').map((point) => {
+          const [lon, lat] = point.trim().split(' ').map(Number);
           return [lon, lat];
         });
         return {
-          type: "Polygon",
+          type: 'Polygon',
           coordinates: [points],
         };
       }
     }
 
-    if (wkt.startsWith("MULTIPOLYGON")) {
+    if (wkt.startsWith('MULTIPOLYGON')) {
       // Simplified MULTIPOLYGON parsing - would need more robust implementation for production
       const coords = wkt.match(/MULTIPOLYGON\(\(\(([^)]+)\)\)\)/)?.[1];
       if (coords) {
-        const points = coords.split(",").map((point) => {
-          const [lon, lat] = point.trim().split(" ").map(Number);
+        const points = coords.split(',').map((point) => {
+          const [lon, lat] = point.trim().split(' ').map(Number);
           return [lon, lat];
         });
         return {
-          type: "MultiPolygon",
+          type: 'MultiPolygon',
           coordinates: [[points]],
         };
       }
@@ -99,8 +99,8 @@ export function transformWKTToGeoJSON(wkt: string): GeoJSON.Geometry {
 
     throw new Error(`Unsupported WKT format: ${wkt.substring(0, 20)}...`);
   } catch (error) {
-    console.error("WKT transformation error:", error);
-    throw new Error("Failed to transform geometry data");
+    console.error('WKT transformation error:', error);
+    throw new Error('Failed to transform geometry data');
   }
 }
 
@@ -118,8 +118,8 @@ export function buildBboxQuery(bbox: {
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {
     const { error } = await supabase
-      .from("h3_pfas_exposure")
-      .select("id")
+      .from('h3_pfas_exposure')
+      .select('id')
       .limit(1);
 
     return !error;

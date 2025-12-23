@@ -591,6 +591,10 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       ? { ...internalViewState, ...externalViewState }
       : internalViewState;
 
+  // Track map interactions to prevent clicks during dragging
+  const isMapDraggingRef = useRef(false);
+  const lastMapMoveTimeRef = useRef<number>(0);
+
   // Optimized throttling using requestAnimationFrame for smooth performance
   const rafIdRef = useRef<number | null>(null);
   const lastViewState = useRef<ViewState | null>(null);
@@ -1909,10 +1913,6 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
       }
     }
   }, [fieldsPaintProps, layerVisibility.fields]); // Use memoized paint props
-
-  // Track map interactions to prevent clicks during dragging
-  const isMapDraggingRef = useRef(false);
-  const lastMapMoveTimeRef = useRef<number>(0);
 
   // Query for field data at a specific coordinate
   const queryFieldDataAtCoordinate = useCallback(
