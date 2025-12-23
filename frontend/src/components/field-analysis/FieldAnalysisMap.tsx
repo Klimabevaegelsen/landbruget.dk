@@ -49,6 +49,8 @@ interface MapLibreLayer {
   paint: Record<string, unknown>;
   layout: Record<string, unknown>;
   filter?: unknown;
+  minzoom?: number;
+  maxzoom?: number;
 }
 
 interface FieldAnalysisMapProps {
@@ -563,6 +565,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
   const loadedSourcesRef = useRef<Set<string>>(new Set());
   const [styleLoadFailed, setStyleLoadFailed] = useState(false);
   const [currentMapStyle, setCurrentMapStyle] = useState(mapStyle);
+  const prevPaintPropsRef = useRef<string | null>(null);
 
   // Internal view state for controlled map
   const [internalViewState, setInternalViewState] = useState<
@@ -950,7 +953,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         'fill-opacity': 0.7,
       };
     }
-  }, [filterState]);
+  }, [filterState.visualizationMode, filterState.colorUnit, filterState.useDecileColoring]);
 
   // Remove field analysis layers
   const removeFieldsLayers = useCallback((map: MapInstance) => {
@@ -1020,16 +1023,27 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         // Create initial pattern with default color
         createPartialCoveragePattern();
 
-        // Main fields layer
+        // Main fields layer with zoom-based opacity
         const fieldsLayer: MapLibreLayer = {
           id: 'fields-fill',
           source: 'fields',
           'source-layer': 'field_analysis',
           type: 'fill',
-          paint: paintProps,
+          paint: {
+            'fill-color': paintProps['fill-color'],
+            'fill-opacity': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              6, 0.3,   // At zoom 6, 30% opacity (less clutter)
+              10, 0.7,  // At zoom 10, 70% opacity
+              14, 0.7,  // At zoom 14+, normal opacity
+            ],
+          },
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
+          minzoom: 6,  // Don't render individual fields below zoom 6
         };
 
         // Only add filter if it exists (MapLibre expects array or undefined, not null)
@@ -1083,7 +1097,7 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           },
         });
 
-        // Fields outline
+        // Fields outline with zoom-based line width
         const fieldsOutlineLayer: MapLibreLayer = {
           id: 'fields-outline',
           source: 'fields',
@@ -1091,8 +1105,22 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
           type: 'line',
           paint: {
             'line-color': '#374151',
-            'line-width': 0.5,
-            'line-opacity': 0.8,
+            'line-width': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              6, 0,     // No outline at zoom 6
+              10, 0.3,  // Thin outline at zoom 10
+              14, 0.5,  // Normal outline at zoom 14+
+            ],
+            'line-opacity': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              6, 0,
+              10, 0.5,
+              14, 0.8,
+            ],
           },
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
@@ -1854,64 +1882,65 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
     }
   }, [filterState.companyFilter]);
 
-  // Update field visualization when filterState changes
+  // Update field visualization when filterState changes - with RAF batching
   useEffect(() => {
     if (!mapRef.current) return;
 
     const map = mapRef.current.getMap();
 
-    if (map.getLayer('fields-fill')) {
-      const paintProps = fieldsPaintProps;
+    // Guard: Only update if paint props actually changed
+    const propsString = JSON.stringify(fieldsPaintProps);
+    if (prevPaintPropsRef.current === propsString) {
+      return;
+    }
+    prevPaintPropsRef.current = propsString;
 
-      // Update the fill color
-      map.setPaintProperty(
-        'fields-fill',
-        'fill-color',
-        paintProps['fill-color']
-      );
-      map.setPaintProperty(
-        'fields-fill',
-        'fill-opacity',
-        paintProps['fill-opacity']
-      );
+    // Batch all paint property updates in a single RAF for performance
+    requestAnimationFrame(() => {
+      if (map.getLayer('fields-fill')) {
+        const paintProps = fieldsPaintProps;
 
-      // Update partial coverage base layer to match main field colors
-      if (map.getLayer('fields-partial-coverage-base')) {
+        // Update the fill color - preserve zoom-based opacity
         map.setPaintProperty(
-          'fields-partial-coverage-base',
+          'fields-fill',
           'fill-color',
           paintProps['fill-color']
         );
-        map.setPaintProperty(
-          'fields-partial-coverage-base',
-          'fill-opacity',
-          paintProps['fill-opacity']
-        );
-      }
+        // Note: fill-opacity is now zoom-based, set in layer creation
 
-      // Handle organic borders layer visibility
-      if (map.getLayer('organic-borders')) {
-        map.setLayoutProperty(
-          'organic-borders',
-          'visibility',
-          layerVisibility.fields ? 'visible' : 'none'
-        );
-      }
+        // Update partial coverage base layer to match main field colors
+        if (map.getLayer('fields-partial-coverage-base')) {
+          map.setPaintProperty(
+            'fields-partial-coverage-base',
+            'fill-color',
+            paintProps['fill-color']
+          );
+        }
 
-      // Handle partial coverage layers visibility
-      if (map.getLayer('fields-partial-coverage-base')) {
-        map.setLayoutProperty(
-          'fields-partial-coverage-base',
-          'visibility',
-          layerVisibility.fields ? 'visible' : 'none'
-        );
-        map.setLayoutProperty(
-          'fields-partial-coverage-pattern',
-          'visibility',
-          layerVisibility.fields ? 'visible' : 'none'
-        );
+        // Handle organic borders layer visibility
+        if (map.getLayer('organic-borders')) {
+          map.setLayoutProperty(
+            'organic-borders',
+            'visibility',
+            layerVisibility.fields ? 'visible' : 'none'
+          );
+        }
+
+        // Handle partial coverage layers visibility
+        if (map.getLayer('fields-partial-coverage-base')) {
+          map.setLayoutProperty(
+            'fields-partial-coverage-base',
+            'visibility',
+            layerVisibility.fields ? 'visible' : 'none'
+          );
+          map.setLayoutProperty(
+            'fields-partial-coverage-pattern',
+            'visibility',
+            layerVisibility.fields ? 'visible' : 'none'
+          );
+        }
       }
-    }
+    });
   }, [fieldsPaintProps, layerVisibility.fields]); // Use memoized paint props
 
   // Query for field data at a specific coordinate
