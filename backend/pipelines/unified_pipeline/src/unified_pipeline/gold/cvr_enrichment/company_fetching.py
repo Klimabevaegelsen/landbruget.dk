@@ -184,9 +184,10 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             # Data is already safely stored in DuckDB in-memory tables
             # We rely on DuckDB's internal memory management instead
 
-            # CRITICAL: Force DuckDB to optimize and free internal structures
-            self.conn.execute("PRAGMA optimize")
-            self.log.debug("   ✓ DuckDB optimization completed")
+            # NOTE: PRAGMA optimize doesn't exist in DuckDB
+            # For in-memory databases, we rely on DuckDB's internal memory management
+            # and Python garbage collection instead
+            self.log.debug("   ✓ DuckDB memory management (internal)")
 
             # CRITICAL: Clear query plan cache to free memory
             try:
