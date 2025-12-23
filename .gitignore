@@ -223,3 +223,6 @@ data_samples/
 
 # Testing directory (already covered by /scripts/ but being explicit)
 /scripts/testing/
+
+# Claude Code local settings (not committed, agent-specific)
+.claude/settings.local.json
