@@ -1,50 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getCachedPesticideCompanyDetails } from '@/lib/server-cache';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Revalidate this route every 7 days (server-side caching)
+// Data updates weekly on Tuesdays - use POST /api/revalidate-cache after data updates
+export const revalidate = 604800; // 7 days in seconds
+
+// Static cache headers for 7-day caching strategy
+const CACHE_HEADERS = {
+  'Cache-Control': 'public, max-age=604800, stale-while-revalidate=604800',
+  'CDN-Cache-Control': 'public, max-age=604800',
+  'Vercel-CDN-Cache-Control': 'public, max-age=604800',
+};
 
 export async function GET(request: NextRequest) {
   try {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      throw new Error('Missing Supabase configuration');
-    }
-
     // Extract search params from the request
     const { searchParams } = new URL(request.url);
 
-    // Build the Supabase function URL
-    const functionUrl = new URL(
-      '/functions/v1/pesticide-company-details',
-      SUPABASE_URL
-    );
-
-    // Forward all search parameters
+    // Convert search params to record for caching
+    const params: Record<string, string> = {};
     for (const [key, value] of searchParams.entries()) {
-      functionUrl.searchParams.set(key, value);
+      params[key] = value;
     }
 
-    // Make the request to Supabase function
-    const response = await fetch(functionUrl.toString(), {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        apikey: SUPABASE_ANON_KEY,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(
-        `Supabase function error: ${response.status} ${response.statusText}`
-      );
-    }
-
-    const data = await response.json();
+    // Use server-side cached data (revalidates automatically every 7 days)
+    const data = await getCachedPesticideCompanyDetails(params);
 
     return NextResponse.json(data, {
-      headers: {
-        'Cache-Control': 'public, max-age=1800, stale-while-revalidate=3600', // 30 min fresh, 1 hour stale
-      },
+      headers: CACHE_HEADERS,
     });
   } catch (error) {
     console.error('Error in pesticide-company-details proxy:', error);

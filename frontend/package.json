@@ -57,7 +57,7 @@
     "lodash": "^4.17.21",
     "lucide-react": "^0.508.0",
     "maplibre-gl": "^5.6.2",
-    "next": "16.0.10",
+    "next": "^16.1.1",
     "next-themes": "^0.4.6",
     "playwright-core": "^1.55.0",
     "pmtiles": "^4.3.0",
