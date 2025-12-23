@@ -98,14 +98,17 @@ export default function FieldAnalysisVisualization() {
         setPmtilesUrls(urls);
 
         // Preload adjacent years in parallel (don't block initial render)
-        pmtilesCacheService.preloadAdjacentYears(
-          yearSelection.selectedYear,
-          yearSelection.availableYears
-        ).then(() => {
-          console.log('✅ Adjacent years preloaded in background');
-        }).catch((error) => {
-          console.warn('⚠️ Adjacent year preload failed:', error);
-        });
+        pmtilesCacheService
+          .preloadAdjacentYears(
+            yearSelection.selectedYear,
+            yearSelection.availableYears
+          )
+          .then(() => {
+            console.log('✅ Adjacent years preloaded in background');
+          })
+          .catch((error) => {
+            console.warn('⚠️ Adjacent year preload failed:', error);
+          });
 
         console.log('✅ PMTiles URLs loaded');
       } catch (error) {

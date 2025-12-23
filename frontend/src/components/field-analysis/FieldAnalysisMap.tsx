@@ -953,7 +953,11 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
         'fill-opacity': 0.7,
       };
     }
-  }, [filterState.visualizationMode, filterState.colorUnit, filterState.useDecileColoring]);
+  }, [
+    filterState.visualizationMode,
+    filterState.colorUnit,
+    filterState.useDecileColoring,
+  ]);
 
   // Remove field analysis layers
   const removeFieldsLayers = useCallback((map: MapInstance) => {
@@ -1035,15 +1039,18 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               'interpolate',
               ['linear'],
               ['zoom'],
-              6, 0.3,   // At zoom 6, 30% opacity (less clutter)
-              10, 0.7,  // At zoom 10, 70% opacity
-              14, 0.7,  // At zoom 14+, normal opacity
+              6,
+              0.3, // At zoom 6, 30% opacity (less clutter)
+              10,
+              0.7, // At zoom 10, 70% opacity
+              14,
+              0.7, // At zoom 14+, normal opacity
             ],
           },
           layout: {
             visibility: layerVisibility.fields ? 'visible' : 'none',
           },
-          minzoom: 6,  // Don't render individual fields below zoom 6
+          minzoom: 6, // Don't render individual fields below zoom 6
         };
 
         // Only add filter if it exists (MapLibre expects array or undefined, not null)
@@ -1109,17 +1116,23 @@ const FieldAnalysisMap = memo(function FieldAnalysisMap({
               'interpolate',
               ['linear'],
               ['zoom'],
-              6, 0,     // No outline at zoom 6
-              10, 0.3,  // Thin outline at zoom 10
-              14, 0.5,  // Normal outline at zoom 14+
+              6,
+              0, // No outline at zoom 6
+              10,
+              0.3, // Thin outline at zoom 10
+              14,
+              0.5, // Normal outline at zoom 14+
             ],
             'line-opacity': [
               'interpolate',
               ['linear'],
               ['zoom'],
-              6, 0,
-              10, 0.5,
-              14, 0.8,
+              6,
+              0,
+              10,
+              0.5,
+              14,
+              0.8,
             ],
           },
           layout: {

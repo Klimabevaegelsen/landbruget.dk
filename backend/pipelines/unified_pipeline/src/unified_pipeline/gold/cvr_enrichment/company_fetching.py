@@ -811,7 +811,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             # Clean up batch table immediately
             try:
                 self.conn.execute(f"DROP TABLE IF EXISTS {batch_table_name}")
-            except:
+            except Exception:
                 pass  # Ignore cleanup errors
 
     def _create_batch_companies_table(self, json_strings: List[str], table_name: str) -> None:
@@ -1109,7 +1109,7 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 try:
                     self.gcs_access.delete_file(raw_batch_path)
                     deleted_count += 1
-                except:
+                except Exception:
                     pass  # Ignore deletion errors
 
             self.log.info(f"✅ Cleaned up {deleted_count} raw batch files")
