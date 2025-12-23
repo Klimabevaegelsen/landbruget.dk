@@ -1081,8 +1081,10 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # NOTE: CHECKPOINT not supported for in-memory databases
-                self.conn.execute("PRAGMA optimize")
+                # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
+                # Rely on Python garbage collection for memory management
+                import gc
+                gc.collect()
                 self.log.info(f"   💾 Memory optimization after combined chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
@@ -1203,8 +1205,9 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # NOTE: CHECKPOINT not supported for in-memory databases
-                self.conn.execute("PRAGMA optimize")
+                # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
+                import gc
+                gc.collect()
                 self.log.info(f"   💾 Memory optimization after fertilizer chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
@@ -1321,8 +1324,9 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # NOTE: CHECKPOINT not supported for in-memory databases
-                self.conn.execute("PRAGMA optimize")
+                # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
+                import gc
+                gc.collect()
                 self.log.info(
                     f"   💾 Memory optimization after nitrogen fixation chunk {chunk_idx + 1}"
                 )
@@ -1445,8 +1449,9 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # NOTE: CHECKPOINT not supported for in-memory databases
-                self.conn.execute("PRAGMA optimize")
+                # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
+                import gc
+                gc.collect()
                 self.log.info(f"   💾 Memory optimization after field plan chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
