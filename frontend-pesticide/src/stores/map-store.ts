@@ -1,8 +1,9 @@
-import { create } from "zustand";
-import { devtools } from "zustand/middleware";
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
 
-export type DataMode = "pesticide_total" | "pfas" | "diquat" | "glyphosate";
-export type YearSelection = number | "total";
+export type DataMode = 'pesticide_total' | 'pfas' | 'diquat' | 'glyphosate';
+export type YearSelection = number | 'total';
+export type HeatmapMode = 'pesticide' | 'pfas';
 
 export interface MapState {
   // Map view state
@@ -17,6 +18,8 @@ export interface MapState {
   // Data selection
   selectedYear: YearSelection;
   selectedDataMode: DataMode;
+  heatmapMode: HeatmapMode;
+  cumulativeMode: boolean;
 
   // Layer visibility (user-controlled)
   showBNBOLayer: boolean;
@@ -57,7 +60,7 @@ export interface MapActions {
   setBearing: (bearing: number) => void;
   setPitch: (pitch: number) => void;
   setViewState: (
-    viewState: Partial<Pick<MapState, "zoom" | "center" | "bearing" | "pitch">>,
+    viewState: Partial<Pick<MapState, 'zoom' | 'center' | 'bearing' | 'pitch'>>
   ) => void;
   setMapInstance: (mapInstance: unknown | null) => void;
   flyToLocation: (location: {
@@ -69,6 +72,8 @@ export interface MapActions {
   // Data selection actions
   setSelectedYear: (year: YearSelection) => void;
   setSelectedDataMode: (mode: DataMode) => void;
+  setHeatmapMode: (mode: HeatmapMode) => void;
+  setCumulativeMode: (cumulative: boolean) => void;
 
   // Layer visibility actions
   setShowBNBOLayer: (show: boolean) => void;
@@ -97,7 +102,7 @@ export interface MapActions {
   setTooltipPosition: (position: { x: number; y: number }) => void;
   showTooltipWithData: (
     data: Record<string, unknown>,
-    position: { x: number; y: number },
+    position: { x: number; y: number }
   ) => void;
   hideTooltip: () => void;
 
@@ -107,7 +112,7 @@ export interface MapActions {
       id: string;
       layer: string;
       properties: Record<string, unknown>;
-    } | null,
+    } | null
   ) => void;
   clearSelectedCell: () => void;
 
@@ -118,7 +123,9 @@ export interface MapActions {
 const DEFAULT_CENTER: [number, number] = [10.0, 56.0]; // Center of Denmark
 const DEFAULT_ZOOM = 7;
 const DEFAULT_YEAR: YearSelection = 2023;
-const DEFAULT_DATA_MODE: DataMode = "pesticide_total";
+const DEFAULT_DATA_MODE: DataMode = 'pesticide_total';
+const DEFAULT_HEATMAP_MODE: HeatmapMode = 'pesticide';
+const DEFAULT_CUMULATIVE_MODE = false;
 
 // Zoom thresholds for layer switching - simplified for 3 levels
 const KOMMUNE_TO_H3_ZOOM = 9.0; // Switch from kommune to H3 at this zoom
@@ -142,6 +149,8 @@ export const useMapStore = create<MapState & MapActions>()(
 
       selectedYear: DEFAULT_YEAR,
       selectedDataMode: DEFAULT_DATA_MODE,
+      heatmapMode: DEFAULT_HEATMAP_MODE,
+      cumulativeMode: DEFAULT_CUMULATIVE_MODE,
 
       showBNBOLayer: true,
       showBasemap: true,
@@ -149,7 +158,7 @@ export const useMapStore = create<MapState & MapActions>()(
       isLoading: false,
       isLoadingYear: false,
       isLoadingTiles: false,
-      loadingMessage: "",
+      loadingMessage: '',
 
       error: null,
 
@@ -173,11 +182,11 @@ export const useMapStore = create<MapState & MapActions>()(
       setMapInstance: (mapInstance) => set({ mapInstance }),
       flyToLocation: (location) => {
         const { mapInstance } = get();
-        console.log("🗺️ flyToLocation called with:", location);
-        console.log("🗺️ mapInstance:", mapInstance);
+        console.log('🗺️ flyToLocation called with:', location);
+        console.log('🗺️ mapInstance:', mapInstance);
 
         if (!mapInstance) {
-          console.warn("🗺️ No map instance available for flyToLocation");
+          console.warn('🗺️ No map instance available for flyToLocation');
           return;
         }
 
@@ -185,8 +194,8 @@ export const useMapStore = create<MapState & MapActions>()(
           // Cast to any to access MapLibre methods
           const map = mapInstance as any;
 
-          if (typeof map.flyTo === "function") {
-            console.log("🗺️ Flying to location:", location);
+          if (typeof map.flyTo === 'function') {
+            console.log('🗺️ Flying to location:', location);
             map.flyTo({
               center: [location.lng, location.lat],
               zoom: location.zoom || 12,
@@ -194,10 +203,10 @@ export const useMapStore = create<MapState & MapActions>()(
               duration: 2000,
             });
           } else {
-            console.warn("🗺️ Map instance does not have flyTo method");
+            console.warn('🗺️ Map instance does not have flyTo method');
           }
         } catch (error) {
-          console.error("🗺️ Error in flyToLocation:", error);
+          console.error('🗺️ Error in flyToLocation:', error);
         }
       },
 
@@ -205,6 +214,8 @@ export const useMapStore = create<MapState & MapActions>()(
       setSelectedYear: (selectedYear) =>
         set({ selectedYear, isLoadingYear: true }),
       setSelectedDataMode: (selectedDataMode) => set({ selectedDataMode }),
+      setHeatmapMode: (heatmapMode) => set({ heatmapMode }),
+      setCumulativeMode: (cumulativeMode) => set({ cumulativeMode }),
 
       // Layer visibility actions
       setShowBNBOLayer: (showBNBOLayer) => set({ showBNBOLayer }),
@@ -227,7 +238,7 @@ export const useMapStore = create<MapState & MapActions>()(
         // When years are set, also update year options to include 'total'
         const availableYearOptions: YearSelection[] = [
           ...availableYears,
-          "total",
+          'total',
         ];
         set({ availableYears, availableYearOptions });
       },
@@ -270,12 +281,14 @@ export const useMapStore = create<MapState & MapActions>()(
           pitch: 0,
           selectedYear: DEFAULT_YEAR,
           selectedDataMode: DEFAULT_DATA_MODE,
+          heatmapMode: DEFAULT_HEATMAP_MODE,
+          cumulativeMode: DEFAULT_CUMULATIVE_MODE,
           showBNBOLayer: true,
           showBasemap: true,
           isLoading: false,
           isLoadingYear: false,
           isLoadingTiles: false,
-          loadingMessage: "",
+          loadingMessage: '',
           error: null,
           showControls: true,
           showTooltip: false,
@@ -286,7 +299,7 @@ export const useMapStore = create<MapState & MapActions>()(
       },
     }),
     {
-      name: "map-store",
+      name: 'map-store',
       partialize: (state: MapState & MapActions) => ({
         // Persist only essential state
         zoom: state.zoom,
@@ -296,8 +309,8 @@ export const useMapStore = create<MapState & MapActions>()(
         showBNBOLayer: state.showBNBOLayer,
         showControls: state.showControls,
       }),
-    },
-  ),
+    }
+  )
 );
 
 // Computed selectors (these are truly computed and don't cause updates)
@@ -315,56 +328,56 @@ export const getComputedLayerVisibility = (zoom: number) => {
 // Data mode configuration
 export const DATA_MODE_CONFIG = {
   pesticide_total: {
-    label: "Total Pesticide Load",
-    description: "Total pesticide load intensity per hectare",
-    h3Field: "pesticide_belastning_per_ha",
-    kommuneField: "pesticide_belastning_per_ha",
-    unit: "kg/ha",
-    colorScale: "white-red",
+    label: 'Total Pesticide Load',
+    description: 'Total pesticide load intensity per hectare',
+    h3Field: 'pesticide_belastning_per_ha',
+    kommuneField: 'pesticide_belastning_per_ha',
+    unit: 'kg/ha',
+    colorScale: 'white-red',
   },
   pfas: {
-    label: "PFAS Intensity",
-    description: "PFAS-containing pesticide intensity per hectare",
-    h3Field: "pfas_containing_active_ingredient_intensity_grams_per_ha",
-    kommuneField: "pfas_containing_active_ingredient_intensity_grams_per_ha",
-    unit: "g/ha",
-    colorScale: "white-red",
+    label: 'PFAS Intensity',
+    description: 'PFAS-containing pesticide intensity per hectare',
+    h3Field: 'pfas_containing_active_ingredient_intensity_grams_per_ha',
+    kommuneField: 'pfas_containing_active_ingredient_intensity_grams_per_ha',
+    unit: 'g/ha',
+    colorScale: 'white-red',
   },
   diquat: {
-    label: "Diquat Intensity",
-    description: "Diquat-containing pesticide intensity per hectare",
-    h3Field: "diquat_containing_active_ingredient_intensity_grams_per_ha",
-    kommuneField: "diquat_containing_active_ingredient_intensity_grams_per_ha",
-    unit: "g/ha",
-    colorScale: "white-red",
+    label: 'Diquat Intensity',
+    description: 'Diquat-containing pesticide intensity per hectare',
+    h3Field: 'diquat_containing_active_ingredient_intensity_grams_per_ha',
+    kommuneField: 'diquat_containing_active_ingredient_intensity_grams_per_ha',
+    unit: 'g/ha',
+    colorScale: 'white-red',
   },
   glyphosate: {
-    label: "Glyphosate Intensity",
-    description: "Glyphosate-containing pesticide intensity per hectare",
-    h3Field: "glyphosate_containing_active_ingredient_intensity_grams_per_ha",
+    label: 'Glyphosate Intensity',
+    description: 'Glyphosate-containing pesticide intensity per hectare',
+    h3Field: 'glyphosate_containing_active_ingredient_intensity_grams_per_ha',
     kommuneField:
-      "glyphosate_containing_active_ingredient_intensity_grams_per_ha",
-    unit: "g/ha",
-    colorScale: "white-red",
+      'glyphosate_containing_active_ingredient_intensity_grams_per_ha',
+    unit: 'g/ha',
+    colorScale: 'white-red',
   },
 } as const;
 
 // BNBO status configuration
 export const BNBO_STATUS_CONFIG = {
-  "Action Required": {
-    color: "#ff6b6b",
-    label: "Action Required",
-    description: "Areas requiring immediate action",
+  'Action Required': {
+    color: '#ff6b6b',
+    label: 'Action Required',
+    description: 'Areas requiring immediate action',
   },
   Completed: {
-    color: "#51cf66",
-    label: "Completed",
-    description: "Areas where action has been completed",
+    color: '#51cf66',
+    label: 'Completed',
+    description: 'Areas where action has been completed',
   },
   Unknown: {
-    color: "#868e96",
-    label: "Unknown",
-    description: "Areas with unknown status",
+    color: '#868e96',
+    label: 'Unknown',
+    description: 'Areas with unknown status',
   },
 } as const;
 

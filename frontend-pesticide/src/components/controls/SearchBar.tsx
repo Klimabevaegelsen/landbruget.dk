@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Search, X, MapPin } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Search, X, MapPin } from 'lucide-react';
 
 interface DAWAResult {
   tekst: string;
@@ -25,10 +25,10 @@ interface SearchBarProps {
 
 export function SearchBar({
   onLocationSelect,
-  placeholder = "Search address...",
-  className = "",
+  placeholder = 'Search address...',
+  className = '',
 }: SearchBarProps) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const [results, setResults] = useState<DAWAResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -60,7 +60,7 @@ export function SearchBar({
             }
           }
         } catch (error) {
-          console.error("Error fetching address details:", error);
+          console.error('Error fetching address details:', error);
         }
       } else if (result.adresse?.x && result.adresse?.y) {
         // Use coordinates from autocomplete result if available
@@ -71,7 +71,7 @@ export function SearchBar({
         });
       }
     },
-    [onLocationSelect],
+    [onLocationSelect]
   );
 
   // Close dropdown when clicking outside
@@ -86,8 +86,8 @@ export function SearchBar({
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Handle keyboard navigation
@@ -96,23 +96,23 @@ export function SearchBar({
       if (!isOpen) return;
 
       switch (event.key) {
-        case "ArrowDown":
+        case 'ArrowDown':
           event.preventDefault();
           setSelectedIndex((prev) =>
-            prev < results.length - 1 ? prev + 1 : prev,
+            prev < results.length - 1 ? prev + 1 : prev
           );
           break;
-        case "ArrowUp":
+        case 'ArrowUp':
           event.preventDefault();
           setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
           break;
-        case "Enter":
+        case 'Enter':
           event.preventDefault();
           if (selectedIndex >= 0 && results[selectedIndex]) {
             handleSelectResult(results[selectedIndex]);
           }
           break;
-        case "Escape":
+        case 'Escape':
           setIsOpen(false);
           setSelectedIndex(-1);
           inputRef.current?.blur();
@@ -120,8 +120,8 @@ export function SearchBar({
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, results, selectedIndex, handleSelectResult]);
 
   const searchDAWA = async (searchQuery: string) => {
@@ -136,22 +136,22 @@ export function SearchBar({
       const response = await fetch(
         `https://api.dataforsyningen.dk/adresser/autocomplete?q=${encodeURIComponent(searchQuery)}&fuzzy=true&per_side=8`,
         {
-          method: "GET",
+          method: 'GET',
           headers: {
-            Accept: "application/json",
+            Accept: 'application/json',
           },
-        },
+        }
       );
 
       if (response.ok) {
         const data = await response.json();
         setResults(data || []);
       } else {
-        console.error("DAWA API error:", response.status);
+        console.error('DAWA API error:', response.status);
         setResults([]);
       }
     } catch (error) {
-      console.error("Error searching DAWA:", error);
+      console.error('Error searching DAWA:', error);
       setResults([]);
     } finally {
       setIsLoading(false);
@@ -177,7 +177,7 @@ export function SearchBar({
   };
 
   const clearSearch = () => {
-    setQuery("");
+    setQuery('');
     setResults([]);
     setIsOpen(false);
     setSelectedIndex(-1);
@@ -187,8 +187,8 @@ export function SearchBar({
   return (
     <div ref={searchRef} className={`relative ${className}`}>
       <div className="relative">
-        <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400">
-          <Search className="w-5 h-5" />
+        <div className="absolute top-1/2 left-4 -translate-y-1/2 transform text-slate-400">
+          <Search className="h-5 w-5" />
         </div>
 
         <input
@@ -198,42 +198,42 @@ export function SearchBar({
           onChange={handleInputChange}
           onFocus={() => query.length > 0 && setIsOpen(true)}
           placeholder={placeholder}
-          className="w-full pl-12 pr-12 py-3 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-base"
+          className="w-full rounded-lg border border-slate-600 bg-slate-800 py-3 pr-12 pl-12 text-base text-white placeholder-slate-400 transition-all duration-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
         />
 
         {query && (
           <button
             onClick={clearSearch}
-            className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+            className="absolute top-1/2 right-4 -translate-y-1/2 transform text-slate-400 transition-colors hover:text-white"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         )}
       </div>
 
       {/* Loading indicator */}
       {isLoading && (
-        <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-          <div className="w-5 h-5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
+        <div className="absolute top-1/2 right-4 -translate-y-1/2 transform">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-400 border-t-transparent"></div>
         </div>
       )}
 
       {/* Results dropdown */}
       {isOpen && (results.length > 0 || (!isLoading && query.length >= 2)) && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50 max-h-64 overflow-y-auto">
+        <div className="absolute top-full right-0 left-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 shadow-xl">
           {results.length > 0 ? (
             results.map((result, index) => (
               <button
                 key={index}
                 onClick={() => handleSelectResult(result)}
-                className={`w-full px-4 py-3 text-left hover:bg-slate-700 transition-colors border-b border-slate-600 last:border-b-0 ${
-                  index === selectedIndex ? "bg-slate-700" : ""
+                className={`w-full border-b border-slate-600 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-slate-700 ${
+                  index === selectedIndex ? 'bg-slate-700' : ''
                 }`}
               >
                 <div className="flex items-start space-x-3">
-                  <MapPin className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-white text-sm font-medium truncate">
+                  <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-400" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-white">
                       {result.tekst}
                     </div>
                   </div>
@@ -241,7 +241,7 @@ export function SearchBar({
               </button>
             ))
           ) : (
-            <div className="px-4 py-3 text-slate-400 text-sm">
+            <div className="px-4 py-3 text-sm text-slate-400">
               No addresses found
             </div>
           )}

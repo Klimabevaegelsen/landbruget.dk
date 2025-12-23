@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface UIState {
   // UI state persistence
@@ -7,8 +7,8 @@ interface UIState {
   setSidebarOpen: (open: boolean) => void;
 
   // User preferences
-  theme: "light" | "dark" | "system";
-  setTheme: (theme: "light" | "dark" | "system") => void;
+  theme: 'light' | 'dark' | 'system';
+  setTheme: (theme: 'light' | 'dark' | 'system') => void;
 
   // Mobile/desktop state
   isMobile: boolean;
@@ -36,7 +36,7 @@ export const useUIStore = create<UIState>()(
     (set) => ({
       // Initial state
       sidebarOpen: false,
-      theme: "system",
+      theme: 'system',
       isMobile: false,
       showDataPanel: false,
       showMobilePanel: false,
@@ -45,7 +45,7 @@ export const useUIStore = create<UIState>()(
 
       // Actions
       setSidebarOpen: (open: boolean) => set({ sidebarOpen: open }),
-      setTheme: (theme: "light" | "dark" | "system") => set({ theme }),
+      setTheme: (theme: 'light' | 'dark' | 'system') => set({ theme }),
       setIsMobile: (isMobile: boolean) => set({ isMobile }),
       setShowDataPanel: (show: boolean) => set({ showDataPanel: show }),
       setShowMobilePanel: (show: boolean) => set({ showMobilePanel: show }),
@@ -54,13 +54,13 @@ export const useUIStore = create<UIState>()(
         set({ performanceMode: enabled }),
     }),
     {
-      name: "ui-store",
+      name: 'ui-store',
       partialize: (state) => ({
         theme: state.theme,
         showDataPanel: state.showDataPanel,
         reduceMotion: state.reduceMotion,
         performanceMode: state.performanceMode,
       }),
-    },
-  ),
+    }
+  )
 );

@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import React, { useMemo, useCallback, useState, useEffect } from "react";
-import { X, ChevronUp, ChevronDown } from "lucide-react";
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import { X, ChevronUp, ChevronDown } from 'lucide-react';
 
 // Define HoverInfo interface
 interface HoverInfo {
-  layer: "h3" | "bnbo" | "bbr";
+  layer: 'h3' | 'bnbo' | 'bbr';
   data: Record<string, unknown>;
   coordinate: [number, number];
   pixel: [number, number];
@@ -37,15 +37,15 @@ export function MobileBottomPanel({
   // Format functions
   const formatNumber = useCallback(
     (value: number | undefined, decimals: number = 2): string => {
-      if (value === undefined || value === null) return "0";
-      if (value === 0) return "0";
-      if (value < 0.01 && value > 0) return "<0.01";
+      if (value === undefined || value === null) return '0';
+      if (value === 0) return '0';
+      if (value < 0.01 && value > 0) return '<0.01';
       return value.toLocaleString(undefined, {
         minimumFractionDigits: 0,
         maximumFractionDigits: decimals,
       });
     },
-    [],
+    []
   );
 
   // Handle drag gestures for panel expansion
@@ -68,7 +68,7 @@ export function MobileBottomPanel({
         setDragOffset(Math.min(deltaY, 200));
       }
     },
-    [isDragging],
+    [isDragging]
   );
 
   const handleTouchEnd = useCallback(
@@ -84,7 +84,7 @@ export function MobileBottomPanel({
 
       setDragOffset(0);
     },
-    [isDragging, dragOffset],
+    [isDragging, dragOffset]
   );
 
   // Render panel content based on layer type
@@ -92,21 +92,21 @@ export function MobileBottomPanel({
     if (!hoverInfo) return null;
 
     switch (hoverInfo.layer) {
-      case "h3":
+      case 'h3':
         const pfasGrams = Number(
-          hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams || 0,
+          hoverInfo.data.pfas_grams || hoverInfo.data.total_pfas_grams || 0
         );
         const pesticideLoad = Number(
           hoverInfo.data.pesticide_load ||
             hoverInfo.data.total_pesticide_load ||
-            0,
+            0
         );
         const diquatGrams = Number(hoverInfo.data.diquat_grams || 0);
         const glyphosateGrams = Number(hoverInfo.data.glyphosate_grams || 0);
         const area = Number(
           hoverInfo.data.agricultural_area_ha ||
             hoverInfo.data.h3_cell_area_ha ||
-            0,
+            0
         );
 
         // Calculate intensities with proper type casting
@@ -130,24 +130,24 @@ export function MobileBottomPanel({
         return (
           <div className="space-y-3">
             {/* Compact Header */}
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
+            <div className="rounded-lg border border-white/20 bg-white/10 p-3 backdrop-blur-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-medium text-white">
                     Agricultural Area
                   </h3>
-                  <div className="text-white/70 text-xs font-mono">
+                  <div className="font-mono text-xs text-white/70">
                     {area > 0
                       ? `${formatNumber(area, 1)} ha`
-                      : "Area unavailable"}
+                      : 'Area unavailable'}
                   </div>
                 </div>
                 {!isExpanded && (
                   <button
                     onClick={() => setIsExpanded(true)}
-                    className="p-1 rounded-full bg-white/20 hover:bg-white/30 transition-colors touch-manipulation"
+                    className="touch-manipulation rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
                   >
-                    <ChevronUp className="w-4 h-4 text-white" />
+                    <ChevronUp className="h-4 w-4 text-white" />
                   </button>
                 )}
               </div>
@@ -156,30 +156,30 @@ export function MobileBottomPanel({
             {/* Key Metrics - Always Visible */}
             <div className="grid grid-cols-2 gap-2">
               {/* Total Pesticide Load */}
-              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-orange-400/30">
+              <div className="rounded-lg border border-orange-400/30 bg-black/40 p-3 backdrop-blur-sm">
                 <div className="text-center">
-                  <div className="text-base font-bold text-orange-300 font-mono">
+                  <div className="font-mono text-base font-bold text-orange-300">
                     {formatNumber(pesticideLoad, 1)}
                   </div>
-                  <div className="text-xs text-orange-400/80 uppercase tracking-wide">
+                  <div className="text-xs tracking-wide text-orange-400/80 uppercase">
                     Pesticide (kg)
                   </div>
-                  <div className="text-xs text-orange-300/70 mt-1 font-mono">
+                  <div className="mt-1 font-mono text-xs text-orange-300/70">
                     {formatNumber(pesticideIntensity, 1)} kg/ha
                   </div>
                 </div>
               </div>
 
               {/* PFAS */}
-              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-red-400/30">
+              <div className="rounded-lg border border-red-400/30 bg-black/40 p-3 backdrop-blur-sm">
                 <div className="text-center">
-                  <div className="text-base font-bold text-red-300 font-mono">
+                  <div className="font-mono text-base font-bold text-red-300">
                     {formatNumber(pfasGrams, 1)}
                   </div>
-                  <div className="text-xs text-red-400/80 uppercase tracking-wide">
+                  <div className="text-xs tracking-wide text-red-400/80 uppercase">
                     PFAS (g)
                   </div>
-                  <div className="text-xs text-red-300/70 mt-1 font-mono">
+                  <div className="mt-1 font-mono text-xs text-red-300/70">
                     {formatNumber(pfasIntensity, 1)} g/ha
                   </div>
                 </div>
@@ -188,34 +188,34 @@ export function MobileBottomPanel({
 
             {/* Expanded Content */}
             {isExpanded && (
-              <div className="space-y-3 animate-in slide-in-from-bottom-2 duration-300">
+              <div className="animate-in slide-in-from-bottom-2 space-y-3 duration-300">
                 {/* Additional Metrics */}
                 <div className="grid grid-cols-2 gap-2">
                   {/* Glyphosate */}
-                  <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-green-400/30">
+                  <div className="rounded-lg border border-green-400/30 bg-black/40 p-3 backdrop-blur-sm">
                     <div className="text-center">
-                      <div className="text-base font-bold text-green-300 font-mono">
+                      <div className="font-mono text-base font-bold text-green-300">
                         {formatNumber(glyphosateGrams, 1)}
                       </div>
-                      <div className="text-xs text-green-400/80 uppercase tracking-wide">
+                      <div className="text-xs tracking-wide text-green-400/80 uppercase">
                         Glyphosate (g)
                       </div>
-                      <div className="text-xs text-green-300/70 mt-1 font-mono">
+                      <div className="mt-1 font-mono text-xs text-green-300/70">
                         {formatNumber(glyphosateIntensity, 1)} g/ha
                       </div>
                     </div>
                   </div>
 
                   {/* Diquat */}
-                  <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-amber-400/30">
+                  <div className="rounded-lg border border-amber-400/30 bg-black/40 p-3 backdrop-blur-sm">
                     <div className="text-center">
-                      <div className="text-base font-bold text-amber-300 font-mono">
+                      <div className="font-mono text-base font-bold text-amber-300">
                         {formatNumber(diquatGrams, 1)}
                       </div>
-                      <div className="text-xs text-amber-400/80 uppercase tracking-wide">
+                      <div className="text-xs tracking-wide text-amber-400/80 uppercase">
                         Diquat (g)
                       </div>
-                      <div className="text-xs text-amber-300/70 mt-1 font-mono">
+                      <div className="mt-1 font-mono text-xs text-amber-300/70">
                         {formatNumber(diquatIntensity, 1)} g/ha
                       </div>
                     </div>
@@ -223,32 +223,32 @@ export function MobileBottomPanel({
                 </div>
 
                 {/* Activity Summary */}
-                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
-                  <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wide">
+                <div className="rounded-lg border border-white/20 bg-white/10 p-3 backdrop-blur-sm">
+                  <h4 className="mb-2 text-sm font-medium tracking-wide text-white uppercase">
                     Activity Summary
                   </h4>
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div>
-                      <div className="text-base font-bold text-white font-mono">
+                      <div className="font-mono text-base font-bold text-white">
                         {applicationCount}
                       </div>
-                      <div className="text-xs text-white/60 uppercase tracking-wide">
+                      <div className="text-xs tracking-wide text-white/60 uppercase">
                         Applications
                       </div>
                     </div>
                     <div>
-                      <div className="text-base font-bold text-white font-mono">
+                      <div className="font-mono text-base font-bold text-white">
                         {fieldCount}
                       </div>
-                      <div className="text-xs text-white/60 uppercase tracking-wide">
+                      <div className="text-xs tracking-wide text-white/60 uppercase">
                         Fields
                       </div>
                     </div>
                     <div>
-                      <div className="text-base font-bold text-white font-mono">
+                      <div className="font-mono text-base font-bold text-white">
                         {formatNumber(coveragePercent, 0)}%
                       </div>
-                      <div className="text-xs text-white/60 uppercase tracking-wide">
+                      <div className="text-xs tracking-wide text-white/60 uppercase">
                         Coverage
                       </div>
                     </div>
@@ -259,38 +259,38 @@ export function MobileBottomPanel({
           </div>
         );
 
-      case "bnbo":
+      case 'bnbo':
         return (
           <div className="space-y-3">
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
+            <div className="rounded-lg border border-white/20 bg-white/10 p-3 backdrop-blur-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium text-white uppercase tracking-wide">
+                  <h3 className="text-sm font-medium tracking-wide text-white uppercase">
                     BNBO Protected Area
                   </h3>
-                  <div className="text-white/70 text-xs font-mono">
-                    {String(hoverInfo.data.status || "Status unknown")}
+                  <div className="font-mono text-xs text-white/70">
+                    {String(hoverInfo.data.status || 'Status unknown')}
                   </div>
                 </div>
                 {!isExpanded && (
                   <button
                     onClick={() => setIsExpanded(true)}
-                    className="p-1 rounded-full bg-white/20 hover:bg-white/30 transition-colors touch-manipulation"
+                    className="touch-manipulation rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
                   >
-                    <ChevronUp className="w-4 h-4 text-white" />
+                    <ChevronUp className="h-4 w-4 text-white" />
                   </button>
                 )}
               </div>
             </div>
 
             {isExpanded && (
-              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-white/20 animate-in slide-in-from-bottom-2 duration-300">
-                <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wide">
+              <div className="animate-in slide-in-from-bottom-2 rounded-lg border border-white/20 bg-black/40 p-3 backdrop-blur-sm duration-300">
+                <h4 className="mb-2 text-sm font-medium tracking-wide text-white uppercase">
                   Area Details
                 </h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-white/60 uppercase tracking-wide">
+                    <span className="tracking-wide text-white/60 uppercase">
                       Area:
                     </span>
                     <span className="font-mono text-white">
@@ -298,11 +298,11 @@ export function MobileBottomPanel({
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-white/60 uppercase tracking-wide">
+                    <span className="tracking-wide text-white/60 uppercase">
                       Protection Level:
                     </span>
                     <span className="font-mono text-white">
-                      {String(hoverInfo.data.protection_level || "Unknown")}
+                      {String(hoverInfo.data.protection_level || 'Unknown')}
                     </span>
                   </div>
                 </div>
@@ -311,58 +311,58 @@ export function MobileBottomPanel({
           </div>
         );
 
-      case "bbr":
+      case 'bbr':
         return (
           <div className="space-y-3">
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 border border-white/20">
+            <div className="rounded-lg border border-white/20 bg-white/10 p-3 backdrop-blur-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium text-white uppercase tracking-wide">
+                  <h3 className="text-sm font-medium tracking-wide text-white uppercase">
                     Building
                   </h3>
-                  <div className="text-white/70 text-xs font-mono">
-                    {String(hoverInfo.data.building_type || "Type unknown")}
+                  <div className="font-mono text-xs text-white/70">
+                    {String(hoverInfo.data.building_type || 'Type unknown')}
                   </div>
                 </div>
                 {!isExpanded && (
                   <button
                     onClick={() => setIsExpanded(true)}
-                    className="p-1 rounded-full bg-white/20 hover:bg-white/30 transition-colors touch-manipulation"
+                    className="touch-manipulation rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
                   >
-                    <ChevronUp className="w-4 h-4 text-white" />
+                    <ChevronUp className="h-4 w-4 text-white" />
                   </button>
                 )}
               </div>
             </div>
 
             {isExpanded && (
-              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-3 border border-white/20 animate-in slide-in-from-bottom-2 duration-300">
-                <h4 className="text-white font-medium mb-2 text-sm uppercase tracking-wide">
+              <div className="animate-in slide-in-from-bottom-2 rounded-lg border border-white/20 bg-black/40 p-3 backdrop-blur-sm duration-300">
+                <h4 className="mb-2 text-sm font-medium tracking-wide text-white uppercase">
                   Building Details
                 </h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-white/60 uppercase tracking-wide">
+                    <span className="tracking-wide text-white/60 uppercase">
                       Type:
                     </span>
                     <span className="font-mono text-white">
-                      {String(hoverInfo.data.building_type || "Unknown")}
+                      {String(hoverInfo.data.building_type || 'Unknown')}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-white/60 uppercase tracking-wide">
+                    <span className="tracking-wide text-white/60 uppercase">
                       Use:
                     </span>
                     <span className="font-mono text-white">
-                      {String(hoverInfo.data.building_use || "Unknown")}
+                      {String(hoverInfo.data.building_use || 'Unknown')}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-white/60 uppercase tracking-wide">
+                    <span className="tracking-wide text-white/60 uppercase">
                       Year:
                     </span>
                     <span className="font-mono text-white">
-                      {String(hoverInfo.data.construction_year || "Unknown")}
+                      {String(hoverInfo.data.construction_year || 'Unknown')}
                     </span>
                   </div>
                 </div>
@@ -382,14 +382,14 @@ export function MobileBottomPanel({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 transition-opacity duration-300"
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300"
         onClick={onClose}
       />
 
       {/* Bottom Panel */}
       <div
-        className={`fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-white/20 shadow-2xl z-50 transform transition-all duration-300 ease-out ${
-          isExpanded ? "max-h-[80vh]" : "max-h-[50vh]"
+        className={`fixed right-0 bottom-0 left-0 z-50 transform border-t border-white/20 bg-black/95 shadow-2xl backdrop-blur-md transition-all duration-300 ease-out ${
+          isExpanded ? 'max-h-[80vh]' : 'max-h-[50vh]'
         }`}
         style={{
           transform: `translateY(${Math.max(0, -dragOffset)}px)`,
@@ -399,10 +399,10 @@ export function MobileBottomPanel({
         onTouchEnd={handleTouchEnd}
       >
         {/* Header with drag handle */}
-        <div className="bg-black/80 backdrop-blur-sm border-b border-white/10 p-4 flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-white/10 bg-black/80 p-4 backdrop-blur-sm">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-1 bg-white/40 rounded-full"></div>
-            <h2 className="text-sm font-medium text-white uppercase tracking-wide">
+            <div className="h-1 w-8 rounded-full bg-white/40"></div>
+            <h2 className="text-sm font-medium tracking-wide text-white uppercase">
               Area Details
             </h2>
           </div>
@@ -410,22 +410,22 @@ export function MobileBottomPanel({
             {isExpanded && (
               <button
                 onClick={() => setIsExpanded(false)}
-                className="p-1 rounded-full bg-white/20 hover:bg-white/30 transition-colors touch-manipulation"
+                className="touch-manipulation rounded-full bg-white/20 p-1 transition-colors hover:bg-white/30"
               >
-                <ChevronDown className="w-4 h-4 text-white" />
+                <ChevronDown className="h-4 w-4 text-white" />
               </button>
             )}
             <button
               onClick={onClose}
-              className="p-1 rounded-full bg-white/20 hover:bg-white/30 transition-colors border border-white/20 touch-manipulation"
+              className="touch-manipulation rounded-full border border-white/20 bg-white/20 p-1 transition-colors hover:bg-white/30"
             >
-              <X className="w-4 h-4 text-white/70 hover:text-white" />
+              <X className="h-4 w-4 text-white/70 hover:text-white" />
             </button>
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-4 pb-safe">
+        <div className="pb-safe flex-1 overflow-y-auto p-4">
           {renderPanelContent}
         </div>
       </div>
