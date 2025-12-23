@@ -84,7 +84,7 @@ export default function FieldAnalysisVisualization() {
     setIsClient(true);
   }, []);
 
-  // Load PMTiles URLs with caching
+  // Load PMTiles URLs with caching - parallel preloading
   useEffect(() => {
     const loadPMTilesUrls = async () => {
       console.log(
@@ -97,13 +97,17 @@ export default function FieldAnalysisVisualization() {
         );
         setPmtilesUrls(urls);
 
-        // Preload adjacent years for smooth year switching
-        await pmtilesCacheService.preloadAdjacentYears(
+        // Preload adjacent years in parallel (don't block initial render)
+        pmtilesCacheService.preloadAdjacentYears(
           yearSelection.selectedYear,
           yearSelection.availableYears
-        );
+        ).then(() => {
+          console.log('✅ Adjacent years preloaded in background');
+        }).catch((error) => {
+          console.warn('⚠️ Adjacent year preload failed:', error);
+        });
 
-        console.log('✅ PMTiles URLs loaded and adjacent years preloaded');
+        console.log('✅ PMTiles URLs loaded');
       } catch (error) {
         console.error('❌ Failed to load PMTiles URLs:', error);
       }

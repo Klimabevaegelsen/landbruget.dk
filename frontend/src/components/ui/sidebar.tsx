@@ -172,7 +172,7 @@ const SidebarContent = React.forwardRef<HTMLDivElement, SidebarContentProps>(
         )}
         {...props}
         style={{
-          ...(props.style || {}),
+          ...props.style,
           ...(isExpanded ? {} : { overflow: 'hidden', width: '100%' }),
         }}
       >

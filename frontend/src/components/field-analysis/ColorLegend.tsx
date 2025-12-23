@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { FilterState } from './types';
+import { COLOR_SCHEMES, getDecileBreakpoints } from './colorUtils';
 
 interface ColorLegendProps {
   filterState: FilterState;
@@ -10,8 +11,14 @@ interface ColorLegendProps {
 
 export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
   const getLegendData = () => {
+    // Get breakpoints for current mode and color unit
+    const breakpoints = filterState.useDecileColoring
+      ? getDecileBreakpoints(filterState.visualizationMode, filterState.colorUnit)
+      : null;
+
     switch (filterState.visualizationMode) {
       case 'total_pesticide_belastning':
+        const pesticideColors = COLOR_SCHEMES.pesticide.colors;
         return {
           title: 'Pesticidbelastning',
           unit:
@@ -20,69 +27,106 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
               : filterState.colorUnit === 'per_hectare'
                 ? 'kg/ha'
                 : 'kg',
-          colors: [
-            { color: '#ffffff', label: 'Lav', range: '0-20' },
-            { color: '#fecaca', label: 'Lav-medium', range: '20-50' },
-            { color: '#f87171', label: 'Medium', range: '50-100' },
-            { color: '#dc2626', label: 'Medium-høj', range: '100-200' },
-            { color: '#991b1b', label: 'Høj', range: '200+' },
-          ],
+          colors: filterState.useDecileColoring && breakpoints
+            ? [
+                { color: pesticideColors[0], label: 'Decil 1', range: `0-${breakpoints[0].toFixed(1)}` },
+                { color: pesticideColors[2], label: 'Decil 3', range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}` },
+                { color: pesticideColors[4], label: 'Decil 5', range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}` },
+                { color: pesticideColors[6], label: 'Decil 7', range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}` },
+                { color: pesticideColors[9], label: 'Decil 10', range: `${breakpoints[8].toFixed(1)}+` },
+              ]
+            : [
+                { color: pesticideColors[0], label: 'Meget lav', range: '0-1' },
+                { color: pesticideColors[2], label: 'Lav', range: '1-10' },
+                { color: pesticideColors[4], label: 'Medium', range: '10-50' },
+                { color: pesticideColors[6], label: 'Høj', range: '50-100' },
+                { color: pesticideColors[9], label: 'Meget høj', range: '100+' },
+              ],
         };
       case 'pfas_belastning':
+        const pfasColors = COLOR_SCHEMES.pfas.colors;
         return {
           title: 'PFAS Belastning',
           unit: 'Belastning',
-          colors: [
-            { color: '#fecaca', label: 'Ingen PFAS', range: '0' },
-            { color: '#fca5a5', label: 'Lav PFAS', range: '0-10' },
-            { color: '#f87171', label: 'Medium PFAS', range: '10-50' },
-            { color: '#ef4444', label: 'Høj PFAS', range: '50-100' },
-            { color: '#dc2626', label: 'Meget høj PFAS', range: '100+' },
-          ],
+          colors: filterState.useDecileColoring && breakpoints
+            ? [
+                { color: pfasColors[0], label: 'Decil 1', range: `0-${breakpoints[0].toFixed(1)}` },
+                { color: pfasColors[2], label: 'Decil 3', range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}` },
+                { color: pfasColors[4], label: 'Decil 5', range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}` },
+                { color: pfasColors[6], label: 'Decil 7', range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}` },
+                { color: pfasColors[9], label: 'Decil 10', range: `${breakpoints[8].toFixed(1)}+` },
+              ]
+            : [
+                { color: pfasColors[0], label: 'Meget lav', range: '0-1' },
+                { color: pfasColors[2], label: 'Lav', range: '1-10' },
+                { color: pfasColors[4], label: 'Medium', range: '10-50' },
+                { color: pfasColors[6], label: 'Høj', range: '50-100' },
+                { color: pfasColors[9], label: 'Meget høj', range: '100+' },
+              ],
         };
       case 'organic_status':
+        const organicColors = COLOR_SCHEMES.organic.colors;
         return {
           title: 'Økologisk Status',
           unit: '',
           colors: [
-            { color: '#22c55e', label: 'Økologisk', range: '' },
-            { color: '#94a3b8', label: 'Konventionel', range: '' },
+            { color: organicColors[1], label: 'Økologisk', range: '' },
+            { color: organicColors[0], label: 'Konventionel', range: '' },
           ],
         };
       case 'applications_count':
+        const appColors = COLOR_SCHEMES.applications.colors;
         return {
           title: 'Antal Applikationer',
           unit: 'Applikationer',
-          colors: [
-            { color: '#e2e8f0', label: '0', range: '0' },
-            { color: '#cbd5e1', label: '1-2', range: '1-2' },
-            { color: '#94a3b8', label: '3-5', range: '3-5' },
-            { color: '#64748b', label: '6-10', range: '6-10' },
-            { color: '#475569', label: '10+', range: '10+' },
-          ],
+          colors: filterState.useDecileColoring && breakpoints
+            ? [
+                { color: appColors[0], label: 'Decil 1', range: `0-${Math.round(breakpoints[0])}` },
+                { color: appColors[2], label: 'Decil 3', range: `${Math.round(breakpoints[1])}-${Math.round(breakpoints[2])}` },
+                { color: appColors[4], label: 'Decil 5', range: `${Math.round(breakpoints[3])}-${Math.round(breakpoints[4])}` },
+                { color: appColors[6], label: 'Decil 7', range: `${Math.round(breakpoints[5])}-${Math.round(breakpoints[6])}` },
+                { color: appColors[9], label: 'Decil 10', range: `${Math.round(breakpoints[8])}+` },
+              ]
+            : [
+                { color: appColors[0], label: '0-3', range: '0-3' },
+                { color: appColors[2], label: '4-6', range: '4-6' },
+                { color: appColors[4], label: '7-9', range: '7-9' },
+                { color: appColors[6], label: '10-12', range: '10-12' },
+                { color: appColors[9], label: '13+', range: '13+' },
+              ],
         };
       case 'area_size':
+        const generalColors = COLOR_SCHEMES.general.colors;
         return {
           title: 'Markareal',
           unit: 'Hektar',
-          colors: [
-            { color: '#fef3c7', label: 'Meget lille', range: '0-1' },
-            { color: '#fcd34d', label: 'Lille', range: '1-5' },
-            { color: '#f59e0b', label: 'Medium', range: '5-20' },
-            { color: '#d97706', label: 'Stor', range: '20-50' },
-            { color: '#92400e', label: 'Meget stor', range: '50+' },
-          ],
+          colors: filterState.useDecileColoring && breakpoints
+            ? [
+                { color: generalColors[0], label: 'Decil 1', range: `0-${breakpoints[0].toFixed(1)}` },
+                { color: generalColors[2], label: 'Decil 3', range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}` },
+                { color: generalColors[4], label: 'Decil 5', range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}` },
+                { color: generalColors[6], label: 'Decil 7', range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}` },
+                { color: generalColors[9], label: 'Decil 10', range: `${breakpoints[8].toFixed(1)}+` },
+              ]
+            : [
+                { color: generalColors[0], label: 'Meget lille', range: '0-1' },
+                { color: generalColors[2], label: 'Lille', range: '1-5' },
+                { color: generalColors[4], label: 'Medium', range: '5-20' },
+                { color: generalColors[6], label: 'Stor', range: '20-50' },
+                { color: generalColors[9], label: 'Meget stor', range: '50+' },
+              ],
         };
       default:
+        const defaultColors = COLOR_SCHEMES.pesticide.colors;
         return {
           title: 'Pesticidbelastning',
           unit: 'Belastning',
           colors: [
-            { color: '#ffffff', label: 'Lav', range: '0-20' },
-            { color: '#fecaca', label: 'Lav-medium', range: '20-50' },
-            { color: '#f87171', label: 'Medium', range: '50-100' },
-            { color: '#dc2626', label: 'Medium-høj', range: '100-200' },
-            { color: '#991b1b', label: 'Høj', range: '200+' },
+            { color: defaultColors[0], label: 'Meget lav', range: '0-1' },
+            { color: defaultColors[2], label: 'Lav', range: '1-10' },
+            { color: defaultColors[4], label: 'Medium', range: '10-50' },
+            { color: defaultColors[6], label: 'Høj', range: '50-100' },
+            { color: defaultColors[9], label: 'Meget høj', range: '100+' },
           ],
         };
     }
