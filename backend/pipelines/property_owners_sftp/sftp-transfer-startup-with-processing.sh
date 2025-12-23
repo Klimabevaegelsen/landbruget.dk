@@ -850,6 +850,15 @@ VM_NAME=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/comp
 ZONE=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone | awk -F/ '{print $NF}')
 PROJECT_ID=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
 
+# Get UUID namespace from instance metadata and export for Python script
+LANDBRUGSDATA_UUID_NAMESPACE=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/LANDBRUGSDATA_UUID_NAMESPACE 2>/dev/null || echo "")
+if [ -z "$LANDBRUGSDATA_UUID_NAMESPACE" ]; then
+  log_with_timestamp "ERROR: LANDBRUGSDATA_UUID_NAMESPACE not found in VM metadata"
+  exit 1
+fi
+export LANDBRUGSDATA_UUID_NAMESPACE
+log_with_timestamp "✅ LANDBRUGSDATA_UUID_NAMESPACE loaded from VM metadata"
+
 # Function to delete the VM
 delete_vm() {
   log_with_timestamp "Attempting to delete VM: $VM_NAME in zone: $ZONE project: $PROJECT_ID"
