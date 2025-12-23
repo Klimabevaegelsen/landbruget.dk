@@ -307,10 +307,13 @@ export class DataManager {
         recordsWithGeometry: rows.filter((row) => row.geometry).length,
         recordsWithPesticideData: rows.filter(
           (row) =>
-            row.total_pesticide_load !== null && (row.total_pesticide_load as number) > 0
+            row.total_pesticide_load !== null &&
+            (row.total_pesticide_load as number) > 0
         ).length,
         recordsWithPfasData: rows.filter(
-          (row) => row.total_pfas_grams !== null && (row.total_pfas_grams as number) > 0
+          (row) =>
+            row.total_pfas_grams !== null &&
+            (row.total_pfas_grams as number) > 0
         ).length,
         yearRange: {
           min: Math.min(...rows.map((row) => row.year as number)),
@@ -360,7 +363,8 @@ export class DataManager {
         year: row.year as number,
         total_pesticide_load: (row.total_pesticide_load as number) || 0,
         total_pfas_grams: (row.total_pfas_grams as number) || 0,
-        pesticide_application_count: (row.pesticide_application_count as number) || 0,
+        pesticide_application_count:
+          (row.pesticide_application_count as number) || 0,
         field_count: (row.field_count as number) || 0,
         agricultural_area_ha: (row.agricultural_area_ha as number) || 0,
         avg_field_coverage: (row.avg_field_coverage as number) || 0,
@@ -413,24 +417,30 @@ export class DataManager {
 
       const existing = aggregated.get(key)!;
       (existing.years as number[]).push(row.year as number);
-      (existing.total_pesticide_load as number) += (row.total_pesticide_load as number) || 0;
-      (existing.total_pfas_grams as number) += (row.total_pfas_grams as number) || 0;
+      (existing.total_pesticide_load as number) +=
+        (row.total_pesticide_load as number) || 0;
+      (existing.total_pfas_grams as number) +=
+        (row.total_pfas_grams as number) || 0;
       (existing.pesticide_application_count as number) +=
         (row.pesticide_application_count as number) || 0;
       (existing.max_field_count as number) = Math.max(
         existing.max_field_count as number,
         (row.field_count as number) || 0
       );
-      (existing.total_agricultural_area_ha as number) += (row.agricultural_area_ha as number) || 0;
-      (existing.total_field_coverage as number) += (row.avg_field_coverage as number) || 0;
+      (existing.total_agricultural_area_ha as number) +=
+        (row.agricultural_area_ha as number) || 0;
+      (existing.total_field_coverage as number) +=
+        (row.avg_field_coverage as number) || 0;
       (existing.year_count as number) += 1;
     });
 
     return Array.from(aggregated.values()).map((item) => ({
       ...item,
       avg_agricultural_area_ha:
-        (item.total_agricultural_area_ha as number) / (item.year_count as number),
-      avg_field_coverage: (item.total_field_coverage as number) / (item.year_count as number),
+        (item.total_agricultural_area_ha as number) /
+        (item.year_count as number),
+      avg_field_coverage:
+        (item.total_field_coverage as number) / (item.year_count as number),
     }));
   }
 
@@ -464,14 +474,8 @@ export class DataManager {
         centroid_lon: row.centroid_lon as number,
         centroid_lat: row.centroid_lat as number,
         h3_resolution: (row.h3_resolution as number) || 10,
-        pfas_intensity:
-          avgAgArea > 0
-            ? totalPfas / avgAgArea
-            : 0,
-        pesticide_intensity:
-          avgAgArea > 0
-            ? totalPesticide / avgAgArea
-            : 0,
+        pfas_intensity: avgAgArea > 0 ? totalPfas / avgAgArea : 0,
+        pesticide_intensity: avgAgArea > 0 ? totalPesticide / avgAgArea : 0,
       };
     });
   }
@@ -483,7 +487,12 @@ export class DataManager {
     return rawData.map((row) => ({
       id: row.id as number,
       bnbo_id: row.bnbo_id as string,
-      status_code: row.status_code as 'protected' | 'buffer' | 'agricultural' | 'transition' | 'unprotected',
+      status_code: row.status_code as
+        | 'protected'
+        | 'buffer'
+        | 'agricultural'
+        | 'transition'
+        | 'unprotected',
       status_description: row.status_description as string,
       area_ha: (row.area_ha as number) || 0,
       geometry:
@@ -503,7 +512,14 @@ export class DataManager {
       id: row.id as number,
       bbr_id: row.bbr_id as string,
       building_code: (row.building_code as string) || null,
-      building_type: (row.building_type as 'Residential' | 'Agricultural' | 'Industrial' | 'Commercial' | 'Public' | 'Other') || 'Other',
+      building_type:
+        (row.building_type as
+          | 'Residential'
+          | 'Agricultural'
+          | 'Industrial'
+          | 'Commercial'
+          | 'Public'
+          | 'Other') || 'Other',
       construction_year: (row.construction_year as number) || null,
       floor_area: (row.floor_area as number) || null,
       geometry:
