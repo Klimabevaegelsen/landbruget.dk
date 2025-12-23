@@ -13,7 +13,10 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
   const getLegendData = () => {
     // Get breakpoints for current mode and color unit
     const breakpoints = filterState.useDecileColoring
-      ? getDecileBreakpoints(filterState.visualizationMode, filterState.colorUnit)
+      ? getDecileBreakpoints(
+          filterState.visualizationMode,
+          filterState.colorUnit
+        )
       : null;
 
     switch (filterState.visualizationMode) {
@@ -27,42 +30,96 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
               : filterState.colorUnit === 'per_hectare'
                 ? 'kg/ha'
                 : 'kg',
-          colors: filterState.useDecileColoring && breakpoints
-            ? [
-                { color: pesticideColors[0], label: 'Decil 1', range: `0-${breakpoints[0].toFixed(1)}` },
-                { color: pesticideColors[2], label: 'Decil 3', range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}` },
-                { color: pesticideColors[4], label: 'Decil 5', range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}` },
-                { color: pesticideColors[6], label: 'Decil 7', range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}` },
-                { color: pesticideColors[9], label: 'Decil 10', range: `${breakpoints[8].toFixed(1)}+` },
-              ]
-            : [
-                { color: pesticideColors[0], label: 'Meget lav', range: '0-1' },
-                { color: pesticideColors[2], label: 'Lav', range: '1-10' },
-                { color: pesticideColors[4], label: 'Medium', range: '10-50' },
-                { color: pesticideColors[6], label: 'Høj', range: '50-100' },
-                { color: pesticideColors[9], label: 'Meget høj', range: '100+' },
-              ],
+          colors:
+            filterState.useDecileColoring && breakpoints
+              ? [
+                  {
+                    color: pesticideColors[0],
+                    label: 'Decil 1',
+                    range: `0-${breakpoints[0].toFixed(1)}`,
+                  },
+                  {
+                    color: pesticideColors[2],
+                    label: 'Decil 3',
+                    range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}`,
+                  },
+                  {
+                    color: pesticideColors[4],
+                    label: 'Decil 5',
+                    range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}`,
+                  },
+                  {
+                    color: pesticideColors[6],
+                    label: 'Decil 7',
+                    range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}`,
+                  },
+                  {
+                    color: pesticideColors[9],
+                    label: 'Decil 10',
+                    range: `${breakpoints[8].toFixed(1)}+`,
+                  },
+                ]
+              : [
+                  {
+                    color: pesticideColors[0],
+                    label: 'Meget lav',
+                    range: '0-1',
+                  },
+                  { color: pesticideColors[2], label: 'Lav', range: '1-10' },
+                  {
+                    color: pesticideColors[4],
+                    label: 'Medium',
+                    range: '10-50',
+                  },
+                  { color: pesticideColors[6], label: 'Høj', range: '50-100' },
+                  {
+                    color: pesticideColors[9],
+                    label: 'Meget høj',
+                    range: '100+',
+                  },
+                ],
         };
       case 'pfas_belastning':
         const pfasColors = COLOR_SCHEMES.pfas.colors;
         return {
           title: 'PFAS Belastning',
           unit: 'Belastning',
-          colors: filterState.useDecileColoring && breakpoints
-            ? [
-                { color: pfasColors[0], label: 'Decil 1', range: `0-${breakpoints[0].toFixed(1)}` },
-                { color: pfasColors[2], label: 'Decil 3', range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}` },
-                { color: pfasColors[4], label: 'Decil 5', range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}` },
-                { color: pfasColors[6], label: 'Decil 7', range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}` },
-                { color: pfasColors[9], label: 'Decil 10', range: `${breakpoints[8].toFixed(1)}+` },
-              ]
-            : [
-                { color: pfasColors[0], label: 'Meget lav', range: '0-1' },
-                { color: pfasColors[2], label: 'Lav', range: '1-10' },
-                { color: pfasColors[4], label: 'Medium', range: '10-50' },
-                { color: pfasColors[6], label: 'Høj', range: '50-100' },
-                { color: pfasColors[9], label: 'Meget høj', range: '100+' },
-              ],
+          colors:
+            filterState.useDecileColoring && breakpoints
+              ? [
+                  {
+                    color: pfasColors[0],
+                    label: 'Decil 1',
+                    range: `0-${breakpoints[0].toFixed(1)}`,
+                  },
+                  {
+                    color: pfasColors[2],
+                    label: 'Decil 3',
+                    range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}`,
+                  },
+                  {
+                    color: pfasColors[4],
+                    label: 'Decil 5',
+                    range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}`,
+                  },
+                  {
+                    color: pfasColors[6],
+                    label: 'Decil 7',
+                    range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}`,
+                  },
+                  {
+                    color: pfasColors[9],
+                    label: 'Decil 10',
+                    range: `${breakpoints[8].toFixed(1)}+`,
+                  },
+                ]
+              : [
+                  { color: pfasColors[0], label: 'Meget lav', range: '0-1' },
+                  { color: pfasColors[2], label: 'Lav', range: '1-10' },
+                  { color: pfasColors[4], label: 'Medium', range: '10-50' },
+                  { color: pfasColors[6], label: 'Høj', range: '50-100' },
+                  { color: pfasColors[9], label: 'Meget høj', range: '100+' },
+                ],
         };
       case 'organic_status':
         const organicColors = COLOR_SCHEMES.organic.colors;
@@ -79,42 +136,92 @@ export function ColorLegend({ filterState, className = '' }: ColorLegendProps) {
         return {
           title: 'Antal Applikationer',
           unit: 'Applikationer',
-          colors: filterState.useDecileColoring && breakpoints
-            ? [
-                { color: appColors[0], label: 'Decil 1', range: `0-${Math.round(breakpoints[0])}` },
-                { color: appColors[2], label: 'Decil 3', range: `${Math.round(breakpoints[1])}-${Math.round(breakpoints[2])}` },
-                { color: appColors[4], label: 'Decil 5', range: `${Math.round(breakpoints[3])}-${Math.round(breakpoints[4])}` },
-                { color: appColors[6], label: 'Decil 7', range: `${Math.round(breakpoints[5])}-${Math.round(breakpoints[6])}` },
-                { color: appColors[9], label: 'Decil 10', range: `${Math.round(breakpoints[8])}+` },
-              ]
-            : [
-                { color: appColors[0], label: '0-3', range: '0-3' },
-                { color: appColors[2], label: '4-6', range: '4-6' },
-                { color: appColors[4], label: '7-9', range: '7-9' },
-                { color: appColors[6], label: '10-12', range: '10-12' },
-                { color: appColors[9], label: '13+', range: '13+' },
-              ],
+          colors:
+            filterState.useDecileColoring && breakpoints
+              ? [
+                  {
+                    color: appColors[0],
+                    label: 'Decil 1',
+                    range: `0-${Math.round(breakpoints[0])}`,
+                  },
+                  {
+                    color: appColors[2],
+                    label: 'Decil 3',
+                    range: `${Math.round(breakpoints[1])}-${Math.round(breakpoints[2])}`,
+                  },
+                  {
+                    color: appColors[4],
+                    label: 'Decil 5',
+                    range: `${Math.round(breakpoints[3])}-${Math.round(breakpoints[4])}`,
+                  },
+                  {
+                    color: appColors[6],
+                    label: 'Decil 7',
+                    range: `${Math.round(breakpoints[5])}-${Math.round(breakpoints[6])}`,
+                  },
+                  {
+                    color: appColors[9],
+                    label: 'Decil 10',
+                    range: `${Math.round(breakpoints[8])}+`,
+                  },
+                ]
+              : [
+                  { color: appColors[0], label: '0-3', range: '0-3' },
+                  { color: appColors[2], label: '4-6', range: '4-6' },
+                  { color: appColors[4], label: '7-9', range: '7-9' },
+                  { color: appColors[6], label: '10-12', range: '10-12' },
+                  { color: appColors[9], label: '13+', range: '13+' },
+                ],
         };
       case 'area_size':
         const generalColors = COLOR_SCHEMES.general.colors;
         return {
           title: 'Markareal',
           unit: 'Hektar',
-          colors: filterState.useDecileColoring && breakpoints
-            ? [
-                { color: generalColors[0], label: 'Decil 1', range: `0-${breakpoints[0].toFixed(1)}` },
-                { color: generalColors[2], label: 'Decil 3', range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}` },
-                { color: generalColors[4], label: 'Decil 5', range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}` },
-                { color: generalColors[6], label: 'Decil 7', range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}` },
-                { color: generalColors[9], label: 'Decil 10', range: `${breakpoints[8].toFixed(1)}+` },
-              ]
-            : [
-                { color: generalColors[0], label: 'Meget lille', range: '0-1' },
-                { color: generalColors[2], label: 'Lille', range: '1-5' },
-                { color: generalColors[4], label: 'Medium', range: '5-20' },
-                { color: generalColors[6], label: 'Stor', range: '20-50' },
-                { color: generalColors[9], label: 'Meget stor', range: '50+' },
-              ],
+          colors:
+            filterState.useDecileColoring && breakpoints
+              ? [
+                  {
+                    color: generalColors[0],
+                    label: 'Decil 1',
+                    range: `0-${breakpoints[0].toFixed(1)}`,
+                  },
+                  {
+                    color: generalColors[2],
+                    label: 'Decil 3',
+                    range: `${breakpoints[1].toFixed(1)}-${breakpoints[2].toFixed(1)}`,
+                  },
+                  {
+                    color: generalColors[4],
+                    label: 'Decil 5',
+                    range: `${breakpoints[3].toFixed(1)}-${breakpoints[4].toFixed(1)}`,
+                  },
+                  {
+                    color: generalColors[6],
+                    label: 'Decil 7',
+                    range: `${breakpoints[5].toFixed(1)}-${breakpoints[6].toFixed(1)}`,
+                  },
+                  {
+                    color: generalColors[9],
+                    label: 'Decil 10',
+                    range: `${breakpoints[8].toFixed(1)}+`,
+                  },
+                ]
+              : [
+                  {
+                    color: generalColors[0],
+                    label: 'Meget lille',
+                    range: '0-1',
+                  },
+                  { color: generalColors[2], label: 'Lille', range: '1-5' },
+                  { color: generalColors[4], label: 'Medium', range: '5-20' },
+                  { color: generalColors[6], label: 'Stor', range: '20-50' },
+                  {
+                    color: generalColors[9],
+                    label: 'Meget stor',
+                    range: '50+',
+                  },
+                ],
         };
       default:
         const defaultColors = COLOR_SCHEMES.pesticide.colors;
