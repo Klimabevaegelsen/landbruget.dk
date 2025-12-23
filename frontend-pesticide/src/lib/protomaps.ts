@@ -1,5 +1,5 @@
 // Protomaps integration for custom base layer with PMTiles v3.2
-import { PMTiles, Protocol } from 'pmtiles';
+import { PMTiles } from 'pmtiles';
 
 export interface ProtomapsConfig {
   pmtilesUrl: string;
@@ -26,10 +26,8 @@ export class ProtomapsManager {
       // Initialize PMTiles with custom Denmark tileset
       this.pmtiles = new PMTiles(this.config.pmtilesUrl);
 
-      // Register protocol for deck.gl and Kepler.gl
-      if (typeof window !== 'undefined') {
-        Protocol.add(this.pmtiles);
-      }
+      // Note: pmtiles v3 handles protocol registration internally
+      // No need to manually register with Protocol.add()
 
       this.isInitialized = true;
       console.log('Protomaps initialized successfully');
@@ -380,12 +378,9 @@ export class ProtomapsManager {
 
   // Cleanup resources
   destroy(): void {
-    if (this.pmtiles && typeof window !== 'undefined') {
-      try {
-        Protocol.remove(this.pmtiles);
-      } catch (error) {
-        console.warn('Error removing PMTiles protocol:', error);
-      }
+    if (this.pmtiles) {
+      // Note: pmtiles v3 handles cleanup internally
+      // No need to manually call Protocol.remove()
     }
     this.pmtiles = null;
     this.isInitialized = false;
@@ -411,7 +406,7 @@ export function createProtomapsManager(
 // Check if PMTiles is supported
 export function isPMTilesSupported(): boolean {
   try {
-    return typeof PMTiles !== 'undefined' && typeof Protocol !== 'undefined';
+    return typeof PMTiles !== 'undefined';
   } catch {
     return false;
   }

@@ -23,14 +23,11 @@ const getCachedSupabaseClient = cache(() => {
     db: {
       schema: 'public',
     },
-    realtime: {
-      enabled: false, // Disable realtime for better performance
-    },
   });
 });
 
 // Export the cached client
-export const supabase: SupabaseClient<Database> = getCachedSupabaseClient();
+export const supabase = getCachedSupabaseClient();
 
 // Utility function for error handling
 export function handleSupabaseError(error: unknown): never {
