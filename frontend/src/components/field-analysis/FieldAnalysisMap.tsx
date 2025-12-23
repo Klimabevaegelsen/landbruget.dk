@@ -49,6 +49,8 @@ interface MapLibreLayer {
   paint: Record<string, unknown>;
   layout: Record<string, unknown>;
   filter?: unknown;
+  minzoom?: number;
+  maxzoom?: number;
 }
 
 interface FieldAnalysisMapProps {
