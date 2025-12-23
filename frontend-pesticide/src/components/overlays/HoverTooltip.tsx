@@ -236,17 +236,21 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="text-center">
                     <div className="text-sm font-semibold text-slate-900">
-                      {String(hoverInfo.data.applications ||
-                        hoverInfo.data.pesticide_application_count ||
-                        0)}
+                      {String(
+                        hoverInfo.data.applications ||
+                          hoverInfo.data.pesticide_application_count ||
+                          0
+                      )}
                     </div>
                     <div className="text-slate-600">Applications</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm font-semibold text-slate-900">
-                      {String(hoverInfo.data.field_count ||
-                        hoverInfo.data.unique_field_count ||
-                        0)}
+                      {String(
+                        hoverInfo.data.field_count ||
+                          hoverInfo.data.unique_field_count ||
+                          0
+                      )}
                     </div>
                     <div className="text-slate-600">Fields</div>
                   </div>
@@ -297,9 +301,13 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                     }}
                   ></div>
                   <div className="text-sm font-medium text-slate-700">
-                    {String(hoverInfo.data.status_description ||
-                      (hoverInfo.data.status_code as string)?.toUpperCase?.() ||
-                      'Unknown')}
+                    {String(
+                      hoverInfo.data.status_description ||
+                        (
+                          hoverInfo.data.status_code as string
+                        )?.toUpperCase?.() ||
+                        'Unknown'
+                    )}
                   </div>
                 </div>
                 <div className="text-xs text-slate-600">

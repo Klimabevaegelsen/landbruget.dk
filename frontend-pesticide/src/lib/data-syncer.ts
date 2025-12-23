@@ -337,10 +337,13 @@ export class H3DataSyncer {
         recordsWithGeometry: rows.filter((row) => row.geometry).length,
         recordsWithPesticideData: rows.filter(
           (row) =>
-            row.total_pesticide_load !== null && (row.total_pesticide_load as number) > 0
+            row.total_pesticide_load !== null &&
+            (row.total_pesticide_load as number) > 0
         ).length,
         recordsWithPfasData: rows.filter(
-          (row) => row.total_pfas_grams !== null && (row.total_pfas_grams as number) > 0
+          (row) =>
+            row.total_pfas_grams !== null &&
+            (row.total_pfas_grams as number) > 0
         ).length,
         yearRange: { min: year, max: year },
         spatialExtent: {
