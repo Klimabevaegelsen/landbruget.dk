@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 
 export type DataMode = 'pesticide_total' | 'pfas' | 'diquat' | 'glyphosate';
 export type YearSelection = number | 'total';
+export type HeatmapMode = 'pesticide' | 'pfas';
 
 export interface MapState {
   // Map view state
@@ -17,6 +18,8 @@ export interface MapState {
   // Data selection
   selectedYear: YearSelection;
   selectedDataMode: DataMode;
+  heatmapMode: HeatmapMode;
+  cumulativeMode: boolean;
 
   // Layer visibility (user-controlled)
   showBNBOLayer: boolean;
@@ -69,6 +72,8 @@ export interface MapActions {
   // Data selection actions
   setSelectedYear: (year: YearSelection) => void;
   setSelectedDataMode: (mode: DataMode) => void;
+  setHeatmapMode: (mode: HeatmapMode) => void;
+  setCumulativeMode: (cumulative: boolean) => void;
 
   // Layer visibility actions
   setShowBNBOLayer: (show: boolean) => void;
@@ -119,6 +124,8 @@ const DEFAULT_CENTER: [number, number] = [10.0, 56.0]; // Center of Denmark
 const DEFAULT_ZOOM = 7;
 const DEFAULT_YEAR: YearSelection = 2023;
 const DEFAULT_DATA_MODE: DataMode = 'pesticide_total';
+const DEFAULT_HEATMAP_MODE: HeatmapMode = 'pesticide';
+const DEFAULT_CUMULATIVE_MODE = false;
 
 // Zoom thresholds for layer switching - simplified for 3 levels
 const KOMMUNE_TO_H3_ZOOM = 9.0; // Switch from kommune to H3 at this zoom
@@ -142,6 +149,8 @@ export const useMapStore = create<MapState & MapActions>()(
 
       selectedYear: DEFAULT_YEAR,
       selectedDataMode: DEFAULT_DATA_MODE,
+      heatmapMode: DEFAULT_HEATMAP_MODE,
+      cumulativeMode: DEFAULT_CUMULATIVE_MODE,
 
       showBNBOLayer: true,
       showBasemap: true,
@@ -205,6 +214,8 @@ export const useMapStore = create<MapState & MapActions>()(
       setSelectedYear: (selectedYear) =>
         set({ selectedYear, isLoadingYear: true }),
       setSelectedDataMode: (selectedDataMode) => set({ selectedDataMode }),
+      setHeatmapMode: (heatmapMode) => set({ heatmapMode }),
+      setCumulativeMode: (cumulativeMode) => set({ cumulativeMode }),
 
       // Layer visibility actions
       setShowBNBOLayer: (showBNBOLayer) => set({ showBNBOLayer }),
@@ -270,6 +281,8 @@ export const useMapStore = create<MapState & MapActions>()(
           pitch: 0,
           selectedYear: DEFAULT_YEAR,
           selectedDataMode: DEFAULT_DATA_MODE,
+          heatmapMode: DEFAULT_HEATMAP_MODE,
+          cumulativeMode: DEFAULT_CUMULATIVE_MODE,
           showBNBOLayer: true,
           showBasemap: true,
           isLoading: false,

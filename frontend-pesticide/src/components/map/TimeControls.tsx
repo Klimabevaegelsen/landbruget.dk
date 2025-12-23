@@ -22,7 +22,7 @@ export function TimeControls() {
     if (!isPlaying) return;
 
     const interval = setInterval(() => {
-      const currentIndex = availableYears.indexOf(selectedYear);
+      const currentIndex = availableYears.indexOf(selectedYear as number);
       const nextIndex = (currentIndex + 1) % availableYears.length;
       setSelectedYear(availableYears[nextIndex]);
     }, playbackSpeed);

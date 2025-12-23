@@ -220,7 +220,7 @@ export function DataSidebar({
               BNBO Protected Area
             </h3>
             <div className="text-sm text-slate-300">
-              {hoverInfo.data.status || 'Status unknown'}
+              {String(hoverInfo.data.status || 'Status unknown')}
             </div>
           </div>
 
@@ -236,7 +236,7 @@ export function DataSidebar({
               <div className="flex justify-between">
                 <span className="text-slate-400">Protection Level:</span>
                 <span className="font-medium text-slate-200">
-                  {hoverInfo.data.protection_level || 'Unknown'}
+                  {String(hoverInfo.data.protection_level || 'Unknown')}
                 </span>
               </div>
             </div>
@@ -251,7 +251,7 @@ export function DataSidebar({
           <div className="rounded-lg border border-slate-600 bg-slate-700 p-4">
             <h3 className="mb-2 text-lg font-semibold text-white">Building</h3>
             <div className="text-sm text-slate-300">
-              {hoverInfo.data.building_type || 'Type unknown'}
+              {String(hoverInfo.data.building_type || 'Type unknown')}
             </div>
           </div>
 
@@ -263,19 +263,19 @@ export function DataSidebar({
               <div className="flex justify-between">
                 <span className="text-slate-400">Type:</span>
                 <span className="font-medium text-slate-200">
-                  {hoverInfo.data.building_type || 'Unknown'}
+                  {String(hoverInfo.data.building_type || 'Unknown')}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Use:</span>
                 <span className="font-medium text-slate-200">
-                  {hoverInfo.data.building_use || 'Unknown'}
+                  {String(hoverInfo.data.building_use || 'Unknown')}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Year:</span>
                 <span className="font-medium text-slate-200">
-                  {hoverInfo.data.construction_year || 'Unknown'}
+                  {String(hoverInfo.data.construction_year || 'Unknown')}
                 </span>
               </div>
             </div>

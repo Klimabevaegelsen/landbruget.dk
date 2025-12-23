@@ -236,17 +236,17 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="text-center">
                     <div className="text-sm font-semibold text-slate-900">
-                      {hoverInfo.data.applications ||
+                      {String(hoverInfo.data.applications ||
                         hoverInfo.data.pesticide_application_count ||
-                        0}
+                        0)}
                     </div>
                     <div className="text-slate-600">Applications</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm font-semibold text-slate-900">
-                      {hoverInfo.data.field_count ||
+                      {String(hoverInfo.data.field_count ||
                         hoverInfo.data.unique_field_count ||
-                        0}
+                        0)}
                     </div>
                     <div className="text-slate-600">Fields</div>
                   </div>
@@ -292,14 +292,14 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                     className="h-3 w-3 rounded border"
                     style={{
                       backgroundColor: getBNBOStatusColor(
-                        hoverInfo.data.status_code
+                        hoverInfo.data.status_code as string
                       ),
                     }}
                   ></div>
                   <div className="text-sm font-medium text-slate-700">
-                    {hoverInfo.data.status_description ||
-                      hoverInfo.data.status_code?.toUpperCase() ||
-                      'Unknown'}
+                    {String(hoverInfo.data.status_description ||
+                      (hoverInfo.data.status_code as string)?.toUpperCase?.() ||
+                      'Unknown')}
                   </div>
                 </div>
                 <div className="text-xs text-slate-600">
@@ -341,16 +341,16 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                     className="h-3 w-3 rounded border"
                     style={{
                       backgroundColor: getBBRTypeColor(
-                        hoverInfo.data.building_type
+                        hoverInfo.data.building_type as string
                       ),
                     }}
                   ></div>
                   <div className="text-sm font-medium text-slate-700">
-                    {hoverInfo.data.building_type || 'Unknown Type'}
+                    {String(hoverInfo.data.building_type || 'Unknown Type')}
                   </div>
                 </div>
                 <div className="text-xs text-slate-600">
-                  Built {hoverInfo.data.construction_year || 'Unknown'}
+                  Built {String(hoverInfo.data.construction_year || 'Unknown')}
                 </div>
               </div>
             </div>
@@ -460,19 +460,20 @@ export function useHoverTooltip() {
       // Determine layer type based on data structure
       let layer: 'h3' | 'bnbo' | 'bbr' = 'h3';
 
-      if (info.object.bnbo_id) {
+      const obj = info.object as Record<string, unknown>;
+      if (obj.bnbo_id) {
         layer = 'bnbo';
-      } else if (info.object.bbr_id) {
+      } else if (obj.bbr_id) {
         layer = 'bbr';
-      } else if (info.object.h3_id) {
+      } else if (obj.h3_id) {
         layer = 'h3';
       }
 
       setHoverInfo({
         layer,
-        data: info.object,
-        coordinate: info.coordinate,
-        pixel: info.pixel,
+        data: info.object as Record<string, unknown>,
+        coordinate: info.coordinate as [number, number],
+        pixel: info.pixel as [number, number],
       });
     } else {
       setHoverInfo(null);
