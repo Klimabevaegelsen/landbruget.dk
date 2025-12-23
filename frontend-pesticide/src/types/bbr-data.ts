@@ -13,31 +13,31 @@ export interface BBRBuilding {
 
 // BBR building types
 export type BBRBuildingType =
-  | "Residential"
-  | "Agricultural"
-  | "Industrial"
-  | "Commercial"
-  | "Public"
-  | "Other";
+  | 'Residential'
+  | 'Agricultural'
+  | 'Industrial'
+  | 'Commercial'
+  | 'Public'
+  | 'Other';
 
 // BBR building type color mapping for visualization
 export const BBR_TYPE_COLORS: Record<BBRBuildingType, string> = {
-  Residential: "#4a90e2", // Blue
-  Agricultural: "#7ed321", // Green
-  Industrial: "#f5a623", // Orange
-  Commercial: "#d0021b", // Red
-  Public: "#9013fe", // Purple
-  Other: "#50e3c2", // Teal
+  Residential: '#4a90e2', // Blue
+  Agricultural: '#7ed321', // Green
+  Industrial: '#f5a623', // Orange
+  Commercial: '#d0021b', // Red
+  Public: '#9013fe', // Purple
+  Other: '#50e3c2', // Teal
 };
 
 // BBR building type descriptions
 export const BBR_TYPE_DESCRIPTIONS: Record<BBRBuildingType, string> = {
-  Residential: "Residential Buildings",
-  Agricultural: "Agricultural Buildings",
-  Industrial: "Industrial Buildings",
-  Commercial: "Commercial Buildings",
-  Public: "Public Buildings",
-  Other: "Other Building Types",
+  Residential: 'Residential Buildings',
+  Agricultural: 'Agricultural Buildings',
+  Industrial: 'Industrial Buildings',
+  Commercial: 'Commercial Buildings',
+  Public: 'Public Buildings',
+  Other: 'Other Building Types',
 };
 
 // Raw BBR data from pipeline

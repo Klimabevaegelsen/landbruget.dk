@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface PMTilesFile {
   year: number;
@@ -56,7 +56,7 @@ interface LoadedPMTiles {
   [key: string]: {
     url: string;
     loadedAt: number;
-    status: "loading" | "loaded" | "error";
+    status: 'loading' | 'loaded' | 'error';
     error?: string;
   };
 }
@@ -83,11 +83,11 @@ interface PMTilesState {
   getKommuneTileKey: (year: number) => string;
   getTileStatus: (
     year: number,
-    resolution: number,
-  ) => "loading" | "loaded" | "error" | "not-loaded";
+    resolution: number
+  ) => 'loading' | 'loaded' | 'error' | 'not-loaded';
   getKommuneTileStatus: (
-    year: number,
-  ) => "loading" | "loaded" | "error" | "not-loaded";
+    year: number
+  ) => 'loading' | 'loaded' | 'error' | 'not-loaded';
 
   // Utility functions
   getAvailableYears: () => number[];
@@ -123,7 +123,7 @@ export const usePMTilesStore = create<PMTilesState>()(
             [key]: {
               url,
               loadedAt: Date.now(),
-              status: "loading",
+              status: 'loading',
             },
           },
         })),
@@ -134,7 +134,7 @@ export const usePMTilesStore = create<PMTilesState>()(
             ...state.loadedTiles,
             [key]: {
               ...state.loadedTiles[key],
-              status: "loaded",
+              status: 'loaded',
             },
           },
         })),
@@ -145,7 +145,7 @@ export const usePMTilesStore = create<PMTilesState>()(
             ...state.loadedTiles,
             [key]: {
               ...state.loadedTiles[key],
-              status: "error",
+              status: 'error',
               error,
             },
           },
@@ -158,13 +158,13 @@ export const usePMTilesStore = create<PMTilesState>()(
       getTileStatus: (year, resolution) => {
         const key = get().getTileKey(year, resolution);
         const tile = get().loadedTiles[key];
-        return tile?.status || "not-loaded";
+        return tile?.status || 'not-loaded';
       },
 
       getKommuneTileStatus: (year) => {
         const key = get().getKommuneTileKey(year);
         const tile = get().loadedTiles[key];
-        return tile?.status || "not-loaded";
+        return tile?.status || 'not-loaded';
       },
 
       getAvailableYears: () => {
@@ -206,8 +206,8 @@ export const usePMTilesStore = create<PMTilesState>()(
         set((state) => {
           const filteredTiles = Object.fromEntries(
             Object.entries(state.loadedTiles).filter(
-              ([, tile]) => now - tile.loadedAt < maxAge,
-            ),
+              ([, tile]) => now - tile.loadedAt < maxAge
+            )
           );
 
           return { loadedTiles: filteredTiles };
@@ -215,11 +215,11 @@ export const usePMTilesStore = create<PMTilesState>()(
       },
     }),
     {
-      name: "pmtiles-store",
+      name: 'pmtiles-store',
       partialize: (state) => ({
         metadata: state.metadata,
         loadedTiles: state.loadedTiles,
       }),
-    },
-  ),
+    }
+  )
 );
