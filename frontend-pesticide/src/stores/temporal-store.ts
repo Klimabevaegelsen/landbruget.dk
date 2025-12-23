@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface TemporalState {
   // Current year
@@ -11,7 +11,7 @@ interface TemporalState {
   // Animation state
   isAnimating: boolean;
   animationSpeed: number; // milliseconds per year
-  animationDirection: "forward" | "backward";
+  animationDirection: 'forward' | 'backward';
 
   // Comparison mode
   comparisonMode: boolean;
@@ -29,7 +29,7 @@ interface TemporalState {
   startAnimation: () => void;
   stopAnimation: () => void;
   setAnimationSpeed: (speed: number) => void;
-  setAnimationDirection: (direction: "forward" | "backward") => void;
+  setAnimationDirection: (direction: 'forward' | 'backward') => void;
 
   // Comparison mode
   setComparisonMode: (enabled: boolean) => void;
@@ -63,7 +63,7 @@ export const useTemporalStore = create<TemporalState>()(
       availableYears: [],
       isAnimating: false,
       animationSpeed: 1000, // 1 second per year
-      animationDirection: "forward",
+      animationDirection: 'forward',
       comparisonMode: false,
       comparisonYear: null,
       cumulativeMode: false,
@@ -88,7 +88,7 @@ export const useTemporalStore = create<TemporalState>()(
             return;
           }
 
-          if (currentState.animationDirection === "forward") {
+          if (currentState.animationDirection === 'forward') {
             if (currentState.canGoNext()) {
               currentState.goToNextYear();
             } else {
@@ -198,7 +198,7 @@ export const useTemporalStore = create<TemporalState>()(
       },
     }),
     {
-      name: "temporal-store",
+      name: 'temporal-store',
       // Persist temporal preferences
       partialize: (state) => ({
         currentYear: state.currentYear,
@@ -209,6 +209,6 @@ export const useTemporalStore = create<TemporalState>()(
         cumulativeMode: state.cumulativeMode,
         cumulativeStartYear: state.cumulativeStartYear,
       }),
-    },
-  ),
+    }
+  )
 );
