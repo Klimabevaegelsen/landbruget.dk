@@ -179,9 +179,7 @@ export const getCachedMunicipalityRankings = unstable_cache(
  */
 export const getCachedPesticideAnalysis = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
-    console.log(
-      `🔄 Fetching fresh pesticide analysis from Supabase...`
-    );
+    console.log(`🔄 Fetching fresh pesticide analysis from Supabase...`);
 
     try {
       const functionUrl = new URL(
@@ -230,9 +228,7 @@ export const getCachedPesticideAnalysis = unstable_cache(
  */
 export const getCachedPesticideCompanyDetails = unstable_cache(
   async (searchParams: Record<string, string> = {}) => {
-    console.log(
-      `🔄 Fetching fresh pesticide company details from Supabase...`
-    );
+    console.log(`🔄 Fetching fresh pesticide company details from Supabase...`);
 
     try {
       const functionUrl = new URL(
