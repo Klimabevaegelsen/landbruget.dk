@@ -2,9 +2,40 @@
 
 ## Conductor Workspace Setup
 
-**Workspace Path**: `/Users/martincollignon/conductor/landbruget.dk/.conductor/riyadh-v1`
+**Workspace Path**: `/Users/martincollignon/conductor/landbruget.dk/.conductor/la-paz-v5`
 
 **CRITICAL**: All file operations MUST use absolute paths starting with this workspace directory. Never read/write to the parent repository at `/Users/martincollignon/conductor/landbruget.dk`.
+
+---
+
+## Spec-Driven Development (SDD)
+
+For new features, use the four-phase SDD workflow:
+
+1. `/specify <feature>` - Create structured specification
+2. `/plan` - Design technical architecture
+3. `/tasks` - Break down into atomic tasks
+4. `/implement [n]` - Execute with TDD validation
+
+See `.claude/specs/README.md` for full workflow documentation.
+
+---
+
+## Available Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/specify` | Start SDD: Create feature spec |
+| `/plan` | SDD Phase 2: Technical design |
+| `/tasks` | SDD Phase 3: Task breakdown |
+| `/implement` | SDD Phase 4: TDD execution |
+| `/run-tests` | Execute test suites |
+| `/run-pipeline` | Run data pipeline |
+| `/db-migrate` | Create Supabase migration |
+| `/validate-data` | Data quality checks |
+| `/create-pr` | Create pull request |
+| `/fix-lint` | Fix linting errors |
+| `/new-component` | Scaffold React component |
 
 ---
 
@@ -471,6 +502,15 @@ Capabilities:
 
 ## Quick Reference Links
 
+### Agent Configuration
+- **SDD Workflow**: `.claude/specs/README.md`
+- **Testing Rules**: `.claude/rules/testing.md`
+- **Data Quality Rules**: `.claude/rules/data-quality.md`
+- **Security Rules**: `.claude/rules/security.md`
+- **Skills**: `.claude/skills/` (data-pipeline, playwright-testing, supabase-migration, code-review)
+- **Commands**: `.claude/commands/`
+
+### Documentation
 - **Pipeline Documentation**: `docs/PIPELINE_INDEX.md`
 - **Data Lineage**: `docs/DATA_LINEAGE_COMPREHENSIVE.md`
 - **Troubleshooting**: `docs/troubleshooting/`

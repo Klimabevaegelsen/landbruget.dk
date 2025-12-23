@@ -1,7 +1,7 @@
-import type { H3DataPoint } from "@/types/h3-data";
-import type { BNBOArea } from "@/types/bnbo-data";
-import type { BBRBuilding } from "@/types/bbr-data";
-import { VISUALIZATION_LIMITS } from "./shared-constants";
+import type { H3DataPoint } from '@/types/h3-data';
+import type { BNBOArea } from '@/types/bnbo-data';
+import type { BBRBuilding } from '@/types/bbr-data';
+import { VISUALIZATION_LIMITS } from './shared-constants';
 
 // Viewport state interface
 export interface ViewState {
@@ -25,7 +25,7 @@ export interface LayerConfig {
   showH3: boolean;
   showBNBO: boolean;
   showBBR: boolean;
-  h3Aggregation: "sum" | "average" | "individual";
+  h3Aggregation: 'sum' | 'average' | 'individual';
   maxH3Points: number;
   maxBNBOPolygons: number;
   maxBBRPoints: number;
@@ -38,7 +38,7 @@ export interface LayerConfig {
 export class DataVirtualizer {
   private viewportBounds: BoundingBox | null = null;
   private zoomLevel: number = 7;
-  private performanceMode: "high" | "medium" | "low" = "medium";
+  private performanceMode: 'high' | 'medium' | 'low' = 'medium';
 
   /**
    * Update viewport and recalculate bounds
@@ -51,7 +51,7 @@ export class DataVirtualizer {
   /**
    * Set performance mode based on device capabilities
    */
-  setPerformanceMode(mode: "high" | "medium" | "low"): void {
+  setPerformanceMode(mode: 'high' | 'medium' | 'low'): void {
     this.performanceMode = mode;
   }
 
@@ -71,15 +71,11 @@ export class DataVirtualizer {
     const bufferedBounds = this.expandBounds(this.viewportBounds, buffer);
 
     let filteredData = data.filter((item) =>
-      this.isPointInBounds(
-        item.centroid_lon,
-        item.centroid_lat,
-        bufferedBounds,
-      ),
+      this.isPointInBounds(item.centroid_lon, item.centroid_lat, bufferedBounds)
     );
 
     // Apply performance-based filtering
-    const maxPoints = this.getMaxPointsForZoom(viewport.zoom, "h3");
+    const maxPoints = this.getMaxPointsForZoom(viewport.zoom, 'h3');
     if (filteredData.length > maxPoints) {
       filteredData = this.prioritizeH3Data(filteredData, maxPoints);
     }
@@ -102,11 +98,11 @@ export class DataVirtualizer {
     const bufferedBounds = this.expandBounds(this.viewportBounds, buffer);
 
     let filteredData = data.filter((area) =>
-      this.isGeometryInBounds(area.geometry, bufferedBounds),
+      this.isGeometryInBounds(area.geometry, bufferedBounds)
     );
 
     // Apply performance-based filtering
-    const maxPolygons = this.getMaxPointsForZoom(viewport.zoom, "bnbo");
+    const maxPolygons = this.getMaxPointsForZoom(viewport.zoom, 'bnbo');
     if (filteredData.length > maxPolygons) {
       filteredData = this.prioritizeBNBOData(filteredData, maxPolygons);
     }
@@ -134,7 +130,7 @@ export class DataVirtualizer {
     });
 
     // Apply performance-based filtering
-    const maxPoints = this.getMaxPointsForZoom(viewport.zoom, "bbr");
+    const maxPoints = this.getMaxPointsForZoom(viewport.zoom, 'bbr');
     if (filteredData.length > maxPoints) {
       filteredData = this.prioritizeBBRData(filteredData, maxPoints);
     }
@@ -154,7 +150,7 @@ export class DataVirtualizer {
         showH3: true,
         showBNBO: false,
         showBBR: false,
-        h3Aggregation: "sum",
+        h3Aggregation: 'sum',
         maxH3Points: Math.floor(2000 * performanceMultiplier),
         maxBNBOPolygons: 0,
         maxBBRPoints: 0,
@@ -165,7 +161,7 @@ export class DataVirtualizer {
         showH3: true,
         showBNBO: true,
         showBBR: false,
-        h3Aggregation: "average",
+        h3Aggregation: 'average',
         maxH3Points: Math.floor(5000 * performanceMultiplier),
         maxBNBOPolygons: Math.floor(1000 * performanceMultiplier),
         maxBBRPoints: 0,
@@ -176,15 +172,15 @@ export class DataVirtualizer {
         showH3: true,
         showBNBO: true,
         showBBR: true,
-        h3Aggregation: "individual",
+        h3Aggregation: 'individual',
         maxH3Points: Math.floor(
-          VISUALIZATION_LIMITS.MAX_H3_HEXAGONS * performanceMultiplier,
+          VISUALIZATION_LIMITS.MAX_H3_HEXAGONS * performanceMultiplier
         ),
         maxBNBOPolygons: Math.floor(
-          VISUALIZATION_LIMITS.MAX_BNBO_POLYGONS * performanceMultiplier,
+          VISUALIZATION_LIMITS.MAX_BNBO_POLYGONS * performanceMultiplier
         ),
         maxBBRPoints: Math.floor(
-          VISUALIZATION_LIMITS.MAX_BBR_POINTS * performanceMultiplier,
+          VISUALIZATION_LIMITS.MAX_BBR_POINTS * performanceMultiplier
         ),
       };
     }
@@ -232,7 +228,7 @@ export class DataVirtualizer {
   private isPointInBounds(
     lon: number,
     lat: number,
-    bounds: BoundingBox,
+    bounds: BoundingBox
   ): boolean {
     return (
       lon >= bounds.minLon &&
@@ -247,29 +243,29 @@ export class DataVirtualizer {
    */
   private isGeometryInBounds(
     geometry: GeoJSON.Geometry,
-    bounds: BoundingBox,
+    bounds: BoundingBox
   ): boolean {
     // Simplified bounds checking - in production would use proper geometry intersection
-    if (geometry.type === "Point") {
+    if (geometry.type === 'Point') {
       const coords = geometry.coordinates as [number, number];
       return this.isPointInBounds(coords[0], coords[1], bounds);
     }
 
-    if (geometry.type === "Polygon") {
+    if (geometry.type === 'Polygon') {
       const coords = geometry.coordinates[0] as [number, number][];
       // Check if any point of the polygon is within bounds
       return coords.some((coord) =>
-        this.isPointInBounds(coord[0], coord[1], bounds),
+        this.isPointInBounds(coord[0], coord[1], bounds)
       );
     }
 
-    if (geometry.type === "MultiPolygon") {
+    if (geometry.type === 'MultiPolygon') {
       const coords = geometry.coordinates as [number, number][][][];
       // Check if any polygon intersects with bounds
       return coords.some((polygon) =>
         polygon[0].some((coord) =>
-          this.isPointInBounds(coord[0], coord[1], bounds),
-        ),
+          this.isPointInBounds(coord[0], coord[1], bounds)
+        )
       );
     }
 
@@ -281,16 +277,16 @@ export class DataVirtualizer {
    */
   private getMaxPointsForZoom(
     zoom: number,
-    layerType: "h3" | "bnbo" | "bbr",
+    layerType: 'h3' | 'bnbo' | 'bbr'
   ): number {
     const config = this.getLayerConfigForZoom(zoom);
 
     switch (layerType) {
-      case "h3":
+      case 'h3':
         return config.maxH3Points;
-      case "bnbo":
+      case 'bnbo':
         return config.maxBNBOPolygons;
-      case "bbr":
+      case 'bbr':
         return config.maxBBRPoints;
       default:
         return 1000;
@@ -302,11 +298,11 @@ export class DataVirtualizer {
    */
   private getPerformanceMultiplier(): number {
     switch (this.performanceMode) {
-      case "high":
+      case 'high':
         return 1.5;
-      case "medium":
+      case 'medium':
         return 1.0;
-      case "low":
+      case 'low':
         return 0.5;
       default:
         return 1.0;
@@ -318,7 +314,7 @@ export class DataVirtualizer {
    */
   private prioritizeH3Data(
     data: H3DataPoint[],
-    maxPoints: number,
+    maxPoints: number
   ): H3DataPoint[] {
     // Sort by combined importance score (PFAS + pesticide load)
     const scored = data.map((item) => ({
@@ -337,7 +333,7 @@ export class DataVirtualizer {
    */
   private prioritizeBNBOData(
     data: BNBOArea[],
-    maxPolygons: number,
+    maxPolygons: number
   ): BNBOArea[] {
     // Sort by area and protection status importance
     const statusPriority = {
@@ -364,7 +360,7 @@ export class DataVirtualizer {
    */
   private prioritizeBBRData(
     data: BBRBuilding[],
-    maxPoints: number,
+    maxPoints: number
   ): BBRBuilding[] {
     // Sort by building type importance and floor area
     const typePriority = {
@@ -399,7 +395,7 @@ export class DataVirtualizer {
   /**
    * Check if dataset should be virtualized based on size
    */
-  shouldVirtualize(data: unknown[], layerType: "h3" | "bnbo" | "bbr"): boolean {
+  shouldVirtualize(data: unknown[], layerType: 'h3' | 'bnbo' | 'bbr'): boolean {
     const thresholds = {
       h3: 5000,
       bnbo: 2000,
