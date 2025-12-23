@@ -10,17 +10,17 @@ export const DEFAULT_VIEWPORT = {
 };
 
 export const API_ENDPOINTS = {
-  H3_DATA: "/api/h3-data",
-  BNBO_DATA: "/api/bnbo-data",
-  BBR_DATA: "/api/bbr-data",
+  H3_DATA: '/api/h3-data',
+  BNBO_DATA: '/api/bnbo-data',
+  BBR_DATA: '/api/bbr-data',
 };
 
 // Data processing constants
 export const GCS_CONFIG = {
-  BUCKET: "landbrugsdata-raw-data",
-  H3_DATA_PATH: "gold/h3_pfas_exposure",
-  BNBO_DATA_PATH: "gold/bnbo_status_areas",
-  BBR_DATA_PATH: "gold/bbr_buildings",
+  BUCKET: 'landbrugsdata-raw-data',
+  H3_DATA_PATH: 'gold/h3_pfas_exposure',
+  BNBO_DATA_PATH: 'gold/bnbo_status_areas',
+  BBR_DATA_PATH: 'gold/bbr_buildings',
 };
 
 // Performance constants
