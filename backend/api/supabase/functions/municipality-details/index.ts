@@ -292,12 +292,12 @@ async function getPesticideBurdenDetails(
     .select(
       `
       *,
-      pesticide_applications!inner(municipality, cvr_number),
+      field_boundaries!inner(municipality),
       companies!inner(id, company_name, cvr_number)
     `
     )
     .eq("year", params.year || 2023)
-    .eq("pesticide_applications.municipality", params.municipality); // FIELD municipality
+    .eq("field_boundaries.municipality", params.municipality); // FIELD municipality
 
   if (error) throw error;
 
@@ -371,12 +371,12 @@ async function getPFASDetails(
     .select(
       `
       *,
-      pesticide_applications!inner(municipality, cvr_number),
+      field_boundaries!inner(municipality),
       companies!inner(id, company_name, cvr_number)
     `
     )
     .eq("year", params.year || 2023)
-    .eq("pesticide_applications.municipality", params.municipality) // FIELD municipality
+    .eq("field_boundaries.municipality", params.municipality) // FIELD municipality
     .eq("contains_pfas", true);
 
   if (error) throw error;
@@ -448,12 +448,12 @@ async function getGlyphosateDetails(
     .select(
       `
       *,
-      pesticide_applications!inner(municipality, cvr_number),
+      field_boundaries!inner(municipality),
       companies!inner(id, company_name, cvr_number)
     `
     )
     .eq("year", params.year || 2023)
-    .eq("pesticide_applications.municipality", params.municipality) // FIELD municipality
+    .eq("field_boundaries.municipality", params.municipality) // FIELD municipality
     .eq("contains_glyphosate", true);
 
   if (error) throw error;

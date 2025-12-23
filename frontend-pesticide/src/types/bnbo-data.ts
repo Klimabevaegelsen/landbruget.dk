@@ -12,28 +12,28 @@ export interface BNBOArea {
 
 // BNBO status codes
 export type BNBOStatusCode =
-  | "protected"
-  | "buffer"
-  | "agricultural"
-  | "transition"
-  | "unprotected";
+  | 'protected'
+  | 'buffer'
+  | 'agricultural'
+  | 'transition'
+  | 'unprotected';
 
 // BNBO status descriptions mapping
 export const BNBO_STATUS_DESCRIPTIONS: Record<BNBOStatusCode, string> = {
-  protected: "Fully Protected Area",
-  buffer: "Buffer Zone",
-  agricultural: "Agricultural Buffer Zone",
-  transition: "Transition Zone",
-  unprotected: "Unprotected Area",
+  protected: 'Fully Protected Area',
+  buffer: 'Buffer Zone',
+  agricultural: 'Agricultural Buffer Zone',
+  transition: 'Transition Zone',
+  unprotected: 'Unprotected Area',
 };
 
 // BNBO color mapping for visualization
 export const BNBO_STATUS_COLORS: Record<BNBOStatusCode, string> = {
-  protected: "#2d8659", // Dark green - fully protected
-  buffer: "#52c878", // Light green - buffer zone
-  agricultural: "#ffd23f", // Yellow - agricultural buffer
-  transition: "#ff8c42", // Orange - transition zone
-  unprotected: "#e5e5e5", // Gray - no protection
+  protected: '#2d8659', // Dark green - fully protected
+  buffer: '#52c878', // Light green - buffer zone
+  agricultural: '#ffd23f', // Yellow - agricultural buffer
+  transition: '#ff8c42', // Orange - transition zone
+  unprotected: '#e5e5e5', // Gray - no protection
 };
 
 // Raw BNBO data from pipeline
