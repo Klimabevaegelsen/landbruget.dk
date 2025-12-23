@@ -1285,7 +1285,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     as financial_document_count,
                 json_extract_string(json_data, '$.processing_timestamp') as processing_timestamp,
                 json_extract_string(json_data, '$.pipeline_run_id') as pipeline_run_id
-            FROM unnest($1) as t(json_data)
+            FROM unnest($1::VARCHAR[]) as t(json_data)
         """,
             [json_strings],
         )
@@ -1312,7 +1312,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         addresses_check = self.conn.execute(
             """
             SELECT COUNT(*)
-            FROM unnest($1) as t(json_data)
+            FROM unnest($1::VARCHAR[]) as t(json_data)
             WHERE json_extract(json_data, '$.addresses') IS NOT NULL
             AND json_array_length(json_extract(json_data, '$.addresses')) > 0
         """,
@@ -1385,7 +1385,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                                 "dawa_fetch_timestamp": "VARCHAR"
                             }}]'
                         )) as address_struct
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.addresses') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.addresses')) > 0
                 )
@@ -1398,7 +1398,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         leadership_check = self.conn.execute(
             """
             SELECT COUNT(*)
-            FROM unnest($1) as t(json_data)
+            FROM unnest($1::VARCHAR[]) as t(json_data)
             WHERE json_extract(json_data, '$.leadership') IS NOT NULL
             AND json_array_length(json_extract(json_data, '$.leadership')) > 0
         """,
@@ -1410,7 +1410,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 """
                 WITH leadership_sample AS (
                     SELECT json_extract(json_data, '$.leadership') as leadership_json
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.leadership') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.leadership')) > 0
                     LIMIT 1
@@ -1431,7 +1431,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         unnest(json_transform(
                             json_extract(json_data, '$.leadership'), $2
                         )) as leadership_data
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.leadership') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.leadership')) > 0
                 """,
@@ -1443,7 +1443,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         ownership_check = self.conn.execute(
             """
             SELECT COUNT(*)
-            FROM unnest($1) as t(json_data)
+            FROM unnest($1::VARCHAR[]) as t(json_data)
             WHERE json_extract(json_data, '$.ownership') IS NOT NULL
             AND json_array_length(json_extract(json_data, '$.ownership')) > 0
         """,
@@ -1455,7 +1455,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 """
                 WITH ownership_sample AS (
                     SELECT json_extract(json_data, '$.ownership') as ownership_json
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.ownership') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.ownership')) > 0
                     LIMIT 1
@@ -1476,7 +1476,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         unnest(json_transform(
                             json_extract(json_data, '$.ownership'), $2
                         )) as ownership_data
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.ownership') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.ownership')) > 0
                 """,
@@ -1488,7 +1488,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         financial_check = self.conn.execute(
             """
             SELECT COUNT(*)
-            FROM unnest($1) as t(json_data)
+            FROM unnest($1::VARCHAR[]) as t(json_data)
             WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
             AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
         """,
@@ -1500,7 +1500,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 """
                 WITH financial_sample AS (
                     SELECT json_extract(json_data, '$.financial_documents') as financial_json
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
                     LIMIT 1
@@ -1619,7 +1619,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                             unnest(json_transform(
                                 json_extract(json_data, '$.financial_documents'), $2
                             )) as financial_parsed
-                        FROM unnest($1) as t(json_data)
+                        FROM unnest($1::VARCHAR[]) as t(json_data)
                         WHERE json_extract(json_data, '$.financial_documents') IS NOT NULL
                         AND json_array_length(json_extract(json_data, '$.financial_documents')) > 0
                     )
@@ -1648,7 +1648,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
         industry_check = self.conn.execute(
             """
             SELECT COUNT(*)
-            FROM unnest($1) as t(json_data)
+            FROM unnest($1::VARCHAR[]) as t(json_data)
             WHERE json_extract(json_data, '$.industries') IS NOT NULL
             AND json_array_length(json_extract(json_data, '$.industries')) > 0
         """,
@@ -1661,7 +1661,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 WITH industry_sample AS (
                     SELECT json_extract(json_data, '$.industries')
                         as industry_json
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.industries') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.industries')) > 0
                     LIMIT 1
@@ -1682,7 +1682,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         unnest(json_transform(
                             json_extract(json_data, '$.industries'), $2
                         )) as industry_data
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.industries') IS NOT NULL
                     AND json_array_length(json_extract(json_data, '$.industries')) > 0
                 """,
@@ -1702,7 +1702,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             employment_check = self.conn.execute(
                 """
                 SELECT COUNT(*)
-                FROM unnest($1) as t(json_data)
+                FROM unnest($1::VARCHAR[]) as t(json_data)
                 WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
                 AND json_array_length(
                     json_extract(json_data, '$.employment_data.' || $2)
@@ -1717,7 +1717,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     WITH employment_sample AS (
                         SELECT json_extract(json_data, '$.employment_data.' || $2)
                             as employment_json
-                        FROM unnest($1) as t(json_data)
+                        FROM unnest($1::VARCHAR[]) as t(json_data)
                         WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
                         AND json_array_length(
                     json_extract(json_data, '$.employment_data.' || $2)
@@ -1740,7 +1740,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                             unnest(json_transform(
                                 json_extract(json_data, '$.employment_data.{employment_field}'), $2
                             )) as employment_data
-                        FROM unnest($1) as t(json_data)
+                        FROM unnest($1::VARCHAR[]) as t(json_data)
                         WHERE json_extract(json_data, '$.employment_data.{employment_field}')
                             IS NOT NULL
                         AND json_array_length(
@@ -1799,7 +1799,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 employment_check = self.conn.execute(
                     """
                     SELECT COUNT(*)
-                    FROM unnest($1) as t(json_data)
+                    FROM unnest($1::VARCHAR[]) as t(json_data)
                     WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
                     AND json_array_length(
                         json_extract(json_data, '$.employment_data.' || $2)
@@ -1817,7 +1817,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     WITH employment_sample AS (
                         SELECT json_extract(json_data, '$.employment_data.' || $2)
                             as employment_json
-                        FROM unnest($1) as t(json_data)
+                        FROM unnest($1::VARCHAR[]) as t(json_data)
                         WHERE json_extract(json_data, '$.employment_data.' || $2) IS NOT NULL
                         AND json_array_length(
                             json_extract(json_data, '$.employment_data.' || $2)
@@ -1843,7 +1843,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                                         json_data, '$.employment_data.{employment_field}'
                                     ), $2
                                 )) as employment_data
-                            FROM unnest($1) as t(json_data)
+                            FROM unnest($1::VARCHAR[]) as t(json_data)
                             WHERE json_extract(
                                 json_data, '$.employment_data.{employment_field}'
                             ) IS NOT NULL
