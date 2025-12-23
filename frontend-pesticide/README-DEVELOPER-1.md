@@ -114,7 +114,7 @@ export class DataManager {
   async fetchH3Data(
     year: number,
     cumulativeMode: boolean,
-    filter?: H3DataFilter,
+    filter?: H3DataFilter
   ): Promise<H3DataPoint[]>;
 
   // Fetch BNBO status areas
@@ -330,9 +330,9 @@ export const DEFAULT_VIEWPORT = {
   zoom: 7,
 };
 export const API_ENDPOINTS = {
-  H3_DATA: "/api/h3-data",
-  BNBO_DATA: "/api/bnbo-data",
-  BBR_DATA: "/api/bbr-data",
+  H3_DATA: '/api/h3-data',
+  BNBO_DATA: '/api/bnbo-data',
+  BBR_DATA: '/api/bbr-data',
 };
 ```
 
