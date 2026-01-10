@@ -35,8 +35,24 @@ logger = Logger.get_logger()
 
 @lru_cache(maxsize=1)
 def get_gcs_filesystem() -> gcsfs.GCSFileSystem:
-    """Get cached gcsfs filesystem instance."""
-    return gcsfs.GCSFileSystem()
+    """Get cached gcsfs filesystem instance using gcloud credentials."""
+    import subprocess
+
+    try:
+        # Get access token from active gcloud account
+        result = subprocess.run(
+            ["gcloud", "auth", "print-access-token"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        token = result.stdout.strip()
+        logger.info("✅ Using gcloud access token for GCS authentication")
+        return gcsfs.GCSFileSystem(token=token)
+    except Exception as e:
+        logger.warning(f"Failed to get gcloud token, falling back to default: {e}")
+        return gcsfs.GCSFileSystem()
 
 
 @lru_cache(maxsize=1)
@@ -47,10 +63,21 @@ def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
     # Register gcsfs filesystem for direct gs:// URL access
     try:
         from fsspec import filesystem
+        import subprocess
 
-        fs = filesystem("gs")
+        # Get gcloud token for fsspec
+        result = subprocess.run(
+            ["gcloud", "auth", "print-access-token"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        token = result.stdout.strip()
+
+        fs = filesystem("gs", token=token)
         conn.register_filesystem(fs)
-        logger.info("✅ DuckDB configured with gcsfs integration")
+        logger.info("✅ DuckDB configured with gcsfs integration using gcloud token")
     except Exception as e:
         logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
 
@@ -67,7 +94,7 @@ class ResourceMonitor:
     def check_resources(self, operation_name: str) -> dict:
         """Check current resource usage with GitHub Actions compatibility."""
         import os
-        
+
         # GITHUB ACTIONS FIX: Skip resource monitoring entirely in CI environment
         if os.getenv("GITHUB_ACTIONS") == "true":
             return {
@@ -76,7 +103,7 @@ class ResourceMonitor:
                 "memory_percent": 0.0,
                 "disk_percent": 0.0,
             }
-        
+
         # Normal resource monitoring for local/non-CI environments
         import psutil
 
@@ -672,7 +699,7 @@ class GCSDataAccess:
                 # Get file info including timestamp
                 file_info = self.fs.info(file_path)
                 mtime = file_info.get("mtime", 0)
-                
+
                 # Handle different mtime types from gcsfs
                 if isinstance(mtime, datetime.datetime):
                     # mtime is already a datetime object
@@ -683,7 +710,7 @@ class GCSDataAccess:
                 else:
                     # No valid timestamp available
                     timestamp = datetime.datetime.now()
-                    
+
                 files_with_timestamps.append((f"gs://{file_path}", timestamp))
             except Exception as e:
                 self.log.warning(f"Could not get timestamp for {file_path}: {e}")

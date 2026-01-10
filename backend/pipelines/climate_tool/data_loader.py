@@ -95,7 +95,8 @@ class ClimateDataLoader:
                 logger.info(f"No year specified, using latest: {year}")
 
             # Green Accounts path - NOTE: has space in folder name!
-            pattern = f"gs://{self.bucket}/silver/gr {year}/*/*.parquet"
+            # DYRERK = Animal records (Dyre Regnskab)
+            pattern = f"gs://{self.bucket}/silver/gr {year}/*/V_4061GR_*_DYRERK_*_pii_handled.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
@@ -173,11 +174,11 @@ class ClimateDataLoader:
             table_name = "fvm_fields_temp"
             self.gcs.create_table_from_gcs(table_name, latest_file)
 
-            # Query for specific CVR
+            # Query for specific CVR - FVM data uses cvr_number column
             query = f"""
                 SELECT *
                 FROM {table_name}
-                WHERE cvr = '{cvr_str}'
+                WHERE cvr_number = '{cvr_str}'
             """
 
             result_df = self.gcs.duckdb_conn.execute(query).df()
