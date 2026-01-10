@@ -23,6 +23,8 @@ on:
           - "dagi"
           - "water_projects"
           - "arbejdstilsynet_inspections"
+          - "drive_data"
+          - "bbr_buildings"
           - "property_cadastral_merge"
           - "field_production"
           - "field_area_analysis"
@@ -55,7 +57,7 @@ jobs:
         github.event.inputs.batch == 'all' ||
         github.event.inputs.batch == '1' ||
         github.event_name == 'schedule' ||
-        contains(fromJson('["dst","fvm_wfs","cadastral","bnbo","dagi","water_projects","arbejdstilsynet_inspections"]'), github.event.inputs.source)
+        contains(fromJson('["dst","fvm_wfs","cadastral","bnbo","dagi","water_projects","arbejdstilsynet_inspections","drive_data","bbr_buildings"]'), github.event.inputs.source)
       }}
     name: Monthly Foundation Sources
     runs-on: ubuntu-latest
@@ -79,7 +81,9 @@ jobs:
               {"source":"bnbo","priority":4,"description":"Well Protection Areas","duration_est":"90min"},
               {"source":"dagi","priority":5,"description":"Danish Administrative Geographic Division","duration_est":"60min"},
               {"source":"water_projects","priority":6,"description":"Water projects data","duration_est":"75min"},
-              {"source":"arbejdstilsynet_inspections","priority":7,"description":"Work Environment Authority inspections","duration_est":"45min"}
+              {"source":"arbejdstilsynet_inspections","priority":7,"description":"Work Environment Authority inspections","duration_est":"45min"},
+              {"source":"drive_data","priority":8,"description":"Google Drive regulatory compliance documents","duration_est":"90min"},
+              {"source":"bbr_buildings","priority":9,"description":"BBR Buildings and GeoDanmark infrastructure","duration_est":"180min"}
             ]') ||
             fromJson(format('[{{"source":"{0}","priority":1,"description":"Manual execution"}}]', github.event.inputs.source))
           }}
@@ -216,6 +220,40 @@ jobs:
               echo "✅ FVM WFS matrix workflow triggered successfully (HTTP $HTTP_CODE)"
             else
               echo "❌ Failed to trigger FVM WFS workflow (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
+          elif [ "${{ matrix.source }}" = "drive_data" ]; then
+            # Google Drive - trigger the dedicated pipeline workflow
+            echo "📁 Google Drive pipeline detected - triggering dedicated workflow"
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/drive_pipeline.yml/dispatches" \
+              -d '{"ref":"${{ github.ref }}","inputs":{"log_level":"INFO","max_workers":"4"}}')
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ Google Drive pipeline triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger Google Drive pipeline (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
+          elif [ "${{ matrix.source }}" = "bbr_buildings" ]; then
+            # BBR Buildings - trigger the dedicated pipeline workflow
+            echo "🏢 BBR Buildings pipeline detected - triggering dedicated workflow"
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/bbr_buildings_pipeline.yml/dispatches" \
+              -d '{"ref":"${{ github.ref }}","inputs":{"layer":"both","sample_size":"0","log_level":"INFO"}}')
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ BBR Buildings pipeline triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger BBR Buildings pipeline (HTTP $HTTP_CODE)"
               cat /tmp/curl_response.txt
               exit 1
             fi
