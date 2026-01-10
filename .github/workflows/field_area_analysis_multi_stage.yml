@@ -767,6 +767,40 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
+      - name: Verify Stage 3 Outputs Exist
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          echo "🔍 Checking for required Stage 3 GCS outputs..."
+          YEAR=$AGRICULTURAL_FIELDS_YEAR
+
+          # Check stage 3A output (property × BNBO intersection)
+          echo "Checking: gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/"
+          if ! gsutil ls "gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/*/data.parquet" &>/dev/null; then
+            echo "⚠️ WARNING: Missing Stage 3A output for ${YEAR}"
+            echo "Expected: gs://${GCS_BUCKET}/gold/property_bnbo_intersection_${YEAR}/*/data.parquet"
+            echo "Stage 3 may have been skipped - consolidation will likely fail"
+            # Don't exit here - let consolidation script provide detailed error
+          else
+            echo "✅ Found Stage 3A output for ${YEAR}"
+          fi
+
+          # Check stage 3B output (property × wetland intersection)
+          echo "Checking: gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/"
+          if ! gsutil ls "gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/*/data.parquet" &>/dev/null; then
+            echo "⚠️ WARNING: Missing Stage 3B output for ${YEAR}"
+            echo "Expected: gs://${GCS_BUCKET}/gold/property_wetland_intersection_${YEAR}/*/data.parquet"
+            echo "Stage 3 may have been skipped - consolidation will likely fail"
+          else
+            echo "✅ Found Stage 3B output for ${YEAR}"
+          fi
+
+          echo ""
+          echo "💡 Note: If Stage 3 outputs are missing, the consolidation will fail."
+          echo "   This is expected if Stage 3 was skipped due to workflow conditionals."
+          echo "   Re-run the workflow with stage='all' to generate missing data."
+
       - name: Consolidate Results (Sequential)
         env:
           AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}

@@ -41,6 +41,23 @@ jobs:
         run: |
           echo "🔥 Starting PMTiles cache warmup..."
 
+          # Pre-check: Verify at least one PMTiles file exists
+          echo "🔍 Checking if PMTiles files are available..."
+          TEST_FILE="pmtiles/field_analysis_2024.pmtiles"
+          TEST_URL="${FRONTEND_URL}/api/pmtiles/${TEST_FILE}"
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -I "${TEST_URL}")
+
+          if [[ $HTTP_CODE -ne 200 && $HTTP_CODE -ne 206 ]]; then
+            echo "⏭️ No PMTiles files found (HTTP ${HTTP_CODE} for ${TEST_FILE})"
+            echo "This is expected if PMTiles haven't been generated yet."
+            echo "Skipping cache warmup - run 'Generate PMTiles' workflow first."
+            exit 0
+          fi
+
+          echo "✅ PMTiles files are available (HTTP ${HTTP_CODE})"
+          echo ""
+
           # High priority files that should always be warmed
           HIGH_PRIORITY_FILES=(
             "pmtiles/field_analysis_2023.pmtiles"
