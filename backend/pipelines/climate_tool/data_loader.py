@@ -4,11 +4,16 @@ GCS Data Loader for Climate Tool
 This module loads data from GCS silver/gold layers for climate calculations.
 Uses the GCSDataAccess pattern from unified_pipeline for optimal performance.
 
-Data Sources:
-- Livestock data: silver/chr (CHR pipeline)
-- Field data: silver/fvm_marker_YYYY (FVM WFS pipeline)
-- Fertilizer data: silver/fertiliser (gødningsregnskab from drive_data)
-- Climate data: silver/dmi (optional, if needed)
+Data Sources (ACTUAL GCS structure from exploration):
+- Livestock data: silver/gr {year}/ (Green Accounts with space in path!)
+  Fields: cvr_number, c_2001 (species), c_2006 (animal count), c_2016 (total N)
+  Years: 2018-2023, 64,999 farm records per year
+- Field data: silver/fvm_marker_{year}/ (FVM WFS pipeline)
+  Fields: cvr, bfe_nummer, afgroede, areal_ha
+  Years: 2008-2025
+- Fertilizer data: silver/fertiliser/ (GKEA gødningsregnskab)
+  Fields: cvr_number, total_n_kvote, faktisk_areal_ha, year
+  Years: 2021-2024, 585,988 field records (2024)
 
 Usage:
     loader = ClimateDataLoader()
@@ -57,24 +62,25 @@ class ClimateDataLoader:
 
     def load_livestock(self, cvr: str, year: Optional[int] = None) -> pd.DataFrame:
         """
-        Load livestock data from CHR silver layer for a specific CVR number.
+        Load livestock data from Green Accounts (gr) silver layer for a specific CVR number.
 
-        This queries the CHR data for herds associated with a CVR, including:
-        - Animal counts by species and type
-        - Herd locations (CHR numbers)
-        - Animal movements and changes
+        This queries the Green Accounts data for livestock associated with a CVR, including:
+        - Animal counts by species and type (c_2001: species, c_2006: count)
+        - Housing systems (c_2005: type, c_2030: code)
+        - Nitrogen production norms (c_2016: total N kg)
+        - Manure types and characteristics
 
         Args:
             cvr: Company CVR number (8 digits)
-            year: Optional year filter (if None, loads latest available data)
+            year: Year (2018-2023). If None, uses 2023 (latest)
 
         Returns:
             DataFrame with livestock data, or empty DataFrame if no data found
 
         Example:
             >>> loader = ClimateDataLoader()
-            >>> livestock = loader.load_livestock(cvr="31373077", year=2024)
-            >>> print(livestock[['chr_nummer', 'species_code', 'animal_count']])
+            >>> livestock = loader.load_livestock(cvr="31373077", year=2023)
+            >>> print(livestock[['cvr_number', 'c_2001', 'c_2006', 'c_2016']])
         """
         try:
             # Validate CVR format
@@ -83,12 +89,17 @@ class ClimateDataLoader:
                 logger.error(f"Invalid CVR format: {cvr}. Must be 8 digits.")
                 return pd.DataFrame()
 
-            # Find latest CHR data file
-            pattern = f"gs://{self.bucket}/silver/chr/*/herds*.parquet"
+            # Default to 2023 (latest available year)
+            if year is None:
+                year = 2023
+                logger.info(f"No year specified, using latest: {year}")
+
+            # Green Accounts path - NOTE: has space in folder name!
+            pattern = f"gs://{self.bucket}/silver/gr {year}/*/*.parquet"
             files = self.gcs.list_files(pattern)
 
             if not files:
-                logger.warning(f"No CHR livestock data found in {pattern}")
+                logger.warning(f"No Green Accounts livestock data found in {pattern}")
                 return pd.DataFrame()
 
             # Use latest file (sorted by timestamp in path)
@@ -96,25 +107,22 @@ class ClimateDataLoader:
             logger.info(f"Loading livestock data from: {latest_file}")
 
             # Create table in DuckDB
-            table_name = "chr_livestock_temp"
+            table_name = "gr_livestock_temp"
             self.gcs.create_table_from_gcs(table_name, latest_file)
 
-            # Query for specific CVR
+            # Query for specific CVR - use cvr_number column (not cvr)
             query = f"""
                 SELECT *
                 FROM {table_name}
-                WHERE cvr = '{cvr_str}'
+                WHERE cvr_number = '{cvr_str}'
             """
-
-            if year:
-                query += f" AND EXTRACT(YEAR FROM dato) = {year}"
 
             result_df = self.gcs.duckdb_conn.execute(query).df()
 
             # Cleanup
             self.gcs.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
-            logger.info(f"✅ Loaded {len(result_df)} livestock records for CVR {cvr_str}")
+            logger.info(f"✅ Loaded {len(result_df)} livestock records for CVR {cvr_str}, year {year}")
             return result_df
 
         except Exception as e:
@@ -186,16 +194,17 @@ class ClimateDataLoader:
 
     def load_fertilizer(self, cvr: str, year: int) -> pd.DataFrame:
         """
-        Load fertilizer application data for a specific CVR and year.
+        Load fertilizer application data from GKEA (Gødningskvoteberegning) for a specific CVR and year.
 
-        This queries the gødningsregnskab (fertilizer accounting) data including:
-        - Fertilizer types and amounts (N, P, K)
-        - Application dates and methods
-        - Field-level allocations
+        This queries the GKEA fertilizer accounting data including:
+        - total_n_kvote: Total N quota in kg (primary field for N2O calculation)
+        - faktisk_areal_ha: Actual field area in hectares
+        - marknummer: Field number
+        - fosfortal: Phosphorus number
 
         Args:
             cvr: Company CVR number (8 digits)
-            year: Agricultural year (YYYY)
+            year: Agricultural year (2021-2024)
 
         Returns:
             DataFrame with fertilizer data, or empty DataFrame if no data found
@@ -203,7 +212,8 @@ class ClimateDataLoader:
         Example:
             >>> loader = ClimateDataLoader()
             >>> fert = loader.load_fertilizer(cvr="31373077", year=2024)
-            >>> print(fert[['goedningstype', 'n_kg_ha', 'areal_ha']])
+            >>> print(fert[['cvr_number', 'total_n_kvote', 'faktisk_areal_ha']])
+            >>> # Calculate N2O: total_n_kvote * 0.01 * (44/28) * 298 = kg CO2e
         """
         try:
             # Validate CVR format
@@ -212,45 +222,51 @@ class ClimateDataLoader:
                 logger.error(f"Invalid CVR format: {cvr}. Must be 8 digits.")
                 return pd.DataFrame()
 
-            # Try to find fertilizer data from drive_data_pipeline silver layer
-            # Format: silver/fertiliser_* or silver/gødningsregnskab_*
-            patterns = [
-                f"gs://{self.bucket}/silver/fertiliser/*/data.parquet",
-                f"gs://{self.bucket}/silver/goedningsregnskab/*/data.parquet",
-            ]
-
-            files = []
-            for pattern in patterns:
-                found = self.gcs.list_files(pattern)
-                if found:
-                    files.extend(found)
+            # GKEA fertilizer data - files named like GKEA2024_Markplan_med_Gødningsoplysninger.parquet
+            # Located in: silver/fertiliser/
+            pattern = f"gs://{self.bucket}/silver/fertiliser/GKEA{year}_*.parquet"
+            files = self.gcs.list_files(pattern)
 
             if not files:
-                logger.warning(f"No fertilizer data found. Tried patterns: {patterns}")
+                logger.warning(f"No GKEA fertilizer data found for year {year} in pattern: {pattern}")
+                # Try without year filter
+                pattern_fallback = f"gs://{self.bucket}/silver/fertiliser/GKEA*.parquet"
+                files = self.gcs.list_files(pattern_fallback)
+                if files:
+                    logger.info(f"Found {len(files)} GKEA files without year filter")
+
+            if not files:
+                logger.warning(f"No GKEA fertilizer data found at all")
                 return pd.DataFrame()
 
-            # Use latest file
-            latest_file = sorted(files)[-1]
-            logger.info(f"Loading fertilizer data from: {latest_file}")
+            # Use file matching the year (or latest)
+            matching_files = [f for f in files if f"GKEA{year}" in f]
+            if matching_files:
+                target_file = sorted(matching_files)[-1]
+            else:
+                target_file = sorted(files)[-1]
+                logger.warning(f"No exact year match, using latest: {target_file}")
+
+            logger.info(f"Loading fertilizer data from: {target_file}")
 
             # Create table in DuckDB
             table_name = "fertilizer_temp"
-            self.gcs.create_table_from_gcs(table_name, latest_file)
+            self.gcs.create_table_from_gcs(table_name, target_file)
 
-            # Query for specific CVR and year
+            # Query for specific CVR - GKEA uses cvr_number column
             query = f"""
                 SELECT *
                 FROM {table_name}
-                WHERE cvr = '{cvr_str}'
+                WHERE cvr_number = '{cvr_str}'
             """
 
-            # Try to filter by year if column exists
+            # GKEA has 'year' column
             columns = self.gcs.duckdb_conn.execute(f"SELECT * FROM {table_name} LIMIT 0").df().columns.tolist()
 
-            if "aar" in columns:
-                query += f" AND aar = {year}"
-            elif "year" in columns:
+            if "year" in columns:
                 query += f" AND year = {year}"
+            elif "aar" in columns:
+                query += f" AND aar = {year}"
 
             result_df = self.gcs.duckdb_conn.execute(query).df()
 
