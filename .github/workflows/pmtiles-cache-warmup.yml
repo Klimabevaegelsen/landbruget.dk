@@ -23,6 +23,7 @@ on:
 jobs:
   warmup-cache:
     runs-on: ubuntu-latest
+    continue-on-error: true  # Don't fail the workflow if cache warmup fails
 
     steps:
       - name: Checkout code
@@ -136,12 +137,25 @@ jobs:
           echo "🎯 PMTiles cache warmup completed!"
           echo "📊 Results: ${SUCCESS_COUNT} success, ${ERROR_COUNT} errors"
 
-          # Fail the job if more than 20% of files failed
+          # Warn if many files failed, but don't fail the workflow
+          # PMTiles files may not exist yet if pipelines haven't run
           TOTAL_FILES=${#FILES_TO_WARM[@]}
-          FAILURE_RATE=$((ERROR_COUNT * 100 / TOTAL_FILES))
+          if [[ $TOTAL_FILES -gt 0 ]]; then
+            FAILURE_RATE=$((ERROR_COUNT * 100 / TOTAL_FILES))
+          else
+            FAILURE_RATE=0
+          fi
 
-          if [[ $FAILURE_RATE -gt 20 ]]; then
-            echo "❌ Too many failures (${FAILURE_RATE}% failure rate)"
+          if [[ $ERROR_COUNT -gt 0 ]]; then
+            echo ""
+            echo "⚠️ Note: ${ERROR_COUNT}/${TOTAL_FILES} files could not be warmed (${FAILURE_RATE}% failure rate)"
+            echo "   This is expected if PMTiles files haven't been generated yet."
+            echo "   Run the 'Generate PMTiles' workflow to create missing files."
+          fi
+
+          # Only fail if ALL files failed (indicates a more serious issue)
+          if [[ $SUCCESS_COUNT -eq 0 && $TOTAL_FILES -gt 0 ]]; then
+            echo "❌ All cache warming attempts failed - check FRONTEND_URL and network connectivity"
             exit 1
           fi
 
