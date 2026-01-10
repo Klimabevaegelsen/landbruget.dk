@@ -462,16 +462,16 @@ jobs:
         uses: actions/github-script@v6
         if: github.event_name == 'pull_request'
         with:
-        script: |
-          const fs = require('fs');
-          const summary = fs.readFileSync('migration_summary.md', 'utf8');
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('migration_summary.md', 'utf8');
 
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: summary
-          });
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
 
   cleanup:
     name: Cleanup
