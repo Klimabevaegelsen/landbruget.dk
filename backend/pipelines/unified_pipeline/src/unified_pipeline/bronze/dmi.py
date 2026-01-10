@@ -224,10 +224,23 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
             all_features: list = []
             cur_start = datetime(start_time.year, start_time.month, 1)
+
+            # Calculate total months for progress tracking
+            total_months = (
+                (end_time.year - start_time.year) * 12 + (end_time.month - start_time.month) + 1
+            )
+            month_counter = 0
+
             while cur_start < end_time:
                 cur_end = _add_one_month(cur_start) - timedelta(seconds=1)
                 if cur_end > end_time:
                     cur_end = end_time
+
+                month_counter += 1
+                self.log.info(
+                    f"  [{parameter_id}] Fetching {cur_start:%Y-%m} "
+                    f"({month_counter}/{total_months}, {month_counter * 100 // total_months}%)"
+                )
 
                 monthly_data = await self.api_client.fetch_grid_data(
                     session, parameter_id, cur_start, cur_end
@@ -235,6 +248,14 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
                 if monthly_data.get("features"):
                     all_features.extend(monthly_data["features"])
+                    self.log.info(
+                        f"  [{parameter_id}] ✓ {cur_start:%Y-%m}: {len(monthly_data['features'])} features "
+                        f"(total: {len(all_features)})"
+                    )
+                else:
+                    self.log.warning(
+                        f"  [{parameter_id}] ⚠ {cur_start:%Y-%m}: No features returned"
+                    )
 
                 cur_start = _add_one_month(cur_start)
 
