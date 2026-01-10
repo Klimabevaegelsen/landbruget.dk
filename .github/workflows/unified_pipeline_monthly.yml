@@ -204,16 +204,33 @@ jobs:
           if [ "${{ matrix.source }}" = "fvm_wfs" ]; then
             # FVM WFS - trigger the dedicated matrix workflow
             echo "🚜 FVM WFS detected - triggering dedicated matrix workflow"
-            curl -X POST \
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
-              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}'
-            echo "✅ FVM WFS matrix workflow triggered successfully"
+              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}')
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ FVM WFS matrix workflow triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger FVM WFS workflow (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
           else
             # Regular pipeline execution
-            echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            SOURCE="${{ matrix.source }}"
+            STAGE="${{ github.event.inputs.stage || 'all' }}"
+
+            if [ -z "$SOURCE" ]; then
+              echo "❌ ERROR: matrix.source is empty or null"
+              echo "Matrix values: ${{ toJson(matrix) }}"
+              exit 1
+            fi
+
+            echo "🚀 Executing: python -m unified_pipeline run -s ${SOURCE} -j ${STAGE}"
+            python -m unified_pipeline run -s "${SOURCE}" -j "${STAGE}"
           fi
 
           # Stop monitoring
@@ -374,10 +391,36 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/field_area_analysis_multi_stage.yml/dispatches" \
               -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","agricultural_fields_year":"both"}}'
             echo "✅ Field Area Analysis matrix workflow triggered successfully"
+          elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
+            # FVM WFS - trigger the dedicated matrix workflow
+            echo "🚜 FVM WFS detected - triggering dedicated matrix workflow"
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
+              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}')
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ FVM WFS matrix workflow triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger FVM WFS workflow (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
           else
             # Regular pipeline execution
-            echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            SOURCE="${{ matrix.source }}"
+            STAGE="${{ github.event.inputs.stage || 'all' }}"
+
+            if [ -z "$SOURCE" ]; then
+              echo "❌ ERROR: matrix.source is empty or null"
+              echo "Matrix values: ${{ toJson(matrix) }}"
+              exit 1
+            fi
+
+            echo "🚀 Executing: python -m unified_pipeline run -s ${SOURCE} -j ${STAGE}"
+            python -m unified_pipeline run -s "${SOURCE}" -j "${STAGE}"
           fi
 
           # Stop monitoring
