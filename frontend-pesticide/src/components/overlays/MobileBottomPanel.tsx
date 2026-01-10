@@ -72,7 +72,7 @@ export function MobileBottomPanel({
   );
 
   const handleTouchEnd = useCallback(
-    (_e: React.TouchEvent) => {
+    (e: React.TouchEvent) => {
       if (!isDragging) return;
 
       setIsDragging(false);
@@ -170,65 +170,57 @@ export function MobileBottomPanel({
                 </div>
               </div>
 
-              {/* PFAS - only show if there are PFAS values > 0 */}
-              {pfasGrams > 0 && (
-                <div className="rounded-lg border border-amber-400/30 bg-black/40 p-3 backdrop-blur-sm">
-                  <div className="text-center">
-                    <div className="font-mono text-base font-bold text-amber-300">
-                      {formatNumber(pfasGrams, 1)}
-                    </div>
-                    <div className="text-xs tracking-wide text-amber-400/80 uppercase">
-                      PFAS (g)
-                    </div>
-                    <div className="mt-1 font-mono text-xs text-amber-300/70">
-                      {formatNumber(pfasIntensity, 1)} g/ha
-                    </div>
+              {/* PFAS */}
+              <div className="rounded-lg border border-red-400/30 bg-black/40 p-3 backdrop-blur-sm">
+                <div className="text-center">
+                  <div className="font-mono text-base font-bold text-red-300">
+                    {formatNumber(pfasGrams, 1)}
+                  </div>
+                  <div className="text-xs tracking-wide text-red-400/80 uppercase">
+                    PFAS (g)
+                  </div>
+                  <div className="mt-1 font-mono text-xs text-red-300/70">
+                    {formatNumber(pfasIntensity, 1)} g/ha
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Expanded Content */}
             {isExpanded && (
               <div className="animate-in slide-in-from-bottom-2 space-y-3 duration-300">
-                {/* Additional Metrics - only show if there are values > 0 */}
-                {(glyphosateGrams > 0 || diquatGrams > 0) && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {/* Glyphosate - only show if there are glyphosate values > 0 */}
-                    {glyphosateGrams > 0 && (
-                      <div className="rounded-lg border border-green-400/30 bg-black/40 p-3 backdrop-blur-sm">
-                        <div className="text-center">
-                          <div className="font-mono text-base font-bold text-green-300">
-                            {formatNumber(glyphosateGrams, 1)}
-                          </div>
-                          <div className="text-xs tracking-wide text-green-400/80 uppercase">
-                            Glyphosate (g)
-                          </div>
-                          <div className="mt-1 font-mono text-xs text-green-300/70">
-                            {formatNumber(glyphosateIntensity, 1)} g/ha
-                          </div>
-                        </div>
+                {/* Additional Metrics */}
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Glyphosate */}
+                  <div className="rounded-lg border border-green-400/30 bg-black/40 p-3 backdrop-blur-sm">
+                    <div className="text-center">
+                      <div className="font-mono text-base font-bold text-green-300">
+                        {formatNumber(glyphosateGrams, 1)}
                       </div>
-                    )}
-
-                    {/* Diquat - only show if there are diquat values > 0 */}
-                    {diquatGrams > 0 && (
-                      <div className="rounded-lg border border-purple-400/30 bg-black/40 p-3 backdrop-blur-sm">
-                        <div className="text-center">
-                          <div className="font-mono text-base font-bold text-purple-300">
-                            {formatNumber(diquatGrams, 1)}
-                          </div>
-                          <div className="text-xs tracking-wide text-purple-400/80 uppercase">
-                            Diquat (g)
-                          </div>
-                          <div className="mt-1 font-mono text-xs text-purple-300/70">
-                            {formatNumber(diquatIntensity, 1)} g/ha
-                          </div>
-                        </div>
+                      <div className="text-xs tracking-wide text-green-400/80 uppercase">
+                        Glyphosate (g)
                       </div>
-                    )}
+                      <div className="mt-1 font-mono text-xs text-green-300/70">
+                        {formatNumber(glyphosateIntensity, 1)} g/ha
+                      </div>
+                    </div>
                   </div>
-                )}
+
+                  {/* Diquat */}
+                  <div className="rounded-lg border border-amber-400/30 bg-black/40 p-3 backdrop-blur-sm">
+                    <div className="text-center">
+                      <div className="font-mono text-base font-bold text-amber-300">
+                        {formatNumber(diquatGrams, 1)}
+                      </div>
+                      <div className="text-xs tracking-wide text-amber-400/80 uppercase">
+                        Diquat (g)
+                      </div>
+                      <div className="mt-1 font-mono text-xs text-amber-300/70">
+                        {formatNumber(diquatIntensity, 1)} g/ha
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                 {/* Activity Summary */}
                 <div className="rounded-lg border border-white/20 bg-white/10 p-3 backdrop-blur-sm">

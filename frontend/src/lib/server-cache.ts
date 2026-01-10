@@ -174,6 +174,104 @@ export const getCachedMunicipalityRankings = unstable_cache(
 );
 
 /**
+ * Cached server-side fetch for pesticide analysis
+ * Revalidates every Tuesday when data updates
+ */
+export const getCachedPesticideAnalysis = unstable_cache(
+  async (searchParams: Record<string, string> = {}) => {
+    console.log(`🔄 Fetching fresh pesticide analysis from Supabase...`);
+
+    try {
+      const functionUrl = new URL(
+        '/functions/v1/pesticide-analysis',
+        SUPABASE_URL
+      );
+
+      // Add all search parameters
+      for (const [key, value] of Object.entries(searchParams)) {
+        functionUrl.searchParams.set(key, value);
+      }
+
+      const response = await fetch(functionUrl.toString(), {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Supabase error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = await response.json();
+      console.log('✅ Fresh pesticide analysis cached on server');
+      return data;
+    } catch (error) {
+      console.error('❌ Failed to fetch pesticide analysis:', error);
+      throw error; // Re-throw to let API route handle the error
+    }
+  },
+  ['pesticide-analysis'], // Cache key
+  {
+    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
+    tags: ['pesticide-analysis'], // Cache tags for manual invalidation
+  }
+);
+
+/**
+ * Cached server-side fetch for pesticide company details
+ * Revalidates every Tuesday when data updates
+ */
+export const getCachedPesticideCompanyDetails = unstable_cache(
+  async (searchParams: Record<string, string> = {}) => {
+    console.log(`🔄 Fetching fresh pesticide company details from Supabase...`);
+
+    try {
+      const functionUrl = new URL(
+        '/functions/v1/pesticide-company-details',
+        SUPABASE_URL
+      );
+
+      // Add all search parameters
+      for (const [key, value] of Object.entries(searchParams)) {
+        functionUrl.searchParams.set(key, value);
+      }
+
+      const response = await fetch(functionUrl.toString(), {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          apikey: SUPABASE_ANON_KEY,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Supabase error: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const data = await response.json();
+      console.log('✅ Fresh pesticide company details cached on server');
+      return data;
+    } catch (error) {
+      console.error('❌ Failed to fetch pesticide company details:', error);
+      throw error; // Re-throw to let API route handle the error
+    }
+  },
+  ['pesticide-company-details'], // Cache key
+  {
+    revalidate: 604800, // 7 days - manual invalidation on Tuesdays via /api/revalidate-cache
+    tags: ['pesticide-company-details'], // Cache tags for manual invalidation
+  }
+);
+
+/**
  * Manual cache invalidation functions for Tuesday data updates
  * Call these when you update data on Tuesdays
  */
@@ -181,9 +279,11 @@ export const invalidateAllCaches = async () => {
   const { revalidateTag } = await import('next/cache');
 
   console.log('🔄 Invalidating all server caches for Tuesday update...');
-  revalidateTag('homepage-stats');
-  revalidateTag('homepage-rankings');
-  revalidateTag('municipality-rankings');
+  revalidateTag('homepage-stats', 'max');
+  revalidateTag('homepage-rankings', 'max');
+  revalidateTag('municipality-rankings', 'max');
+  revalidateTag('pesticide-analysis', 'max');
+  revalidateTag('pesticide-company-details', 'max');
   console.log('✅ All server caches invalidated');
 };
 
@@ -191,7 +291,7 @@ export const invalidateHomepageCache = async () => {
   const { revalidateTag } = await import('next/cache');
 
   console.log('🔄 Invalidating homepage caches...');
-  revalidateTag('homepage-stats');
-  revalidateTag('homepage-rankings');
+  revalidateTag('homepage-stats', 'max');
+  revalidateTag('homepage-rankings', 'max');
   console.log('✅ Homepage caches invalidated');
 };

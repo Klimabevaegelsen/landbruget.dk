@@ -15,6 +15,7 @@ This plugin transforms architectural guidelines from CLAUDE.md into **executable
 **Rule**: Prevent components in `src/components/` from importing the Supabase client.
 
 **Enforcement**:
+
 ```javascript
 // ❌ Bad - will fail lint
 import { supabase } from '@/lib/supabase'
@@ -37,6 +38,7 @@ export function FieldCard({ data }: FieldCardProps) {
 ```
 
 **Rationale**: Components should be presentational. Data fetching happens in:
+
 - Server Components (page.tsx)
 - Custom hooks (useFields.ts)
 - Service layers (services/fields.ts)
@@ -48,6 +50,7 @@ export function FieldCard({ data }: FieldCardProps) {
 **Rule**: Components displaying agricultural data must accept and render a `source: 'api' | 'owner' | 'mixed'` prop.
 
 **Enforcement**:
+
 ```typescript
 // ❌ Bad - will fail lint
 interface FieldDataRowProps {
@@ -73,6 +76,7 @@ export function FieldDataRow({ label, value, source }: FieldDataRowProps) {
 ```
 
 **Components requiring source prop**:
+
 - `*DataRow`, `*DataTable`, `*MetricCard`
 - Any component in `src/components/fields/`, `src/components/companies/`
 - Components using data from Supabase tables
@@ -84,6 +88,7 @@ export function FieldDataRow({ label, value, source }: FieldDataRowProps) {
 **Rule**: Status values must use the `PropertyStatus` enum from the data model.
 
 **Enforcement**:
+
 ```typescript
 // ❌ Bad - will fail lint
 if (field.status === 'draft') { ... }
@@ -97,6 +102,7 @@ if (field.status === PropertyStatus.AwaitingOwner) { ... }
 ```
 
 **Enums to enforce**:
+
 - `PropertyStatus`: Draft, AwaitingOwner, Published, Archived
 - `DataSource`: API, Owner, Mixed
 - `ComplianceStatus`: Compliant, NonCompliant, Unknown, Pending
@@ -106,22 +112,24 @@ if (field.status === PropertyStatus.AwaitingOwner) { ... }
 **Problem**: `eval()`, `Function()`, and similar constructs create security vulnerabilities.
 
 **Rule**: Disallow use of:
+
 - `eval()`
 - `new Function()`
 - `setTimeout/setInterval` with string arguments
 - Dynamic `import()` with user input
 
 **Enforcement**:
+
 ```javascript
 // ❌ Bad - will fail lint
-const result = eval(userInput)
-const fn = new Function('x', 'return x * 2')
-setTimeout('doSomething()', 1000)
+const result = eval(userInput);
+const fn = new Function('x', 'return x * 2');
+setTimeout('doSomething()', 1000);
 
 // ✅ Good - passes lint
-const result = parseUserInput(userInput)
-const fn = (x) => x * 2
-setTimeout(() => doSomething(), 1000)
+const result = parseUserInput(userInput);
+const fn = (x) => x * 2;
+setTimeout(() => doSomething(), 1000);
 ```
 
 ### 5. `landbruget.dk/geospatial-crs-validation`
@@ -129,41 +137,45 @@ setTimeout(() => doSomething(), 1000)
 **Problem**: Mixing coordinate systems causes incorrect map rendering.
 
 **Rule**: Geospatial data must specify CRS and convert appropriately:
+
 - Danish sources: EPSG:25832
 - Storage/Supabase: EPSG:4326 (WGS84)
 - Display: EPSG:3857 (Web Mercator)
 
 **Enforcement**:
+
 ```typescript
 // ❌ Bad - ambiguous CRS
-const point = { lat: 56.26, lon: 9.5 }
+const point = { lat: 56.26, lon: 9.5 };
 
 // ✅ Good - explicit CRS
 const point = {
   lat: 56.26,
   lon: 9.5,
-  crs: 'EPSG:4326'
-}
+  crs: 'EPSG:4326',
+};
 
 // Or use typed GeoJSON
 const feature: Feature<Point> = {
   type: 'Feature',
   geometry: {
     type: 'Point',
-    coordinates: [9.5, 56.26]  // Note: lon, lat order in GeoJSON!
+    coordinates: [9.5, 56.26], // Note: lon, lat order in GeoJSON!
   },
-  properties: { crs: 'EPSG:4326' }
-}
+  properties: { crs: 'EPSG:4326' },
+};
 ```
 
 ## Implementation Status
 
 ### Phase 1: Documentation (✅ Complete)
+
 - [x] Define architectural rules
 - [x] Document enforcement patterns
 - [x] Create examples and rationale
 
 ### Phase 2: Plugin Development (🔴 TODO)
+
 - [ ] Set up oxlint JS plugin boilerplate
 - [ ] Implement `no-direct-db-import-in-ui` rule
 - [ ] Implement `require-source-tag-prop` rule
@@ -174,6 +186,7 @@ const feature: Feature<Point> = {
 - [ ] Configure in `.oxlintrc.json`
 
 ### Phase 3: Integration (🔴 TODO)
+
 - [ ] Add to npm scripts
 - [ ] Configure CI/CD to fail on violations
 - [ ] Update CLAUDE.md with rule documentation
@@ -223,4 +236,4 @@ npm run build
 
 ---
 
-*This plugin is part of the agent-native development infrastructure for landbruget.dk, transforming natural language architectural guidelines into machine-enforceable rules.*
+_This plugin is part of the agent-native development infrastructure for landbruget.dk, transforming natural language architectural guidelines into machine-enforceable rules._

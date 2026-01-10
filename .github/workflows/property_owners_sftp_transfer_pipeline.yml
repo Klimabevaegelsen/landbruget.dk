@@ -41,7 +41,7 @@ jobs:
           PROJECT_ID="landbrugsdata-1"
           ZONE="europe-west1-b"
 
-          # Clean up any existing terminated property-owners-pipeline VMs to release the static IP
+          # Clean up any existing property-owners-pipeline VMs to release the static IP
           echo "Checking for existing property-owners-pipeline VMs..."
           EXISTING_VMS=$(gcloud compute instances list --filter="name~'property-owners-pipeline'" --format="value(name,status,zone)" --project=$PROJECT_ID || true)
           if [ -n "$EXISTING_VMS" ]; then
@@ -51,8 +51,14 @@ jobs:
               if [ "$vm_status" = "TERMINATED" ]; then
                 echo "Deleting terminated VM: $vm_name in zone: $(basename $vm_zone)"
                 gcloud compute instances delete "$vm_name" --zone="$(basename $vm_zone)" --project=$PROJECT_ID --quiet || echo "Failed to delete $vm_name (may already be deleted)"
-              elif [ "$vm_status" = "RUNNING" ]; then
-                echo "⚠️ Warning: VM $vm_name is still running. You may want to check its status."
+              elif [ "$vm_status" = "RUNNING" ] || [ "$vm_status" = "STOPPING" ]; then
+                echo "⚠️ VM $vm_name is $vm_status - forcing shutdown to release static IP"
+                echo "Stopping VM: $vm_name in zone: $(basename $vm_zone)"
+                gcloud compute instances stop "$vm_name" --zone="$(basename $vm_zone)" --project=$PROJECT_ID --quiet || echo "Failed to stop $vm_name"
+                echo "Waiting 30 seconds for VM to stop..."
+                sleep 30
+                echo "Deleting stopped VM: $vm_name in zone: $(basename $vm_zone)"
+                gcloud compute instances delete "$vm_name" --zone="$(basename $vm_zone)" --project=$PROJECT_ID --quiet || echo "Failed to delete $vm_name"
               fi
             done <<< "$EXISTING_VMS"
           else
@@ -73,7 +79,7 @@ jobs:
             --image-family=debian-12 \
             --image-project=debian-cloud \
             --scopes=https://www.googleapis.com/auth/cloud-platform \
-            --metadata=enable-oslogin=true \
+            --metadata=enable-oslogin=true,LANDBRUGSDATA_UUID_NAMESPACE=${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }} \
             --metadata-from-file=startup-script=backend/pipelines/property_owners_sftp/sftp-transfer-startup-with-processing.sh \
             --maintenance-policy=MIGRATE
 

@@ -160,79 +160,73 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                 </div>
               </div>
 
-              {/* PFAS - only show if there are PFAS values > 0 */}
-              {pfasGrams > 0 && (
-                <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
-                  <div className="mb-1 flex items-center justify-between">
-                    <div className="text-sm font-medium text-amber-800">
-                      PFAS Active Ingredients
-                    </div>
-                    <div className="text-xs font-medium text-amber-600">
-                      Persistent
-                    </div>
+              {/* PFAS - Clean warning design */}
+              <div className="rounded-md border-l-4 border-red-400 bg-red-50 px-3 py-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <div className="text-sm font-medium text-red-800">
+                    PFAS Active Ingredients
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <div className="text-base font-semibold text-amber-900">
-                        {formatNumber(pfasGrams, 2)}
-                      </div>
-                      <div className="text-amber-600">grams total</div>
-                    </div>
-                    <div>
-                      <div className="text-base font-semibold text-amber-900">
-                        {formatNumber(pfasIntensity, 2)}
-                      </div>
-                      <div className="text-amber-600">grams per hectare</div>
-                    </div>
+                  <div className="text-xs font-medium text-red-600">
+                    Persistent
                   </div>
                 </div>
-              )}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-base font-semibold text-red-900">
+                      {formatNumber(pfasGrams, 2)}
+                    </div>
+                    <div className="text-red-600">grams total</div>
+                  </div>
+                  <div>
+                    <div className="text-base font-semibold text-red-900">
+                      {formatNumber(pfasIntensity, 2)}
+                    </div>
+                    <div className="text-red-600">grams per hectare</div>
+                  </div>
+                </div>
+              </div>
 
-              {/* Glyphosate - only show if there are glyphosate values > 0 */}
-              {glyphosateGrams > 0 && (
-                <div className="rounded-md border-l-4 border-green-400 bg-green-50 px-3 py-2">
-                  <div className="mb-1 text-sm font-medium text-green-800">
-                    Glyphosate Active Ingredients
+              {/* Glyphosate - Clean design */}
+              <div className="rounded-md border-l-4 border-green-400 bg-green-50 px-3 py-2">
+                <div className="mb-1 text-sm font-medium text-green-800">
+                  Glyphosate Active Ingredients
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-base font-semibold text-green-900">
+                      {formatNumber(glyphosateGrams, 2)}
+                    </div>
+                    <div className="text-green-600">grams total</div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <div className="text-base font-semibold text-green-900">
-                        {formatNumber(glyphosateGrams, 2)}
-                      </div>
-                      <div className="text-green-600">grams total</div>
+                  <div>
+                    <div className="text-base font-semibold text-green-900">
+                      {formatNumber(glyphosateIntensity, 2)}
                     </div>
-                    <div>
-                      <div className="text-base font-semibold text-green-900">
-                        {formatNumber(glyphosateIntensity, 2)}
-                      </div>
-                      <div className="text-green-600">grams per hectare</div>
-                    </div>
+                    <div className="text-green-600">grams per hectare</div>
                   </div>
                 </div>
-              )}
+              </div>
 
-              {/* Diquat - only show if there are diquat values > 0 */}
-              {diquatGrams > 0 && (
-                <div className="rounded-md border-l-4 border-purple-400 bg-purple-50 px-3 py-2">
-                  <div className="mb-1 text-sm font-medium text-purple-800">
-                    Diquat Active Ingredients
+              {/* Diquat - Clean design */}
+              <div className="rounded-md border-l-4 border-amber-400 bg-amber-50 px-3 py-2">
+                <div className="mb-1 text-sm font-medium text-amber-800">
+                  Diquat Active Ingredients
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <div className="text-base font-semibold text-amber-900">
+                      {formatNumber(diquatGrams, 2)}
+                    </div>
+                    <div className="text-amber-600">grams total</div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <div className="text-base font-semibold text-purple-900">
-                        {formatNumber(diquatGrams, 2)}
-                      </div>
-                      <div className="text-purple-600">grams total</div>
+                  <div>
+                    <div className="text-base font-semibold text-amber-900">
+                      {formatNumber(diquatIntensity, 2)}
                     </div>
-                    <div>
-                      <div className="text-base font-semibold text-purple-900">
-                        {formatNumber(diquatIntensity, 2)}
-                      </div>
-                      <div className="text-purple-600">grams per hectare</div>
-                    </div>
+                    <div className="text-amber-600">grams per hectare</div>
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Agricultural Activity - Minimal stats */}
               <div className="rounded-md bg-slate-50 px-3 py-2">
@@ -242,17 +236,21 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="text-center">
                     <div className="text-sm font-semibold text-slate-900">
-                      {hoverInfo.data.applications ||
-                        hoverInfo.data.pesticide_application_count ||
-                        0}
+                      {String(
+                        hoverInfo.data.applications ||
+                          hoverInfo.data.pesticide_application_count ||
+                          0
+                      )}
                     </div>
                     <div className="text-slate-600">Applications</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm font-semibold text-slate-900">
-                      {hoverInfo.data.field_count ||
-                        hoverInfo.data.unique_field_count ||
-                        0}
+                      {String(
+                        hoverInfo.data.field_count ||
+                          hoverInfo.data.unique_field_count ||
+                          0
+                      )}
                     </div>
                     <div className="text-slate-600">Fields</div>
                   </div>
@@ -298,14 +296,18 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                     className="h-3 w-3 rounded border"
                     style={{
                       backgroundColor: getBNBOStatusColor(
-                        hoverInfo.data.status_code
+                        hoverInfo.data.status_code as string
                       ),
                     }}
                   ></div>
                   <div className="text-sm font-medium text-slate-700">
-                    {hoverInfo.data.status_description ||
-                      hoverInfo.data.status_code?.toUpperCase() ||
-                      'Unknown'}
+                    {String(
+                      hoverInfo.data.status_description ||
+                        (
+                          hoverInfo.data.status_code as string
+                        )?.toUpperCase?.() ||
+                        'Unknown'
+                    )}
                   </div>
                 </div>
                 <div className="text-xs text-slate-600">
@@ -347,16 +349,16 @@ export function HoverTooltip({ hoverInfo }: HoverTooltipProps) {
                     className="h-3 w-3 rounded border"
                     style={{
                       backgroundColor: getBBRTypeColor(
-                        hoverInfo.data.building_type
+                        hoverInfo.data.building_type as string
                       ),
                     }}
                   ></div>
                   <div className="text-sm font-medium text-slate-700">
-                    {hoverInfo.data.building_type || 'Unknown Type'}
+                    {String(hoverInfo.data.building_type || 'Unknown Type')}
                   </div>
                 </div>
                 <div className="text-xs text-slate-600">
-                  Built {hoverInfo.data.construction_year || 'Unknown'}
+                  Built {String(hoverInfo.data.construction_year || 'Unknown')}
                 </div>
               </div>
             </div>
@@ -466,19 +468,20 @@ export function useHoverTooltip() {
       // Determine layer type based on data structure
       let layer: 'h3' | 'bnbo' | 'bbr' = 'h3';
 
-      if (info.object.bnbo_id) {
+      const obj = info.object as Record<string, unknown>;
+      if (obj.bnbo_id) {
         layer = 'bnbo';
-      } else if (info.object.bbr_id) {
+      } else if (obj.bbr_id) {
         layer = 'bbr';
-      } else if (info.object.h3_id) {
+      } else if (obj.h3_id) {
         layer = 'h3';
       }
 
       setHoverInfo({
         layer,
-        data: info.object,
-        coordinate: info.coordinate,
-        pixel: info.pixel,
+        data: info.object as Record<string, unknown>,
+        coordinate: info.coordinate as [number, number],
+        pixel: info.pixel as [number, number],
       });
     } else {
       setHoverInfo(null);

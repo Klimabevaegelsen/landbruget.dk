@@ -97,18 +97,57 @@ from pyproj import Transformer, CRS
 from datetime import datetime
 from pathlib import Path
 from google.cloud import storage, secretmanager
-
-# Import UUID utilities
-try:
-    from backend.pipelines.unified_pipeline.src.unified_pipeline.common.uuid_utils import LandbrugsdataUUID
-except ImportError:
-    # Fallback for different import paths
-    import sys
-    sys.path.append('/home/landbrugsdata/backend/pipelines/unified_pipeline/src')
-    from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 import subprocess
 import sys
 import traceback
+import hashlib
+
+# Inlined UUID generation to avoid repository dependency
+class LandbrugsdataUUID:
+    """
+    Inlined UUID generation for property_owners pipeline.
+    Uses MD5-based UUID5 format to match the centralized uuid_utils.
+    """
+    _namespace = None
+
+    @classmethod
+    def _get_namespace(cls):
+        """Get the UUID namespace from environment variable."""
+        if cls._namespace is None:
+            namespace_str = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
+            if not namespace_str:
+                raise ValueError(
+                    "LANDBRUGSDATA_UUID_NAMESPACE environment variable is required"
+                )
+            cls._namespace = namespace_str
+        return cls._namespace
+
+    @classmethod
+    def generate_deterministic_uuid(cls, entity_type, identifier):
+        """
+        Generate deterministic UUID for any entity type with custom identifier.
+
+        Args:
+            entity_type: Type of entity (e.g., 'cpr', 'company', etc.)
+            identifier: Unique identifier string for this entity
+
+        Returns:
+            UUID string
+        """
+        if not identifier:
+            raise ValueError("Identifier cannot be empty")
+
+        # Use MD5-based UUID generation to match DuckDB implementation
+        namespace_str = str(cls._get_namespace())
+        input_str = f"{namespace_str}{entity_type}-{identifier}"
+        md5_hash = hashlib.md5(input_str.encode()).hexdigest()
+
+        # Format as UUID5 (version 5, variant 10)
+        uuid_str = (
+            f"{md5_hash[0:8]}-{md5_hash[8:12]}-5{md5_hash[12:15]}-"
+            f"8{md5_hash[15:18]}-{md5_hash[18:30]}"
+        )
+        return uuid_str
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -810,6 +849,15 @@ chmod +x /opt/transfer_script.py
 VM_NAME=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name)
 ZONE=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone | awk -F/ '{print $NF}')
 PROJECT_ID=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
+
+# Get UUID namespace from instance metadata and export for Python script
+LANDBRUGSDATA_UUID_NAMESPACE=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/LANDBRUGSDATA_UUID_NAMESPACE 2>/dev/null || echo "")
+if [ -z "$LANDBRUGSDATA_UUID_NAMESPACE" ]; then
+  log_with_timestamp "ERROR: LANDBRUGSDATA_UUID_NAMESPACE not found in VM metadata"
+  exit 1
+fi
+export LANDBRUGSDATA_UUID_NAMESPACE
+log_with_timestamp "✅ LANDBRUGSDATA_UUID_NAMESPACE loaded from VM metadata"
 
 # Function to delete the VM
 delete_vm() {

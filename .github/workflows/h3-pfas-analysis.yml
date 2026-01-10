@@ -56,8 +56,17 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      has_years: ${{ steps.set-matrix.outputs.has_years }}
     steps:
-      - name: Set year-based matrix (optimized to avoid redundant annual data downloads)
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Discover years with available data and set matrix
         id: set-matrix
         run: |
           # Parse analysis modes (h3 and kommune are different aggregation levels)
@@ -79,20 +88,45 @@ jobs:
           # Parse years - create one job per year
           if [[ -n "${{ github.event.inputs.years }}" ]]; then
             if [[ "${{ github.event.inputs.years }}" == *","* ]]; then
-              IFS=',' read -ra years <<< "${{ github.event.inputs.years }}"
+              IFS=',' read -ra requested_years <<< "${{ github.event.inputs.years }}"
             else
-              years=("${{ github.event.inputs.years }}")
+              requested_years=("${{ github.event.inputs.years }}")
             fi
           else
             # Default to all available years (2010-2023)
-            years=("2010" "2011" "2012" "2013" "2014" "2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023")
+            requested_years=("2010" "2011" "2012" "2013" "2014" "2015" "2016" "2017" "2018" "2019" "2020" "2021" "2022" "2023")
           fi
 
-          # Build matrix combinations - one job per YEAR
+          # Check which years have pesticide disaggregation data available in GCS
+          echo "🔍 Checking GCS for years with available pesticide disaggregation data..."
+          available_years=()
+          for year in "${requested_years[@]}"; do
+            # Check if pesticide disaggregation data exists for this year
+            if gsutil ls "gs://${{ env.GCS_BUCKET }}/gold/pesticide_disaggregation_${year}/" &>/dev/null; then
+              echo "  ✅ Year ${year}: Data available"
+              available_years+=("$year")
+            else
+              echo "  ⏭️ Year ${year}: No pesticide data found - skipping"
+            fi
+          done
+
+          if [[ ${#available_years[@]} -eq 0 ]]; then
+            echo "⚠️ No years have available pesticide disaggregation data!"
+            echo "matrix=[]" >> $GITHUB_OUTPUT
+            echo "has_years=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo ""
+          echo "📊 Years with available data: ${available_years[*]}"
+          echo "   (${#available_years[@]} of ${#requested_years[@]} requested years)"
+          echo ""
+
+          # Build matrix combinations - one job per YEAR with available data
           # Each job processes ALL requested aggregation levels (h3 resolutions + kommune) for that year
           # This avoids downloading the same large annual data files (pesticide disaggregation, FVM fields) multiple times
           matrix_items=()
-          for year in "${years[@]}"; do
+          for year in "${available_years[@]}"; do
             # Build list of all aggregation levels to process
             aggregation_levels=()
 
@@ -117,11 +151,13 @@ jobs:
           # Convert to JSON array
           matrix_json="[$(IFS=','; echo "${matrix_items[*]}")]"
           echo "matrix=$matrix_json" >> $GITHUB_OUTPUT
+          echo "has_years=true" >> $GITHUB_OUTPUT
           echo "Generated optimized matrix (one job per year, processes all aggregation levels): $matrix_json"
 
   # Matrix job for parallel analysis by year and resolution
   h3-pfas-analysis:
     needs: prepare-matrix
+    if: needs.prepare-matrix.outputs.has_years == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -350,7 +386,7 @@ jobs:
   cumulative-analysis:
     needs: [prepare-matrix, h3-pfas-analysis]
     runs-on: ubuntu-latest
-    if: needs.h3-pfas-analysis.result == 'success'
+    if: needs.prepare-matrix.outputs.has_years == 'true' && needs.h3-pfas-analysis.result == 'success'
 
     name: Generate Cumulative Analysis (All Years Combined)
 
@@ -481,8 +517,17 @@ jobs:
         run: |
           echo "=== H3 PFAS Analysis Summary ==="
           echo "Matrix jobs: ${{ needs.prepare-matrix.outputs.matrix }}"
+          echo "Has years with data: ${{ needs.prepare-matrix.outputs.has_years }}"
           echo "Individual year analyses: ${{ needs.h3-pfas-analysis.result }}"
           echo "Cumulative analysis: ${{ needs.cumulative-analysis.result }}"
+
+          # Handle case where no years have data
+          if [[ "${{ needs.prepare-matrix.outputs.has_years }}" != "true" ]]; then
+            echo "⚠️ No years with available pesticide disaggregation data found."
+            echo "   Run the pesticide disaggregation pipeline first to generate data."
+            echo "   Workflow completed without errors (no work to do)."
+            exit 0
+          fi
 
           if [[ "${{ needs.h3-pfas-analysis.result }}" == "success" ]] && [[ "${{ needs.cumulative-analysis.result }}" == "success" ]]; then
             echo "✅ All analyses completed successfully!"

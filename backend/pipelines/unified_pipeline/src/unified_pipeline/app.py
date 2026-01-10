@@ -607,10 +607,27 @@ def execute(cli_config: cli_models.CliConfig) -> int:
                 (WorkPermitsGold, WorkPermitsGoldConfig),
             ],
         },
+        # Note: drive_data and bbr_buildings are external pipelines
+        # They should be triggered via GitHub Actions monthly workflow
+        # See: .github/workflows/unified_pipeline_monthly.yml
+        # Direct CLI execution is not supported - use GitHub Actions instead
     }
 
     # Retrieve jobs for given source and stage
     print(f"🚨 APP: Looking up pipeline for source={cli_config.source}, stage={cli_config.stage}")
+
+    # Check for external pipelines that should be triggered via GitHub Actions
+    external_pipelines = [cli_models.Source.drive_data, cli_models.Source.bbr_buildings]
+    if cli_config.source in external_pipelines:
+        raise ValueError(
+            f"❌ Source '{cli_config.source.value}' is an external pipeline.\n"
+            f"Please trigger it via GitHub Actions monthly workflow:\n"
+            f"  gh workflow run unified_pipeline_monthly.yml -f source={cli_config.source.value}\n"
+            f"Or use the dedicated workflow:\n"
+            f"  - drive_data: gh workflow run drive_pipeline.yml\n"
+            f"  - bbr_buildings: gh workflow run bbr_buildings_pipeline.yml"
+        )
+
     try:
         jobs = pipeline_map[cli_config.source][cli_config.stage]
         print(f"🚨 APP: Found {len(jobs)} jobs: {[job[0].__name__ for job in jobs]}")

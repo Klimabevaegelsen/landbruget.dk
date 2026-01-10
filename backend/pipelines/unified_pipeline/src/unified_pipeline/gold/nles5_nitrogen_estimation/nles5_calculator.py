@@ -71,8 +71,7 @@ class NLES5Calculator:
             if percolation_stats[2] > 0:
                 pct_missing = percolation_stats[2] / max(input_count, 1) * 100
                 self.log.warning(
-                    f"   ⚠️  Missing percolation data: {percolation_stats[2]:,} "
-                    f"({pct_missing:.1f}%)"
+                    f"   ⚠️  Missing percolation data: {percolation_stats[2]:,} ({pct_missing:.1f}%)"
                 )
                 self.log.warning(
                     f"   These {percolation_stats[2]:,} fields will be excluded "
@@ -910,7 +909,7 @@ class NLES5Calculator:
                     self.log.info("🔍 CVR MATCHING DIAGNOSTIC:")
                     self.log.info(f"   Fields with CVR: {cvr_diagnostic[0]:,} unique CVR numbers")
                     self.log.info(
-                        f"   Fertilizer accounts: {cvr_diagnostic[1]:,} " f"unique CVR numbers"
+                        f"   Fertilizer accounts: {cvr_diagnostic[1]:,} unique CVR numbers"
                     )
                     pct_matching = cvr_diagnostic[2] / max(cvr_diagnostic[0], 1) * 100
                     self.log.info(
@@ -1031,7 +1030,7 @@ class NLES5Calculator:
             if base_count > 1_000_000:
                 # Use chunked processing for large datasets
                 self.log.info(
-                    "🔄 Using chunked processing for fertilizer and nitrogen " "fixation join"
+                    "🔄 Using chunked processing for fertilizer and nitrogen fixation join"
                 )
                 self._join_fertilizer_and_nfix_chunked(base_count)
             else:
@@ -1091,7 +1090,7 @@ class NLES5Calculator:
 
             # OPTIMIZATION: Skip nitrogen fixation step - now calculated inline above
             self.log.info(
-                "✅ Nitrogen fixation calculated inline during fertilizer join " "(optimization)"
+                "✅ Nitrogen fixation calculated inline during fertilizer join (optimization)"
             )
 
             # No need to clean up nitrogen_with_fertilizer since we're going
@@ -1293,8 +1292,12 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # DuckDB automatically manages memory - no manual optimization needed
-                self.log.info(f"   💾 Processed combined chunk {chunk_idx + 1}")
+                # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
+                # Rely on Python garbage collection for memory management
+                import gc
+
+                gc.collect()
+                self.log.info(f"   💾 Memory optimization after combined chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
         self.log.info(f"✅ All {len(batch_files)} combined batches saved. Loading and combining...")
@@ -1419,8 +1422,11 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # DuckDB automatically manages memory - no manual optimization needed
-                self.log.info(f"   💾 Processed fertilizer chunk {chunk_idx + 1}")
+                # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
+                import gc
+
+                gc.collect()
+                self.log.info(f"   💾 Memory optimization after fertilizer chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
         self.log.info(
@@ -1545,8 +1551,13 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # DuckDB automatically manages memory - no manual optimization needed
-                self.log.info(f"   💾 Processed nitrogen fixation chunk {chunk_idx + 1}")
+                # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
+                import gc
+
+                gc.collect()
+                self.log.info(
+                    f"   💾 Memory optimization after nitrogen fixation chunk {chunk_idx + 1}"
+                )
 
         # Now load all batches back and combine them
         self.log.info(
@@ -1672,8 +1683,11 @@ class NLES5Calculator:
 
             # Memory optimization every 10 chunks
             if (chunk_idx + 1) % 10 == 0:
-                # DuckDB automatically manages memory - no manual optimization needed
-                self.log.info(f"   💾 Processed field plan chunk {chunk_idx + 1}")
+                # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
+                import gc
+
+                gc.collect()
+                self.log.info(f"   💾 Memory optimization after field plan chunk {chunk_idx + 1}")
 
         # Now load all batches back and combine them
         self.log.info(
@@ -1929,7 +1943,7 @@ class NLES5Calculator:
 
         except Exception as e:
             self.log.error(
-                f"❌ Error calculating NLES5 estimates for target year " f"{target_year}: {e}"
+                f"❌ Error calculating NLES5 estimates for target year {target_year}: {e}"
             )
             raise
 

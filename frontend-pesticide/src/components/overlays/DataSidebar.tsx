@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { X } from 'lucide-react';
 
 // Define HoverInfo interface
@@ -110,89 +110,77 @@ export function DataSidebar({
             </div>
           </div>
 
-          {/* PFAS - only show if there are PFAS values > 0 */}
-          {pfasGrams > 0 && (
-            <div className="rounded-lg border-l-4 border-amber-400 bg-slate-800 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-sm font-medium text-amber-300">
-                  PFAS Active Ingredients
-                </h4>
-                <span className="rounded-full border border-amber-700 bg-amber-900/50 px-1.5 py-0.5 text-xs font-medium text-amber-300">
-                  Persistent
-                </span>
+          {/* PFAS */}
+          <div className="rounded-lg border-l-4 border-red-400 bg-slate-800 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-sm font-medium text-red-300">
+                PFAS Active Ingredients
+              </h4>
+              <span className="rounded-full border border-red-700 bg-red-900/50 px-1.5 py-0.5 text-xs font-medium text-red-300">
+                Persistent
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-center">
+                <div className="text-lg font-bold text-red-200">
+                  {formatNumber(pfasGrams, 2)}
+                </div>
+                <div className="text-xs text-red-400">grams total</div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center">
-                  <div className="text-lg font-bold text-amber-200">
-                    {formatNumber(pfasGrams, 2)}
-                  </div>
-                  <div className="text-xs text-amber-400">grams total</div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-red-200">
+                  {formatNumber(pfasIntensity, 2)}
                 </div>
-                <div className="text-center">
-                  <div className="text-lg font-bold text-amber-200">
-                    {formatNumber(pfasIntensity, 2)}
-                  </div>
-                  <div className="text-xs text-amber-400">
-                    grams per hectare
-                  </div>
-                </div>
+                <div className="text-xs text-red-400">grams per hectare</div>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Glyphosate - only show if there are glyphosate values > 0 */}
-          {glyphosateGrams > 0 && (
-            <div className="rounded-lg border-l-4 border-green-400 bg-slate-800 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-sm font-medium text-green-300">
-                  Glyphosate Active Ingredients
-                </h4>
+          {/* Glyphosate */}
+          <div className="rounded-lg border-l-4 border-green-400 bg-slate-800 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-sm font-medium text-green-300">
+                Glyphosate Active Ingredients
+              </h4>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-200">
+                  {formatNumber(glyphosateGrams, 2)}
+                </div>
+                <div className="text-xs text-green-400">grams total</div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center">
-                  <div className="text-lg font-bold text-green-200">
-                    {formatNumber(glyphosateGrams, 2)}
-                  </div>
-                  <div className="text-xs text-green-400">grams total</div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-200">
+                  {formatNumber(glyphosateIntensity, 2)}
                 </div>
-                <div className="text-center">
-                  <div className="text-lg font-bold text-green-200">
-                    {formatNumber(glyphosateIntensity, 2)}
-                  </div>
-                  <div className="text-xs text-green-400">
-                    grams per hectare
-                  </div>
-                </div>
+                <div className="text-xs text-green-400">grams per hectare</div>
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Diquat - only show if there are diquat values > 0 */}
-          {diquatGrams > 0 && (
-            <div className="rounded-lg border-l-4 border-purple-400 bg-slate-800 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="text-sm font-medium text-purple-300">
-                  Diquat Active Ingredients
-                </h4>
+          {/* Diquat */}
+          <div className="rounded-lg border-l-4 border-amber-400 bg-slate-800 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-sm font-medium text-amber-300">
+                Diquat Active Ingredients
+              </h4>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-center">
+                <div className="text-lg font-bold text-amber-200">
+                  {formatNumber(diquatGrams, 2)}
+                </div>
+                <div className="text-xs text-amber-400">grams total</div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="text-center">
-                  <div className="text-lg font-bold text-purple-200">
-                    {formatNumber(diquatGrams, 2)}
-                  </div>
-                  <div className="text-xs text-purple-400">grams total</div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-amber-200">
+                  {formatNumber(diquatIntensity, 2)}
                 </div>
-                <div className="text-center">
-                  <div className="text-lg font-bold text-purple-200">
-                    {formatNumber(diquatIntensity, 2)}
-                  </div>
-                  <div className="text-xs text-purple-400">
-                    grams per hectare
-                  </div>
-                </div>
+                <div className="text-xs text-amber-400">grams per hectare</div>
               </div>
             </div>
-          )}
+          </div>
 
           {/* Activity Summary */}
           <div className="rounded-lg border border-slate-600 bg-slate-800 p-3">
@@ -232,7 +220,7 @@ export function DataSidebar({
               BNBO Protected Area
             </h3>
             <div className="text-sm text-slate-300">
-              {hoverInfo.data.status || 'Status unknown'}
+              {String(hoverInfo.data.status || 'Status unknown')}
             </div>
           </div>
 
@@ -248,7 +236,7 @@ export function DataSidebar({
               <div className="flex justify-between">
                 <span className="text-slate-400">Protection Level:</span>
                 <span className="font-medium text-slate-200">
-                  {hoverInfo.data.protection_level || 'Unknown'}
+                  {String(hoverInfo.data.protection_level || 'Unknown')}
                 </span>
               </div>
             </div>
@@ -263,7 +251,7 @@ export function DataSidebar({
           <div className="rounded-lg border border-slate-600 bg-slate-700 p-4">
             <h3 className="mb-2 text-lg font-semibold text-white">Building</h3>
             <div className="text-sm text-slate-300">
-              {hoverInfo.data.building_type || 'Type unknown'}
+              {String(hoverInfo.data.building_type || 'Type unknown')}
             </div>
           </div>
 
@@ -275,19 +263,19 @@ export function DataSidebar({
               <div className="flex justify-between">
                 <span className="text-slate-400">Type:</span>
                 <span className="font-medium text-slate-200">
-                  {hoverInfo.data.building_type || 'Unknown'}
+                  {String(hoverInfo.data.building_type || 'Unknown')}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Use:</span>
                 <span className="font-medium text-slate-200">
-                  {hoverInfo.data.building_use || 'Unknown'}
+                  {String(hoverInfo.data.building_use || 'Unknown')}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Year:</span>
                 <span className="font-medium text-slate-200">
-                  {hoverInfo.data.construction_year || 'Unknown'}
+                  {String(hoverInfo.data.construction_year || 'Unknown')}
                 </span>
               </div>
             </div>

@@ -24,7 +24,7 @@ export function useDataFetching() {
 
     try {
       // Fetch H3 data based on current settings
-      const h3DataPromise = fetchH3Data(selectedYear, cumulativeMode);
+      const h3DataPromise = fetchH3Data(selectedYear as number, cumulativeMode);
 
       // Fetch BNBO and BBR data (these don't depend on year/mode)
       const bnboDataPromise = fetchBNBOData();

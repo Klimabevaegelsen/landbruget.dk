@@ -17,13 +17,19 @@ export async function POST(request: NextRequest) {
     // Default to all cache tags if none specified
     const tags = tagsParam
       ? tagsParam.split(',')
-      : ['homepage-stats', 'homepage-rankings', 'municipality-rankings'];
+      : [
+          'homepage-stats',
+          'homepage-rankings',
+          'municipality-rankings',
+          'pesticide-analysis',
+          'pesticide-company-details',
+        ];
 
     console.log('🔄 Manual cache invalidation requested for tags:', tags);
 
     // Revalidate each specified cache tag
     for (const tag of tags) {
-      revalidateTag(tag.trim());
+      revalidateTag(tag.trim(), 'max');
       console.log(`✅ Revalidated cache tag: ${tag.trim()}`);
     }
 
@@ -83,6 +89,8 @@ export async function GET() {
       'homepage-stats',
       'homepage-rankings',
       'municipality-rankings',
+      'pesticide-analysis',
+      'pesticide-company-details',
     ],
     cache_strategy: '7-day server cache + manual Tuesday invalidation',
     next_tuesday_copenhagen: nextTuesday.toLocaleString('da-DK', {

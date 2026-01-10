@@ -31,7 +31,7 @@ export default function Home() {
   const [showSidebar, setShowSidebar] = useState(true); // Start with sidebar visible
 
   // Store state
-  const { selectedYear: _selectedYear } = useDataState();
+  const { selectedYear } = useDataState();
   const { error } = useLoadingState();
   const { showTooltip, tooltipData, tooltipPosition } = useTooltipState();
   const { isMobile, setIsMobile, showMobilePanel, setShowMobilePanel } =

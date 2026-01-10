@@ -36,7 +36,7 @@ export class DataManager {
     // Check cache first
     const cachedData = this.getCachedData(cacheKey, CACHE_SETTINGS.H3_DATA_TTL);
     if (cachedData) {
-      return cachedData;
+      return cachedData as H3DataPoint[];
     }
 
     try {
@@ -104,7 +104,7 @@ export class DataManager {
 
       if (cumulativeMode) {
         const aggregatedData = this.aggregateH3DataByYear(data);
-        processedData = this.transformAggregatedH3Data(aggregatedData, config);
+        processedData = this.transformAggregatedH3Data(aggregatedData);
       } else {
         processedData = this.transformH3Data(data, config);
       }
@@ -130,7 +130,7 @@ export class DataManager {
       CACHE_SETTINGS.BNBO_DATA_TTL
     );
     if (cachedData) {
-      return cachedData;
+      return cachedData as BNBOArea[];
     }
 
     try {
@@ -198,7 +198,7 @@ export class DataManager {
       CACHE_SETTINGS.BBR_DATA_TTL
     );
     if (cachedData) {
-      return cachedData;
+      return cachedData as BBRBuilding[];
     }
 
     try {
@@ -273,17 +273,11 @@ export class DataManager {
 
     const cachedData = this.getCachedData(cacheKey, 3600); // Cache for 1 hour
     if (cachedData) {
-      return cachedData;
+      return cachedData as H3DataQuality;
     }
 
     try {
-      let query = supabase.from('h3_pfas_exposure');
-
-      if (year) {
-        query = query.eq('year', year);
-      }
-
-      const { data, error } = await query.select(`
+      let query = supabase.from('h3_pfas_exposure').select(`
         year,
         total_pesticide_load,
         total_pfas_grams,
@@ -291,6 +285,12 @@ export class DataManager {
         ST_X(h3_centroid) as centroid_lon,
         ST_Y(h3_centroid) as centroid_lat
       `);
+
+      if (year) {
+        query = query.eq('year', year);
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         handleSupabaseError(error);
@@ -300,34 +300,39 @@ export class DataManager {
         throw new Error('No data available for quality analysis');
       }
 
+      const rows = data as Array<Record<string, unknown>>;
+
       const quality: H3DataQuality = {
-        totalRecords: data.length,
-        recordsWithGeometry: data.filter((row) => row.geometry).length,
-        recordsWithPesticideData: data.filter(
+        totalRecords: rows.length,
+        recordsWithGeometry: rows.filter((row) => row.geometry).length,
+        recordsWithPesticideData: rows.filter(
           (row) =>
-            row.total_pesticide_load !== null && row.total_pesticide_load > 0
+            row.total_pesticide_load !== null &&
+            (row.total_pesticide_load as number) > 0
         ).length,
-        recordsWithPfasData: data.filter(
-          (row) => row.total_pfas_grams !== null && row.total_pfas_grams > 0
+        recordsWithPfasData: rows.filter(
+          (row) =>
+            row.total_pfas_grams !== null &&
+            (row.total_pfas_grams as number) > 0
         ).length,
         yearRange: {
-          min: Math.min(...data.map((row) => row.year)),
-          max: Math.max(...data.map((row) => row.year)),
+          min: Math.min(...rows.map((row) => row.year as number)),
+          max: Math.max(...rows.map((row) => row.year as number)),
         },
         spatialExtent: {
-          minLon: Math.min(...data.map((row) => row.centroid_lon)),
-          maxLon: Math.max(...data.map((row) => row.centroid_lon)),
-          minLat: Math.min(...data.map((row) => row.centroid_lat)),
-          maxLat: Math.max(...data.map((row) => row.centroid_lat)),
+          minLon: Math.min(...rows.map((row) => row.centroid_lon as number)),
+          maxLon: Math.max(...rows.map((row) => row.centroid_lon as number)),
+          minLat: Math.min(...rows.map((row) => row.centroid_lat as number)),
+          maxLat: Math.max(...rows.map((row) => row.centroid_lat as number)),
         },
         dataCompleteness:
-          (data.filter(
+          (rows.filter(
             (row) =>
               row.total_pesticide_load !== null &&
               row.total_pfas_grams !== null &&
               row.geometry
           ).length /
-            data.length) *
+            rows.length) *
           100,
         lastUpdated: new Date().toISOString(),
       };
@@ -354,18 +359,19 @@ export class DataManager {
           : row.geometry;
 
       const dataPoint: H3DataPoint = {
-        h3_id: row.h3_id,
-        year: row.year,
-        total_pesticide_load: row.total_pesticide_load || 0,
-        total_pfas_grams: row.total_pfas_grams || 0,
-        pesticide_application_count: row.pesticide_application_count || 0,
-        field_count: row.field_count || 0,
-        agricultural_area_ha: row.agricultural_area_ha || 0,
-        avg_field_coverage: row.avg_field_coverage || 0,
+        h3_id: row.h3_id as number,
+        year: row.year as number,
+        total_pesticide_load: (row.total_pesticide_load as number) || 0,
+        total_pfas_grams: (row.total_pfas_grams as number) || 0,
+        pesticide_application_count:
+          (row.pesticide_application_count as number) || 0,
+        field_count: (row.field_count as number) || 0,
+        agricultural_area_ha: (row.agricultural_area_ha as number) || 0,
+        avg_field_coverage: (row.avg_field_coverage as number) || 0,
         geometry: geometry,
-        centroid_lon: row.centroid_lon,
-        centroid_lat: row.centroid_lat,
-        h3_resolution: row.h3_resolution || 10,
+        centroid_lon: row.centroid_lon as number,
+        centroid_lat: row.centroid_lat as number,
+        h3_resolution: (row.h3_resolution as number) || 10,
       };
 
       // Add calculated intensity fields
@@ -390,10 +396,10 @@ export class DataManager {
   private aggregateH3DataByYear(
     data: Record<string, unknown>[]
   ): Record<string, unknown>[] {
-    const aggregated = new Map();
+    const aggregated = new Map<string, Record<string, unknown>>();
 
     data.forEach((row) => {
-      const key = row.h3_id;
+      const key = String(row.h3_id);
 
       if (!aggregated.has(key)) {
         aggregated.set(key, {
@@ -409,26 +415,32 @@ export class DataManager {
         });
       }
 
-      const existing = aggregated.get(key);
-      existing.years.push(row.year);
-      existing.total_pesticide_load += row.total_pesticide_load || 0;
-      existing.total_pfas_grams += row.total_pfas_grams || 0;
-      existing.pesticide_application_count +=
-        row.pesticide_application_count || 0;
-      existing.max_field_count = Math.max(
-        existing.max_field_count,
-        row.field_count || 0
+      const existing = aggregated.get(key)!;
+      (existing.years as number[]).push(row.year as number);
+      (existing.total_pesticide_load as number) +=
+        (row.total_pesticide_load as number) || 0;
+      (existing.total_pfas_grams as number) +=
+        (row.total_pfas_grams as number) || 0;
+      (existing.pesticide_application_count as number) +=
+        (row.pesticide_application_count as number) || 0;
+      (existing.max_field_count as number) = Math.max(
+        existing.max_field_count as number,
+        (row.field_count as number) || 0
       );
-      existing.total_agricultural_area_ha += row.agricultural_area_ha || 0;
-      existing.total_field_coverage += row.avg_field_coverage || 0;
-      existing.year_count += 1;
+      (existing.total_agricultural_area_ha as number) +=
+        (row.agricultural_area_ha as number) || 0;
+      (existing.total_field_coverage as number) +=
+        (row.avg_field_coverage as number) || 0;
+      (existing.year_count as number) += 1;
     });
 
     return Array.from(aggregated.values()).map((item) => ({
       ...item,
       avg_agricultural_area_ha:
-        item.total_agricultural_area_ha / item.year_count,
-      avg_field_coverage: item.total_field_coverage / item.year_count,
+        (item.total_agricultural_area_ha as number) /
+        (item.year_count as number),
+      avg_field_coverage:
+        (item.total_field_coverage as number) / (item.year_count as number),
     }));
   }
 
@@ -444,27 +456,26 @@ export class DataManager {
           ? JSON.parse(row.geometry)
           : row.geometry;
 
+      const years = row.years as number[];
+      const avgAgArea = row.avg_agricultural_area_ha as number;
+      const totalPfas = row.total_pfas_grams as number;
+      const totalPesticide = row.total_pesticide_load as number;
+
       return {
-        h3_id: row.h3_id,
-        year: Math.max(...row.years), // Use latest year for display
-        total_pesticide_load: row.total_pesticide_load,
-        total_pfas_grams: row.total_pfas_grams,
-        pesticide_application_count: row.pesticide_application_count,
-        field_count: row.max_field_count,
-        agricultural_area_ha: row.avg_agricultural_area_ha,
-        avg_field_coverage: row.avg_field_coverage,
+        h3_id: row.h3_id as number,
+        year: Math.max(...years), // Use latest year for display
+        total_pesticide_load: totalPesticide,
+        total_pfas_grams: totalPfas,
+        pesticide_application_count: row.pesticide_application_count as number,
+        field_count: row.max_field_count as number,
+        agricultural_area_ha: avgAgArea,
+        avg_field_coverage: row.avg_field_coverage as number,
         geometry: geometry,
-        centroid_lon: row.centroid_lon,
-        centroid_lat: row.centroid_lat,
-        h3_resolution: row.h3_resolution || 10,
-        pfas_intensity:
-          row.avg_agricultural_area_ha > 0
-            ? row.total_pfas_grams / row.avg_agricultural_area_ha
-            : 0,
-        pesticide_intensity:
-          row.avg_agricultural_area_ha > 0
-            ? row.total_pesticide_load / row.avg_agricultural_area_ha
-            : 0,
+        centroid_lon: row.centroid_lon as number,
+        centroid_lat: row.centroid_lat as number,
+        h3_resolution: (row.h3_resolution as number) || 10,
+        pfas_intensity: avgAgArea > 0 ? totalPfas / avgAgArea : 0,
+        pesticide_intensity: avgAgArea > 0 ? totalPesticide / avgAgArea : 0,
       };
     });
   }
@@ -474,17 +485,22 @@ export class DataManager {
    */
   private transformBNBOData(rawData: Record<string, unknown>[]): BNBOArea[] {
     return rawData.map((row) => ({
-      id: row.id,
-      bnbo_id: row.bnbo_id,
-      status_code: row.status_code,
-      status_description: row.status_description,
-      area_ha: row.area_ha || 0,
+      id: row.id as number,
+      bnbo_id: row.bnbo_id as string,
+      status_code: row.status_code as
+        | 'protected'
+        | 'buffer'
+        | 'agricultural'
+        | 'transition'
+        | 'unprotected',
+      status_description: row.status_description as string,
+      area_ha: (row.area_ha as number) || 0,
       geometry:
         typeof row.geometry === 'string'
           ? JSON.parse(row.geometry)
           : row.geometry,
-      year: row.year || new Date().getFullYear(),
-      created_at: row.created_at,
+      year: (row.year as number) || new Date().getFullYear(),
+      created_at: row.created_at as string,
     }));
   }
 
@@ -493,18 +509,25 @@ export class DataManager {
    */
   private transformBBRData(rawData: Record<string, unknown>[]): BBRBuilding[] {
     return rawData.map((row) => ({
-      id: row.id,
-      bbr_id: row.bbr_id,
-      building_code: row.building_code,
-      building_type: row.building_type || 'Other',
-      construction_year: row.construction_year,
-      floor_area: row.floor_area,
+      id: row.id as number,
+      bbr_id: row.bbr_id as string,
+      building_code: (row.building_code as string) || null,
+      building_type:
+        (row.building_type as
+          | 'Residential'
+          | 'Agricultural'
+          | 'Industrial'
+          | 'Commercial'
+          | 'Public'
+          | 'Other') || 'Other',
+      construction_year: (row.construction_year as number) || null,
+      floor_area: (row.floor_area as number) || null,
       geometry:
         typeof row.geometry === 'string'
           ? JSON.parse(row.geometry)
           : row.geometry,
-      address: row.address,
-      created_at: row.created_at,
+      address: (row.address as string) || null,
+      created_at: row.created_at as string,
     }));
   }
 

@@ -138,7 +138,7 @@ export function generateCSVFilename(
   const timestamp = new Date()
     .toISOString()
     .slice(0, 19)
-    .replace(/[:\-]/g, '')
+    .replace(/[:-]/g, '')
     .replace('T', '_');
 
   if (bounds) {

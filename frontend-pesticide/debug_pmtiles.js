@@ -1,5 +1,5 @@
 // Debug script to test PMTiles URL accessibility
-const baseUrl = 'https://data.pesticidkortet.dk';
+const baseUrl = 'https://storage.googleapis.com/landbrugsdata-raw-data';
 
 const testUrls = [
   `${baseUrl}/pmtiles/protomaps_denmark.pmtiles`,

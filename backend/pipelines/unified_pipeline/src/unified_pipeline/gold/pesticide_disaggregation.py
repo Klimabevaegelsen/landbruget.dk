@@ -924,75 +924,65 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         return datasets
 
     def _read_pesticide_data_for_year(self, year: int) -> Optional[str]:
-        """Read pesticide data for a specific year."""
+        """Read pesticide data for a specific year.
+
+        Uses GCS file modification timestamps for deterministic file selection,
+        avoiding issues with non-deterministic glob() ordering.
+        """
         try:
             # Look for the specific pesticide file for this year
-            # Based on actual codebase: filename pattern is pesticiddata_YYYY_YYYY.parquet
-            # in timestamped subdirs
+            # Filename pattern is pesticiddata_YYYY_YYYY.parquet in timestamped subdirs
             filename = f"pesticiddata_{year}_{year + 1}.parquet"
 
-            # Use list_files with recursive pattern to find all parquet files
-            pattern = f"gs://{self.config.bucket}/silver/pesticides/*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            # Use specific pattern to find only matching files
+            pattern = f"gs://{self.config.bucket}/silver/pesticides/*/{filename}"
 
-            # Find the file that matches our year in the latest timestamped directory
-            target_file = None
-            latest_timestamp = None
-            for file_path in files:
-                if filename in file_path:
-                    # Extract timestamp from path like "gs://bucket/silver/pesticides/20250629_102742/pesticiddata_2021_2022.parquet"
-                    path_parts = file_path.split("/")
-                    if len(path_parts) >= 6:  # gs://bucket/silver/pesticides/timestamp/filename
-                        timestamp_dir = path_parts[5]  # "20250629_102742"
-                        if latest_timestamp is None or timestamp_dir > latest_timestamp:
-                            latest_timestamp = timestamp_dir
-                            target_file = file_path
+            # Use list_files_with_timestamps for deterministic file selection
+            files_with_ts = self.gcs_access.list_files_with_timestamps(pattern)
 
-            if target_file:
-                self.log.info(f"Found pesticide data at {target_file}")
-                return target_file
-            else:
+            if not files_with_ts:
                 self.log.warning(
                     f"No pesticide file found for year {year} (looking for {filename})"
                 )
                 return None
+
+            # Sort by actual GCS modification time (deterministic) - newest first
+            files_sorted = sorted(files_with_ts, key=lambda x: x[1], reverse=True)
+            latest_path = files_sorted[0][0]
+
+            self.log.info(f"Found pesticide data at {latest_path}")
+            return latest_path
 
         except Exception as e:
             self.log.error(f"Error reading pesticide data for year {year}: {e}")
             return None
 
     def _read_fields_data_for_year(self, year: int) -> Optional[str]:
-        """Read agricultural fields data for a specific year."""
+        """Read agricultural fields data for a specific year.
+
+        Uses GCS file modification timestamps for deterministic file selection,
+        avoiding issues with non-deterministic glob() ordering.
+        """
         try:
             # Look for FVM marker data for this year
             self.log.info(f"Reading FVM marker data for year {year}")
 
-            # Use list_files with recursive pattern to find all parquet files
-            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{year}/*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            # Use specific pattern to find only data.parquet files (standard silver layer format)
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{year}/*/data.parquet"
 
-            # Find the parquet file in timestamped subdirectories
-            target_file = None
-            latest_timestamp = None
-            for file_path in files:
-                # Look for files like "data.parquet" (standard silver layer format)
-                if file_path.endswith("data.parquet"):
-                    # Extract timestamp from path like "gs://bucket/silver/fvm_marker_2021/20241201_123456/data.parquet"
-                    path_parts = file_path.split("/")
-                    if (
-                        len(path_parts) >= 7
-                    ):  # gs://bucket/silver/fvm_marker_year/timestamp/filename
-                        timestamp_dir = path_parts[5]  # "20241201_123456" (corrected index)
-                        if latest_timestamp is None or timestamp_dir > latest_timestamp:
-                            latest_timestamp = timestamp_dir
-                            target_file = file_path
+            # Use list_files_with_timestamps for deterministic file selection
+            files_with_ts = self.gcs_access.list_files_with_timestamps(pattern)
 
-            if target_file:
-                self.log.info(f"Found FVM marker data at {target_file}")
-                return target_file
-            else:
+            if not files_with_ts:
                 self.log.warning(f"No FVM marker file found for year {year}")
                 return None
+
+            # Sort by actual GCS modification time (deterministic) - newest first
+            files_sorted = sorted(files_with_ts, key=lambda x: x[1], reverse=True)
+            latest_path = files_sorted[0][0]
+
+            self.log.info(f"Found FVM marker data at {latest_path}")
+            return latest_path
 
         except Exception as e:
             self.log.error(f"Error reading fields data for year {year}: {e}")

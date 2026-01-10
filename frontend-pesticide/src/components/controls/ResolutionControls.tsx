@@ -45,7 +45,7 @@ export function ResolutionControls({
           {availableResolutions.map((resolution) => (
             <button
               key={resolution}
-              onClick={() => setResolution(resolution)}
+              onClick={() => setResolution(resolution as 8 | 10 | 'kommune')}
               className={`rounded px-2 py-1 text-xs transition-colors ${
                 resolution === currentResolution
                   ? 'bg-white/20 text-white'

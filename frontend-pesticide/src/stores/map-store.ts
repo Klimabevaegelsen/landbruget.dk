@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware';
 
 export type DataMode = 'pesticide_total' | 'pfas' | 'diquat' | 'glyphosate';
 export type YearSelection = number | 'total';
+export type HeatmapMode = 'pesticide' | 'pfas';
 
 export interface MapState {
   // Map view state
@@ -17,6 +18,8 @@ export interface MapState {
   // Data selection
   selectedYear: YearSelection;
   selectedDataMode: DataMode;
+  heatmapMode: HeatmapMode;
+  cumulativeMode: boolean;
 
   // Layer visibility (user-controlled)
   showBNBOLayer: boolean;
@@ -69,6 +72,8 @@ export interface MapActions {
   // Data selection actions
   setSelectedYear: (year: YearSelection) => void;
   setSelectedDataMode: (mode: DataMode) => void;
+  setHeatmapMode: (mode: HeatmapMode) => void;
+  setCumulativeMode: (cumulative: boolean) => void;
 
   // Layer visibility actions
   setShowBNBOLayer: (show: boolean) => void;
@@ -119,26 +124,18 @@ const DEFAULT_CENTER: [number, number] = [10.0, 56.0]; // Center of Denmark
 const DEFAULT_ZOOM = 7;
 const DEFAULT_YEAR: YearSelection = 2023;
 const DEFAULT_DATA_MODE: DataMode = 'pesticide_total';
+const DEFAULT_HEATMAP_MODE: HeatmapMode = 'pesticide';
+const DEFAULT_CUMULATIVE_MODE = false;
 
-// Zoom thresholds for layer switching - with overlap zones
+// Zoom thresholds for layer switching - simplified for 3 levels
 const KOMMUNE_TO_H3_ZOOM = 9.0; // Switch from kommune to H3 at this zoom
-const H3_RES8_START_FADE = 11.0; // Start fading out res8 at this zoom
-const H3_RES10_START_SHOW = 11.5; // Start showing res10 at this zoom
-const H3_RES8_FULL_FADE = 12.0; // Fully fade out res8 at this zoom
+const H3_RES8_TO_RES10_ZOOM = 12.0; // Switch from res8 to res10 at this zoom
 
-// H3 resolution based on zoom level - returns primary resolution
+// H3 resolution based on zoom level - simplified to only res8 and res10
 const getH3ResolutionForZoom = (zoom: number): number => {
-  if (zoom >= H3_RES10_START_SHOW) return 10;
+  if (zoom >= H3_RES8_TO_RES10_ZOOM) return 10;
   return 8;
 };
-
-// Helper to determine if both H3 resolutions should be visible (overlap zone)
-const isInH3OverlapZone = (zoom: number): boolean => {
-  return zoom >= H3_RES8_START_FADE && zoom <= H3_RES8_FULL_FADE;
-};
-
-// Add zoom threshold for layer visibility updates to prevent excessive updates
-const ZOOM_THRESHOLD = 0.1; // Only update layers if zoom changes by more than this amount
 
 export const useMapStore = create<MapState & MapActions>()(
   devtools(
@@ -152,6 +149,8 @@ export const useMapStore = create<MapState & MapActions>()(
 
       selectedYear: DEFAULT_YEAR,
       selectedDataMode: DEFAULT_DATA_MODE,
+      heatmapMode: DEFAULT_HEATMAP_MODE,
+      cumulativeMode: DEFAULT_CUMULATIVE_MODE,
 
       showBNBOLayer: true,
       showBasemap: true,
@@ -215,6 +214,8 @@ export const useMapStore = create<MapState & MapActions>()(
       setSelectedYear: (selectedYear) =>
         set({ selectedYear, isLoadingYear: true }),
       setSelectedDataMode: (selectedDataMode) => set({ selectedDataMode }),
+      setHeatmapMode: (heatmapMode) => set({ heatmapMode }),
+      setCumulativeMode: (cumulativeMode) => set({ cumulativeMode }),
 
       // Layer visibility actions
       setShowBNBOLayer: (showBNBOLayer) => set({ showBNBOLayer }),
@@ -280,6 +281,8 @@ export const useMapStore = create<MapState & MapActions>()(
           pitch: 0,
           selectedYear: DEFAULT_YEAR,
           selectedDataMode: DEFAULT_DATA_MODE,
+          heatmapMode: DEFAULT_HEATMAP_MODE,
+          cumulativeMode: DEFAULT_CUMULATIVE_MODE,
           showBNBOLayer: true,
           showBasemap: true,
           isLoading: false,
@@ -314,43 +317,12 @@ export const useMapStore = create<MapState & MapActions>()(
 export const getComputedLayerVisibility = (zoom: number) => {
   const shouldShowH3 = zoom >= KOMMUNE_TO_H3_ZOOM;
   const shouldShowKommune = zoom < KOMMUNE_TO_H3_ZOOM;
-  const inOverlapZone = isInH3OverlapZone(zoom);
 
   return {
     shouldShowKommune,
     shouldShowH3,
     currentH3Resolution: getH3ResolutionForZoom(zoom),
-    // In overlap zone, show both resolutions with different opacities
-    shouldShowH3Res8: shouldShowH3 && zoom < H3_RES8_FULL_FADE,
-    shouldShowH3Res10: shouldShowH3 && zoom >= H3_RES10_START_SHOW,
-    inOverlapZone,
-    // Calculate opacity for smooth transitions
-    res8Opacity: inOverlapZone
-      ? Math.max(
-          0,
-          (H3_RES8_FULL_FADE - zoom) / (H3_RES8_FULL_FADE - H3_RES8_START_FADE)
-        )
-      : zoom < H3_RES8_START_FADE
-        ? 1
-        : 0,
-    res10Opacity: inOverlapZone
-      ? Math.min(
-          1,
-          (zoom - H3_RES10_START_SHOW) /
-            (H3_RES8_FULL_FADE - H3_RES10_START_SHOW)
-        )
-      : zoom >= H3_RES8_FULL_FADE
-        ? 1
-        : 0,
   };
-};
-
-// Helper function to determine if layer visibility should be updated based on zoom threshold
-export const shouldUpdateLayerVisibility = (
-  oldZoom: number,
-  newZoom: number
-): boolean => {
-  return Math.abs(newZoom - oldZoom) >= ZOOM_THRESHOLD;
 };
 
 // Data mode configuration
@@ -393,7 +365,7 @@ export const DATA_MODE_CONFIG = {
 // BNBO status configuration
 export const BNBO_STATUS_CONFIG = {
   'Action Required': {
-    color: '#eab308',
+    color: '#ff6b6b',
     label: 'Action Required',
     description: 'Areas requiring immediate action',
   },

@@ -19,14 +19,8 @@ interface PMTilesUrls {
 
 class PMTilesDiscoveryService {
   private cache: Map<string, unknown> = new Map();
-  private readonly baseUrl = 'https://data.pesticidkortet.dk';
-
-  constructor() {
-    console.log(
-      '🔧 PMTilesDiscoveryService initialized with baseUrl:',
-      this.baseUrl
-    );
-  }
+  private readonly baseUrl =
+    'https://storage.googleapis.com/landbrugsdata-raw-data';
 
   // Discover available data by checking GCS bucket structure
   async getDataAvailability(): Promise<DataAvailability> {
@@ -81,10 +75,20 @@ class PMTilesDiscoveryService {
       return this.cache.get(cacheKey) as string;
     }
 
-    // Direct R2 URL - files are now stored with simple names
-    const url = `${this.baseUrl}/pmtiles/h3_pfas_${year}_res${resolution}.pmtiles`;
-    this.cache.set(cacheKey, url);
-    return url;
+    try {
+      const pattern = `gold/pmtiles/h3_pfas_${year}_res${resolution}`;
+      const latestTimestamp = await this._discoverLatestTimestamp(pattern);
+
+      const url = `${this.baseUrl}/${pattern}/${latestTimestamp}/h3_pfas_${year}_res${resolution}.pmtiles`;
+      this.cache.set(cacheKey, url);
+      return url;
+    } catch (error) {
+      console.error(
+        `Failed to discover H3 tiles for ${year} res${resolution}:`,
+        error
+      );
+      throw error;
+    }
   }
 
   async discoverLatestKommuneTiles(year: YearSelection): Promise<string> {
@@ -94,10 +98,17 @@ class PMTilesDiscoveryService {
       return this.cache.get(cacheKey) as string;
     }
 
-    // Direct R2 URL - files are now stored with simple names
-    const url = `${this.baseUrl}/pmtiles/kommune_pfas_${year}.pmtiles`;
-    this.cache.set(cacheKey, url);
-    return url;
+    try {
+      const pattern = `gold/pmtiles/kommune_pfas_${year}`;
+      const latestTimestamp = await this._discoverLatestTimestamp(pattern);
+
+      const url = `${this.baseUrl}/${pattern}/${latestTimestamp}/kommune_pfas_${year}.pmtiles`;
+      this.cache.set(cacheKey, url);
+      return url;
+    } catch (error) {
+      console.error(`Failed to discover kommune tiles for ${year}:`, error);
+      throw error;
+    }
   }
 
   private async _discoverLatestTimestamp(pattern: string): Promise<string> {

@@ -14,7 +14,7 @@ interface DataModeSelectorProps {
   variant?: 'sidebar' | 'topbar' | 'mobile';
 }
 
-const _ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
+const ColorScaleLegend: React.FC<{ mode: DataMode }> = ({ mode }) => {
   const config = DATA_MODE_CONFIG[mode];
 
   // Generate color scale for visualization

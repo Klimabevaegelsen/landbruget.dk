@@ -23,6 +23,7 @@ on:
 jobs:
   warmup-cache:
     runs-on: ubuntu-latest
+    continue-on-error: true  # Don't fail the workflow if cache warmup fails
 
     steps:
       - name: Checkout code
@@ -39,6 +40,23 @@ jobs:
           FRONTEND_URL: ${{ secrets.FRONTEND_URL || 'https://landbruget.dk' }}
         run: |
           echo "🔥 Starting PMTiles cache warmup..."
+
+          # Pre-check: Verify at least one PMTiles file exists
+          echo "🔍 Checking if PMTiles files are available..."
+          TEST_FILE="pmtiles/field_analysis_2024.pmtiles"
+          TEST_URL="${FRONTEND_URL}/api/pmtiles/${TEST_FILE}"
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -I "${TEST_URL}")
+
+          if [[ $HTTP_CODE -ne 200 && $HTTP_CODE -ne 206 ]]; then
+            echo "⏭️ No PMTiles files found (HTTP ${HTTP_CODE} for ${TEST_FILE})"
+            echo "This is expected if PMTiles haven't been generated yet."
+            echo "Skipping cache warmup - run 'Generate PMTiles' workflow first."
+            exit 0
+          fi
+
+          echo "✅ PMTiles files are available (HTTP ${HTTP_CODE})"
+          echo ""
 
           # High priority files that should always be warmed
           HIGH_PRIORITY_FILES=(
@@ -136,12 +154,25 @@ jobs:
           echo "🎯 PMTiles cache warmup completed!"
           echo "📊 Results: ${SUCCESS_COUNT} success, ${ERROR_COUNT} errors"
 
-          # Fail the job if more than 20% of files failed
+          # Warn if many files failed, but don't fail the workflow
+          # PMTiles files may not exist yet if pipelines haven't run
           TOTAL_FILES=${#FILES_TO_WARM[@]}
-          FAILURE_RATE=$((ERROR_COUNT * 100 / TOTAL_FILES))
+          if [[ $TOTAL_FILES -gt 0 ]]; then
+            FAILURE_RATE=$((ERROR_COUNT * 100 / TOTAL_FILES))
+          else
+            FAILURE_RATE=0
+          fi
 
-          if [[ $FAILURE_RATE -gt 20 ]]; then
-            echo "❌ Too many failures (${FAILURE_RATE}% failure rate)"
+          if [[ $ERROR_COUNT -gt 0 ]]; then
+            echo ""
+            echo "⚠️ Note: ${ERROR_COUNT}/${TOTAL_FILES} files could not be warmed (${FAILURE_RATE}% failure rate)"
+            echo "   This is expected if PMTiles files haven't been generated yet."
+            echo "   Run the 'Generate PMTiles' workflow to create missing files."
+          fi
+
+          # Only fail if ALL files failed (indicates a more serious issue)
+          if [[ $SUCCESS_COUNT -eq 0 && $TOTAL_FILES -gt 0 ]]; then
+            echo "❌ All cache warming attempts failed - check FRONTEND_URL and network connectivity"
             exit 1
           fi
 

@@ -330,15 +330,20 @@ export class H3DataSyncer {
       }
 
       // Calculate quality metrics
+      const rows = data as Array<Record<string, unknown>>;
+
       const quality: H3DataQuality = {
-        totalRecords: data.length,
-        recordsWithGeometry: data.filter((row) => row.geometry).length,
-        recordsWithPesticideData: data.filter(
+        totalRecords: rows.length,
+        recordsWithGeometry: rows.filter((row) => row.geometry).length,
+        recordsWithPesticideData: rows.filter(
           (row) =>
-            row.total_pesticide_load !== null && row.total_pesticide_load > 0
+            row.total_pesticide_load !== null &&
+            (row.total_pesticide_load as number) > 0
         ).length,
-        recordsWithPfasData: data.filter(
-          (row) => row.total_pfas_grams !== null && row.total_pfas_grams > 0
+        recordsWithPfasData: rows.filter(
+          (row) =>
+            row.total_pfas_grams !== null &&
+            (row.total_pfas_grams as number) > 0
         ).length,
         yearRange: { min: year, max: year },
         spatialExtent: {
@@ -348,13 +353,13 @@ export class H3DataSyncer {
           maxLat: 57.8,
         },
         dataCompleteness:
-          (data.filter(
+          (rows.filter(
             (row) =>
               row.total_pesticide_load !== null &&
               row.total_pfas_grams !== null &&
               row.geometry
           ).length /
-            data.length) *
+            rows.length) *
           100,
         lastUpdated: new Date().toISOString(),
       };
@@ -507,7 +512,7 @@ export class H3DataSyncer {
       const batch = data.slice(i, i + this.config.batch_size);
 
       try {
-        const { error } = await supabase.from(tableName).upsert(batch, {
+        const { error } = await supabase.from(tableName).upsert(batch as any, {
           onConflict: conflictColumns.join(','),
           ignoreDuplicates: false,
         });
