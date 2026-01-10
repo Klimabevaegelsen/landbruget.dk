@@ -10,6 +10,8 @@ import { BlockTimeline } from "./pageBlocks/block-timeline";
 import { BlockKpiGroup } from "./pageBlocks/block-kpi-group";
 import { BlockMapChart } from "./pageBlocks/block-map-chart";
 import { BlockIteratedSection } from "./pageBlocks/block-iterated-section";
+import { BlockClimateKPIs } from "./pageBlocks/block-climate-kpis";
+import { BlockClimateBreakdown } from "./pageBlocks/block-climate-breakdown";
 
 export function PageBlock({
   block,
@@ -37,6 +39,10 @@ export function PageBlock({
       return <BlockMapChart chart={block} />;
     case "iteratedSection":
       return <BlockIteratedSection iteratedSection={block} level={level} />;
+    case "climateKPIs":
+      return <BlockClimateKPIs block={block} />;
+    case "climateBreakdown":
+      return <BlockClimateBreakdown block={block} />;
     default:
       return <BlockPlaceholder block={block} />;
   }

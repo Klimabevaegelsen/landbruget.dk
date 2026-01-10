@@ -184,6 +184,25 @@ export interface IteratedSection {
   }[];
 }
 
+export interface ClimateKPIs {
+  _key: string;
+  _type: "climateKPIs";
+  title: string;
+  cvr: string;
+  year?: number;
+}
+
+export interface ClimateBreakdown {
+  _key: string;
+  _type: "climateBreakdown";
+  title: string;
+  cvr: string;
+  yearRange?: {
+    start: number;
+    end: number;
+  };
+}
+
 // Union type for all page builder items
 export type PageBuilderItem =
   | InfoCard
@@ -195,7 +214,9 @@ export type PageBuilderItem =
   | HorizontalStackedBarChart
   | ComboChart
   | Timeline
-  | IteratedSection;
+  | IteratedSection
+  | ClimateKPIs
+  | ClimateBreakdown;
 
 // Main response type
 export interface PageBuilderResponse {
