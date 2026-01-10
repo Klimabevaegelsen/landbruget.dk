@@ -62,6 +62,7 @@ jobs:
     permissions:
       contents: "read"
       id-token: "write"
+      actions: "write"  # Required to trigger other workflows
     strategy:
       matrix:
         include: >-
