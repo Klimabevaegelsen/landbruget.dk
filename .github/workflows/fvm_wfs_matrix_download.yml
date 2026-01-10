@@ -32,6 +32,7 @@ jobs:
     steps:
       - name: Generate matrix
         id: set-matrix
+        shell: bash
         run: |
           # Define all layer configurations
           if [ "${{ github.event.inputs.layer_types }}" = "all" ]; then
