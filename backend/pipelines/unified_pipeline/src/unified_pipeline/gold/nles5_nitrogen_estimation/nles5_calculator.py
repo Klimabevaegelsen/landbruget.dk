@@ -50,6 +50,34 @@ class NLES5Calculator:
         try:
             self.log.info("🌧️  IMPLEMENTING DETAILED PERCOLATION EFFECTS FROM REFERENCE NLES5")
 
+            # DIAGNOSTIC: Check input data before filtering
+            input_count = self.conn.execute("""
+                SELECT COUNT(*) FROM fields_with_climate_soil_crops
+            """).fetchone()[0]
+
+            percolation_stats = self.conn.execute("""
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(CASE WHEN total_percolation IS NOT NULL THEN 1 END) as with_percolation,
+                    COUNT(CASE WHEN total_percolation IS NULL THEN 1 END) as without_percolation
+                FROM fields_with_climate_soil_crops
+            """).fetchone()
+
+            self.log.info(f"📊 Input data for percolation effects: {input_count:,} total fields")
+            self.log.info(
+                f"   ✅ With percolation data: {percolation_stats[1]:,} "
+                f"({percolation_stats[1] / max(input_count, 1) * 100:.1f}%)"
+            )
+            if percolation_stats[2] > 0:
+                pct_missing = percolation_stats[2] / max(input_count, 1) * 100
+                self.log.warning(
+                    f"   ⚠️  Missing percolation data: {percolation_stats[2]:,} ({pct_missing:.1f}%)"
+                )
+                self.log.warning(
+                    f"   These {percolation_stats[2]:,} fields will be excluded "
+                    f"from NLES5 calculations"
+                )
+
             # Add detailed soil effect calculation from reference implementation
             self.conn.execute("""
                 CREATE OR REPLACE TABLE detailed_percolation_effects AS
@@ -192,7 +220,7 @@ class NLES5Calculator:
                 self.log.info("🌧️  DETAILED PERCOLATION EFFECTS STATISTICS:")
                 self.log.info(
                     f"   Fields processed: {perc_stats[0]:,}, "
-                    f"valid seasonal data: {perc_stats[1]:,} ({perc_stats[1]/perc_stats[0]:.1%})"
+                    f"valid seasonal data: {perc_stats[1]:,} ({perc_stats[1] / perc_stats[0]:.1%})"
                 )
 
                 # Input percolation values
@@ -362,21 +390,21 @@ class NLES5Calculator:
                 self.log.info(f"   Total fields: {diagnostics[0]:,}")
                 self.log.info(
                     f"   Has percolation (>0): {diagnostics[1]:,} "
-                    f"({diagnostics[1]/diagnostics[0]:.1%})"
+                    f"({diagnostics[1] / diagnostics[0]:.1%})"
                 )
                 self.log.info(
                     f"   Has climate quality: {diagnostics[2]:,} "
-                    f"({diagnostics[2]/diagnostics[0]:.1%})"
+                    f"({diagnostics[2] / diagnostics[0]:.1%})"
                 )
                 self.log.info(
                     f"   Has soil nitrogen: {diagnostics[3]:,} "
-                    f"({diagnostics[3]/diagnostics[0]:.1%})"
+                    f"({diagnostics[3] / diagnostics[0]:.1%})"
                 )
                 self.log.info(
-                    f"   Has crop code: {diagnostics[4]:,} ({diagnostics[4]/diagnostics[0]:.1%})"
+                    f"   Has crop code: {diagnostics[4]:,} ({diagnostics[4] / diagnostics[0]:.1%})"
                 )
                 self.log.info(
-                    f"   Has geometry: {diagnostics[5]:,} ({diagnostics[5]/diagnostics[0]:.1%})"
+                    f"   Has geometry: {diagnostics[5]:,} ({diagnostics[5] / diagnostics[0]:.1%})"
                 )
 
                 # Check what the current WHERE conditions would yield
@@ -655,14 +683,14 @@ class NLES5Calculator:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE nles5_nitrogen_coefficients AS
                 SELECT * FROM (VALUES
-                    ('Bt', {nitrogen_coeffs['Bt']}),
-                    ('Bcs', {nitrogen_coeffs['Bcs']}),
-                    ('Bca', {nitrogen_coeffs['Bca']}),
-                    ('Budb', {nitrogen_coeffs['Budb']}),
-                    ('Bm1', {nitrogen_coeffs['Bm1']}),
-                    ('Bf0', {nitrogen_coeffs['Bf0']}),
-                    ('Bf1', {nitrogen_coeffs['Bf1']}),
-                    ('Bg0', {nitrogen_coeffs['Bg0']})
+                    ('Bt', {nitrogen_coeffs["Bt"]}),
+                    ('Bcs', {nitrogen_coeffs["Bcs"]}),
+                    ('Bca', {nitrogen_coeffs["Bca"]}),
+                    ('Budb', {nitrogen_coeffs["Budb"]}),
+                    ('Bm1', {nitrogen_coeffs["Bm1"]}),
+                    ('Bf0', {nitrogen_coeffs["Bf0"]}),
+                    ('Bf1', {nitrogen_coeffs["Bf1"]}),
+                    ('Bg0', {nitrogen_coeffs["Bg0"]})
                 ) AS t(coefficient_name, coefficient_value)
             """)
 
@@ -731,8 +759,8 @@ class NLES5Calculator:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE nles5_soil_parameters AS
                 SELECT * FROM (VALUES
-                    ('sand', {soil_params['sand']}),
-                    ('clay', {soil_params['clay']})
+                    ('sand', {soil_params["sand"]}),
+                    ('clay', {soil_params["clay"]})
                 ) AS t(soil_type, parameter_value)
             """)
 
@@ -852,8 +880,152 @@ class NLES5Calculator:
                 pass
 
             self.log.info(
-                f"Join optimization: nitrogen_base={base_count:,}, fertilizer_accounts={fertilizer_size:,}"
+                f"Join optimization: nitrogen_base={base_count:,}, "
+                f"fertilizer_accounts={fertilizer_size:,}"
             )
+
+            # DIAGNOSTIC: Check CVR matching potential
+            if fertilizer_size > 0:
+                cvr_diagnostic = self.conn.execute("""
+                    SELECT 
+                        (SELECT COUNT(DISTINCT cvr_number) 
+                         FROM nitrogen_base 
+                         WHERE cvr_number IS NOT NULL) as fields_unique_cvr,
+                        (SELECT COUNT(DISTINCT cvr_number) 
+                         FROM fertilizer_accounts 
+                         WHERE cvr_number IS NOT NULL) as fert_unique_cvr,
+                        (SELECT COUNT(DISTINCT nb.cvr_number) 
+                         FROM nitrogen_base nb 
+                         INNER JOIN fertilizer_accounts fa 
+                            ON nb.cvr_number = fa.cvr_number 
+                            AND nb.year = fa.year
+                        ) as matching_cvr,
+                        (SELECT AVG(tn_t_ha) 
+                         FROM fertilizer_accounts 
+                         WHERE tn_t_ha IS NOT NULL) as avg_fertilizer_quota
+                """).fetchone()
+
+                if cvr_diagnostic:
+                    self.log.info("🔍 CVR MATCHING DIAGNOSTIC:")
+                    self.log.info(f"   Fields with CVR: {cvr_diagnostic[0]:,} unique CVR numbers")
+                    self.log.info(
+                        f"   Fertilizer accounts: {cvr_diagnostic[1]:,} unique CVR numbers"
+                    )
+                    pct_matching = cvr_diagnostic[2] / max(cvr_diagnostic[0], 1) * 100
+                    self.log.info(
+                        f"   Matching CVRs: {cvr_diagnostic[2]:,} "
+                        f"({pct_matching:.1f}% of field CVRs)"
+                    )
+                    if cvr_diagnostic[3]:
+                        self.log.info(
+                            f"   Avg fertilizer quota in data: {cvr_diagnostic[3]:.1f} kg N/ha"
+                        )
+
+                    if cvr_diagnostic[2] == 0:
+                        self.log.warning(
+                            "⚠️  NO CVR MATCHES between fields and fertilizer accounts!"
+                        )
+                        self.log.warning(
+                            "   This means all fields will get default/zero fertilizer values"
+                        )
+                        self.log.warning(
+                            "   Check: Are CVR numbers properly formatted? Same year data?"
+                        )
+
+                        # ENHANCED DIAGNOSTIC: Check data types and sample values
+                        self.log.info("🔬 DETAILED CVR DIAGNOSTIC - Investigating mismatch...")
+
+                        # Check data types
+                        fields_type = self.conn.execute("""
+                            SELECT DISTINCT typeof(cvr_number) as type, COUNT(*) as count
+                            FROM nitrogen_base 
+                            WHERE cvr_number IS NOT NULL
+                            GROUP BY typeof(cvr_number)
+                        """).fetchall()
+
+                        fert_type = self.conn.execute("""
+                            SELECT DISTINCT typeof(cvr_number) as type, COUNT(*) as count
+                            FROM fertilizer_accounts 
+                            WHERE cvr_number IS NOT NULL
+                            GROUP BY typeof(cvr_number)
+                        """).fetchall()
+
+                        self.log.info(f"   📊 Fields CVR types: {fields_type}")
+                        self.log.info(f"   📊 Fertilizer CVR types: {fert_type}")
+
+                        # Sample CVR values from both tables
+                        fields_sample = self.conn.execute("""
+                            SELECT DISTINCT cvr_number, year
+                            FROM nitrogen_base 
+                            WHERE cvr_number IS NOT NULL
+                            ORDER BY cvr_number
+                            LIMIT 5
+                        """).fetchall()
+
+                        fert_sample = self.conn.execute("""
+                            SELECT DISTINCT cvr_number, year
+                            FROM fertilizer_accounts 
+                            WHERE cvr_number IS NOT NULL
+                            ORDER BY cvr_number
+                            LIMIT 5
+                        """).fetchall()
+
+                        self.log.info(f"   📝 Sample Fields CVR+Year: {fields_sample}")
+                        self.log.info(f"   📝 Sample Fertilizer CVR+Year: {fert_sample}")
+
+                        # Check year distributions
+                        fields_years = self.conn.execute("""
+                            SELECT 
+                                year, 
+                                COUNT(DISTINCT cvr_number) as unique_cvrs, 
+                                COUNT(*) as total_rows
+                            FROM nitrogen_base 
+                            WHERE cvr_number IS NOT NULL
+                            GROUP BY year
+                            ORDER BY year
+                        """).fetchall()
+
+                        fert_years = self.conn.execute("""
+                            SELECT 
+                                year, 
+                                COUNT(DISTINCT cvr_number) as unique_cvrs, 
+                                COUNT(*) as total_rows
+                            FROM fertilizer_accounts 
+                            WHERE cvr_number IS NOT NULL
+                            GROUP BY year
+                            ORDER BY year
+                        """).fetchall()
+
+                        self.log.info(f"   📅 Fields year distribution: {fields_years}")
+                        self.log.info(f"   📅 Fertilizer year distribution: {fert_years}")
+
+                        # Check for string formatting issues (e.g., leading zeros, spaces)
+                        cvr_format_check = self.conn.execute("""
+                            SELECT 
+                                (SELECT LENGTH(CAST(cvr_number AS VARCHAR)) as len 
+                                 FROM nitrogen_base 
+                                 WHERE cvr_number IS NOT NULL LIMIT 1) as fields_len,
+                                (SELECT LENGTH(CAST(cvr_number AS VARCHAR)) as len 
+                                 FROM fertilizer_accounts 
+                                 WHERE cvr_number IS NOT NULL LIMIT 1) as fert_len,
+                                (SELECT cvr_number 
+                                 FROM nitrogen_base 
+                                 WHERE cvr_number IS NOT NULL LIMIT 1) as fields_first_cvr,
+                                (SELECT cvr_number 
+                                 FROM fertilizer_accounts 
+                                 WHERE cvr_number IS NOT NULL LIMIT 1) as fert_first_cvr
+                        """).fetchone()
+
+                        self.log.info(
+                            f"   🔤 Format check - Fields CVR length: "
+                            f"{cvr_format_check[0]}, "
+                            f"Fertilizer CVR length: {cvr_format_check[1]}"
+                        )
+                        self.log.info(
+                            f"   🔤 Format check - Fields first CVR: "
+                            f"'{cvr_format_check[2]}', "
+                            f"Fertilizer first CVR: '{cvr_format_check[3]}'"
+                        )
 
             if base_count > 1_000_000:
                 # Use chunked processing for large datasets
@@ -863,7 +1035,8 @@ class NLES5Calculator:
                 self._join_fertilizer_and_nfix_chunked(base_count)
             else:
                 # Standard join with correct order (larger table on left)
-                # OPTIMIZATION: Calculate nitrogen fixation inline to avoid massive n_fixation_history table
+                # OPTIMIZATION: Calculate nitrogen fixation inline to avoid
+                # massive n_fixation_history table
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE nitrogen_with_nfix AS
                     SELECT
@@ -882,12 +1055,20 @@ class NLES5Calculator:
                             ELSE 'default_fertilizer_data'
                         END as fertilizer_data_quality,
 
-                        -- OPTIMIZATION: Nitrogen fixation calculated inline from crop_code
-                        CAST(COALESCE(fix.fixation_rate, 0.0) AS DECIMAL(5,1)) as nitrogen_fixation
+                        -- OPTIMIZATION: Nitrogen fixation calculated inline from 
+                        -- crop_code
+                        CAST(COALESCE(fix.fixation_rate, 0.0) AS DECIMAL(5,1)) 
+                            as nitrogen_fixation
 
                     FROM nitrogen_base nb  -- Large table on left (2.3M+ records)
-                    LEFT JOIN fertilizer_accounts fa ON nb.cvr_number = fa.cvr_number AND nb.year = fa.year  -- Small table on right (~27K records)
-                    LEFT JOIN n_fixation_mapping fix ON nb.crop_code = fix.glr_code  -- Small lookup table for nitrogen fixation (crop_code already in nitrogen_base)
+                    LEFT JOIN fertilizer_accounts fa 
+                        ON nb.cvr_number = fa.cvr_number 
+                        AND nb.year = fa.year  
+                        -- Small table on right (~27K records)
+                    LEFT JOIN n_fixation_mapping fix 
+                        ON nb.crop_code = fix.glr_code
+                        -- Small lookup table for nitrogen fixation 
+                        -- (crop_code already in nitrogen_base)
                 """)
 
             # Check result size to detect cardinality explosion
@@ -896,9 +1077,12 @@ class NLES5Calculator:
             ).fetchone()[0]
             self.log.info(f"Fields after fertilizer + nitrogen fixation join: {combined_count:,}")
 
-            if combined_count > base_count * 1.1:  # More than 10% increase indicates problem
+            # More than 10% increase indicates problem
+            if combined_count > base_count * 1.1:
+                pct_increase = (combined_count / base_count - 1) * 100
                 self.log.warning(
-                    f"⚠️ Cardinality explosion detected: {base_count:,} → {combined_count:,} (+{((combined_count/base_count-1)*100):.1f}%)"
+                    f"⚠️ Cardinality explosion detected: {base_count:,} → "
+                    f"{combined_count:,} (+{pct_increase:.1f}%)"
                 )
 
             # Clean up base table immediately to free memory
@@ -909,7 +1093,8 @@ class NLES5Calculator:
                 "✅ Nitrogen fixation calculated inline during fertilizer join (optimization)"
             )
 
-            # No need to clean up nitrogen_with_fertilizer since we're going directly to nitrogen_with_nfix
+            # No need to clean up nitrogen_with_fertilizer since we're going
+            # directly to nitrogen_with_nfix
 
             # Step 3: Add field plan data (field-level join - should be 1:1)
             self.log.info("Adding field plan data (field-level)...")
@@ -941,10 +1126,16 @@ class NLES5Calculator:
                         'no_catch_crops' as catch_crops_data_quality,
 
                         -- Calculate total mineral nitrogen
-                        nwn.mineral_n_spring + nwn.mineral_n_autumn + nwn.mineral_n_growing_season as total_mineral_nitrogen
+                        nwn.mineral_n_spring + nwn.mineral_n_autumn 
+                            + nwn.mineral_n_growing_season 
+                            as total_mineral_nitrogen
 
-                    FROM nitrogen_with_nfix nwn  -- Large table on left (2.3M+ records)
-                    LEFT JOIN field_plan_data fp ON nwn.field_id = fp.field_id AND nwn.year = fp.year  -- Small table on right (~567K records)
+                    FROM nitrogen_with_nfix nwn
+                        -- Large table on left (2.3M+ records)
+                    LEFT JOIN field_plan_data fp 
+                        ON nwn.field_id = fp.field_id 
+                        AND nwn.year = fp.year
+                        -- Small table on right (~567K records)
                 """)
 
             # Clean up final intermediate table
@@ -954,9 +1145,18 @@ class NLES5Calculator:
             prep_stats = self.conn.execute("""
                 SELECT
                     COUNT(*) as total_fields,
-                    COUNT(CASE WHEN fertilizer_data_quality = 'real_fertilizer_data' THEN 1 END) as real_fertilizer_count,
-                    COUNT(CASE WHEN field_plan_data_quality = 'real_field_plan_data' THEN 1 END) as real_field_plan_data_count,
-                    COUNT(CASE WHEN catch_crops_data_quality = 'has_catch_crops' THEN 1 END) as catch_crops_count,
+                    COUNT(CASE 
+                        WHEN fertilizer_data_quality = 'real_fertilizer_data' 
+                        THEN 1 
+                    END) as real_fertilizer_count,
+                    COUNT(CASE 
+                        WHEN field_plan_data_quality = 'real_field_plan_data' 
+                        THEN 1 
+                    END) as real_field_plan_data_count,
+                    COUNT(CASE 
+                        WHEN catch_crops_data_quality = 'has_catch_crops' 
+                        THEN 1 
+                    END) as catch_crops_count,
                     AVG(total_nitrogen_quota) as avg_n_quota,
                     AVG(total_mineral_nitrogen) as avg_mineral_n
                 FROM nitrogen_inputs_prepared
@@ -971,10 +1171,10 @@ class NLES5Calculator:
                 avg_mineral = prep_stats[5] or 0.0
 
                 self.log.info(f"✅ Prepared nitrogen inputs for {total:,} fields")
-                self.log.info(f"📊 Real fertilizer data: {real_fert:,} ({real_fert/total:.1%})")
-                self.log.info(f"📊 Real field plan data: {real_plan:,} ({real_plan/total:.1%})")
+                self.log.info(f"📊 Real fertilizer data: {real_fert:,} ({real_fert / total:.1%})")
+                self.log.info(f"📊 Real field plan data: {real_plan:,} ({real_plan / total:.1%})")
                 self.log.info(
-                    f"📊 Fields with catch crops: {catch_crops:,} ({catch_crops/total:.1%})"
+                    f"📊 Fields with catch crops: {catch_crops:,} ({catch_crops / total:.1%})"
                 )
                 self.log.info(f"📊 Avg nitrogen quota: {avg_quota:.1f} kg N/ha")
                 self.log.info(f"📊 Avg mineral nitrogen: {avg_mineral:.1f} kg N/ha")
@@ -984,13 +1184,18 @@ class NLES5Calculator:
             raise
 
     def _join_fertilizer_and_nfix_chunked(self, total_count: int) -> None:
-        """Process fertilizer and nitrogen fixation join in chunks (optimized to avoid n_fixation_history table)."""
+        """Process fertilizer and nitrogen fixation join in chunks.
+
+        Optimized to avoid n_fixation_history table.
+        """
 
         chunk_size = self.config.nles5_calculation_batch_size  # 40,000 from config
         num_chunks = (total_count + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"📊 Processing fertilizer + nitrogen fixation join: {total_count:,} records in {num_chunks} chunks of {chunk_size:,} each"
+            f"📊 Processing fertilizer + nitrogen fixation join: "
+            f"{total_count:,} records in {num_chunks} chunks of "
+            f"{chunk_size:,} each"
         )
 
         # Create batch output directory
@@ -1032,7 +1237,9 @@ class NLES5Calculator:
             batch_file = batch_dir / f"batch_{chunk_idx:04d}.parquet"
 
             self.log.info(
-                f"📦 Processing fertilizer + nitrogen fixation chunk {chunk_idx + 1}/{num_chunks} (offset: {offset:,}) -> {batch_file.name}"
+                f"📦 Processing fertilizer + nitrogen fixation chunk "
+                f"{chunk_idx + 1}/{num_chunks} (offset: {offset:,}) -> "
+                f"{batch_file.name}"
             )
 
             # Create chunk with combined fertilizer and nitrogen fixation data
@@ -1059,8 +1266,12 @@ class NLES5Calculator:
                     ORDER BY field_id
                     LIMIT {chunk_size} OFFSET {offset}
                 ) nb  -- Large chunk on left
-                LEFT JOIN fertilizer_accounts fa ON nb.cvr_number = fa.cvr_number AND nb.year = fa.year  -- Small table
-                LEFT JOIN n_fixation_mapping fix ON nb.crop_code = fix.glr_code  -- Small lookup table (crop_code already in nitrogen_base)
+                LEFT JOIN fertilizer_accounts fa 
+                    ON nb.cvr_number = fa.cvr_number 
+                    AND nb.year = fa.year  -- Small table
+                LEFT JOIN n_fixation_mapping fix 
+                    ON nb.crop_code = fix.glr_code
+                    -- Small lookup table (crop_code already in nitrogen_base)
             """)
 
             chunk_count = self.conn.execute(
@@ -1084,6 +1295,7 @@ class NLES5Calculator:
                 # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
                 # Rely on Python garbage collection for memory management
                 import gc
+
                 gc.collect()
                 self.log.info(f"   💾 Memory optimization after combined chunk {chunk_idx + 1}")
 
@@ -1109,7 +1321,8 @@ class NLES5Calculator:
 
         final_count = self.conn.execute("SELECT COUNT(*) FROM nitrogen_with_nfix").fetchone()[0]
         self.log.info(
-            f"✅ Chunked fertilizer + nitrogen fixation join completed: {final_count:,} records loaded from {len(batch_files)} batch files"
+            f"✅ Chunked fertilizer + nitrogen fixation join completed: "
+            f"{final_count:,} records loaded from {len(batch_files)} batch files"
         )
 
     def _join_fertilizer_chunked(self, total_count: int) -> None:
@@ -1119,7 +1332,8 @@ class NLES5Calculator:
         num_chunks = (total_count + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"📊 Processing fertilizer join: {total_count:,} records in {num_chunks} chunks of {chunk_size:,} each"
+            f"📊 Processing fertilizer join: {total_count:,} records in "
+            f"{num_chunks} chunks of {chunk_size:,} each"
         )
 
         # Create batch output directory
@@ -1160,7 +1374,8 @@ class NLES5Calculator:
             batch_file = batch_dir / f"batch_{chunk_idx:04d}.parquet"
 
             self.log.info(
-                f"📦 Processing fertilizer chunk {chunk_idx + 1}/{num_chunks} (offset: {offset:,}) -> {batch_file.name}"
+                f"📦 Processing fertilizer chunk {chunk_idx + 1}/{num_chunks} "
+                f"(offset: {offset:,}) -> {batch_file.name}"
             )
 
             # Create chunk and join with fertilizer data
@@ -1184,7 +1399,9 @@ class NLES5Calculator:
                     ORDER BY field_id
                     LIMIT {chunk_size} OFFSET {offset}
                 ) nb  -- Large chunk on left
-                LEFT JOIN fertilizer_accounts fa ON nb.cvr_number = fa.cvr_number AND nb.year = fa.year  -- Small table on right
+                LEFT JOIN fertilizer_accounts fa 
+                    ON nb.cvr_number = fa.cvr_number 
+                    AND nb.year = fa.year  -- Small table on right
             """)
 
             chunk_count = self.conn.execute(
@@ -1207,6 +1424,7 @@ class NLES5Calculator:
             if (chunk_idx + 1) % 10 == 0:
                 # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
                 import gc
+
                 gc.collect()
                 self.log.info(f"   💾 Memory optimization after fertilizer chunk {chunk_idx + 1}")
 
@@ -1236,7 +1454,8 @@ class NLES5Calculator:
             0
         ]
         self.log.info(
-            f"✅ Chunked fertilizer join completed: {final_count:,} records loaded from {len(batch_files)} batch files"
+            f"✅ Chunked fertilizer join completed: {final_count:,} records "
+            f"loaded from {len(batch_files)} batch files"
         )
 
     def _join_nitrogen_fixation_chunked(self, total_count: int) -> None:
@@ -1246,7 +1465,8 @@ class NLES5Calculator:
         num_chunks = (total_count + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"📊 Processing nitrogen fixation join: {total_count:,} records in {num_chunks} chunks of {chunk_size:,} each"
+            f"📊 Processing nitrogen fixation join: {total_count:,} records in "
+            f"{num_chunks} chunks of {chunk_size:,} each"
         )
 
         # Create batch output directory
@@ -1277,7 +1497,8 @@ class NLES5Calculator:
                 0.0 as organic_n_livestock,
                 'N/A' as harmoni_level,
                 'default_fertilizer_data' as fertilizer_data_quality,
-                CAST(0.0 AS DECIMAL(5,1)) as nitrogen_fixation  -- Allow up to 999.9 kg/ha for nitrogen fixation
+                -- Allow up to 999.9 kg/ha for nitrogen fixation
+                CAST(0.0 AS DECIMAL(5,1)) as nitrogen_fixation
             WHERE false  -- Empty table with correct structure
         """)
 
@@ -1288,7 +1509,9 @@ class NLES5Calculator:
             batch_file = batch_dir / f"batch_{chunk_idx:04d}.parquet"
 
             self.log.info(
-                f"📦 Processing nitrogen fixation chunk {chunk_idx + 1}/{num_chunks} (offset: {offset:,}) -> {batch_file.name}"
+                f"📦 Processing nitrogen fixation chunk "
+                f"{chunk_idx + 1}/{num_chunks} (offset: {offset:,}) -> "
+                f"{batch_file.name}"
             )
 
             # Create chunk and join with nitrogen fixation data
@@ -1296,14 +1519,18 @@ class NLES5Calculator:
                 CREATE OR REPLACE TABLE nfix_chunk_result AS
                 SELECT
                     nwf.*,
-                    CAST(COALESCE(nfix.nfix_ha, 0.0) AS DECIMAL(5,1)) as nitrogen_fixation  -- Cast to appropriate decimal type
+                    -- Cast to appropriate decimal type
+                    CAST(COALESCE(nfix.nfix_ha, 0.0) AS DECIMAL(5,1)) 
+                        as nitrogen_fixation
                 FROM (
                     SELECT *
                     FROM nitrogen_with_fertilizer
                     ORDER BY field_id
                     LIMIT {chunk_size} OFFSET {offset}
                 ) nwf  -- Large chunk on left
-                LEFT JOIN n_fixation_history nfix ON nwf.field_id = nfix.field_id AND nwf.year = nfix.year  -- Large table on right
+                LEFT JOIN n_fixation_history nfix 
+                    ON nwf.field_id = nfix.field_id 
+                    AND nwf.year = nfix.year  -- Large table on right
             """)
 
             chunk_count = self.conn.execute("SELECT COUNT(*) FROM nfix_chunk_result").fetchone()[0]
@@ -1326,6 +1553,7 @@ class NLES5Calculator:
             if (chunk_idx + 1) % 10 == 0:
                 # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
                 import gc
+
                 gc.collect()
                 self.log.info(
                     f"   💾 Memory optimization after nitrogen fixation chunk {chunk_idx + 1}"
@@ -1355,7 +1583,8 @@ class NLES5Calculator:
 
         final_count = self.conn.execute("SELECT COUNT(*) FROM nitrogen_with_nfix").fetchone()[0]
         self.log.info(
-            f"✅ Chunked nitrogen fixation join completed: {final_count:,} records loaded from {len(batch_files)} batch files"
+            f"✅ Chunked nitrogen fixation join completed: {final_count:,} records "
+            f"loaded from {len(batch_files)} batch files"
         )
 
     def _join_field_plan_chunked(self, total_count: int) -> None:
@@ -1365,7 +1594,8 @@ class NLES5Calculator:
         num_chunks = (total_count + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"📊 Processing field plan join: {total_count:,} records in {num_chunks} chunks of {chunk_size:,} each"
+            f"📊 Processing field plan join: {total_count:,} records in "
+            f"{num_chunks} chunks of {chunk_size:,} each"
         )
 
         # Create batch output directory
@@ -1406,7 +1636,8 @@ class NLES5Calculator:
             batch_file = batch_dir / f"batch_{chunk_idx:04d}.parquet"
 
             self.log.info(
-                f"📦 Processing field plan chunk {chunk_idx + 1}/{num_chunks} (offset: {offset:,}) -> {batch_file.name}"
+                f"📦 Processing field plan chunk {chunk_idx + 1}/{num_chunks} "
+                f"(offset: {offset:,}) -> {batch_file.name}"
             )
 
             # Create chunk and join with field plan data
@@ -1421,14 +1652,17 @@ class NLES5Calculator:
                     0.0 as has_catch_crops,
                     'none' as catch_crop_type,
                     'no_catch_crops' as catch_crops_data_quality,
-                    nwn.mineral_n_spring + nwn.mineral_n_autumn + nwn.mineral_n_growing_season as total_mineral_nitrogen
+                    nwn.mineral_n_spring + nwn.mineral_n_autumn 
+                        + nwn.mineral_n_growing_season as total_mineral_nitrogen
                 FROM (
                     SELECT *
                     FROM nitrogen_with_nfix
                     ORDER BY field_id
                     LIMIT {chunk_size} OFFSET {offset}
                 ) nwn  -- Large chunk on left
-                LEFT JOIN field_plan_data fp ON nwn.field_id = fp.field_id AND nwn.year = fp.year  -- Small table on right
+                LEFT JOIN field_plan_data fp 
+                    ON nwn.field_id = fp.field_id 
+                    AND nwn.year = fp.year  -- Small table on right
             """)
 
             chunk_count = self.conn.execute(
@@ -1451,6 +1685,7 @@ class NLES5Calculator:
             if (chunk_idx + 1) % 10 == 0:
                 # NOTE: CHECKPOINT and PRAGMA optimize not supported for in-memory databases
                 import gc
+
                 gc.collect()
                 self.log.info(f"   💾 Memory optimization after field plan chunk {chunk_idx + 1}")
 
@@ -1480,7 +1715,8 @@ class NLES5Calculator:
             0
         ]
         self.log.info(
-            f"✅ Chunked field plan join completed: {final_count:,} records loaded from {len(batch_files)} batch files"
+            f"✅ Chunked field plan join completed: {final_count:,} records "
+            f"loaded from {len(batch_files)} batch files"
         )
 
     def _calculate_nles5_estimates_batched(self) -> str:
@@ -1509,7 +1745,8 @@ class NLES5Calculator:
 
             if total_fields <= batch_size:
                 self.log.info(
-                    f"Field count ({total_fields:,}) smaller than batch size, using regular processing"
+                    f"Field count ({total_fields:,}) smaller than batch size, "
+                    f"using regular processing"
                 )
                 return self._calculate_nles5_estimates()
 
@@ -1537,7 +1774,8 @@ class NLES5Calculator:
                 chunk_size = min(batch_size, total_fields - offset)
 
                 self.log.info(
-                    f"   Processing NLES5 batch {batch_num + 1}/{num_batches}: {offset:,} to {offset + chunk_size:,}"
+                    f"   Processing NLES5 batch {batch_num + 1}/{num_batches}: "
+                    f"{offset:,} to {offset + chunk_size:,}"
                 )
 
                 # Create batch table
@@ -1562,17 +1800,27 @@ class NLES5Calculator:
                             -0.1108 * (year - 1991) +
                             POWER((23.51 +
                                    -- Crop effects (all crop parameters combined)
-                                   crop_lambda_ma + winter_veg_lambda_wa + prev_crop_eta_mp + prev_winter_veg_eta_wp +
-                                   -- Nitrogen effect (N * theta) - theta applied to entire N calculation
+                                   crop_lambda_ma + winter_veg_lambda_wa 
+                                       + prev_crop_eta_mp + prev_winter_veg_eta_wp +
+                                   -- Nitrogen effect (N * theta)
+                                   -- theta applied to entire N calculation
                                    theta_factor * (
-                                       (nitrogen_coefficients_Bt * total_n_soil_top25) +
-                                       (nitrogen_coefficients_Bcs * mineral_n_spring) +
-                                       (nitrogen_coefficients_Bca * mineral_n_autumn) +
-                                       (nitrogen_coefficients_Budb * mineral_n_grazing) +
-                                       (nitrogen_coefficients_Bm1 * mineral_organic_n_prev2years) +
-                                       (nitrogen_coefficients_Bf0 * biological_n_fixation_current) +
-                                       (nitrogen_coefficients_Bf1 * biological_n_fixation_prev2years) +
-                                       (nitrogen_coefficients_Bg0 * organic_n_manure_current)
+                                       (nitrogen_coefficients_Bt 
+                                           * total_n_soil_top25) +
+                                       (nitrogen_coefficients_Bcs 
+                                           * mineral_n_spring) +
+                                       (nitrogen_coefficients_Bca 
+                                           * mineral_n_autumn) +
+                                       (nitrogen_coefficients_Budb 
+                                           * mineral_n_grazing) +
+                                       (nitrogen_coefficients_Bm1 
+                                           * mineral_organic_n_prev2years) +
+                                       (nitrogen_coefficients_Bf0 
+                                           * biological_n_fixation_current) +
+                                       (nitrogen_coefficients_Bf1 
+                                           * biological_n_fixation_prev2years) +
+                                       (nitrogen_coefficients_Bg0 
+                                           * organic_n_manure_current)
                                    )), 1.5) *
                             percolation_effect
                         ) AS nitrogen_leaching_nles5
@@ -1622,13 +1870,17 @@ class NLES5Calculator:
     def _calculate_nles5_estimates_target_year(
         self, percolation_table: str, target_year: int
     ) -> str:
-        """Calculate final NLES5 estimates for target year using complete NLES5 formula with fertilizer integration."""
+        """Calculate final NLES5 estimates for target year.
+
+        Uses complete NLES5 formula with fertilizer integration.
+        """
         try:
             result_table = f"estimates_target_{target_year}"
 
             # PHASE 1: Join fertilizer data with percolation table
             self.log.info(
-                f"🧮 Integrating fertilizer data for complete NLES5 calculation (target year: {target_year})"
+                f"🧮 Integrating fertilizer data for complete NLES5 calculation "
+                f"(target year: {target_year})"
             )
 
             # Initialize fertilizer table variable
@@ -1649,7 +1901,8 @@ class NLES5Calculator:
             if percolation_count == 0:
                 raise ValueError(
                     f"Percolation data missing for target year {target_year} - "
-                    f"{percolation_table} is empty. Verify climate processing and spatial join alignment (CRS/geometry)."
+                    f"{percolation_table} is empty. Verify climate processing and "
+                    f"spatial join alignment (CRS/geometry)."
                 )
 
             # Check if fertilizer table exists and has data for target year
@@ -1666,6 +1919,23 @@ class NLES5Calculator:
             ).fetchone()[0]
             self.log.info(f"   - field_plan_data: {field_plan_data_count:,} records")
 
+            # 🔍 DIAGNOSTIC: Check jordbundstype data type and sample values
+            try:
+                schema_info = self.conn.execute("DESCRIBE field_plan_data").fetchall()
+                jordbundstype_col = [col for col in schema_info if col[0] == "jordbundstype"]
+                if jordbundstype_col:
+                    self.log.info(f"   - jordbundstype data type: {jordbundstype_col[0][1]}")
+
+                sample_values = self.conn.execute("""
+                    SELECT DISTINCT jordbundstype 
+                    FROM field_plan_data 
+                    WHERE jordbundstype IS NOT NULL 
+                    LIMIT 10
+                """).fetchall()
+                self.log.info(f"   - jordbundstype sample values: {[v[0] for v in sample_values]}")
+            except Exception as diag_e:
+                self.log.warning(f"   - Could not retrieve jordbundstype diagnostics: {diag_e}")
+
             # Continue with the fertilizer integration logic...
             return self._execute_target_year_calculation(
                 percolation_table, target_year, fertilizer_table, result_table
@@ -1678,22 +1948,30 @@ class NLES5Calculator:
             raise
 
     def _execute_target_year_calculation(
-        self, percolation_table: str, target_year: int, fertilizer_table: str, result_table: str
+        self,
+        percolation_table: str,
+        target_year: int,
+        fertilizer_table: str,
+        result_table: str,
     ) -> str:
         """Execute the target year NLES5 calculation."""
-        # This method contains the detailed calculation logic for target year processing
-        # For brevity, I'm showing the structure - the full implementation would include all the SQL logic
+        # This method contains the detailed calculation logic for target year
+        # processing. For brevity, I'm showing the structure - the full
+        # implementation would include all the SQL logic
 
-        # Create fields with fertilizer data - FIXED: Ensure no schema inheritance issues
+        # Create fields with fertilizer data
+        # FIXED: Ensure no schema inheritance issues
         self.conn.execute("DROP TABLE IF EXISTS fields_with_fertilizer")
         self.conn.execute(f"""
             CREATE TEMPORARY TABLE fields_with_fertilizer AS
             SELECT
                 f.field_id,
+                f.field_uuid,  -- Preserve UUID from source
                 f.cvr_number,
                 f.year,
                 f.geom,
-                CAST(f.area_ha AS DECIMAL(10,4)) as area_ha,  -- FIXED: Explicit cast to prevent DECIMAL constraints
+                -- FIXED: Explicit cast to prevent DECIMAL constraints
+                CAST(f.area_ha AS DECIMAL(10,4)) as area_ha,
                 f.crop_name,
                 f.m_code,
                 f.layer_type,
@@ -1723,21 +2001,29 @@ class NLES5Calculator:
                 COALESCE(fh.organic_n_hus, 0.0) as organic_n_hus,
                 COALESCE(fh.tn_t_ha, 0.0) as tn_t_ha,
                 -- Join field plan data for additional context
-                COALESCE(fp.jordbundstype, 'Unknown') as field_plan_data_soil_type,
+                -- FIXED: Cast jordbundstype to VARCHAR before COALESCE
+                -- to avoid INT32 conversion error
+                COALESCE(CAST(fp.jordbundstype AS VARCHAR), 'Unknown') 
+                    as field_plan_data_soil_type,
                 COALESCE(fp.areal, 0.0) as field_plan_data_area
             FROM {percolation_table} f
-            LEFT JOIN {fertilizer_table} fh ON f.cvr_number = fh.cvr_number AND fh.year = {target_year}
-            LEFT JOIN field_plan_data fp ON f.field_id = fp.field_id
+            LEFT JOIN {fertilizer_table} fh 
+                ON f.cvr_number = fh.cvr_number 
+                AND fh.year = {target_year}
+            LEFT JOIN field_plan_data fp 
+                ON f.field_id = fp.field_id
             WHERE f.drainage_effect IS NOT NULL
         """)
 
-        # Create the final NLES5 estimates table for this target year - FIXED: Explicit schema to prevent DECIMAL(2,1) error
+        # Create the final NLES5 estimates table for this target year
+        # FIXED: Explicit schema to prevent DECIMAL(2,1) error
         self.conn.execute(f"DROP TABLE IF EXISTS {result_table}")
         self.conn.execute(f"""
             CREATE TABLE {result_table} AS
             WITH deduplicated_fields AS (
                 SELECT DISTINCT
                     field_id,
+                    field_uuid,  -- Preserve UUID
                     cvr_number,
                     year,
                     area_ha,
@@ -1765,67 +2051,89 @@ class NLES5Calculator:
             )
             SELECT
                 f.field_id,
+                -- Preserve field UUID from source data
+                f.field_uuid,
                 -- Generate block_id from available FVM marker data
                 CASE
                     WHEN f.field_id IS NOT NULL AND f.cvr_number IS NOT NULL THEN
-                        CONCAT(f.cvr_number, '_', LEFT(f.field_id, 8))  -- Use CVR + first 8 chars of field_id
+                        -- Use CVR + first 8 chars of field_id
+                        CONCAT(f.cvr_number, '_', LEFT(f.field_id, 8))
                     WHEN f.cvr_number IS NOT NULL THEN
-                        CONCAT(f.cvr_number, '_block')  -- Fallback to CVR + block
+                        -- Fallback to CVR + block
+                        CONCAT(f.cvr_number, '_block')
                     ELSE
-                        CONCAT('field_', LEFT(f.field_id, 8))  -- Final fallback
+                        -- Final fallback
+                        CONCAT('field_', LEFT(f.field_id, 8))
                 END as block_id,
                 f.cvr_number,
                 {target_year} as year,
-                CAST(f.area_ha AS DECIMAL(10,4)) as area_ha,  -- FIXED: Explicit cast to prevent DECIMAL(2,1) error
+                -- FIXED: Explicit cast to prevent DECIMAL(2,1) error
+                CAST(f.area_ha AS DECIMAL(10,4)) as area_ha,
                 f.crop_name as crop_type,
                 -- FIXED: Use real soil data instead of hardcoded unknown values
                 COALESCE(f.soil_code, 'unknown') as soil_code,
                 COALESCE(f.soil_description, 'unknown') as soil_description,
                 COALESCE(f.clay_content, 15.0) as clay_content,
 
-                -- Calculate NLES5 nitrogen washout using correct NLES5 formula: Y5 = Trend + V^1.5 * Perco_Soil_effect
+                -- Calculate NLES5 nitrogen washout using correct NLES5 formula
+                -- Y5 = Trend + V^1.5 * Perco_Soil_effect
                 GREATEST(0,
                     (
                         -0.1108 * (f.year - 1991) +
                         POWER((23.51 +
                                COALESCE(crop_params.nles5_factor, 0) +
                                1.0 * (
-                                   0.456793 * COALESCE(f.tn_t_ha * 1000, 0) +  -- Convert tons/ha to kg/ha for soil N
+                                   -- Cap at 0.5 t/ha, convert to kg/ha
+                                   0.456793 * (LEAST(COALESCE(f.tn_t_ha, 0), 0.5) 
+                                       * 1000) +
                                    0.049570 * COALESCE(f.mineral_n_foraar, 0) +
                                    0.157044 * COALESCE(f.mineral_n_eft, 0) +
                                    0.038245 * COALESCE(f.mineral_n_udb, 0) +
                                    0.014099 * COALESCE(f.organic_n_hus, 0) +
-                                   0.026499 * 0 +  -- No previous year mineral N data available
-                                   0.016314 * 0    -- No N fixation data available
+                                   -- No previous year mineral N data available
+                                   0.026499 * 0 +
+                                   -- No N fixation data available
+                                   0.016314 * 0
                                )), 1.5) *
                         COALESCE(f.perco_soil_effect, 0.001)
-                    ) * 1.085  -- Apply scaling factor to final result
+                    -- Apply scaling factor to final result
+                    ) * 1.085
                 ) as nitrogen_washout_kg_ha,
 
-                -- FIXED: Use total percolation for temporal variation instead of single April-August period
+                -- FIXED: Use total percolation for temporal variation
+                -- instead of single April-August period
                 COALESCE(f.total_percolation, 0.0) as percolation_mm,
                 -- Add seasonal breakdown for analysis
-                COALESCE(f.perco_apr_aug_current, 0.0) as percolation_april_august,
-                COALESCE(f.perco_sep_mar_current, 0.0) as percolation_sept_march,
-                COALESCE(f.perco_apr_aug_previous, 0.0) as percolation_april_august_prev,
-                COALESCE(f.perco_sep_mar_previous, 0.0) as percolation_sept_march_prev,
+                COALESCE(f.perco_apr_aug_current, 0.0) 
+                    as percolation_april_august,
+                COALESCE(f.perco_sep_mar_current, 0.0) 
+                    as percolation_sept_march,
+                COALESCE(f.perco_apr_aug_previous, 0.0) 
+                    as percolation_april_august_prev,
+                COALESCE(f.perco_sep_mar_previous, 0.0) 
+                    as percolation_sept_march_prev,
 
-                -- Calculate uncertainty based on NLES5 model coefficient of variation (~10%)
-                -- From DCA Report 163: Model uncertainty is approximately 10% (coefficient of variation)
-                -- Higher uncertainty for fields with extreme values or poor data quality
+                -- Calculate uncertainty based on NLES5 model coefficient of
+                -- variation (~10%). From DCA Report 163: Model uncertainty is
+                -- approximately 10% (coefficient of variation). Higher uncertainty
+                -- for fields with extreme values or poor data quality.
                 GREATEST(8.0, LEAST(15.0,
                     10.0 + -- Base model uncertainty of 10%
                     CASE
-                        WHEN COALESCE(f.tn_t_ha, 0) = 0 THEN 2.0  -- +2% for missing fertilizer data
+                        -- +2% for missing fertilizer data
+                        WHEN COALESCE(f.tn_t_ha, 0) = 0 THEN 2.0
                         ELSE 0.0
                     END +
                     CASE
-                        WHEN COALESCE(f.perco_apr_aug_current, 0) < 50 THEN 1.5  -- +1.5% for low percolation (dry conditions)
-                        WHEN COALESCE(f.perco_apr_aug_current, 0) > 300 THEN 2.0  -- +2% for high percolation (wet conditions)
+                        -- +1.5% for low percolation (dry conditions)
+                        WHEN COALESCE(f.perco_apr_aug_current, 0) < 50 THEN 1.5
+                        -- +2% for high percolation (wet conditions)
+                        WHEN COALESCE(f.perco_apr_aug_current, 0) > 300 THEN 2.0
                         ELSE 0.0
                     END +
                     CASE
-                        WHEN crop_params.nles5_factor IS NULL THEN 1.0  -- +1% for unknown crop type
+                        -- +1% for unknown crop type
+                        WHEN crop_params.nles5_factor IS NULL THEN 1.0
                         ELSE 0.0
                     END
                 )) as uncertainty_pct,
@@ -1833,9 +2141,21 @@ class NLES5Calculator:
                 -- Data quality score based on available data completeness
                 GREATEST(0.5, LEAST(1.0,
                     0.7 + -- Base quality score
-                    CASE WHEN COALESCE(f.tn_t_ha, 0) > 0 THEN 0.1 ELSE 0.0 END +  -- +0.1 for fertilizer data
-                    CASE WHEN COALESCE(f.perco_apr_aug_current, 0) > 0 THEN 0.1 ELSE 0.0 END +  -- +0.1 for climate data
-                    CASE WHEN crop_params.nles5_factor IS NOT NULL THEN 0.1 ELSE 0.0 END  -- +0.1 for known crop
+                    -- +0.1 for fertilizer data
+                    CASE 
+                        WHEN COALESCE(f.tn_t_ha, 0) > 0 THEN 0.1 
+                        ELSE 0.0 
+                    END +
+                    -- +0.1 for climate data
+                    CASE 
+                        WHEN COALESCE(f.perco_apr_aug_current, 0) > 0 THEN 0.1 
+                        ELSE 0.0 
+                    END +
+                    -- +0.1 for known crop
+                    CASE 
+                        WHEN crop_params.nles5_factor IS NOT NULL THEN 0.1 
+                        ELSE 0.0 
+                    END
                 )) as data_quality_score,
                 ST_AsText(f.geom) as geometry_wkt,
                 current_timestamp as created_at
@@ -1847,7 +2167,8 @@ class NLES5Calculator:
         # Log results
         count = self.conn.execute(f"SELECT COUNT(*) FROM {result_table}").fetchone()[0]
         self.log.info(
-            f"✅ Created {result_table} with {count:,} NLES5 estimates for target year {target_year}"
+            f"✅ Created {result_table} with {count:,} NLES5 estimates "
+            f"for target year {target_year}"
         )
 
         return result_table
@@ -1922,7 +2243,9 @@ class NLES5Calculator:
                 percolation_effects_stats = self.conn.execute(f"""
                     SELECT
                         COUNT(*) as total_fields,
-                        COUNT(CASE WHEN total_percolation > 0 THEN 1 END) as fields_with_percolation,
+                        COUNT(CASE 
+                            WHEN total_percolation > 0 THEN 1 
+                        END) as fields_with_percolation,
 
                         -- Raw percolation values after field spatial joins
                         MIN(total_percolation) as min_total_perco,
@@ -1957,8 +2280,16 @@ class NLES5Calculator:
                         STDDEV(perco_soil_effect) as stddev_perco_soil_effect,
 
                         -- Soil type distribution
-                        COUNT(CASE WHEN soil_code IN ('1', '2', '3') OR soil_description ILIKE '%sand%' THEN 1 END) as sand_fields,
-                        COUNT(CASE WHEN NOT (soil_code IN ('1', '2', '3') OR soil_description ILIKE '%sand%') THEN 1 END) as clay_fields
+                        COUNT(CASE 
+                            WHEN soil_code IN ('1', '2', '3') 
+                                OR soil_description ILIKE '%sand%' 
+                            THEN 1 
+                        END) as sand_fields,
+                        COUNT(CASE 
+                            WHEN NOT (soil_code IN ('1', '2', '3') 
+                                OR soil_description ILIKE '%sand%') 
+                            THEN 1 
+                        END) as clay_fields
                     FROM {result_table}
                     WHERE total_percolation IS NOT NULL
                 """).fetchone()
@@ -1966,78 +2297,105 @@ class NLES5Calculator:
                 if percolation_effects_stats:
                     self.log.info("🌧️  PERCOLATION EFFECTS DEBUG STATISTICS:")
                     self.log.info(
-                        f"   Fields processed: {percolation_effects_stats[0]:,}, with percolation data: {percolation_effects_stats[1]:,}"
+                        f"   Fields processed: {percolation_effects_stats[0]:,}, "
+                        f"with percolation data: {percolation_effects_stats[1]:,}"
                     )
                     self.log.info(
-                        f"   Soil types: Sand={percolation_effects_stats[25]:,}, Clay={percolation_effects_stats[26]:,}"
+                        f"   Soil types: Sand={percolation_effects_stats[25]:,}, "
+                        f"Clay={percolation_effects_stats[26]:,}"
                     )
 
                     # Raw percolation values at field level
                     self.log.info("   RAW PERCOLATION at field level:")
                     self.log.info(
-                        f"     Total: min={percolation_effects_stats[2]:.1f}mm, max={percolation_effects_stats[3]:.1f}mm, avg={percolation_effects_stats[4]:.1f}mm"
+                        f"     Total: min={percolation_effects_stats[2]:.1f}mm, "
+                        f"max={percolation_effects_stats[3]:.1f}mm, "
+                        f"avg={percolation_effects_stats[4]:.1f}mm"
                     )
                     if percolation_effects_stats[5] and percolation_effects_stats[4]:
                         cv_total = percolation_effects_stats[5] / percolation_effects_stats[4] * 100
                         self.log.info(
-                            f"     Total variation: stddev={percolation_effects_stats[5]:.1f}mm, CV={cv_total:.1f}%"
+                            f"     Total variation: stddev={percolation_effects_stats[5]:.1f}mm, "
+                            f"CV={cv_total:.1f}%"
                         )
 
                     self.log.info(
-                        f"     April-Aug: min={percolation_effects_stats[6]:.1f}mm, max={percolation_effects_stats[7]:.1f}mm, avg={percolation_effects_stats[8]:.1f}mm"
+                        f"     April-Aug: min={percolation_effects_stats[6]:.1f}mm, "
+                        f"max={percolation_effects_stats[7]:.1f}mm, "
+                        f"avg={percolation_effects_stats[8]:.1f}mm"
                     )
                     if percolation_effects_stats[9] and percolation_effects_stats[8]:
                         cv_apr_aug = (
                             percolation_effects_stats[9] / percolation_effects_stats[8] * 100
                         )
                         self.log.info(
-                            f"     April-Aug variation: stddev={percolation_effects_stats[9]:.1f}mm, CV={cv_apr_aug:.1f}%"
+                            f"     April-Aug variation: "
+                            f"stddev={percolation_effects_stats[9]:.1f}mm, "
+                            f"CV={cv_apr_aug:.1f}%"
                         )
 
                     self.log.info(
-                        f"     Sept-Mar: min={percolation_effects_stats[10]:.1f}mm, max={percolation_effects_stats[11]:.1f}mm, avg={percolation_effects_stats[12]:.1f}mm"
+                        f"     Sept-Mar: min={percolation_effects_stats[10]:.1f}mm, "
+                        f"max={percolation_effects_stats[11]:.1f}mm, "
+                        f"avg={percolation_effects_stats[12]:.1f}mm"
                     )
                     if percolation_effects_stats[13] and percolation_effects_stats[12]:
                         cv_sep_mar = (
                             percolation_effects_stats[13] / percolation_effects_stats[12] * 100
                         )
                         self.log.info(
-                            f"     Sept-Mar variation: stddev={percolation_effects_stats[13]:.1f}mm, CV={cv_sep_mar:.1f}%"
+                            f"     Sept-Mar variation: "
+                            f"stddev={percolation_effects_stats[13]:.1f}mm, "
+                            f"CV={cv_sep_mar:.1f}%"
                         )
 
                     # Calculated effects
                     self.log.info("   CALCULATED EFFECTS:")
                     self.log.info(
-                        f"     Soil effect: min={percolation_effects_stats[14]:.4f}, max={percolation_effects_stats[15]:.4f}, avg={percolation_effects_stats[16]:.4f}"
+                        f"     Soil effect: min={percolation_effects_stats[14]:.4f}, "
+                        f"max={percolation_effects_stats[15]:.4f}, "
+                        f"avg={percolation_effects_stats[16]:.4f}"
                     )
                     if percolation_effects_stats[17] and percolation_effects_stats[16]:
                         cv_soil = (
                             percolation_effects_stats[17] / percolation_effects_stats[16] * 100
                         )
                         self.log.info(
-                            f"     Soil effect variation: stddev={percolation_effects_stats[17]:.4f}, CV={cv_soil:.1f}%"
+                            f"     Soil effect variation: "
+                            f"stddev={percolation_effects_stats[17]:.4f}, "
+                            f"CV={cv_soil:.1f}%"
                         )
 
                     self.log.info(
-                        f"     Drainage effect: min={percolation_effects_stats[18]:.4f}, max={percolation_effects_stats[19]:.4f}, avg={percolation_effects_stats[20]:.4f}"
+                        f"     Drainage effect: "
+                        f"min={percolation_effects_stats[18]:.4f}, "
+                        f"max={percolation_effects_stats[19]:.4f}, "
+                        f"avg={percolation_effects_stats[20]:.4f}"
                     )
                     if percolation_effects_stats[21] and percolation_effects_stats[20]:
                         cv_drainage = (
                             percolation_effects_stats[21] / percolation_effects_stats[20] * 100
                         )
                         self.log.info(
-                            f"     Drainage effect variation: stddev={percolation_effects_stats[21]:.4f}, CV={cv_drainage:.1f}%"
+                            f"     Drainage effect variation: "
+                            f"stddev={percolation_effects_stats[21]:.4f}, "
+                            f"CV={cv_drainage:.1f}%"
                         )
 
                     self.log.info(
-                        f"     Combined perco-soil effect: min={percolation_effects_stats[22]:.4f}, max={percolation_effects_stats[23]:.4f}, avg={percolation_effects_stats[24]:.4f}"
+                        f"     Combined perco-soil effect: "
+                        f"min={percolation_effects_stats[22]:.4f}, "
+                        f"max={percolation_effects_stats[23]:.4f}, "
+                        f"avg={percolation_effects_stats[24]:.4f}"
                     )
                     if percolation_effects_stats[25] and percolation_effects_stats[24]:
                         cv_combined = (
                             percolation_effects_stats[25] / percolation_effects_stats[24] * 100
                         )
                         self.log.info(
-                            f"     Combined effect variation: stddev={percolation_effects_stats[25]:.4f}, CV={cv_combined:.1f}%"
+                            f"     Combined effect variation: "
+                            f"stddev={percolation_effects_stats[25]:.4f}, "
+                            f"CV={cv_combined:.1f}%"
                         )
 
             return result_table
@@ -2088,7 +2446,8 @@ class NLES5Calculator:
 
             final_count = self.conn.execute(f"SELECT COUNT(*) FROM {final_table}").fetchone()[0]
             self.log.info(
-                f"✅ Target-year-by-target-year processing complete: {final_count:,} total estimates"
+                f"✅ Target-year-by-target-year processing complete: "
+                f"{final_count:,} total estimates"
             )
 
             return final_table
