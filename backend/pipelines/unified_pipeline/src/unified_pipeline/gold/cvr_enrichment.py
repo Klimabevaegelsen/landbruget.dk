@@ -917,7 +917,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     "ShorttermPartOfLongtermLiabilitiesOtherThanProvisions"
                 ),
                 "other_payables_including_tax": (
-                    "OtherPayablesIncludingTaxPayables" "LiabilitiesOtherThanProvisionsShortterm"
+                    "OtherPayablesIncludingTaxPayablesLiabilitiesOtherThanProvisionsShortterm"
                 ),
                 "provisions": "Provisions",
                 "provisions_for_deferred_tax": "ProvisionsForDeferredTax",
@@ -1148,96 +1148,96 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             f"""
             INSERT INTO {table_name}
             SELECT
-                company_uuid(json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER) as company_uuid,
-                json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER as cvr_number,
-                json_extract_string(json_data::VARCHAR, '$.company_name') as company_name,
-                json_extract_string(json_data::VARCHAR, '$.company_type_description')
+                company_uuid(json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER) as company_uuid,
+                json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER as cvr_number,
+                json_extract_string(CAST(json_data AS VARCHAR), '$.company_name') as company_name,
+                json_extract_string(CAST(json_data AS VARCHAR), '$.company_type_description')
                     as company_type_description,
-                json_extract_string(json_data::VARCHAR, '$.status') as status,
-                json_extract_string(json_data::VARCHAR, '$.founded_date') as founded_date,
-                json_extract_string(json_data::VARCHAR, '$.dissolution_date') as dissolution_date,
-                json_extract(json_data::VARCHAR, '$.advertisement_protection')::BOOLEAN
+                json_extract_string(CAST(json_data AS VARCHAR), '$.status') as status,
+                json_extract_string(CAST(json_data AS VARCHAR), '$.founded_date') as founded_date,
+                json_extract_string(CAST(json_data AS VARCHAR), '$.dissolution_date') as dissolution_date,
+                json_extract(CAST(json_data AS VARCHAR), '$.advertisement_protection')::BOOLEAN
                     as advertisement_protection,
-                json_extract(json_data::VARCHAR, '$.primary_address_geometry.latitude')::DOUBLE
+                json_extract(CAST(json_data AS VARCHAR), '$.primary_address_geometry.latitude')::DOUBLE
                     as address_latitude,
-                json_extract(json_data::VARCHAR, '$.primary_address_geometry.longitude')::DOUBLE
+                json_extract(CAST(json_data AS VARCHAR), '$.primary_address_geometry.longitude')::DOUBLE
                     as address_longitude,
-                json_extract_string(json_data::VARCHAR, '$.primary_address_geometry.coordinate_system')
+                json_extract_string(CAST(json_data AS VARCHAR), '$.primary_address_geometry.coordinate_system')
                     as address_coordinate_system,
-                json_extract(json_data::VARCHAR, '$.primary_address_geometry.srid')::INTEGER as address_srid,
-                json_extract_string(json_data::VARCHAR, '$.primary_address_geometry.geometry_wkt')
+                json_extract(CAST(json_data AS VARCHAR), '$.primary_address_geometry.srid')::INTEGER as address_srid,
+                json_extract_string(CAST(json_data AS VARCHAR), '$.primary_address_geometry.geometry_wkt')
                     as address_geom_wkt,
-                json_extract_string(json_data::VARCHAR, '$.primary_address_geometry.coordinate_quality')
+                json_extract_string(CAST(json_data AS VARCHAR), '$.primary_address_geometry.coordinate_quality')
                     as address_coordinate_quality,
-                json_extract_string(json_data::VARCHAR, '$.primary_address_geometry.coordinate_source')
+                json_extract_string(CAST(json_data AS VARCHAR), '$.primary_address_geometry.coordinate_source')
                     as address_coordinate_source,
                 -- Extract industry information from the JSON data
                 CASE
-                    WHEN json_array_length(json_extract(json_data::VARCHAR, '$.industries')) > 0 THEN
+                    WHEN json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.industries')) > 0 THEN
                         json_extract_string(
-                            json_extract(json_data::VARCHAR, '$.industries[0]'),
+                            json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                             '$.industry_code'
                         )
                     ELSE NULL
                 END as primary_industry_code,
                 CASE
-                    WHEN json_array_length(json_extract(json_data::VARCHAR, '$.industries')) > 0 THEN
+                    WHEN json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.industries')) > 0 THEN
                         json_extract_string(
-                            json_extract(json_data::VARCHAR, '$.industries[0]'),
+                            json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                             '$.industry_description'
                         )
                     ELSE NULL
                 END as primary_industry_description,
                 CASE
-                    WHEN json_array_length(json_extract(json_data::VARCHAR, '$.industries')) > 0 THEN
+                    WHEN json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.industries')) > 0 THEN
                         CASE
                             -- Get the primary industry code
                             WHEN json_extract_string(
-                                json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                 '$.industry_code'
                             ) IS NOT NULL
                             AND json_extract(
-                                json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                 '$.is_current'
                             )::BOOLEAN = true
                             THEN
                                 CASE
                                     -- Primary Agriculture, Forestry and Fishing (codes 01-03)
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) LIKE '01%'
                                          OR json_extract_string(
-                                             json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                             json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                              '$.industry_code'
                                          ) LIKE '02%'
                                          OR json_extract_string(
-                                             json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                             json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                              '$.industry_code'
                                          ) LIKE '03%' THEN true
                                     -- Fish farming and aquaculture
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN ('050200') THEN true
                                     -- Real estate (agricultural properties)
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN ('702040', '682040') THEN true
                                     -- Veterinary services
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN ('852000', '750000') THEN true
                                     -- Agricultural support services and consulting
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN ('749010', '741410') THEN true
                                     -- Agricultural machinery and equipment
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN (
                                         '516600', '773100', '713100', '466100',
@@ -1245,7 +1245,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                                     ) THEN true
                                     -- Agricultural trade (livestock, feed, plants)
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN (
                                         '512300', '462100', '462300', '462200',
@@ -1253,7 +1253,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                                     ) THEN true
                                     -- Agricultural processing and food production
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN (
                                         '151110', '109100', '101110', '110200',
@@ -1261,12 +1261,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                                     ) THEN true
                                     -- Agricultural retail (flowers, pets)
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN ('524875', '477630', '524885', '477610') THEN true
                                     -- Agricultural education and storage
                                     WHEN json_extract_string(
-                                        json_extract(json_data::VARCHAR, '$.industries[0]'),
+                                        json_extract(CAST(json_data AS VARCHAR), '$.industries[0]'),
                                         '$.industry_code'
                                     ) IN ('802240', '631200', '521000') THEN true
                                     -- Default to false for all other sectors
@@ -1276,15 +1276,15 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         END
                     ELSE false
                 END as is_agricultural_company,
-                json_extract_string(json_data::VARCHAR, '$.data_source') as data_source,
-                json_extract_string(json_data::VARCHAR, '$.fetch_timestamp') as fetch_timestamp,
-                json_extract(json_data::VARCHAR, '$.source_pipelines')::VARCHAR[] as source_pipelines,
-                json_extract(json_data::VARCHAR, '$.source_pipeline_count')::INTEGER
+                json_extract_string(CAST(json_data AS VARCHAR), '$.data_source') as data_source,
+                json_extract_string(CAST(json_data AS VARCHAR), '$.fetch_timestamp') as fetch_timestamp,
+                json_extract(CAST(json_data AS VARCHAR), '$.source_pipelines')::VARCHAR[] as source_pipelines,
+                json_extract(CAST(json_data AS VARCHAR), '$.source_pipeline_count')::INTEGER
                     as source_pipeline_count,
-                json_extract(json_data::VARCHAR, '$.financial_document_count')::INTEGER
+                json_extract(CAST(json_data AS VARCHAR), '$.financial_document_count')::INTEGER
                     as financial_document_count,
-                json_extract_string(json_data::VARCHAR, '$.processing_timestamp') as processing_timestamp,
-                json_extract_string(json_data::VARCHAR, '$.pipeline_run_id') as pipeline_run_id
+                json_extract_string(CAST(json_data AS VARCHAR), '$.processing_timestamp') as processing_timestamp,
+                json_extract_string(CAST(json_data AS VARCHAR), '$.pipeline_run_id') as pipeline_run_id
             FROM unnest($1::VARCHAR[]) as t(json_data)
         """,
             [json_strings],
@@ -1313,8 +1313,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             """
             SELECT COUNT(*)
             FROM unnest($1::VARCHAR[]) as t(json_data)
-            WHERE json_extract(json_data::VARCHAR, '$.addresses') IS NOT NULL
-            AND json_array_length(json_extract(json_data::VARCHAR, '$.addresses')) > 0
+            WHERE json_extract(CAST(json_data AS VARCHAR), '$.addresses') IS NOT NULL
+            AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.addresses')) > 0
         """,
             [json_strings],
         ).fetchone()[0]
@@ -1354,9 +1354,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     address_struct.dawa_fetch_timestamp
                 FROM (
                     SELECT
-                        json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER as cvr_number,
+                        json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER as cvr_number,
                         unnest(from_json(
-                            json_extract(json_data::VARCHAR, '$.addresses'),
+                            json_extract(CAST(json_data AS VARCHAR), '$.addresses'),
                             '[{{
                                 "full_address": "VARCHAR",
                                 "street_name": "VARCHAR",
@@ -1386,8 +1386,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                             }}]'
                         )) as address_struct
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.addresses') IS NOT NULL
-                    AND json_array_length(json_extract(json_data::VARCHAR, '$.addresses')) > 0
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.addresses') IS NOT NULL
+                    AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.addresses')) > 0
                 )
             """,
                 [json_strings],
@@ -1399,8 +1399,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             """
             SELECT COUNT(*)
             FROM unnest($1::VARCHAR[]) as t(json_data)
-            WHERE json_extract(json_data::VARCHAR, '$.leadership') IS NOT NULL
-            AND json_array_length(json_extract(json_data::VARCHAR, '$.leadership')) > 0
+            WHERE json_extract(CAST(json_data AS VARCHAR), '$.leadership') IS NOT NULL
+            AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.leadership')) > 0
         """,
             [json_strings],
         ).fetchone()[0]
@@ -1409,10 +1409,10 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             leadership_schema = self.conn.execute(
                 """
                 WITH leadership_sample AS (
-                    SELECT json_extract(json_data::VARCHAR, '$.leadership') as leadership_json
+                    SELECT json_extract(CAST(json_data AS VARCHAR), '$.leadership') as leadership_json
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.leadership') IS NOT NULL
-                    AND json_array_length(json_extract(json_data::VARCHAR, '$.leadership')) > 0
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.leadership') IS NOT NULL
+                    AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.leadership')) > 0
                     LIMIT 1
                 )
                 SELECT json_structure(leadership_json) FROM leadership_sample
@@ -1425,15 +1425,15 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     f"""
                     INSERT INTO {table_name}_leadership
                     SELECT
-                        company_uuid(json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER)
+                        company_uuid(json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER)
                             as company_uuid,
-                        json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER as cvr_number,
+                        json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER as cvr_number,
                         unnest(json_transform(
-                            json_extract(json_data::VARCHAR, '$.leadership'), $2
+                            json_extract(CAST(json_data AS VARCHAR), '$.leadership'), $2
                         )) as leadership_data
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.leadership') IS NOT NULL
-                    AND json_array_length(json_extract(json_data::VARCHAR, '$.leadership')) > 0
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.leadership') IS NOT NULL
+                    AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.leadership')) > 0
                 """,
                     [json_strings, leadership_schema[0]],
                 )
@@ -1444,8 +1444,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             """
             SELECT COUNT(*)
             FROM unnest($1::VARCHAR[]) as t(json_data)
-            WHERE json_extract(json_data::VARCHAR, '$.ownership') IS NOT NULL
-            AND json_array_length(json_extract(json_data::VARCHAR, '$.ownership')) > 0
+            WHERE json_extract(CAST(json_data AS VARCHAR), '$.ownership') IS NOT NULL
+            AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.ownership')) > 0
         """,
             [json_strings],
         ).fetchone()[0]
@@ -1454,10 +1454,10 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             ownership_schema = self.conn.execute(
                 """
                 WITH ownership_sample AS (
-                    SELECT json_extract(json_data::VARCHAR, '$.ownership') as ownership_json
+                    SELECT json_extract(CAST(json_data AS VARCHAR), '$.ownership') as ownership_json
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.ownership') IS NOT NULL
-                    AND json_array_length(json_extract(json_data::VARCHAR, '$.ownership')) > 0
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.ownership') IS NOT NULL
+                    AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.ownership')) > 0
                     LIMIT 1
                 )
                 SELECT json_structure(ownership_json) FROM ownership_sample
@@ -1470,15 +1470,15 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     f"""
                     INSERT INTO {table_name}_ownership
                     SELECT
-                        company_uuid(json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER)
+                        company_uuid(json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER)
                             as company_uuid,
-                        json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER as cvr_number,
+                        json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER as cvr_number,
                         unnest(json_transform(
-                            json_extract(json_data::VARCHAR, '$.ownership'), $2
+                            json_extract(CAST(json_data AS VARCHAR), '$.ownership'), $2
                         )) as ownership_data
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.ownership') IS NOT NULL
-                    AND json_array_length(json_extract(json_data::VARCHAR, '$.ownership')) > 0
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.ownership') IS NOT NULL
+                    AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.ownership')) > 0
                 """,
                     [json_strings, ownership_schema[0]],
                 )
@@ -1489,8 +1489,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             """
             SELECT COUNT(*)
             FROM unnest($1::VARCHAR[]) as t(json_data)
-            WHERE json_extract(json_data::VARCHAR, '$.financial_documents') IS NOT NULL
-            AND json_array_length(json_extract(json_data::VARCHAR, '$.financial_documents')) > 0
+            WHERE json_extract(CAST(json_data AS VARCHAR), '$.financial_documents') IS NOT NULL
+            AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.financial_documents')) > 0
         """,
             [json_strings],
         ).fetchone()[0]
@@ -1499,10 +1499,10 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             financial_schema = self.conn.execute(
                 """
                 WITH financial_sample AS (
-                    SELECT json_extract(json_data::VARCHAR, '$.financial_documents') as financial_json
+                    SELECT json_extract(CAST(json_data AS VARCHAR), '$.financial_documents') as financial_json
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.financial_documents') IS NOT NULL
-                    AND json_array_length(json_extract(json_data::VARCHAR, '$.financial_documents')) > 0
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.financial_documents') IS NOT NULL
+                    AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.financial_documents')) > 0
                     LIMIT 1
                 )
                 SELECT json_structure(financial_json) FROM financial_sample
@@ -1615,13 +1615,13 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     INSERT INTO {table_name}_financial
                     WITH financial_flattened AS (
                         SELECT
-                            json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER as cvr_number,
+                            json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER as cvr_number,
                             unnest(json_transform(
-                                json_extract(json_data::VARCHAR, '$.financial_documents'), $2
+                                json_extract(CAST(json_data AS VARCHAR), '$.financial_documents'), $2
                             )) as financial_parsed
                         FROM unnest($1::VARCHAR[]) as t(json_data)
-                        WHERE json_extract(json_data::VARCHAR, '$.financial_documents') IS NOT NULL
-                        AND json_array_length(json_extract(json_data::VARCHAR, '$.financial_documents')) > 0
+                        WHERE json_extract(CAST(json_data AS VARCHAR), '$.financial_documents') IS NOT NULL
+                        AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.financial_documents')) > 0
                     )
                     SELECT
                         company_uuid(cvr_number) as company_uuid,
@@ -1649,8 +1649,8 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             """
             SELECT COUNT(*)
             FROM unnest($1::VARCHAR[]) as t(json_data)
-            WHERE json_extract(json_data::VARCHAR, '$.industries') IS NOT NULL
-            AND json_array_length(json_extract(json_data::VARCHAR, '$.industries')) > 0
+            WHERE json_extract(CAST(json_data AS VARCHAR), '$.industries') IS NOT NULL
+            AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.industries')) > 0
         """,
             [json_strings],
         ).fetchone()[0]
@@ -1659,11 +1659,11 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
             industry_schema = self.conn.execute(
                 """
                 WITH industry_sample AS (
-                    SELECT json_extract(json_data::VARCHAR, '$.industries')
+                    SELECT json_extract(CAST(json_data AS VARCHAR), '$.industries')
                         as industry_json
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.industries') IS NOT NULL
-                    AND json_array_length(json_extract(json_data::VARCHAR, '$.industries')) > 0
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.industries') IS NOT NULL
+                    AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.industries')) > 0
                     LIMIT 1
                 )
                 SELECT json_structure(industry_json) FROM industry_sample
@@ -1676,15 +1676,15 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     f"""
                     INSERT INTO {table_name}_industries
                     SELECT
-                        company_uuid(json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER)
+                        company_uuid(json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER)
                             as company_uuid,
-                        json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER as cvr_number,
+                        json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER as cvr_number,
                         unnest(json_transform(
-                            json_extract(json_data::VARCHAR, '$.industries'), $2
+                            json_extract(CAST(json_data AS VARCHAR), '$.industries'), $2
                         )) as industry_data
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.industries') IS NOT NULL
-                    AND json_array_length(json_extract(json_data::VARCHAR, '$.industries')) > 0
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.industries') IS NOT NULL
+                    AND json_array_length(json_extract(CAST(json_data AS VARCHAR), '$.industries')) > 0
                 """,
                     [json_strings, industry_schema[0]],
                 )
@@ -1703,9 +1703,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 """
                 SELECT COUNT(*)
                 FROM unnest($1::VARCHAR[]) as t(json_data)
-                WHERE json_extract(json_data::VARCHAR, '$.employment_data.' || $2) IS NOT NULL
+                WHERE json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2) IS NOT NULL
                 AND json_array_length(
-                    json_extract(json_data::VARCHAR, '$.employment_data.' || $2)
+                    json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2)
                 ) > 0
             """,
                 [json_strings, employment_field],
@@ -1715,12 +1715,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 employment_schema = self.conn.execute(
                     """
                     WITH employment_sample AS (
-                        SELECT json_extract(json_data::VARCHAR, '$.employment_data.' || $2)
+                        SELECT json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2)
                             as employment_json
                         FROM unnest($1::VARCHAR[]) as t(json_data)
-                        WHERE json_extract(json_data::VARCHAR, '$.employment_data.' || $2) IS NOT NULL
+                        WHERE json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2) IS NOT NULL
                         AND json_array_length(
-                    json_extract(json_data::VARCHAR, '$.employment_data.' || $2)
+                    json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2)
                 ) > 0
                         LIMIT 1
                     )
@@ -1734,17 +1734,17 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                         f"""
                         INSERT INTO {table_name}_employment_{table_suffix}
                         SELECT
-                            company_uuid(json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER)
+                            company_uuid(json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER)
                                 as company_uuid,
-                            json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER as cvr_number,
+                            json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER as cvr_number,
                             unnest(json_transform(
-                                json_extract(json_data::VARCHAR, '$.employment_data.{employment_field}'), $2
+                                json_extract(CAST(json_data AS VARCHAR), '$.employment_data.{employment_field}'), $2
                             )) as employment_data
                         FROM unnest($1::VARCHAR[]) as t(json_data)
-                        WHERE json_extract(json_data::VARCHAR, '$.employment_data.{employment_field}')
+                        WHERE json_extract(CAST(json_data AS VARCHAR), '$.employment_data.{employment_field}')
                             IS NOT NULL
                         AND json_array_length(
-                            json_extract(json_data::VARCHAR, '$.employment_data.{employment_field}')
+                            json_extract(CAST(json_data AS VARCHAR), '$.employment_data.{employment_field}')
                         ) > 0
                     """,
                         [json_strings, employment_schema[0]],
@@ -1800,9 +1800,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                     """
                     SELECT COUNT(*)
                     FROM unnest($1::VARCHAR[]) as t(json_data)
-                    WHERE json_extract(json_data::VARCHAR, '$.employment_data.' || $2) IS NOT NULL
+                    WHERE json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2) IS NOT NULL
                     AND json_array_length(
-                        json_extract(json_data::VARCHAR, '$.employment_data.' || $2)
+                        json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2)
                     ) > 0
                 """,
                     [json_strings, employment_field],
@@ -1815,12 +1815,12 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                 employment_schema = self.conn.execute(
                     """
                     WITH employment_sample AS (
-                        SELECT json_extract(json_data::VARCHAR, '$.employment_data.' || $2)
+                        SELECT json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2)
                             as employment_json
                         FROM unnest($1::VARCHAR[]) as t(json_data)
-                        WHERE json_extract(json_data::VARCHAR, '$.employment_data.' || $2) IS NOT NULL
+                        WHERE json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2) IS NOT NULL
                         AND json_array_length(
-                            json_extract(json_data::VARCHAR, '$.employment_data.' || $2)
+                            json_extract(CAST(json_data AS VARCHAR), '$.employment_data.' || $2)
                         ) > 0
                         LIMIT 1
                     )
@@ -1835,9 +1835,9 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                             f"""
                             INSERT INTO {table_name}_employment_{table_suffix}
                             SELECT
-                                company_uuid(json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER)
+                                company_uuid(json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER)
                                     as company_uuid,
-                                json_extract(json_data::VARCHAR, '$.cvr_number')::INTEGER as cvr_number,
+                                json_extract(CAST(json_data AS VARCHAR), '$.cvr_number')::INTEGER as cvr_number,
                                 unnest(json_transform(
                                     json_extract(
                                         json_data, '$.employment_data.{employment_field}'
@@ -1848,7 +1848,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
                                 json_data, '$.employment_data.{employment_field}'
                             ) IS NOT NULL
                             AND json_array_length(
-                                json_extract(json_data::VARCHAR, '$.employment_data.{employment_field}')
+                                json_extract(CAST(json_data AS VARCHAR), '$.employment_data.{employment_field}')
                             ) > 0
                         """,
                             [json_strings, employment_schema[0]],
@@ -1980,7 +1980,7 @@ class CVREnrichmentGold(BaseSource[CVREnrichmentGoldConfig], GoldJobInterface):
 
             # Geocoded addresses count
             geocoded_count = self.conn.execute(
-                f"SELECT COUNT(*) FROM {table_name}_addresses " f"WHERE dawa_enriched = true"
+                f"SELECT COUNT(*) FROM {table_name}_addresses WHERE dawa_enriched = true"
             ).fetchone()[0]
 
             # Sample results
