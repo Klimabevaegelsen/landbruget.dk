@@ -212,8 +212,17 @@ jobs:
             echo "✅ FVM WFS matrix workflow triggered successfully"
           else
             # Regular pipeline execution
-            echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            SOURCE="${{ matrix.source }}"
+            STAGE="${{ github.event.inputs.stage || 'all' }}"
+
+            if [ -z "$SOURCE" ]; then
+              echo "❌ ERROR: matrix.source is empty or null"
+              echo "Matrix values: ${{ toJson(matrix) }}"
+              exit 1
+            fi
+
+            echo "🚀 Executing: python -m unified_pipeline run -s ${SOURCE} -j ${STAGE}"
+            python -m unified_pipeline run -s "${SOURCE}" -j "${STAGE}"
           fi
 
           # Stop monitoring
@@ -376,8 +385,17 @@ jobs:
             echo "✅ Field Area Analysis matrix workflow triggered successfully"
           else
             # Regular pipeline execution
-            echo "🚀 Executing: python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}"
-            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
+            SOURCE="${{ matrix.source }}"
+            STAGE="${{ github.event.inputs.stage || 'all' }}"
+
+            if [ -z "$SOURCE" ]; then
+              echo "❌ ERROR: matrix.source is empty or null"
+              echo "Matrix values: ${{ toJson(matrix) }}"
+              exit 1
+            fi
+
+            echo "🚀 Executing: python -m unified_pipeline run -s ${SOURCE} -j ${STAGE}"
+            python -m unified_pipeline run -s "${SOURCE}" -j "${STAGE}"
           fi
 
           # Stop monitoring
