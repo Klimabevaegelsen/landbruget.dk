@@ -3,11 +3,24 @@ Climate Calculator Orchestration Module
 
 This module orchestrates all emission calculations for farm climate impact assessment.
 It integrates cattle, field, and other emission sources using existing formula modules.
+
+Data Flow:
+1. data_loader.py → Fetch raw data from GCS (Danish schema)
+2. data_transformer.py → Transform to structured objects (LivestockSummary, FieldSummary, FertilizerSummary)
+3. climate_calculator.py (this file) → Convert to formula module inputs → Calculate emissions
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-import pandas as pd
+from typing import Dict, List, Optional, Any
+import logging
+
+# Import data structures from transformer
+from data_transformer import (
+    LivestockSummary,
+    FieldSummary,
+    FertilizerSummary,
+    IntegratedFarmTransformer,
+)
 
 # Import existing formula modules
 from formulas.kvaeg import enterisk_metan, stald_og_lager, bedriftsaftryk
@@ -19,6 +32,8 @@ from formulas.marker import (
     organogene_jorde,
     kalkning,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,11 +106,9 @@ class FarmClimateCalculator:
         Initialize calculator with data loader.
 
         Args:
-            data_loader: Object that loads farm data from various sources
+            data_loader: ClimateDataLoader instance that loads farm data from GCS
         """
         self.data_loader = data_loader
-        # TODO: Load constants from JSON files in reference_values/
-        # This will be implemented when integrating with actual data sources
 
     def calculate_emissions(self, cvr: str, year: int) -> EmissionReport:
         """
@@ -108,43 +121,45 @@ class FarmClimateCalculator:
         Returns:
             EmissionReport with all emission categories and metrics
         """
-        # 1. Load data from various sources
-        livestock_data = self.data_loader.load_livestock(cvr, year)
-        field_data = self.data_loader.load_fields(cvr, year)
-        fertilizer_data = self.data_loader.load_fertilizer(cvr, year)
-        energy_data = self.data_loader.load_energy(cvr, year)
+        logger.info(f"Calculating emissions for CVR {cvr}, year {year}")
 
-        # 2. Calculate emissions by category
+        # 1. Load raw data from GCS
+        livestock_df = self.data_loader.load_livestock(cvr, year)
+        field_df = self.data_loader.load_fields(cvr, year)
+        fertilizer_df = self.data_loader.load_fertilizer(cvr, year)
+
+        # 2. Transform to structured format
+        farm_data = IntegratedFarmTransformer.transform_all(livestock_df, field_df, fertilizer_df)
+
+        # 3. Calculate emissions by category
         categories = []
 
         # Cattle emissions (if applicable)
-        if livestock_data is not None and "cattle" in livestock_data:
-            cattle_cat = self._calculate_cattle_emissions(livestock_data["cattle"])
+        if "cattle" in farm_data["livestock"]:
+            cattle_cat = self._calculate_cattle_emissions(farm_data["livestock"]["cattle"])
             if cattle_cat:
                 categories.append(cattle_cat)
+                logger.info(f"Cattle emissions: {cattle_cat.co2e_kg:.1f} kg CO2e")
 
         # Field emissions (if applicable)
-        if field_data is not None and fertilizer_data is not None:
-            field_cat = self._calculate_field_emissions(field_data, fertilizer_data)
+        if farm_data["fertilizer"] is not None and len(farm_data["fields"]) > 0:
+            field_cat = self._calculate_field_emissions(farm_data["fields"], farm_data["fertilizer"])
             if field_cat:
                 categories.append(field_cat)
+                logger.info(f"Field emissions: {field_cat.co2e_kg:.1f} kg CO2e")
 
-        # Energy emissions (if applicable)
-        if energy_data is not None:
-            energy_cat = self._calculate_energy_emissions(energy_data)
-            if energy_cat:
-                categories.append(energy_cat)
-
-        # 3. Calculate total emissions
+        # 4. Calculate total emissions
         total_co2e_kg = sum(cat.co2e_kg for cat in categories)
 
-        # 4. Calculate intensity metrics
-        intensity = self._calculate_intensity_metrics(total_co2e_kg, livestock_data, field_data)
+        # 5. Calculate intensity metrics
+        intensity = self._calculate_intensity_metrics(total_co2e_kg, farm_data)
 
-        # 5. Calculate data completeness
+        # 6. Calculate data completeness
         completeness = self._calculate_data_completeness(categories)
 
-        # 6. Return report
+        logger.info(f"Total emissions: {total_co2e_kg:.1f} kg CO2e (completeness: {completeness:.1%})")
+
+        # 7. Return report
         return EmissionReport(
             cvr=cvr,
             year=year,
@@ -154,272 +169,205 @@ class FarmClimateCalculator:
             data_completeness=completeness,
         )
 
-    def _calculate_cattle_emissions(self, cattle_data: pd.DataFrame) -> Optional[EmissionCategory]:
+    def _calculate_cattle_emissions(self, cattle_summary: LivestockSummary) -> Optional[EmissionCategory]:
         """
         Calculate cattle emissions using formulas from formulas/kvaeg/.
 
         Args:
-            cattle_data: DataFrame with cattle herd information
+            cattle_summary: LivestockSummary object for cattle (from data_transformer.py)
 
         Returns:
             EmissionCategory for cattle, or None if no data
         """
-        if cattle_data is None or cattle_data.empty:
+        if cattle_summary is None or cattle_summary.total_count == 0:
             return None
 
         # Prepare data structure for enterisk_metan calculation
-        dyretype_counts = self._prepare_cattle_data_for_enteric(cattle_data)
+        dyretype_counts = self._prepare_cattle_data_for_enteric(cattle_summary)
 
-        # Calculate enteric methane emissions
-        enteric_co2e = enterisk_metan.beregn_co2e_enterisk_kvaeg_total(dyretype_counts)
+        try:
+            # Calculate enteric methane emissions
+            enteric_co2e = enterisk_metan.beregn_co2e_enterisk_kvaeg_total(dyretype_counts)
+            logger.debug(f"Enteric methane: {enteric_co2e:.1f} kg CO2e")
+        except Exception as e:
+            logger.warning(f"Failed to calculate enteric methane: {e}")
+            enteric_co2e = 0.0
 
-        # Calculate stald og lager emissions (if ARLA data available)
-        stald_lager_co2e = self._calculate_stald_lager(cattle_data)
+        # Stald og lager emissions require ARLA data (not available in Green Accounts)
+        # TODO: Implement when ARLA FarmAhead data is integrated
+        stald_lager_co2e = 0.0
+
+        # Determine data quality
+        data_quality = self._assess_cattle_data_quality(cattle_summary, dyretype_counts)
 
         # Create category with sub-sources
         cattle_category = EmissionCategory(
             name="cattle",
             co2e_kg=enteric_co2e + stald_lager_co2e,
-            data_quality="complete" if self._has_complete_cattle_data(cattle_data) else "estimated",
+            data_quality=data_quality,
         )
 
         cattle_category.add_sub_source("enteric_methane", enteric_co2e)
-        cattle_category.add_sub_source("manure_storage", stald_lager_co2e)
+        if stald_lager_co2e > 0:
+            cattle_category.add_sub_source("manure_storage", stald_lager_co2e)
 
         return cattle_category
 
-    def _prepare_cattle_data_for_enteric(self, cattle_data: pd.DataFrame) -> Dict:
+    def _prepare_cattle_data_for_enteric(self, cattle_summary: LivestockSummary) -> Dict:
         """
-        Transform cattle DataFrame into structure needed by enteric methane formulas.
+        Transform LivestockSummary into structure needed by enteric methane formulas.
 
         Args:
-            cattle_data: Raw cattle data from data loader
+            cattle_summary: LivestockSummary object for cattle
 
         Returns:
             Dictionary with structure expected by beregn_co2e_enterisk_kvaeg_total
+            Format: {dyretype: {"count": int, "foderoptag_kg_ts_pr_dag": float, ...}, ...}
         """
-        # TODO: Implement mapping from actual data structure to formula requirements
-        # This is a placeholder showing expected structure
         dyretype_counts = {}
 
-        # Example mapping (needs to match actual data structure):
-        # if 'malkeko_tung_race' in cattle_data.columns:
-        #     dyretype_counts['malkeko_tung_race'] = {
-        #         'count': cattle_data['malkeko_tung_race'].iloc[0],
-        #         'foderoptag_kg_ts_pr_dag': cattle_data['foderoptag'].iloc[0],
-        #         'fedtsyre_g_pr_kg_ts': cattle_data['fedtsyre'].iloc[0],
-        #         'ndf_g_pr_kg_ts': cattle_data['ndf'].iloc[0]
-        #     }
+        # Map cattle subtypes to formula dyretypes
+        # Note: Green Accounts doesn't provide feed parameters (foderoptag, fedtsyre, ndf)
+        # We'll use default values or flag as estimated
+        for subtype, count in cattle_summary.subtypes.items():
+            if count == 0:
+                continue
+
+            # Map English subtypes to formula dyretypes
+            if subtype == "dairy_cows":
+                # TODO: Determine if heavy (tung) or Jersey based on data
+                # For now, assume heavy race as it's more common
+                dyretype_counts["malkeko_tung_race"] = {
+                    "count": count,
+                    # Default values from reference_values (would need to load)
+                    "foderoptag_kg_ts_pr_dag": 23.5,  # Typical for dairy cows
+                    "fedtsyre_g_pr_kg_ts": 22.0,
+                    "ndf_g_pr_kg_ts": 340.0,
+                }
+            elif subtype == "heifers":
+                # Older heifers (> 6 months)
+                dyretype_counts["opdraet_aeldre_tung"] = {
+                    "count": count,
+                    "foderoptag_kg_ts_pr_dag": 7.5,
+                    "kraftfoderandel_procent": 10.0,
+                    "fedtsyre_g_pr_kg_ts": 18.0,
+                }
+            elif subtype == "calves":
+                # Young calves (0-6 months) - uses default values
+                dyretype_counts["opdraet_0_6mdr_tung"] = {"count": count}
+            elif subtype in ["young_bulls", "bulls"]:
+                # Bulls for slaughter
+                dyretype_counts["tyre_aeldre_tung"] = {
+                    "count": count,
+                    "foderoptag_kg_ts_pr_dag": 8.0,
+                    "kraftfoderandel_procent": 15.0,
+                    "fedtsyre_g_pr_kg_ts": 19.0,
+                }
+            else:
+                logger.warning(f"Unknown cattle subtype: {subtype}, skipping enteric calculation")
 
         return dyretype_counts
 
-    def _calculate_stald_lager(self, cattle_data: pd.DataFrame) -> float:
+    def _assess_cattle_data_quality(self, cattle_summary: LivestockSummary, dyretype_counts: Dict) -> str:
         """
-        Calculate emissions from barn and manure storage.
-
-        Uses ARLA FarmAhead data if available, otherwise estimates.
+        Assess data quality for cattle emissions calculation.
 
         Args:
-            cattle_data: Cattle data including ARLA metrics if available
+            cattle_summary: LivestockSummary object
+            dyretype_counts: Prepared data for formula modules
 
         Returns:
-            CO2e from stald og lager (kg)
+            Data quality string: "complete", "estimated", or "unavailable"
         """
-        # Check if ARLA data is available
-        if "arla_s_co2e" in cattle_data.columns:
-            return stald_og_lager.calculate_co2_stald_lager(
-                s_co2e=cattle_data["arla_s_co2e"].iloc[0],
-                theta_maelk=cattle_data["arla_theta_maelk"].iloc[0],
-                fpcm=cattle_data["arla_fpcm"].iloc[0],
-                phi=cattle_data.get("phi", pd.Series([1.05])).iloc[0],
-                n_ko=cattle_data["cow_count"].iloc[0],
-            )
+        # Green Accounts provides animal counts but not feed parameters
+        # Feed parameters are estimated using defaults
+        if len(dyretype_counts) == 0:
+            return "unavailable"
 
-        # TODO: Implement estimation method if ARLA data not available
-        return 0.0
-
-    def _has_complete_cattle_data(self, cattle_data: pd.DataFrame) -> bool:
-        """Check if cattle data is complete for accurate calculations."""
-        required_cols = ["cow_count", "foderoptag", "fedtsyre", "ndf"]
-        return all(col in cattle_data.columns for col in required_cols)
+        # If we have counts but using default feed parameters
+        return "estimated"
 
     def _calculate_field_emissions(
-        self, field_data: pd.DataFrame, fertilizer_data: pd.DataFrame
+        self, field_summaries: List[FieldSummary], fertilizer_summary: FertilizerSummary
     ) -> Optional[EmissionCategory]:
         """
         Calculate field emissions using formulas from formulas/marker/.
 
         Args:
-            field_data: DataFrame with field/crop information
-            fertilizer_data: DataFrame with fertilizer applications
+            field_summaries: List of FieldSummary objects (from data_transformer.py)
+            fertilizer_summary: FertilizerSummary object (from data_transformer.py)
 
         Returns:
             EmissionCategory for fields, or None if no data
         """
-        if field_data is None or field_data.empty:
+        if not field_summaries or fertilizer_summary is None:
             return None
 
         total_co2e = 0.0
-        field_category = EmissionCategory(name="fields", co2e_kg=0.0, data_quality="complete")
+        n2o_fertilizer_total = 0.0
+        c_balance_total = 0.0
 
-        # Iterate through each field/crop combination
-        for idx, field in field_data.iterrows():
-            # Get fertilizer data for this field
-            field_fertilizer = self._get_field_fertilizer(field, fertilizer_data)
-
-            # Calculate N2O from fertilizer application
-            n2o_co2e = self._calculate_field_n2o(field, field_fertilizer)
+        # Calculate N2O from fertilizer application (primary emission source)
+        try:
+            # Use simplified approach: total N applied across all fields
+            # Formula expects: n_total_kg_ha, areal_ha, goedningstype
+            n2o_kg, n2o_co2e = goedning_og_nitrifikationshaemmer.calculate_n2o_goedning(
+                n_total_kg_ha=fertilizer_summary.avg_n_kg_per_ha,
+                areal_ha=fertilizer_summary.total_area_ha,
+                goedningstype="handelsgoedning",  # Assume commercial fertilizer (default)
+                n_nitri_kg_ha=0.0,  # Nitrification inhibitor data not available in GKEA
+            )
+            n2o_fertilizer_total = n2o_co2e
             total_co2e += n2o_co2e
+            logger.debug(f"N2O from fertilizer: {n2o_co2e:.1f} kg CO2e")
+        except Exception as e:
+            logger.warning(f"Failed to calculate N2O from fertilizer: {e}")
 
-            # Calculate carbon balance
-            c_balance_co2e = self._calculate_field_carbon_balance(field)
-            total_co2e += c_balance_co2e
+        # Other emission sources require more detailed data (not available in current sources)
+        # TODO: Implement when additional data sources are integrated:
+        # - Carbon balance: Needs crop residue data
+        # - Nitrate leaching: Needs soil type and precipitation data
+        # - Organic soils: Needs soil classification data
+        # - Liming: Needs liming application data
 
-            # Calculate nitrate leaching (indirect N2O)
-            leaching_co2e = self._calculate_nitrate_leaching(field, field_fertilizer)
-            total_co2e += leaching_co2e
+        field_category = EmissionCategory(
+            name="fields",
+            co2e_kg=total_co2e,
+            data_quality="estimated",  # Using simplified approach without detailed field-level data
+        )
 
-            # Calculate emissions from organic soils (if applicable)
-            organic_soil_co2e = self._calculate_organic_soil(field)
-            total_co2e += organic_soil_co2e
-
-            # Calculate emissions from liming (if applicable)
-            liming_co2e = self._calculate_liming(field)
-            total_co2e += liming_co2e
-
-        field_category.co2e_kg = total_co2e
-        field_category.add_sub_source("n2o_fertilizer", n2o_co2e)
-        field_category.add_sub_source("carbon_balance", c_balance_co2e)
-        field_category.add_sub_source("nitrate_leaching", leaching_co2e)
-        field_category.add_sub_source("organic_soils", organic_soil_co2e)
-        field_category.add_sub_source("liming", liming_co2e)
+        if n2o_fertilizer_total > 0:
+            field_category.add_sub_source("n2o_fertilizer", n2o_fertilizer_total)
 
         return field_category
 
-    def _get_field_fertilizer(self, field: pd.Series, fertilizer_data: pd.DataFrame) -> pd.DataFrame:
-        """Extract fertilizer data for specific field."""
-        # TODO: Implement field-fertilizer matching logic
-        return pd.DataFrame()
-
-    def _calculate_field_n2o(self, field: pd.Series, fertilizer: pd.DataFrame) -> float:
-        """
-        Calculate N2O emissions from fertilizer application.
-
-        Uses goedning_og_nitrifikationshaemmer module.
-        """
-        if fertilizer.empty:
-            return 0.0
-
-        total_n2o_co2e = 0.0
-
-        # Calculate for each fertilizer type
-        for _, fert in fertilizer.iterrows():
-            n2o_kg, co2e_kg = goedning_og_nitrifikationshaemmer.calculate_n2o_goedning(
-                n_total_kg_ha=fert["n_kg_ha"],
-                areal_ha=field["area_ha"],
-                goedningstype=fert["type"],  # "handelsgoedning", "husdyrgoedning", "afgraesning"
-                n_nitri_kg_ha=fert.get("n_nitri_kg_ha", 0.0),
-                handelsgoedning_detail_type=fert.get("detail_type", None),
-            )
-            total_n2o_co2e += co2e_kg
-
-        return total_n2o_co2e
-
-    def _calculate_field_carbon_balance(self, field: pd.Series) -> float:
-        """
-        Calculate carbon balance for field.
-
-        Uses kulstofbalance module.
-        """
-        # Calculate crop residues (needs afgroederester module)
-        a_over = 0.0  # TODO: Call afgroederester.calculate_A_over_kg_ts_ha
-        a_under = 0.0  # TODO: Call afgroederester.calculate_A_under_kg_ts_ha
-
-        c_afgroederest = kulstofbalance.calculate_C_afgroederest_kg_c_ha(
-            a_over_kg_ts_ha=a_over, a_under_kg_ts_ha=a_under
-        )
-
-        c_organisk = kulstofbalance.calculate_C_organisk_goedning_kg_c_ha(
-            n_hus_plus_afg_kg_n_ha=field.get("n_organic_kg_ha", 0.0)
-        )
-
-        co2e = kulstofbalance.calculate_co2e_kulstofbalance_mark(
-            r_relativ_faktor=field.get("r_faktor", 1),
-            areal_ha=field["area_ha"],
-            c_afgroederest_kg_c_ha=c_afgroederest,
-            c_organisk_kg_c_ha=c_organisk,
-        )
-
-        return co2e
-
-    def _calculate_nitrate_leaching(self, field: pd.Series, fertilizer: pd.DataFrame) -> float:
-        """Calculate indirect N2O from nitrate leaching."""
-        # TODO: Implement using nitratudvaskning module
-        return 0.0
-
-    def _calculate_organic_soil(self, field: pd.Series) -> float:
-        """Calculate emissions from organic soils."""
-        # TODO: Implement using organogene_jorde module
-        return 0.0
-
-    def _calculate_liming(self, field: pd.Series) -> float:
-        """Calculate emissions from liming."""
-        # TODO: Implement using kalkning module
-        return 0.0
-
-    def _calculate_energy_emissions(self, energy_data: pd.DataFrame) -> Optional[EmissionCategory]:
-        """
-        Calculate emissions from energy use (diesel, electricity).
-
-        Args:
-            energy_data: DataFrame with energy consumption
-
-        Returns:
-            EmissionCategory for energy, or None if no data
-        """
-        if energy_data is None or energy_data.empty:
-            return None
-
-        # TODO: Implement energy emission calculations
-        # Using formulas/import/diesel_maskinarbejde.py and formulas/import/el.py
-
-        energy_category = EmissionCategory(name="energy", co2e_kg=0.0, data_quality="unavailable")
-
-        return energy_category
-
-    def _calculate_intensity_metrics(
-        self, total_co2e_kg: float, livestock_data: Optional[pd.DataFrame], field_data: Optional[pd.DataFrame]
-    ) -> Dict[str, float]:
+    def _calculate_intensity_metrics(self, total_co2e_kg: float, farm_data: Dict[str, Any]) -> Dict[str, float]:
         """
         Calculate intensity metrics (emissions per unit production).
 
         Args:
             total_co2e_kg: Total emissions
-            livestock_data: Livestock data (for milk/meat production)
-            field_data: Field data (for crop production)
+            farm_data: Integrated farm data from IntegratedFarmTransformer
 
         Returns:
             Dictionary of intensity metrics
         """
         metrics = {}
 
-        # CO2e per kg milk (if dairy farm)
-        if livestock_data is not None and "milk_kg" in livestock_data.columns:
-            milk_kg = livestock_data["milk_kg"].sum()
-            if milk_kg > 0:
-                metrics["co2e_per_kg_milk"] = total_co2e_kg / milk_kg
+        # CO2e per hectare (if farm has fields)
+        total_ha = farm_data["metadata"].get("total_area_ha", 0)
+        if total_ha > 0:
+            metrics["co2e_per_ha"] = total_co2e_kg / total_ha
 
-        # CO2e per hectare (if crop farm)
-        if field_data is not None and "area_ha" in field_data.columns:
-            total_ha = field_data["area_ha"].sum()
-            if total_ha > 0:
-                metrics["co2e_per_ha"] = total_co2e_kg / total_ha
+        # CO2e per animal (if livestock farm)
+        total_animals = sum(summary.total_count for summary in farm_data["livestock"].values())
+        if total_animals > 0:
+            metrics["co2e_per_animal"] = total_co2e_kg / total_animals
 
-        # CO2e per animal unit (if livestock farm)
-        if livestock_data is not None and "animal_units" in livestock_data.columns:
-            animal_units = livestock_data["animal_units"].sum()
-            if animal_units > 0:
-                metrics["co2e_per_animal_unit"] = total_co2e_kg / animal_units
+        # TODO: Add more specific metrics when production data is available:
+        # - CO2e per kg milk (needs milk production data from ARLA or CHR)
+        # - CO2e per kg meat (needs slaughter weight data)
+        # - CO2e per kg crop yield (needs yield data)
 
         return metrics
 
@@ -445,35 +393,73 @@ class FarmClimateCalculator:
 
 # Example usage
 if __name__ == "__main__":
-    # This is a placeholder - actual data loader will be implemented separately
-    class MockDataLoader:
-        def load_livestock(self, cvr: str, year: int):
-            return None
+    """
+    Example demonstrating the complete climate calculation workflow.
 
-        def load_fields(self, cvr: str, year: int):
-            return None
+    Prerequisites:
+    - GCS bucket with Danish agricultural data
+    - Credentials configured in backend/.env
+    - data_loader.py and data_transformer.py modules
+    """
+    import sys
+    from pathlib import Path
 
-        def load_fertilizer(self, cvr: str, year: int):
-            return None
+    # Add parent directory to path for imports
+    parent_dir = Path(__file__).parent
+    if str(parent_dir) not in sys.path:
+        sys.path.insert(0, str(parent_dir))
 
-        def load_energy(self, cvr: str, year: int):
-            return None
+    from data_loader import ClimateDataLoader
 
-    # Example calculation
-    calculator = FarmClimateCalculator(MockDataLoader())
+    # Configure logging
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    # Test with mock CVR
-    report = calculator.calculate_emissions(cvr="12345678", year=2024)
+    # Initialize loader with GCS credentials
+    loader = ClimateDataLoader()
 
-    print(f"Climate Report for CVR {report.cvr}, Year {report.year}")
-    print(f"Total CO2e: {report.total_co2e_kg:.2f} kg")
-    print(f"Data Completeness: {report.data_completeness:.1%}")
-    print(f"\nCategories:")
-    for cat in report.categories:
-        print(f"  {cat.name}: {cat.co2e_kg:.2f} kg CO2e ({cat.data_quality})")
-        for source_name, source_co2e in cat.sub_sources.items():
-            print(f"    - {source_name}: {source_co2e:.2f} kg CO2e")
+    # Initialize calculator
+    calculator = FarmClimateCalculator(loader)
 
-    print(f"\nIntensity Metrics:")
-    for metric_name, metric_value in report.intensity_metrics.items():
-        print(f"  {metric_name}: {metric_value:.2f}")
+    # Example CVR (Arla test farm with known data)
+    cvr = "31373077"
+    year = 2023
+
+    print(f"\n{'=' * 70}")
+    print(f"Climate Emission Calculation: CVR {cvr}, Year {year}")
+    print(f"{'=' * 70}\n")
+
+    try:
+        # Calculate emissions
+        report = calculator.calculate_emissions(cvr=cvr, year=year)
+
+        # Display results
+        print(f"\n{'=' * 70}")
+        print(f"EMISSION REPORT")
+        print(f"{'=' * 70}")
+        print(f"CVR: {report.cvr}")
+        print(f"Year: {report.year}")
+        print(f"Total CO2e: {report.total_co2e_kg:,.1f} kg ({report.total_co2e_kg / 1000:.1f} tonnes)")
+        print(f"Data Completeness: {report.data_completeness:.1%}")
+
+        print(f"\n{'Emission Categories':-^70}")
+        for cat in report.categories:
+            print(f"\n{cat.name.upper()}: {cat.co2e_kg:,.1f} kg CO2e ({cat.data_quality})")
+            if cat.sub_sources:
+                for source_name, source_co2e in cat.sub_sources.items():
+                    print(f"  └─ {source_name}: {source_co2e:,.1f} kg CO2e")
+
+        print(f"\n{'Intensity Metrics':-^70}")
+        if report.intensity_metrics:
+            for metric_name, metric_value in report.intensity_metrics.items():
+                metric_display = metric_name.replace("_", " ").title()
+                print(f"{metric_display}: {metric_value:.2f}")
+        else:
+            print("No intensity metrics available (insufficient production data)")
+
+        print(f"\n{'=' * 70}\n")
+
+    except Exception as e:
+        logger.error(f"Failed to calculate emissions: {e}")
+        import traceback
+
+        traceback.print_exc()

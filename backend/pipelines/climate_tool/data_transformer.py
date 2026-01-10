@@ -199,10 +199,15 @@ class GreenAccountsTransformer:
                 continue
 
             # Extract animal counts (c_2006)
-            total_count = int(group["c_2006"].sum())
+            # NOTE: c_2006 may be string with concatenated values - convert to numeric first
+            total_count = int(pd.to_numeric(group["c_2006"], errors="coerce").fillna(0).sum())
 
             # Extract N production (c_2016) if available
-            total_n = float(group["c_2016"].sum()) if "c_2016" in group.columns else 0.0
+            # NOTE: c_2016 may be string with concatenated values - convert to numeric first
+            if "c_2016" in group.columns:
+                total_n = float(pd.to_numeric(group["c_2016"], errors="coerce").fillna(0).sum())
+            else:
+                total_n = 0.0
 
             # Build subtypes dict from c_2004 (type detail)
             subtypes = {}
@@ -218,14 +223,17 @@ class GreenAccountsTransformer:
                     else:
                         subtype_english = str(subtype_danish).lower()
 
-                    subtypes[subtype_english] = int(subgroup["c_2006"].sum())
+                    # Convert to numeric to handle concatenated string values
+                    subtypes[subtype_english] = int(pd.to_numeric(subgroup["c_2006"], errors="coerce").fillna(0).sum())
 
             # Build housing systems dict from c_2005 (housing type)
             housing_systems = {}
             if "c_2005" in group.columns:
                 for housing_danish, housing_group in group.groupby("c_2005"):
-                    # Store housing system counts
-                    housing_systems[str(housing_danish)] = int(housing_group["c_2006"].sum())
+                    # Store housing system counts (convert to numeric to handle string concatenation)
+                    housing_systems[str(housing_danish)] = int(
+                        pd.to_numeric(housing_group["c_2006"], errors="coerce").fillna(0).sum()
+                    )
 
             # Create summary object
             results[species_english] = LivestockSummary(
@@ -435,24 +443,45 @@ class FVMTransformer:
             return []
 
         # Validate required columns
-        required_cols = ["afgroede", "areal_ha"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            logger.error(f"Missing required columns: {missing_cols}")
+        # FVM data may use different column names depending on version
+        area_col = None
+        crop_col = None
+
+        # Check for area column variants
+        if "areal_ha" in df.columns:
+            area_col = "areal_ha"
+        elif "area_ha" in df.columns:
+            area_col = "area_ha"
+        elif "areal" in df.columns:
+            area_col = "areal"
+
+        # Check for crop column variants
+        if "afgroede" in df.columns:
+            crop_col = "afgroede"
+        elif "crop_name" in df.columns:
+            crop_col = "crop_name"
+        elif "afgroedekode" in df.columns:
+            crop_col = "afgroedekode"
+
+        if not area_col or not crop_col:
+            logger.error(f"Missing required columns. Available: {df.columns.tolist()}")
+            logger.error(
+                f"Looking for area column (areal_ha/area_ha/areal) and crop column (afgroede/crop_name/afgroedekode)"
+            )
             return []
 
         # Handle missing or invalid data
         df_clean = df.copy()
-        df_clean["areal_ha"] = pd.to_numeric(df_clean["areal_ha"], errors="coerce").fillna(0)
+        df_clean[area_col] = pd.to_numeric(df_clean[area_col], errors="coerce").fillna(0)
 
         results = []
 
         # Group by crop type
-        for crop_danish, group in df_clean.groupby("afgroede"):
+        for crop_danish, group in df_clean.groupby(crop_col):
             # Map Danish crop name to English
             crop_english = FVMTransformer.CROP_MAPPING.get(str(crop_danish), str(crop_danish).lower().replace(" ", "_"))
 
-            total_area = float(group["areal_ha"].sum())
+            total_area = float(group[area_col].sum())
             field_count = len(group)
 
             summary = FieldSummary(crop_type=crop_english, total_area_ha=total_area, field_count=field_count)
