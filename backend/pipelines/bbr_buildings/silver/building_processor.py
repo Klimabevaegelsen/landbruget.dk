@@ -90,6 +90,7 @@ class BuildingProcessor:
                     ia.floors,
                     ia.dwellings,
                     ia.address,
+                    ia.bbr_usage_code,
                     ia.category_group
                 FROM joined_buildings jb
                 LEFT JOIN inspire_attributes ia ON jb.BBRUUID::VARCHAR = ia.building_uuid::VARCHAR
@@ -125,6 +126,9 @@ class BuildingProcessor:
                 floors as inspire_floors,
                 dwellings as inspire_dwellings,
                 address as address_full,
+                -- Pesticide proximity pipeline compatibility
+                address as inspire_address,
+                bbr_usage_code,
                 category_group as inspire_category_group,
                 CURRENT_DATE as last_updated
             FROM {processing_table}

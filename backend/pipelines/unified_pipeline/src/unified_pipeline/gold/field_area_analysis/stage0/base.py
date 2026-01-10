@@ -36,11 +36,12 @@ class PreFilteringStageBase(FieldAnalysisStageBase):
         self.conn.execute("SET max_temp_directory_size='12GB'")
 
     def _get_stage0_output_path(self, dataset_name: str) -> str:
-        """Get GCS path for Stage 0 pre-filtered output following standard pipeline pattern."""
+        """Get GCS path for Stage 0 pre-filtered output with year suffix for isolation."""
         from datetime import datetime
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"gs://{CONFIG.bucket}/gold/{dataset_name}/{timestamp}/data.parquet"
+        year_suffixed_dataset = f"{dataset_name}_{CONFIG.agricultural_fields_year}"
+        return f"gs://{CONFIG.bucket}/gold/{year_suffixed_dataset}/{timestamp}/data.parquet"
 
     def _save_prefiltered_dataset(self, table_name: str, output_dataset_name: str):
         """

@@ -55,7 +55,7 @@ STAGE_JOBS = {
         "fields_properties": FieldsPropertiesIntersection,
         "fields_soil_types": FieldsSoilTypesIntersection,
     },
-    # Stage 2 (field-level analysis with pre-filtered data)
+    # Stage 2 (field-level intersection geometries only - aggregations moved to Stage 4)
     2: {
         "fields_bnbo_water": FieldsBNBOWaterCoverage,
         "fields_wetland_water": FieldsWetlandWaterCoverage,

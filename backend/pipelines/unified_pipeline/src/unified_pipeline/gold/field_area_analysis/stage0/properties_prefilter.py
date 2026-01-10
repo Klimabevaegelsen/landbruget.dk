@@ -91,6 +91,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
                     geometry,
                     ST_Area_Spheroid(geometry) as property_area_m2
                 FROM properties_full
+                ORDER BY bestemtFastEjendomBFENr
                 LIMIT {chunk_size} OFFSET {offset}
             """)
 

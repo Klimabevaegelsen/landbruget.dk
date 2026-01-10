@@ -56,7 +56,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         stage2a_water_dataset = updated_outputs["field_bnbo_water_intersections"]
         stage2a_water_path = self._get_latest_gold_path(stage2a_water_dataset)
         self.gcs_access.query_parquet_direct(
-            stage2a_water_path, "SELECT *", "field_bnbo_water_intersections"
+            stage2a_water_path, "SELECT *", "stage3a_field_bnbo_water_intersections"
         )
         self.log.info(f"✅ Loaded field_bnbo_water_intersections from {stage2a_water_dataset}")
 
@@ -65,7 +65,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         # Input validation
         property_count = self.conn.execute("SELECT COUNT(*) FROM field_property_intersections").fetchone()[0]
         bnbo_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
-        water_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_water_intersections").fetchone()[0]
+        water_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM stage3a_field_bnbo_water_intersections").fetchone()[0]
 
         self.log.info(f"📊 Input data loaded:")
         self.log.info(f"  Field-property intersections: {property_count:,}")
@@ -131,7 +131,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
                 fbwi.project_id,
                 ST_Intersection(p.property_geometry, fbwi.field_bnbo_water_geometry) as property_bnbo_water_geometry
             FROM field_property_intersections p
-            JOIN field_bnbo_water_intersections fbwi ON p.field_uuid = fbwi.field_uuid
+            JOIN stage3a_field_bnbo_water_intersections fbwi ON p.field_uuid = fbwi.field_uuid
                 AND ST_Intersects(p.property_geometry, fbwi.field_bnbo_water_geometry)
         """)
 
@@ -244,7 +244,7 @@ class FinalBNBOAnalysis(FieldAnalysisStageBase):
         # Get input counts
         field_property_count = self.conn.execute("SELECT COUNT(*) FROM field_property_intersections").fetchone()[0]
         field_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_intersections").fetchone()[0]
-        field_bnbo_water_count = self.conn.execute("SELECT COUNT(*) FROM field_bnbo_water_intersections").fetchone()[0]
+        field_bnbo_water_count = self.conn.execute("SELECT COUNT(*) FROM stage3a_field_bnbo_water_intersections").fetchone()[0]
         
         # Get output counts
         property_bnbo_count = self.conn.execute("SELECT COUNT(*) FROM property_bnbo_intersections").fetchone()[0]

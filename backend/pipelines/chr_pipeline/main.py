@@ -17,17 +17,18 @@ from bronze.export import (
     import_context_data,
     save_raw_data,
 )
-from bronze.load_besaetning import ENDPOINTS as BES_ENDPOINTS
-from bronze.load_besaetning import create_soap_client as create_bes_client
-from bronze.load_besaetning import get_fvm_credentials, load_herd_details, load_herd_list
-from bronze.load_diko import ENDPOINTS as DIKO_ENDPOINTS
-from bronze.load_diko import create_soap_client as create_diko_client
+from bronze.auth import (
+    create_besaetning_client,
+    create_chr_dyr_client,
+    create_diko_client,
+    create_ejendom_client,
+    create_stamdata_client,
+    get_fvm_credentials,
+    get_legacy_fvm_credentials,
+)
+from bronze.load_besaetning import load_herd_details, load_herd_list
 from bronze.load_diko import load_diko_flytninger
-from bronze.load_ejendom import ENDPOINTS as EJD_ENDPOINTS
-from bronze.load_ejendom import create_soap_client as create_ejd_client
 from bronze.load_ejendom import load_ejendom_oplysninger, load_ejendom_vet_events
-from bronze.load_stamdata import ENDPOINTS as STAMDATA_ENDPOINTS
-from bronze.load_stamdata import create_soap_client as create_stamdata_client
 from bronze.load_stamdata import load_species_usage_combinations
 from bronze.load_vetstat import load_vetstat_antibiotics
 from silver import config
@@ -66,12 +67,31 @@ def setup_logging(log_level: str):
     logging.getLogger("zeep").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("google").setLevel(logging.WARNING)
-    logging.getLogger("requests").setLevel(logging.WARNING)
 
-    # Prevent log propagation for specific modules when not in DEBUG
-    if numeric_level > logging.DEBUG:
-        for logger_name in ["zeep", "urllib3", "google", "requests"]:
-            logging.getLogger(logger_name).propagate = False
+
+def get_client(context: Dict[str, Any], client_name: str):
+    """Get a CHR client lazily, creating it only when needed."""
+    if client_name not in context["clients"]:
+        logging.info(f"Creating {client_name} client lazily")
+        
+        client_creators = {
+            "stamdata": create_stamdata_client,
+            "besaetning": create_besaetning_client,
+            "diko": create_diko_client,
+            "ejendom": create_ejendom_client,
+            "chr_dyr": create_chr_dyr_client,
+        }
+        
+        if client_name not in client_creators:
+            raise ValueError(f"Unknown client type: {client_name}")
+            
+        try:
+            context["clients"][client_name] = client_creators[client_name]()
+        except Exception as e:
+            logging.error(f"Failed to create {client_name} client: {e}")
+            raise
+            
+    return context["clients"][client_name]
 
 
 def get_default_dates() -> tuple[date, date]:
@@ -440,7 +460,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
     # Only handle bronze steps here
     if step == "stamdata":
         context["combinations"] = fetch_stamdata(
-            context["clients"]["stamdata"], context["username"], context["args"]["test_species_codes"]
+            get_client(context, "stamdata"), context["username"], context["args"]["test_species_codes"]
         )
         if not context["combinations"]:
             raise ValueError("No valid species/usage combinations found")
@@ -452,7 +472,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("Cannot run 'herds' step without first running 'stamdata'")
 
         context["herd_to_species"] = fetch_herds(
-            context["clients"]["besaetning"],
+            get_client(context, "besaetning"),
             context["username"],
             context["combinations"],
             limit_total=context["args"]["limit_total_herds"],
@@ -472,7 +492,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         context["chr_to_species"] = {}
 
         herd_tasks = [
-            (context["clients"]["besaetning"], context["username"], herd_num, species_code)
+            (get_client(context, "besaetning"), context["username"], herd_num, species_code)
             for herd_num, species_code in context["herd_to_species"].items()
         ]
 
@@ -507,7 +527,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("Cannot run 'diko' step without first running 'herds'")
 
         diko_tasks = [
-            (context["clients"]["diko"], context["username"], herd_num, species_code)
+            (get_client(context, "diko"), context["username"], herd_num, species_code)
             for herd_num, species_code in context["herd_to_species"].items()
         ]
 
@@ -528,7 +548,7 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError("Cannot run 'ejendom' step without first running 'herd_details'")
 
         ejendom_tasks = [
-            (context["clients"]["ejendom"], context["username"], chr_num)
+            (get_client(context, "ejendom"), context["username"], chr_num)
             for chr_num in context["chr_to_species"].keys()
         ]
 
@@ -569,20 +589,13 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
 
         # Import the smart aggregation function
         from bronze.animal_movements import load_cattle_movement_summaries
-        from bronze.auth import create_soap_client as create_chr_dyr_client
 
-        # Create CHR_dyr client for smart aggregation
-        if "chr_dyr" not in context["clients"]:
-            # Get credentials
-            username, password = get_fvm_credentials()
-            context["clients"]["chr_dyr"] = create_chr_dyr_client(
-                "https://ws.fvst.dk/service/CHR_dyrWS?wsdl", username, password
-            )
+        # CHR_dyr client will be created lazily when needed
 
         # Create smart aggregation tasks for cattle herds
         cattle_movement_tasks = [
             (
-                context["clients"]["chr_dyr"],
+                get_client(context, "chr_dyr"),
                 context["username"],
                 herd_num,
                 context["args"]["start_date"],
@@ -875,16 +888,16 @@ def main():
 
             if needs_fvm_credentials:
                 # Initialize context with imported data and FVM credentials
-                username, password = get_fvm_credentials()
+                try:
+                    username, password, certificate, private_key = get_fvm_credentials()
+                except Exception as e:
+                    logging.warning(f"Robust authentication failed, falling back to legacy: {e}")
+                    username, password = get_legacy_fvm_credentials()
+                    
                 context = {
                     "args": args,
                     "username": username,
-                    "clients": {
-                        "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
-                        "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
-                        "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
-                        "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
-                    },
+                    "clients": {},  # Create clients lazily when needed
                     # Merge imported context
                     **imported_context,
                 }
@@ -910,16 +923,16 @@ def main():
         else:
             if needs_fvm_credentials:
                 # Initialize fresh context with FVM credentials
-                username, password = get_fvm_credentials()
+                try:
+                    username, password, certificate, private_key = get_fvm_credentials()
+                except Exception as e:
+                    logging.warning(f"Robust authentication failed, falling back to legacy: {e}")
+                    username, password = get_legacy_fvm_credentials()
+                    
                 context = {
                     "args": args,
                     "username": username,
-                    "clients": {
-                        "stamdata": create_stamdata_client(STAMDATA_ENDPOINTS["stamdata"], username, password),
-                        "besaetning": create_bes_client(BES_ENDPOINTS["besaetning"], username, password),
-                        "ejendom": create_ejd_client(EJD_ENDPOINTS["ejendom"], username, password),
-                        "diko": create_diko_client(DIKO_ENDPOINTS["diko"], username, password),
-                    },
+                    "clients": {},  # Create clients lazily when needed
                 }
             else:
                 # Initialize minimal context for silver-only processing

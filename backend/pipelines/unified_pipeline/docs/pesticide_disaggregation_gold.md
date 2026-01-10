@@ -4,6 +4,8 @@
 
 The Pesticide Disaggregation Gold Layer processor disaggregates pesticide applications from company level to individual field level using the proven strategy that achieved 92% coverage in the original pipeline.
 
+**NEW**: Now includes integrated proximity analysis that creates comprehensive environmental and health risk data for pesticide-treated fields, including proximity to residential and educational buildings, and distances to water features.
+
 **CRITICAL**: This implementation preserves the EXACT original logic without any "enhancements" that could break the proven 92% coverage approach.
 
 ## Usage
@@ -49,12 +51,27 @@ asyncio.run(processor.run())
 - `pesticide_year`: Year of pesticide data to process (default: 2021)
 - `area_tolerance_pct`: Area tolerance percentage (default: 2.0) **DO NOT CHANGE**
 
+### Proximity Analysis Parameters (NEW)
+
+- `enable_proximity_analysis`: Whether to run proximity analysis after disaggregation (default: True)
+- `building_proximity_distance_m`: Distance threshold for building proximity analysis (default: 100m)
+- `water_proximity_distance_m`: Maximum distance for water proximity analysis (default: 100m)
+- `buildings_dataset`: Dataset name for buildings data (default: "bbr_buildings")
+- `water_typology_dataset`: Dataset name for water typology data (default: "water_typology")
+
 ### Input Datasets
 
 The processor requires these silver datasets to be available:
 
 - `agricultural_fields`: Agricultural field boundaries with CVR and crop data
 - `pesticides`: Pesticide application records
+
+### Additional Datasets for Proximity Analysis
+
+When proximity analysis is enabled (default), these additional datasets are required:
+
+- `bbr_buildings`: Building data with addresses and usage categories (residential, educational)
+- `water_typology`: Water feature data with geometries (lakes, coastal waters, watercourses)
 
 ### Temporal Pattern
 

@@ -58,9 +58,7 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInter
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
 
-print("DEBUG: pesticide_disaggregation.py module loaded!")
 logger = logging.getLogger(__name__)
-print(f"DEBUG: Logger created: {logger}")
 
 
 class PesticideDisaggregationGoldConfig(BaseJobConfig):
@@ -104,6 +102,12 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     # Input dataset names (what files to look for in cloud storage)
     pesticide_applications_dataset: str = "pesticides"
 
+    # Year filtering for matrix jobs (process single year instead of all years)
+    pesticide_year: Optional[int] = Field(
+        default=None,
+        description="Specific pesticide year to process (if None, processes all available years)",
+    )
+
     # Performance tuning for the database operations
     max_memory_gb: float = Field(
         default=12.0,
@@ -115,6 +119,19 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     )
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    def apply_cli_filters(self, cli_config) -> None:
+        """
+        Apply CLI filtering for matrix job processing.
+        
+        This method sets the pesticide_year from CLI parameters to enable
+        processing of specific years for parallel matrix jobs.
+        
+        Args:
+            cli_config: CLI configuration containing pesticide_year filter
+        """
+        if cli_config.pesticide_year:
+            object.__setattr__(self, "pesticide_year", cli_config.pesticide_year)
 
 
 class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig], GoldJobInterface):
@@ -359,6 +376,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+        print("🚨 PESTICIDE DISAGGREGATION RUN METHOD: Starting execution")
+        print(f"🚨 CONFIG: pesticide_year = {self.config.pesticide_year}")
         """
         THE MAIN ENTRY POINT - This is where the entire pesticide disaggregation process starts!
 
@@ -408,8 +427,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info(
             f"✅ Found {len(pesticide_field_pairs)} pesticide-field year pairs to process"
         )
+        print(f"🚨 FOUND {len(pesticide_field_pairs)} YEAR PAIRS: {pesticide_field_pairs}")
         for pest_year, field_year in pesticide_field_pairs:
             self.log.info(f"   📅 Will process: pesticide {pest_year} → field {field_year}")
+            print(f"🚨 WILL PROCESS: pesticide {pest_year} → field {field_year}")
 
         # STEP 2: INITIALIZE TRACKING VARIABLES
         # ====================================
@@ -659,7 +680,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
-            self.log.info(f"✅ Saved table {table_name} to gs://{self.config.bucket}/{gcs_path}")
+            full_gcs_path = f"gs://{self.config.bucket}/{gcs_path}"
+            self.log.info(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
+            self.log.info(f"📁 GCS Path: {full_gcs_path}")
+            print(f"✅ DISAGGREGATION OUTPUT: {table_name} saved to {full_gcs_path}")
+            print(f"📁 GCS Path: {full_gcs_path}")
 
         except Exception as e:
             self.log.error(f"❌ Failed to save table {table_name} to GCS: {e}")
@@ -712,14 +737,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             List of (pesticide_year, field_year) tuples ready for processing
         """
         print("DEBUG: _get_pesticide_field_year_pairs called")
-        self.log.info("🔍 Discovering available pesticide and field years")
-
-        # STEP 1: DISCOVER AVAILABLE PESTICIDE YEARS
-        # ==========================================
-        # Look through cloud storage for pesticide data files
-        self.log.info("📊 Scanning GCS for pesticide data...")
-        pesticide_years = self._get_available_pesticide_years()
-        self.log.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
+        
+        # Check if we should process only a specific year (for matrix jobs)
+        if self.config.pesticide_year:
+            self.log.info(f"🎯 Matrix job mode: Processing only pesticide year {self.config.pesticide_year}")
+            print(f"🎯 MATRIX JOB: Processing only pesticide year {self.config.pesticide_year}")
+            pesticide_years = {self.config.pesticide_year}
+        else:
+            self.log.info("🔍 Discovering all available pesticide and field years")
+            # STEP 1: DISCOVER AVAILABLE PESTICIDE YEARS
+            # ==========================================
+            # Look through cloud storage for pesticide data files
+            self.log.info("📊 Scanning GCS for pesticide data...")
+            pesticide_years = self._get_available_pesticide_years()
+            self.log.info(f"✅ Found pesticide years: {sorted(pesticide_years)}")
 
         # STEP 2: DISCOVER AVAILABLE FIELD YEARS
         # ======================================
@@ -809,9 +840,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pesticide_path = self._read_pesticide_data_for_year(pesticide_year)
             if pesticide_path is not None:
                 datasets["pesticides"] = pesticide_path
-                self.log.info(
-                    f"✅ Successfully located pesticide data for {pesticide_year}: {pesticide_path}"
-                )
+                self.log.info(f"✅ PESTICIDE INPUT: Located data for {pesticide_year}")
+                self.log.info(f"📁 Pesticide Data Path: {pesticide_path}")
+                print(f"✅ PESTICIDE INPUT: Located data for {pesticide_year}")
+                print(f"📁 Pesticide Data Path: {pesticide_path}")
             else:
                 self.log.error(f"❌ No pesticide data found for year {pesticide_year}")
                 datasets["pesticides"] = None
@@ -827,9 +859,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             fields_path = self._read_fields_data_for_year(field_year)
             if fields_path is not None:
                 datasets["agricultural_fields"] = fields_path
-                self.log.info(
-                    f"✅ Successfully located agricultural fields data for {field_year}: {fields_path}"
-                )
+                self.log.info(f"✅ FIELDS INPUT: Located data for {field_year}")
+                self.log.info(f"📁 Fields Data Path: {fields_path}")
             else:
                 self.log.error(f"❌ No agricultural fields data found for year {field_year}")
                 datasets["agricultural_fields"] = None

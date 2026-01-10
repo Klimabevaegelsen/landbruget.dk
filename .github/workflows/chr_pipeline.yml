@@ -179,6 +179,8 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
@@ -188,6 +190,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           # Generate proper timestamp in YYYYMMDD_HHMMSS format like other pipelines
           BRONZE_TIMESTAMP=$(date -u +%Y%m%d_%H%M%S)
@@ -329,6 +339,8 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
@@ -338,6 +350,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           mkdir -p /tmp/data/bronze/chr
           mkdir -p /tmp/data/silver/chr
@@ -490,6 +510,8 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
@@ -499,6 +521,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           # Use the shared bronze timestamp from foundation job
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
@@ -639,6 +669,8 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
@@ -648,6 +680,14 @@ jobs:
           echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           # Use the shared bronze timestamp from foundation job
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)
@@ -751,6 +791,8 @@ jobs:
           GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
           FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
           FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          VETSTAT_CERTIFICATE: ${{ secrets.VETSTAT_CERTIFICATE }}
+          VETSTAT_CERTIFICATE_PASSWORD: ${{ secrets.VETSTAT_CERTIFICATE_PASSWORD }}
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
         run: |
           cd backend/pipelines/chr_pipeline
@@ -761,6 +803,14 @@ jobs:
           echo "LOCAL_DATA_PATH=/tmp/data" >> .env
           echo "CONTEXT_IMPORT_PATH=/tmp/chr_context.json" >> .env
           echo "CONTEXT_EXPORT_PATH=/tmp/chr_context_with_details.json" >> .env
+          
+          # Add VetStat credentials for robust authentication
+          if [[ -n "$VETSTAT_CERTIFICATE" ]]; then
+            echo "VETSTAT_CERTIFICATE=$VETSTAT_CERTIFICATE" >> .env
+          fi
+          if [[ -n "$VETSTAT_CERTIFICATE_PASSWORD" ]]; then
+            echo "VETSTAT_CERTIFICATE_PASSWORD=$VETSTAT_CERTIFICATE_PASSWORD" >> .env
+          fi
           
           # Use the shared bronze timestamp from foundation job
           BRONZE_TIMESTAMP=$(cat /tmp/bronze_timestamp.txt)

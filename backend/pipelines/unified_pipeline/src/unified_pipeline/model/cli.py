@@ -47,6 +47,8 @@ class Source(Enum):
         field_production: Field production estimates gold layer
         field_area_analysis: Field area analysis gold layer
         pesticide_disaggregation: Pesticide disaggregation gold layer
+        pesticide_proximity: Pesticide proximity analysis gold layer
+        pesticide_compliance: Pesticide regulatory compliance analysis gold layer
         dst: Danish Statistics (Danmarks Statistik) API data source
         dmi: Danish Meteorological Institute (DMI) climate data source
         arbejdstilsynet_inspections: Danish Work Environment Authority inspections data
@@ -65,8 +67,10 @@ class Source(Enum):
     water_typology = "water_typology"
     property_cadastral_merge = "property_cadastral_merge"
     field_production = "field_production"
-    field_area_analysis = "field_area_analysis"
+    field_area_analysis = "field_area_analysis" 
     pesticide_disaggregation = "pesticide_disaggregation"
+    pesticide_proximity = "pesticide_proximity"
+    pesticide_compliance = "pesticide_compliance"
     cvr_enrichment = "cvr_enrichment"
     dst = "dst"
     dmi = "dmi"
@@ -88,6 +92,14 @@ class Stage(Enum):
         gold: Business-ready combined datasets stage
         enrichment: Enrichment-only stage for post-processing existing silver data
         all: Process bronze, silver, and gold stages sequentially
+        
+        # CVR Enrichment Pipeline Steps
+        collection: CVR collection step (collect and batch CVR numbers)
+        company_fetching: Company data fetching step
+        pnumber_fetching: P-number data fetching step
+        financial_documents: Financial documents fetching step
+        address_geocoding: Address geocoding step
+        data_consolidation: Data consolidation step
     """
 
     bronze = "bronze"
@@ -95,6 +107,14 @@ class Stage(Enum):
     gold = "gold"
     enrichment = "enrichment"
     all = "all"
+    
+    # CVR Enrichment Pipeline Steps
+    collection = "collection"
+    company_fetching = "company_fetching"
+    pnumber_fetching = "pnumber_fetching"
+    financial_documents = "financial_documents"
+    address_geocoding = "address_geocoding"
+    data_consolidation = "data_consolidation"
 
 
 class FVMLayerType(Enum):
@@ -148,7 +168,12 @@ class CliConfig(BaseModel):
     stage: Stage
     fvm_layer_type: Optional[FVMLayerType] = None
     fvm_year: Optional[int] = None
+    pesticide_year: Optional[int] = None
     # CVR enrichment specific parameters
     test_limit: Optional[int] = None
     parse_financial_xml: bool = True
     max_financial_documents: int = 10
+    
+    # Batch processing parameters
+    batch_number: Optional[int] = None
+    total_batches: Optional[int] = None

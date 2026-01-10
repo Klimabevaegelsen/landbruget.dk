@@ -34,10 +34,28 @@ from unified_pipeline.gold.arbejdstilsynet_inspections import (
     ArbjdstilsynetInspectionsGold,
     ArbjdstilsynetInspectionsGoldConfig,
 )
-from unified_pipeline.gold.cvr_enrichment import (
-    CVREnrichmentGold,
-    CVREnrichmentGoldConfig,
-)
+# Import legacy monolithic CVR enrichment from the specific .py file
+# Note: We need to be specific because there's both cvr_enrichment.py and cvr_enrichment/ directory
+import sys
+import importlib.util
+import os
+
+# Get the path to the specific cvr_enrichment.py file
+cvr_enrichment_file = os.path.join(os.path.dirname(__file__), 'gold', 'cvr_enrichment.py')
+spec = importlib.util.spec_from_file_location("cvr_enrichment_legacy", cvr_enrichment_file)
+cvr_enrichment_legacy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cvr_enrichment_legacy)
+
+CVREnrichmentGold = cvr_enrichment_legacy.CVREnrichmentGold
+CVREnrichmentGoldConfig = cvr_enrichment_legacy.CVREnrichmentGoldConfig
+
+# Import new modular CVR enrichment steps from the package directory
+from unified_pipeline.gold.cvr_enrichment.cvr_collection import CVRCollection, CVRCollectionConfig
+from unified_pipeline.gold.cvr_enrichment.company_fetching import CompanyFetching, CompanyFetchingConfig
+from unified_pipeline.gold.cvr_enrichment.pnumber_fetching import PNumberFetching, PNumberFetchingConfig
+from unified_pipeline.gold.cvr_enrichment.financial_documents import FinancialDocuments, FinancialDocumentsConfig
+from unified_pipeline.gold.cvr_enrichment.address_geocoding import AddressGeocoding, AddressGeocodingConfig
+from unified_pipeline.gold.cvr_enrichment.data_consolidation import DataConsolidation, DataConsolidationConfig
 from unified_pipeline.gold.field_area_analysis import (
     FieldAreaAnalysisGold,
     FieldAreaAnalysisGoldConfig,
@@ -49,6 +67,14 @@ from unified_pipeline.gold.field_production import (
 from unified_pipeline.gold.pesticide_disaggregation import (
     PesticideDisaggregationGold,
     PesticideDisaggregationGoldConfig,
+)
+from unified_pipeline.gold.pesticide_proximity import (
+    PesticideProximityGold,
+    PesticideProximityGoldConfig,
+)
+from unified_pipeline.gold.pesticide_compliance import (
+    PesticideComplianceGold,
+    PesticideComplianceGoldConfig,
 )
 from unified_pipeline.gold.worker_safety import (
     WorkerSafetyGold,
@@ -90,6 +116,8 @@ load_dotenv()
 async def execute_pipeline_jobs(
     jobs: list, stage: cli.Stage, cli_config: cli.CliConfig
 ) -> tuple[int, int]:
+    print(f"🚨 EXECUTE_JOBS: Starting with {len(jobs)} jobs for stage {stage}")
+    print(f"🚨 EXECUTE_JOBS: CLI config pesticide_year = {cli_config.pesticide_year}")
     """
     Execute pipeline jobs with support for gold layer and in-memory data passing.
 
@@ -114,13 +142,22 @@ async def execute_pipeline_jobs(
 
     for job_cls, config_cls in jobs:
         log.info(f"Running {job_cls.__name__} for stage {stage}")
+        print(f"🚨 APP: About to run {job_cls.__name__} with config {config_cls.__name__}")
 
         # Create config instance and pass CLI config for FVM WFS filtering
         config_instance = config_cls()
+        print(f"🚨 APP: Created config instance: {config_instance}")
+        
         if hasattr(config_instance, "apply_cli_filters"):
+            print(f"🚨 APP: Applying CLI filters to {config_cls.__name__}")
             config_instance.apply_cli_filters(cli_config)
+            print(f"🚨 APP: After CLI filters - pesticide_year = {getattr(config_instance, 'pesticide_year', 'NOT_SET')}")
+        else:
+            print(f"🚨 APP: No apply_cli_filters method found on {config_cls.__name__}")
 
+        print(f"🚨 APP: Creating instance of {job_cls.__name__}")
         instance = job_cls(config=config_instance)
+        print(f"🚨 APP: Instance created successfully")
         job_successful = False
 
         try:
@@ -187,7 +224,10 @@ async def execute_pipeline_jobs(
 
             elif issubclass(job_cls, GoldJobInterface):
                 # Gold stage - pass collected silver data
+                print(f"🚨 APP: About to call {job_cls.__name__}.run() with silver_data")
+                print(f"🚨 APP: Silver data keys: {list(silver_data.keys()) if silver_data else 'None'}")
                 await instance.run(silver_data=silver_data)
+                print(f"🚨 APP: {job_cls.__name__}.run() completed successfully")
                 # Gold jobs don't return data, so we consider them successful if they don't raise an exception
                 job_successful = True
                 log.info(f"Gold job {job_cls.__name__} completed successfully using silver data")
@@ -208,14 +248,19 @@ async def execute_pipeline_jobs(
 
         except Exception as e:
             log.error(f"Error executing {job_cls.__name__}: {e}")
+            print(f"🚨 APP: EXCEPTION in {job_cls.__name__}: {e}")
             import traceback
 
             log.error(f"Traceback: {traceback.format_exc()}")
+            print(f"🚨 APP: TRACEBACK: {traceback.format_exc()}")
 
     return successful_jobs, total_jobs
 
 
 def execute(cli_config: cli.CliConfig) -> int:
+    print(f"🚨 APP EXECUTE: Starting with config: {cli_config}")
+    print(f"🚨 APP EXECUTE: Source = {cli_config.source}, Stage = {cli_config.stage}")
+    print(f"🚨 APP EXECUTE: pesticide_year = {cli_config.pesticide_year}")
     """
     Main execution function for processing pipeline data.
 
@@ -232,8 +277,18 @@ def execute(cli_config: cli.CliConfig) -> int:
     Raises:
         ValueError: If the requested source/stage combination is not supported
     """
-    log = Logger.get_logger()
+    # Initialize logger with LOG_LEVEL environment variable BEFORE any other logging
+    import os
+    import sys
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    print(f"🚨 APP EXECUTE: Initializing logger with level: {log_level}")
+    sys.stdout.flush()  # Force flush for GitHub Actions
+    
+    # Force reset the singleton logger to ensure LOG_LEVEL is respected
+    Logger.LOG = None  # Reset singleton to force recreation with correct level
+    log = Logger.get_logger(log_level)
     log.info("Starting Unified Pipeline.")
+    sys.stdout.flush()  # Force flush after logger creation
 
     # Define pipeline mapping for sources and stages
     pipeline_map = {
@@ -355,13 +410,38 @@ def execute(cli_config: cli.CliConfig) -> int:
                 (PesticideDisaggregationGold, PesticideDisaggregationGoldConfig),
             ],
         },
+        cli.Source.pesticide_proximity: {
+            cli.Stage.gold: [(PesticideProximityGold, PesticideProximityGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires gold pesticide_disaggregation and silver datasets:
+                # bbr_buildings, water_typology, fvm_marker
+                (PesticideProximityGold, PesticideProximityGoldConfig),
+            ],
+        },
+        cli.Source.pesticide_compliance: {
+            cli.Stage.gold: [(PesticideComplianceGold, PesticideComplianceGoldConfig)],
+            cli.Stage.all: [
+                # Note: This requires silver datasets to be available:
+                # bmd, pesticides
+                (PesticideComplianceGold, PesticideComplianceGoldConfig),
+            ],
+        },
         cli.Source.cvr_enrichment: {
+            # Legacy monolithic approach
             cli.Stage.gold: [(CVREnrichmentGold, CVREnrichmentGoldConfig)],
             cli.Stage.all: [
                 # Note: This collects CVR numbers from all pipeline CVR collections
                 # and fetches CVR register data for enrichment
                 (CVREnrichmentGold, CVREnrichmentGoldConfig),
             ],
+            
+            # New modular pipeline steps
+            cli.Stage.collection: [(CVRCollection, CVRCollectionConfig)],
+            cli.Stage.company_fetching: [(CompanyFetching, CompanyFetchingConfig)],
+            cli.Stage.pnumber_fetching: [(PNumberFetching, PNumberFetchingConfig)],
+            cli.Stage.financial_documents: [(FinancialDocuments, FinancialDocumentsConfig)],
+            cli.Stage.address_geocoding: [(AddressGeocoding, AddressGeocodingConfig)],
+            cli.Stage.data_consolidation: [(DataConsolidation, DataConsolidationConfig)],
         },
         cli.Source.dst: {
             cli.Stage.bronze: [(DSTBronze, DSTBronzeConfig)],
@@ -403,15 +483,20 @@ def execute(cli_config: cli.CliConfig) -> int:
     }
 
     # Retrieve jobs for given source and stage
+    print(f"🚨 APP: Looking up pipeline for source={cli_config.source}, stage={cli_config.stage}")
     try:
         jobs = pipeline_map[cli_config.source][cli_config.stage]
+        print(f"🚨 APP: Found {len(jobs)} jobs: {[job[0].__name__ for job in jobs]}")
     except KeyError:
+        print(f"🚨 APP: KeyError - source/stage combination not found in pipeline_map")
         raise ValueError(f"Source {cli_config.source} and stage {cli_config.stage} not supported.")
 
     # Execute jobs with support for in-memory data passing
+    print(f"🚨 APP: About to execute {len(jobs)} jobs with asyncio.run")
     successful_jobs, total_jobs = asyncio.run(
         execute_pipeline_jobs(jobs, cli_config.stage, cli_config)
     )
+    print(f"🚨 APP: Execution completed - {successful_jobs}/{total_jobs} successful")
 
     # Determine exit code based on job success
     if successful_jobs == 0:
@@ -488,6 +573,27 @@ def execute(cli_config: cli.CliConfig) -> int:
     default=10,
     help="Maximum number of financial documents to fetch per company (CVR enrichment only).",
 )
+@click.option(
+    "--pesticide-year",
+    "pesticide_year",
+    type=int,
+    help="Year filter for pesticide matrix jobs (e.g., 2018). If not specified, processes all available years.",
+    required=False,
+)
+@click.option(
+    "--batch-number",
+    "batch_number",
+    type=int,
+    help="Batch number for parallel processing (1-based). Used with CVR enrichment pipeline steps.",
+    required=False,
+)
+@click.option(
+    "--total-batches",
+    "total_batches",
+    type=int,
+    help="Total number of batches for parallel processing. Used with CVR enrichment pipeline steps.",
+    required=False,
+)
 def run_cli(
     env: str,
     source: str,
@@ -497,6 +603,9 @@ def run_cli(
     test_limit: int = None,
     parse_financial_xml: bool = True,
     max_financial_documents: int = 10,
+    pesticide_year: int = None,
+    batch_number: int = None,
+    total_batches: int = None,
 ) -> None:
     """
     CLI entry point for the unified pipeline application.
@@ -525,6 +634,9 @@ def run_cli(
         test_limit=test_limit,
         parse_financial_xml=parse_financial_xml,
         max_financial_documents=max_financial_documents,
+        pesticide_year=pesticide_year,
+        batch_number=batch_number,
+        total_batches=total_batches,
     )
     print(app_config)
     exit_code = execute(app_config)
