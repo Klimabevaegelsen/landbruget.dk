@@ -871,14 +871,49 @@ class GCSDataAccess:
 
         options_str = ", ".join(copy_options)
 
-        with tempfile.NamedTemporaryFile(suffix=file_suffix) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
             # DuckDB writes directly to the specified format
-            self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
+            self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp_path}' ({options_str})")
+
+            # Get file size for verification
+            import os
+
+            local_size = os.path.getsize(tmp_path)
+            self.log.info(f"Created local temp file: {local_size:,} bytes")
 
             # Stream copy to GCS without loading into memory
-            with open(tmp.name, "rb") as src:
+            with open(tmp_path, "rb") as src:
                 with self.fs.open(gcs_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+                    bytes_written = shutil.copyfileobj(src, dst)
+
+            self.log.info(f"Uploaded {local_size:,} bytes to GCS")
+
+            # Verify upload by checking if file exists
+            try:
+                if self.fs.exists(gcs_path):
+                    remote_size = self.fs.size(gcs_path)
+                    self.log.info(f"✅ Verified upload: {remote_size:,} bytes at {gcs_path}")
+                    if remote_size != local_size:
+                        self.log.warning(
+                            f"⚠️  Size mismatch: local={local_size}, remote={remote_size}"
+                        )
+                else:
+                    self.log.error(f"❌ File not found after upload: {gcs_path}")
+                    raise Exception(f"Upload verification failed: file not found at {gcs_path}")
+            except Exception as verify_error:
+                self.log.error(f"❌ Upload verification failed: {verify_error}")
+                raise
+        finally:
+            # Clean up temp file
+            try:
+                import os
+
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
         self.monitor.check_resources("post_duckdb_upload")
         format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
