@@ -83,8 +83,8 @@ jobs:
             echo "soil_types_available=false" >> $GITHUB_OUTPUT
           fi
 
-          # Check bnbo (drinking water protection areas)
-          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/bnbo/" &>/dev/null; then
+          # Check bnbo (drinking water protection areas - dissolved geometries)
+          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/bnbo_status_dissolved/" &>/dev/null; then
             echo "  ✅ bnbo: Available"
             echo "bnbo_available=true" >> $GITHUB_OUTPUT
           else
@@ -92,8 +92,8 @@ jobs:
             echo "bnbo_available=false" >> $GITHUB_OUTPUT
           fi
 
-          # Check properties (cadastral data)
-          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/silver/bfe_ejerlav/" &>/dev/null; then
+          # Check properties (merged cadastral + property owners from gold layer)
+          if gsutil ls "gs://${{ secrets.GCS_BUCKET }}/gold/property_cadastral_merged/" &>/dev/null; then
             echo "  ✅ properties: Available"
             echo "properties_available=true" >> $GITHUB_OUTPUT
           else
