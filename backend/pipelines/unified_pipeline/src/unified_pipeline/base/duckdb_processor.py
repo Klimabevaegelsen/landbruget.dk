@@ -41,12 +41,16 @@ class DuckDBProcessor:
             gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
             if gcs_access_key and gcs_secret_key:
+                # Escape single quotes in credentials to prevent SQL injection
+                escaped_key = gcs_access_key.replace("'", "''")
+                escaped_secret = gcs_secret_key.replace("'", "''")
+
                 # Create persistent GCS secret for native access
                 self.conn.execute(f"""
                     CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
                         TYPE GCS,
-                        KEY_ID '{gcs_access_key}',
-                        SECRET '{gcs_secret_key}'
+                        KEY_ID '{escaped_key}',
+                        SECRET '{escaped_secret}'
                     );
                 """)
                 print("✅ DuckDB GCS HMAC authentication configured")
@@ -70,11 +74,15 @@ class DuckDBProcessor:
             secret_name: Name for the secret (default: gcs_hmac)
         """
         try:
+            # Escape single quotes in credentials to prevent SQL injection
+            escaped_key = access_key_id.replace("'", "''")
+            escaped_secret = secret_access_key.replace("'", "''")
+
             self.conn.execute(f"""
                 CREATE OR REPLACE PERSISTENT SECRET {secret_name} (
                     TYPE GCS,
-                    KEY_ID '{access_key_id}',
-                    SECRET '{secret_access_key}'
+                    KEY_ID '{escaped_key}',
+                    SECRET '{escaped_secret}'
                 );
             """)
             print(f"✅ GCS secret '{secret_name}' configured successfully")
