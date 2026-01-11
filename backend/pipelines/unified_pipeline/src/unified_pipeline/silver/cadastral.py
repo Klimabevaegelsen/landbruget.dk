@@ -559,8 +559,9 @@ class CadastralSilver(BaseSource[CadastralSilverConfig], SilverJobInterface):
             self.log.warning("No valid data found after processing")
             return None
 
-        # Skip expensive geometry validation for cadastral data since coordinates are now fixed
-        skip_validation = os.getenv("CADASTRAL_SKIP_VALIDATION", "true").lower() == "true"
+        # Enable geometry validation by default to fix invalid geometries upstream
+        # Validation includes ST_MakeValid which repairs topology issues before Gold stage
+        skip_validation = os.getenv("CADASTRAL_SKIP_VALIDATION", "false").lower() == "true"
         if skip_validation:
             self.log.info("Skipping geometry validation (CADASTRAL_SKIP_VALIDATION=true)")
             # Just do coordinate transformation without validation
