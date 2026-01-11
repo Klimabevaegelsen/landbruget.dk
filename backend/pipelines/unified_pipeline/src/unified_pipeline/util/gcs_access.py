@@ -892,7 +892,11 @@ class GCSDataAccess:
             self.log.info(f"Uploaded {local_size:,} bytes to GCS")
 
             # Verify upload by checking if file exists
+            # CRITICAL: Invalidate gcsfs cache before verification to ensure fresh check
             try:
+                # Invalidate cache for this path to force fresh GCS check
+                self.fs.invalidate_cache(gcs_path)
+
                 if self.fs.exists(gcs_path):
                     remote_size = self.fs.size(gcs_path)
                     self.log.info(f"✅ Verified upload: {remote_size:,} bytes at {gcs_path}")
