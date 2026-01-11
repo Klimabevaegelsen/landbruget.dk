@@ -88,12 +88,16 @@ class PMTilesGeneratorPipeline(BaseSource[PMTilesGeneratorConfig]):
                 # Set correct GCS region (landbrugsdata-raw-data bucket is in EUROPE-WEST1)
                 self.duckdb_conn.execute("SET s3_region = 'europe-west1'")
 
+                # Escape single quotes in credentials to prevent SQL injection
+                escaped_key = gcs_access_key.replace("'", "''")
+                escaped_secret = gcs_secret_key.replace("'", "''")
+
                 # Create persistent GCS secret for native access
                 self.duckdb_conn.execute(f"""
                     CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
                         TYPE GCS,
-                        KEY_ID '{gcs_access_key}',
-                        SECRET '{gcs_secret_key}'
+                        KEY_ID '{escaped_key}',
+                        SECRET '{escaped_secret}'
                     );
                 """)
                 logger.info("✅ DuckDB GCS HMAC authentication configured successfully")
