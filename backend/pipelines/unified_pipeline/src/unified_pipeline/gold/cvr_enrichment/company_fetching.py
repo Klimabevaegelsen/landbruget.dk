@@ -806,10 +806,11 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
             # Create simple table with raw JSON data
             raw_json_list = []
             for cvr_number, company_result in raw_results.items():
-                if company_result and "data" in company_result:
+                # company_result is the company data itself, not wrapped in {"data": ...}
+                if company_result:
                     raw_entry = {
                         "cvr_number": int(cvr_number),
-                        "raw_json": json.dumps(company_result["data"]),
+                        "raw_json": json.dumps(company_result),
                         "fetch_timestamp": company_data.get("fetch_timestamp"),
                         "batch_number": batch_idx,
                     }
