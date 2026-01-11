@@ -119,9 +119,9 @@ jobs:
           path: /tmp/cvr_collection_data.parquet
           retention-days: 1
 
-  # Step 2: Company Fetching (Sequential - single job with API-level batching)
-  company_fetching:
-    name: "Company Fetching"
+  # Step 2a: Company Fetching Part 1 (First half of CVR numbers)
+  company_fetching_part1:
+    name: "Company Fetching (Part 1/2)"
     runs-on: ubuntu-latest
     needs: cvr_collection
     if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
@@ -156,7 +156,7 @@ jobs:
           path: /tmp/
         continue-on-error: true
 
-      - name: Run Company Fetching
+      - name: Run Company Fetching Part 1
         env:
           CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
           CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
@@ -165,70 +165,252 @@ jobs:
         run: |
           cd backend/pipelines/unified_pipeline
 
-          CMD="python -u -m unified_pipeline run -s cvr_enrichment -j company_fetching"
+          CMD="python -u -m unified_pipeline run -s cvr_enrichment -j company_fetching --batch-number 1 --total-batches 2"
 
           if [ -n "${{ github.event.inputs.test_limit }}" ]; then
             CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
           fi
 
-          echo "🚀 Starting Company Fetching Step"
+          echo "🚀 Starting Company Fetching Part 1/2"
           echo "Running with Log Level: $LOG_LEVEL"
           echo "Running: $CMD"
           echo "🚀 Command starting now..."
 
-          # Run command directly like other pipelines - no tee redirection
           $CMD
 
-          echo "✅ Company Fetching completed successfully"
+          echo "✅ Company Fetching Part 1 completed successfully"
 
-      - name: Verify Company Data Artifact
+  # Step 2b: Company Fetching Part 2 (Second half of CVR numbers)
+  company_fetching_part2:
+    name: "Company Fetching (Part 2/2)"
+    runs-on: ubuntu-latest
+    needs: company_fetching_part1
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
         run: |
-          # Check if the company fetching step already created the artifact file
-          if [ -f "/tmp/cvr_company_data.parquet" ]; then
-            echo "✅ Company data artifact already exists from the fetching step"
-            ls -lh /tmp/cvr_company_data.parquet
-          else
-            echo "⚠️ Company data artifact not found, looking for latest available data..."
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
 
-            # Find the latest company data file from today's runs
-            LATEST_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | grep "$(date -u +%Y%m%d)" | sort -r | head -1 || echo "")
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-            if [ -n "$LATEST_COMPANY_PATH" ]; then
-              echo "✅ Found latest company file: $LATEST_COMPANY_PATH"
-              gsutil cp "$LATEST_COMPANY_PATH" /tmp/cvr_company_data.parquet
-              echo "✅ Created company artifact from: $LATEST_COMPANY_PATH"
-            else
-              echo "⚠️ No company data files found from today"
-              echo "Trying to find any recent company data file..."
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
 
-              # Fallback: find any recent company file
-              RECENT_COMPANY_PATH=$(gsutil ls gs://landbrugsdata-raw-data/gold/cvr_enrichment_companies/*/data.parquet 2>/dev/null | sort -r | head -1 || echo "")
+      - name: Download CVR Collection Data
+        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: cvr-collection-data
+          path: /tmp/
+        continue-on-error: true
 
-              if [ -n "$RECENT_COMPANY_PATH" ]; then
-                echo "✅ Found recent company file: $RECENT_COMPANY_PATH"
-                gsutil cp "$RECENT_COMPANY_PATH" /tmp/cvr_company_data.parquet
-                echo "✅ Created company artifact from recent file: $RECENT_COMPANY_PATH"
-              else
-                echo "❌ No company data files found at all"
-                echo "Creating empty artifact to prevent downstream failures"
-                touch /tmp/cvr_company_data.parquet
-                echo "Created empty company artifact"
-              fi
-            fi
+      - name: Run Company Fetching Part 2
+        env:
+          CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
+          CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
+          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          PYTHONUNBUFFERED: 1
+        run: |
+          cd backend/pipelines/unified_pipeline
+
+          CMD="python -u -m unified_pipeline run -s cvr_enrichment -j company_fetching --batch-number 2 --total-batches 2"
+
+          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
           fi
 
-      - name: Upload Company Raw Data
+          echo "🚀 Starting Company Fetching Part 2/2"
+          echo "Running with Log Level: $LOG_LEVEL"
+          echo "Running: $CMD"
+          echo "🚀 Command starting now..."
+
+          $CMD
+
+          echo "✅ Company Fetching Part 2 completed successfully"
+
+  # Step 2c: Consolidate Company Fetching Parts (Merge all parts into single file)
+  company_fetching_consolidate:
+    name: "Company Fetching (Consolidate)"
+    runs-on: ubuntu-latest
+    needs: company_fetching_part2
+    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install duckdb gcsfs pyarrow
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Consolidate Parts from GCS
+        env:
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+        run: |
+          echo "🔄 Consolidating company fetching parts from GCS..."
+
+          # Find today's timestamp directory
+          TODAY=$(date -u +%Y%m%d)
+          echo "Looking for data from: $TODAY"
+
+          # List available part directories
+          PART_DIRS=$(gsutil ls gs://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TODAY}*/ 2>/dev/null | head -1 || echo "")
+
+          if [ -z "$PART_DIRS" ]; then
+            echo "❌ No data directories found for today"
+            exit 1
+          fi
+
+          # Extract timestamp from the first directory found
+          TIMESTAMP=$(echo "$PART_DIRS" | sed 's|.*/bronze/cvr_raw_companies/||' | sed 's|/.*||')
+          echo "Found timestamp: $TIMESTAMP"
+
+          # Check for part directories
+          PART1_EXISTS=$(gsutil ls gs://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/consolidated.parquet 2>/dev/null || echo "")
+          PART2_EXISTS=$(gsutil ls gs://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/consolidated.parquet 2>/dev/null || echo "")
+
+          echo "Part 1 exists: ${PART1_EXISTS:-no}"
+          echo "Part 2 exists: ${PART2_EXISTS:-no}"
+
+          if [ -z "$PART1_EXISTS" ] || [ -z "$PART2_EXISTS" ]; then
+            echo "❌ Missing part files - cannot consolidate"
+            echo "Part 1: $PART1_EXISTS"
+            echo "Part 2: $PART2_EXISTS"
+            exit 1
+          fi
+
+          # Use Python/DuckDB to merge the parts
+          python3 << EOF
+          import duckdb
+          import gcsfs
+          import os
+
+          # Set up GCS filesystem with HMAC credentials (same pattern as gcs_access.py)
+          gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+          gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+
+          if gcs_access_key and gcs_secret_key:
+              print("Using HMAC authentication for gcsfs")
+              fs = gcsfs.GCSFileSystem(
+                  access_key_id=gcs_access_key,
+                  secret_access_key=gcs_secret_key
+              )
+          else:
+              print("Using default authentication for gcsfs")
+              fs = gcsfs.GCSFileSystem()
+
+          conn = duckdb.connect()
+          conn.install_extension("spatial")
+          conn.load_extension("spatial")
+          conn.register_filesystem(fs)
+
+          timestamp = "${TIMESTAMP}"
+          bucket = "landbrugsdata-raw-data"
+
+          # Read both parts
+          part1_path = f"gs://{bucket}/bronze/cvr_raw_companies/{timestamp}/part1/consolidated.parquet"
+          part2_path = f"gs://{bucket}/bronze/cvr_raw_companies/{timestamp}/part2/consolidated.parquet"
+
+          print(f"📖 Reading Part 1: {part1_path}")
+          print(f"📖 Reading Part 2: {part2_path}")
+
+          # Merge parts into consolidated table
+          conn.execute(f"""
+              CREATE TABLE consolidated AS
+              SELECT * FROM read_parquet(['{part1_path}', '{part2_path}'])
+              ORDER BY cvr_number
+          """)
+
+          count = conn.execute("SELECT COUNT(*) FROM consolidated").fetchone()[0]
+          print(f"✅ Merged {count:,} total company records from both parts")
+
+          # Save to final consolidated location
+          final_path = f"gs://{bucket}/bronze/cvr_raw_companies/{timestamp}/consolidated.parquet"
+          conn.execute(f"""
+              COPY consolidated TO '{final_path}'
+              (FORMAT 'parquet', COMPRESSION 'zstd', ROW_GROUP_SIZE 100000)
+          """)
+          print(f"✅ Saved consolidated data to: {final_path}")
+
+          # Also save locally for artifact
+          conn.execute("COPY consolidated TO '/tmp/cvr_raw_data.parquet' (FORMAT 'parquet', COMPRESSION 'zstd')")
+          print("💾 Saved local artifact: /tmp/cvr_raw_data.parquet")
+
+          conn.close()
+          EOF
+
+          echo "✅ Consolidation completed successfully"
+
+      - name: Cleanup Part Directories
+        run: |
+          echo "🧹 Cleaning up part directories to save storage space..."
+
+          # Find the timestamp we used
+          TODAY=$(date -u +%Y%m%d)
+          PART_DIRS=$(gsutil ls gs://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TODAY}*/ 2>/dev/null | head -1 || echo "")
+          TIMESTAMP=$(echo "$PART_DIRS" | sed 's|.*/bronze/cvr_raw_companies/||' | sed 's|/.*||')
+
+          if [ -n "$TIMESTAMP" ]; then
+            echo "Cleaning up part directories for timestamp: $TIMESTAMP"
+
+            # Delete part1 directory
+            if gsutil ls gs://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/ &>/dev/null; then
+              echo "Deleting part1 directory..."
+              gsutil -m rm -r gs://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part1/ || true
+              echo "✅ Deleted part1 directory"
+            fi
+
+            # Delete part2 directory
+            if gsutil ls gs://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/ &>/dev/null; then
+              echo "Deleting part2 directory..."
+              gsutil -m rm -r gs://landbrugsdata-raw-data/bronze/cvr_raw_companies/${TIMESTAMP}/part2/ || true
+              echo "✅ Deleted part2 directory"
+            fi
+
+            echo "✅ Cleanup completed"
+          else
+            echo "⚠️ Could not determine timestamp for cleanup"
+          fi
+
+      - name: Upload Consolidated Raw Data
         uses: actions/upload-artifact@v4
         with:
           name: cvr-raw-company-data
-          path: /tmp/cvr_raw_companies_consolidated.parquet
+          path: /tmp/cvr_raw_data.parquet
           retention-days: 1
 
   # Step 3: Data Parsing (Silver Layer - Parse raw JSON into structured data)
   data_parsing:
     name: "Data Parsing (Silver Layer)"
     runs-on: ubuntu-latest
-    needs: company_fetching
+    needs: company_fetching_consolidate
     if: ${{ !cancelled() && (github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'data_parsing')) }}
 
     steps:
@@ -644,7 +826,9 @@ jobs:
     needs:
       [
         cvr_collection,
-        company_fetching,
+        company_fetching_part1,
+        company_fetching_part2,
+        company_fetching_consolidate,
         data_parsing,
         data_consolidation,
         pnumber_fetching,
@@ -659,12 +843,14 @@ jobs:
           echo "🎉 CVR Enrichment Pipeline completed!"
           echo "📊 Pipeline Configuration:"
           echo "   • Test limit: ${{ github.event.inputs.test_limit || 'None (full dataset)' }}"
-          echo "   • Processing mode: Single job (no batching)"
+          echo "   • Processing mode: Split into 2 parts (to avoid 6h timeout)"
           echo "   • Skipped steps: ${{ github.event.inputs.skip_steps || 'None' }}"
           echo ""
           echo "📋 Steps Status:"
           echo "   • CVR Collection: ${{ needs.cvr_collection.result }}"
-          echo "   • Company Fetching (Bronze): ${{ needs.company_fetching.result }}"
+          echo "   • Company Fetching Part 1 (Bronze): ${{ needs.company_fetching_part1.result }}"
+          echo "   • Company Fetching Part 2 (Bronze): ${{ needs.company_fetching_part2.result }}"
+          echo "   • Company Fetching Consolidate: ${{ needs.company_fetching_consolidate.result }}"
           echo "   • Data Parsing (Silver): ${{ needs.data_parsing.result }}"
           echo "   • Data Consolidation (Gold): ${{ needs.data_consolidation.result }}"
           echo "   • P-Number Fetching: ${{ needs.pnumber_fetching.result }}"
@@ -672,7 +858,7 @@ jobs:
           echo "   • Address Geocoding: ${{ needs.address_geocoding.result }}"
           echo ""
           echo "✅ New Bronze→Silver→Gold architecture implemented successfully"
-          echo "   • Bronze: Raw JSON data streaming"
+          echo "   • Bronze: Raw JSON data streaming (split into 2 parts)"
           echo "   • Silver: Structured data parsing"
           echo "   • Gold: Compatibility consolidation"
 
@@ -683,7 +869,9 @@ jobs:
     needs:
       [
         cvr_collection,
-        company_fetching,
+        company_fetching_part1,
+        company_fetching_part2,
+        company_fetching_consolidate,
         data_parsing,
         data_consolidation,
         pnumber_fetching,
