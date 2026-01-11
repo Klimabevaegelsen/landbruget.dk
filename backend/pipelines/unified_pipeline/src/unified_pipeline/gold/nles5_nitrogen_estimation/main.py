@@ -794,6 +794,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                             with open(local_parquet, "rb") as src:
                                 with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
                                     import shutil
+
                                     shutil.copyfileobj(src, dst)
 
                             self.log.info(
@@ -1801,9 +1802,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
             total_fields = self.conn.execute(
                 f"SELECT COUNT(*) FROM {fields_climate_table}"
             ).fetchone()[0]
-            batch_size = (
-                5000  # Process 5K fields at a time - smaller batches to prevent memory exhaustion
-            )
+            batch_size = 2000  # Process 2K fields at a time - reduced from 5K due to memory constraints in GitHub Actions (8GB limit)
             num_batches = (total_fields + batch_size - 1) // batch_size
 
             self.log.info(
@@ -1833,7 +1832,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
                 self.conn.execute(f"""
                     INSERT INTO field_soil_matches_temp
-                    SELECT 
+                    SELECT
                         f.field_uuid,
                         s.soil_code,
                         s.soil_description,
@@ -1847,10 +1846,15 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                     LEFT JOIN soil_types_prepared s ON ST_Intersects(f.geom, s.geom)
                 """)
 
-                # Cleanup and progress update every 10 batches
-                if (batch_idx + 1) % 10 == 0:
+                # Force checkpoint after each batch to prevent memory accumulation
+                try:
+                    self.conn.execute("CHECKPOINT")
+                except Exception:
+                    pass  # Continue even if checkpoint fails
+
+                # Progress update every 5 batches (reduced from 10 for tighter memory control)
+                if (batch_idx + 1) % 5 == 0:
                     try:
-                        self.conn.execute("CHECKPOINT")
                         rows_so_far = self.conn.execute(
                             "SELECT COUNT(*) FROM field_soil_matches_temp"
                         ).fetchone()[0]
@@ -2053,7 +2057,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
 
             # Phase 3: Join back to original fields table to get final result
             # FIXED: Use closest_soil_temp instead of re-joining with soil_types_prepared
-            # This preserves all the work done in Phases 3.1-3.2.5 (batched processing, 
+            # This preserves all the work done in Phases 3.1-3.2.5 (batched processing,
             # largest overlap selection, nearest neighbor fallback)
             self.conn.execute(f"""
                 CREATE OR REPLACE TEMPORARY TABLE {result_table} AS
@@ -2544,6 +2548,7 @@ class NLES5NitrogenEstimationGold(BaseSource[NLES5NitrogenEstimationGoldConfig],
                 with open(local_parquet, "rb") as src:
                     with self.gcs_access.fs.open(full_gcs_path, "wb") as dst:
                         import shutil
+
                         shutil.copyfileobj(src, dst)
 
                 self.log.info(f"✅ Saved batched results to {full_gcs_path}")

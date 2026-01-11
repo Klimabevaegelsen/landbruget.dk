@@ -305,10 +305,13 @@ class NLES5MemoryUtils:
             # Additional memory cleanup for DuckDB
             try:
                 # Force DuckDB to release memory
+                # NOTE: CHECKPOINT can fail if temp files were deleted, but that's OK
+                # since we now skip all active DuckDB temp files during cleanup
                 self.conn.execute("CHECKPOINT")
                 self.conn.execute("VACUUM")
-            except Exception:
-                pass
+            except Exception as e:
+                # Log but continue - CHECKPOINT failures are expected if database is busy
+                self.log.debug(f"DuckDB CHECKPOINT/VACUUM skipped (database busy): {e}")
 
             final_memory = self._get_memory_usage()
             memory_freed = initial_memory - final_memory
@@ -344,10 +347,13 @@ class NLES5MemoryUtils:
                 for file in files:
                     file_path = os.path.join(root, file)
 
-                    # 🔍 DIAGNOSTIC: Skip DuckDB temp files to prevent corruption
-                    # DuckDB manages its own temp files - deleting them while
-                    # connection is active causes errors
-                    if file.startswith("duckdb_temp_storage_") and file.endswith(".tmp"):
+                    # 🔍 CRITICAL FIX: Skip ALL DuckDB temp files to prevent database corruption
+                    # DuckDB creates multiple types of temp files that must not be deleted while active:
+                    # - duckdb_temp_storage_*.tmp (spill files)
+                    # - duckdb_temp_block-*.block (block storage files)
+                    # - duckdb_temp_directory_*.tmp (directory entries)
+                    # Deleting ANY of these causes "database has been invalidated" fatal errors
+                    if file.startswith("duckdb_temp_") or "duckdb_temp" in file:
                         duckdb_temp_files_skipped += 1
                         self.log.debug(f"🔍 CLEANUP: Skipping active DuckDB temp file: {file}")
                         continue
