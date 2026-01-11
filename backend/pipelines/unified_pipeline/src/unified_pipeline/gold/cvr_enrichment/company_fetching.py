@@ -65,11 +65,22 @@ class CompanyFetchingConfig(BaseJobConfig):
 
     def apply_cli_filters(self, cli_config):
         """Apply CLI configuration filters to this config."""
+        updates = {}
+
         if cli_config.test_limit is not None:
+            updates["test_limit"] = cli_config.test_limit
+
+        if hasattr(cli_config, "batch_number") and cli_config.batch_number is not None:
+            updates["batch_number"] = cli_config.batch_number
+
+        if hasattr(cli_config, "total_batches") and cli_config.total_batches is not None:
+            updates["total_batches"] = cli_config.total_batches
+
+        if updates:
             object.__setattr__(
                 self,
                 "shared_config",
-                self.shared_config.model_copy(update={"test_limit": cli_config.test_limit}),
+                self.shared_config.model_copy(update=updates),
             )
 
 
@@ -339,7 +350,34 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
 
             all_cvrs = [row[0] for row in result]
 
-            self.log.info(f"Loaded {len(all_cvrs):,} CVR numbers for memory-safe batch processing")
+            # Apply batch filtering if batch_number and total_batches are specified (for GitHub Actions job splitting)
+            if (
+                self.config.shared_config.batch_number is not None
+                and self.config.shared_config.total_batches is not None
+            ):
+                batch_num = self.config.shared_config.batch_number
+                total_batches = self.config.shared_config.total_batches
+
+                self.log.info(
+                    f"📦 Batch filtering enabled: Processing batch {batch_num} of {total_batches}"
+                )
+
+                # Split CVRs into equal chunks for parallel processing
+                import math
+
+                chunk_size = math.ceil(len(all_cvrs) / total_batches)
+                start_idx = (batch_num - 1) * chunk_size
+                end_idx = min(batch_num * chunk_size, len(all_cvrs))
+
+                all_cvrs = all_cvrs[start_idx:end_idx]
+
+                self.log.info(
+                    f"📦 Batch {batch_num}/{total_batches}: Processing {len(all_cvrs):,} CVR numbers (indices {start_idx:,}-{end_idx:,})"
+                )
+            else:
+                self.log.info(
+                    f"Loaded {len(all_cvrs):,} CVR numbers for memory-safe batch processing"
+                )
 
             return all_cvrs
 
@@ -793,9 +831,17 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 )
 
                 # Save to GCS immediately
+                # Use subdirectory for GitHub Actions batch part to avoid file collisions
                 timestamp = self.date_pattern
+                ga_batch = self.config.shared_config.batch_number
                 batch_path_suffix = f"raw_batch_{batch_idx:03d}_of_{total_batches:03d}"
-                raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+
+                if ga_batch is not None:
+                    # Running as part of split GitHub Actions job - use part subdirectory
+                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                else:
+                    # Running as single job - use flat structure
+                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
                 self.gcs_access.upload_from_duckdb_table(
                     batch_table_name,
@@ -945,27 +991,47 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         This creates a consolidated raw JSON file that can be processed by
         separate parsing/enrichment steps, maintaining the Bronze→Silver→Gold pattern.
 
+        When running as part of a split GitHub Actions job (with batch_number set),
+        this only consolidates the current part's batches into a part-specific file.
+        A separate consolidation step will merge all parts together.
+
         Args:
-            total_batches: Total number of batch files created
+            total_batches: Total number of batch files created (for this part)
             total_stats: Statistics from batch processing
 
         Returns:
             Name of the consolidated raw data table
         """
-        self.log.info(f"Consolidating {total_batches} raw batch files into single raw data file")
-
         timestamp = self.date_pattern
+        ga_batch = self.config.shared_config.batch_number
+        ga_total_batches = self.config.shared_config.total_batches
         consolidated_table = "cvr_raw_data_consolidated"
+
+        if ga_batch is not None:
+            self.log.info(
+                f"Consolidating {total_batches} raw batch files for part {ga_batch}/{ga_total_batches}"
+            )
+        else:
+            self.log.info(
+                f"Consolidating {total_batches} raw batch files into single raw data file"
+            )
 
         try:
             # Drop existing consolidated table
             self.conn.execute(f"DROP TABLE IF EXISTS {consolidated_table}")
 
-            # Consolidate all raw batch files
+            # Consolidate all raw batch files for this part
             raw_batch_patterns = []
             for batch_idx in range(1, total_batches + 1):
                 batch_path_suffix = f"raw_batch_{batch_idx:03d}_of_{total_batches:03d}"
-                raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+
+                if ga_batch is not None:
+                    # Running as part of split job - use part subdirectory
+                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                else:
+                    # Running as single job - use flat structure
+                    raw_gcs_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+
                 raw_batch_patterns.append(raw_gcs_path)
 
             if raw_batch_patterns:
@@ -981,26 +1047,48 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
                 ).fetchone()[0]
                 self.log.info(f"✅ Consolidated {raw_count:,} raw company records")
 
-                # Save consolidated raw data to standard bronze location
-                raw_final_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/consolidated.parquet"
-                self.gcs_access.upload_from_duckdb_table(
-                    consolidated_table,
-                    raw_final_path,
-                    compression="zstd",
-                    row_group_size=100000,
-                )
-
-                # Also save locally for GitHub Actions artifact sharing
+                # Save consolidated raw data
                 import os
 
-                if os.getenv("GITHUB_ACTIONS") == "true":
-                    local_path = "/tmp/cvr_raw_data.parquet"
-                    self.conn.execute(
-                        f"COPY {consolidated_table} TO '{local_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
+                if ga_batch is not None:
+                    # Save part-specific consolidated file
+                    raw_final_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/consolidated.parquet"
+                    self.gcs_access.upload_from_duckdb_table(
+                        consolidated_table,
+                        raw_final_path,
+                        compression="zstd",
+                        row_group_size=100000,
                     )
-                    self.log.info(f"💾 Saved consolidated raw data to artifact: {local_path}")
+                    self.log.info(
+                        f"✅ Part {ga_batch} consolidated data saved to: {raw_final_path}"
+                    )
 
-                self.log.info("✅ Consolidated raw data saved - ready for parsing step")
+                    # Save locally for artifact sharing between workflow jobs
+                    if os.getenv("GITHUB_ACTIONS") == "true":
+                        local_path = f"/tmp/cvr_raw_data_part{ga_batch}.parquet"
+                        self.conn.execute(
+                            f"COPY {consolidated_table} TO '{local_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
+                        )
+                        self.log.info(f"💾 Saved part {ga_batch} data to artifact: {local_path}")
+                else:
+                    # Save to standard bronze location (single job mode)
+                    raw_final_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/consolidated.parquet"
+                    self.gcs_access.upload_from_duckdb_table(
+                        consolidated_table,
+                        raw_final_path,
+                        compression="zstd",
+                        row_group_size=100000,
+                    )
+
+                    # Also save locally for GitHub Actions artifact sharing
+                    if os.getenv("GITHUB_ACTIONS") == "true":
+                        local_path = "/tmp/cvr_raw_data.parquet"
+                        self.conn.execute(
+                            f"COPY {consolidated_table} TO '{local_path}' (FORMAT 'parquet', COMPRESSION 'zstd')"
+                        )
+                        self.log.info(f"💾 Saved consolidated raw data to artifact: {local_path}")
+
+                    self.log.info("✅ Consolidated raw data saved - ready for parsing step")
 
             else:
                 # Create empty table with schema
@@ -1102,10 +1190,18 @@ class CompanyFetching(BaseSource[CompanyFetchingConfig], GoldJobInterface):
         try:
             self.log.info("🧹 Cleaning up raw batch files to save storage space...")
 
+            ga_batch = self.config.shared_config.batch_number
             deleted_count = 0
+
             for batch_idx in range(1, total_batches + 1):
                 batch_path_suffix = f"raw_batch_{batch_idx:03d}_of_{total_batches:03d}"
-                raw_batch_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
+
+                if ga_batch is not None:
+                    # Running as part of split job - use part subdirectory
+                    raw_batch_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/part{ga_batch}/{batch_path_suffix}.parquet"
+                else:
+                    # Running as single job - use flat structure
+                    raw_batch_path = f"gs://{self.config.bucket}/bronze/cvr_raw_companies/{timestamp}/{batch_path_suffix}.parquet"
 
                 try:
                     self.gcs_access.delete_file(raw_batch_path)
