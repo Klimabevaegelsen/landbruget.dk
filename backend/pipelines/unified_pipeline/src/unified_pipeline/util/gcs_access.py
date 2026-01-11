@@ -118,11 +118,14 @@ def _setup_native_gcs_auth(conn: duckdb.DuckDBPyConnection) -> bool:
             # Create GCS secret for native access
             # Note: TYPE gcs automatically configures the correct GCS endpoint
             # No s3_region setting needed - that's only for S3
+            # Use proper SQL escaping by doubling single quotes
+            escaped_key = gcs_access_key.replace("'", "''")
+            escaped_secret = gcs_secret_key.replace("'", "''")
             conn.execute(f"""
                 CREATE OR REPLACE SECRET gcs_secret (
                     TYPE gcs,
-                    KEY_ID '{gcs_access_key}',
-                    SECRET '{gcs_secret_key}'
+                    KEY_ID '{escaped_key}',
+                    SECRET '{escaped_secret}'
                 );
             """)
             logger.info("✅ Created DuckDB GCS secret with HMAC credentials")
