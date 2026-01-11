@@ -871,18 +871,88 @@ class GCSDataAccess:
 
         options_str = ", ".join(copy_options)
 
-        with tempfile.NamedTemporaryFile(suffix=file_suffix) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
             # DuckDB writes directly to the specified format
-            self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
+            self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp_path}' ({options_str})")
+
+            # Get file size for verification
+            import os
+
+            local_size = os.path.getsize(tmp_path)
+            self.log.info(f"Created local temp file: {local_size:,} bytes")
 
             # Stream copy to GCS without loading into memory
-            with open(tmp.name, "rb") as src:
+            with open(tmp_path, "rb") as src:
                 with self.fs.open(gcs_path, "wb") as dst:
                     shutil.copyfileobj(src, dst)
+
+            self.log.info(f"Uploaded {local_size:,} bytes to GCS")
+
+            # Verify upload by checking if file exists
+            try:
+                if self.fs.exists(gcs_path):
+                    remote_size = self.fs.size(gcs_path)
+                    self.log.info(f"✅ Verified upload: {remote_size:,} bytes at {gcs_path}")
+                    if remote_size != local_size:
+                        self.log.warning(
+                            f"⚠️  Size mismatch: local={local_size}, remote={remote_size}"
+                        )
+                else:
+                    self.log.error(f"❌ File not found after upload: {gcs_path}")
+                    raise Exception(f"Upload verification failed: file not found at {gcs_path}")
+            except Exception as verify_error:
+                self.log.error(f"❌ Upload verification failed: {verify_error}")
+                raise
+        finally:
+            # Clean up temp file
+            try:
+                import os
+
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
         self.monitor.check_resources("post_duckdb_upload")
         format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
         self.log.info(f"Uploaded DuckDB table {table_name} to {gcs_path} ({format_type} format)")
+
+    def verify_gcs_upload(self, gcs_path: str, expected_size: int = None) -> bool:
+        """
+        Verify that a file was successfully uploaded to GCS.
+
+        Args:
+            gcs_path: Full gs:// path to the file
+            expected_size: Expected file size in bytes (optional)
+
+        Returns:
+            True if file exists and size matches (if provided)
+
+        Raises:
+            Exception if file doesn't exist or size mismatch
+        """
+        try:
+            if not self.fs.exists(gcs_path):
+                self.log.error(f"❌ File not found after upload: {gcs_path}")
+                raise Exception(f"Upload verification failed: file not found at {gcs_path}")
+
+            remote_size = self.fs.size(gcs_path)
+            self.log.info(f"✅ Verified upload: {remote_size:,} bytes at {gcs_path}")
+
+            if expected_size is not None and remote_size != expected_size:
+                self.log.warning(
+                    f"⚠️  Size mismatch: expected={expected_size:,}, actual={remote_size:,}"
+                )
+                raise Exception(
+                    f"Upload size mismatch: expected {expected_size}, got {remote_size}"
+                )
+
+            return True
+        except Exception as e:
+            self.log.error(f"❌ Upload verification failed: {e}")
+            raise
 
     def upload_from_duckdb_query(self, query: str, gcs_path: str, **format_options):
         """Execute query and upload result directly to GCS without DataFrame conversion.
