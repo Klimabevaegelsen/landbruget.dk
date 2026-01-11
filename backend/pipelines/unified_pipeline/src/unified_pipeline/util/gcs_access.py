@@ -98,6 +98,10 @@ def _setup_native_gcs_auth(conn: duckdb.DuckDBPyConnection) -> bool:
     """
     Setup native GCS HMAC authentication if credentials are available.
 
+    Uses DuckDB's httpfs extension with GCS secret type.
+    Reference: https://duckdb.org/docs/stable/core_extensions/httpfs/s3api
+    Reference: https://duckdb.org/docs/stable/guides/network_cloud_storage/gcs_import
+
     Returns:
         True if native authentication was configured successfully, False otherwise.
     """
@@ -111,17 +115,17 @@ def _setup_native_gcs_auth(conn: duckdb.DuckDBPyConnection) -> bool:
         gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
         if gcs_access_key and gcs_secret_key:
-            # Set correct GCS region (landbrugsdata-raw-data bucket is in EUROPE-WEST1)
-            conn.execute("SET s3_region = 'europe-west1'")
-
-            # Create persistent GCS secret for native access
+            # Create GCS secret for native access
+            # Note: TYPE gcs automatically configures the correct GCS endpoint
+            # No s3_region setting needed - that's only for S3
             conn.execute(f"""
-                CREATE OR REPLACE PERSISTENT SECRET gcs_hmac (
-                    TYPE GCS,
+                CREATE OR REPLACE SECRET gcs_secret (
+                    TYPE gcs,
                     KEY_ID '{gcs_access_key}',
                     SECRET '{gcs_secret_key}'
                 );
             """)
+            logger.info("✅ Created DuckDB GCS secret with HMAC credentials")
             return True
         else:
             logger.info("ℹ️  GCS HMAC credentials not found, using gcsfs fallback")
@@ -201,6 +205,9 @@ class GCSDataAccess:
             self.duckdb_conn = connection
             self.log = logger
             self.log.info("✅ GCSDataAccess: Using provided DuckDB connection")
+            # CRITICAL: Register gcsfs filesystem even when connection is provided
+            # This is required for DuckDB to read gs:// URLs
+            self._register_gcsfs()
         else:
             # Create a fresh connection for this instance
             self.duckdb_conn = duckdb.connect()
@@ -210,6 +217,47 @@ class GCSDataAccess:
 
         self.monitor = ResourceMonitor()
         self._native_gcs_available = self._check_native_gcs_support()
+
+    def _register_gcsfs(self):
+        """
+        Register GCS access with DuckDB for gs:// URL support.
+
+        CRITICAL: This must be called for any DuckDB connection that needs to read from GCS.
+
+        Tries two approaches in order:
+        1. Native DuckDB GCS HMAC authentication (fastest, requires httpfs extension)
+        2. fsspec + gcsfs registration (fallback, 5x faster than httpfs alone)
+
+        Uses HMAC credentials if available for better performance in GitHub Actions.
+        """
+        # Try native GCS HMAC authentication first (fastest)
+        if _setup_native_gcs_auth(self.duckdb_conn):
+            logger.info("✅ DuckDB configured with native GCS HMAC authentication")
+            logger.info("✅ DuckDB can now read gs:// URLs via httpfs + HMAC")
+            return
+
+        # Fallback to gcsfs filesystem registration
+        try:
+            from fsspec import filesystem
+
+            # Use HMAC authentication if available
+            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+
+            if gcs_access_key and gcs_secret_key:
+                fs = filesystem(
+                    "gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key
+                )
+                logger.info("✅ Registered gcsfs with DuckDB using HMAC credentials")
+            else:
+                fs = filesystem("gs")  # Uses gcsfs under the hood
+                logger.info("✅ Registered gcsfs with DuckDB using default authentication")
+
+            self.duckdb_conn.register_filesystem(fs)
+            logger.info("✅ DuckDB can now read gs:// URLs via gcsfs (5x faster than httpfs)")
+        except Exception as e:
+            logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
+            logger.warning("⚠️  DuckDB will not be able to read gs:// URLs directly")
 
     def _configure_duckdb(self):
         """
@@ -228,27 +276,10 @@ class GCSDataAccess:
             # Install spatial extension
             self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
 
-            # CRITICAL: Register gcsfs filesystem for optimal GCS performance
-            # This approach is 5x faster than httpfs according to benchmarks
-            from fsspec import filesystem
-
-            # Use HMAC authentication if available
-            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
-            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
-
-            if gcs_access_key and gcs_secret_key:
-                fs = filesystem(
-                    "gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key
-                )
-            else:
-                fs = filesystem("gs")  # Uses gcsfs under the hood
-
-            self.duckdb_conn.register_filesystem(fs)
+            # Register gcsfs filesystem for optimal GCS performance
+            self._register_gcsfs()
 
             logger.info("✅ DuckDB configured with spatial and gcsfs filesystem integration")
-            logger.info(
-                "✅ Using fsspec + gcsfs for optimal GCS performance (5x faster than httpfs)"
-            )
         except Exception as e:
             logger.warning(f"DuckDB configuration warning: {e}")
 
