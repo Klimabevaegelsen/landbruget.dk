@@ -887,7 +887,7 @@ class GCSDataAccess:
             # Stream copy to GCS without loading into memory
             with open(tmp_path, "rb") as src:
                 with self.fs.open(gcs_path, "wb") as dst:
-                    bytes_written = shutil.copyfileobj(src, dst)
+                    shutil.copyfileobj(src, dst)
 
             self.log.info(f"Uploaded {local_size:,} bytes to GCS")
 
