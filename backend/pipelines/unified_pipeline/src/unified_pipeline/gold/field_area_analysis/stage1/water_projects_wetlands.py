@@ -68,11 +68,12 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
         # Wetlands = larger dataset (1.6M) as probe side for comprehensive coverage
 
         self.log.info("Decomposing water projects with ST_Dump for optimal spatial indexing...")
+        self.log.info("Applying ST_MakeValid to ensure water projects geometry validity...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects AS
             SELECT
                 project_id,
-                UNNEST(ST_Dump(geometry)).geom as geometry
+                ST_MakeValid(UNNEST(ST_Dump(geometry)).geom) as geometry
             FROM water_projects_raw
         """)
 
@@ -91,13 +92,14 @@ class WaterProjectsWetlandsIntersection(FieldAnalysisStageBase):
                 "Stage 1: wetlands_raw missing wetland_key; ensure Stage 0 produced it"
             )
 
+        self.log.info("Applying ST_MakeValid to ensure wetlands geometry validity...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE wetlands AS
             SELECT
                 wetland_key, -- Deterministic fragment key for stable joins
                 wetland_id,  -- Legacy numeric ID retained for compatibility
                 toerv_pct,   -- Keep wetland type for analysis
-                geometry     -- Already decomposed by Stage 0 ST_Dump
+                ST_MakeValid(geometry) as geometry  -- Already decomposed by Stage 0 ST_Dump
             FROM wetlands_raw
         """)
 

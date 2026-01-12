@@ -164,7 +164,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                 )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
-                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
+                    self.log.info(f"   Raw WKT {i + 1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
                     if wkt and "POINT(" in wkt:
                         coords_str = wkt.replace("POINT(", "").replace(")", "")
@@ -174,17 +174,17 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                                 first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
                                 coord_pairs.append((first_val, second_val))
                                 self.log.info(
-                                    f"   Soil {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                    f"   Soil {i + 1}: POINT({first_val:.6f} {second_val:.6f})"
                                 )
                             else:
                                 self.log.warning(
-                                    f"   Soil {i+1}: Invalid coordinate format: {coords_str}"
+                                    f"   Soil {i + 1}: Invalid coordinate format: {coords_str}"
                                 )
                         except Exception as parse_e:
-                            self.log.warning(f"   Soil {i+1}: Parse error: {parse_e}")
+                            self.log.warning(f"   Soil {i + 1}: Parse error: {parse_e}")
                             continue
                     else:
-                        self.log.warning(f"   Soil {i+1}: Not a POINT geometry: {wkt}")
+                        self.log.warning(f"   Soil {i + 1}: Not a POINT geometry: {wkt}")
 
                 if coord_pairs:
                     self.log.info(
@@ -251,12 +251,13 @@ class SoilTypesPreFilter(PreFilteringStageBase):
         # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
         # Use simpler approach: since we know geometry is GEOMETRY type, use it directly
         try:
+            self.log.info("Applying ST_MakeValid to ensure soil types geometry validity...")
             self.conn.execute("""
                 CREATE OR REPLACE TABLE soil_types_full AS
                 SELECT
                     soil_code,
                     soil_description,  -- Only meaningful soil data (8 Danish soil types)
-                    UNNEST(ST_Dump(geometry)).geom as geometry
+                    ST_MakeValid(UNNEST(ST_Dump(geometry)).geom) as geometry
                 FROM soil_types_raw
                 WHERE geometry IS NOT NULL
             """)
@@ -265,12 +266,13 @@ class SoilTypesPreFilter(PreFilteringStageBase):
             self.log.info("🔄 Trying with type-safe CASE statement...")
 
             # Fallback: Use type-safe approach with explicit type checking
+            self.log.info("Applying ST_MakeValid in fallback case...")
             self.conn.execute("""
                 CREATE OR REPLACE TABLE soil_types_full AS
                 SELECT
                     soil_code,
                     soil_description,  -- Only meaningful soil data (8 Danish soil types)
-                    UNNEST(ST_Dump(
+                    ST_MakeValid(UNNEST(ST_Dump(
                         CASE
                             WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                 ST_GeomFromText(geometry)
@@ -279,7 +281,7 @@ class SoilTypesPreFilter(PreFilteringStageBase):
                             ELSE
                                 geometry
                         END
-                    )).geom as geometry
+                    )).geom) as geometry
                 FROM soil_types_raw
                 WHERE geometry IS NOT NULL
             """)

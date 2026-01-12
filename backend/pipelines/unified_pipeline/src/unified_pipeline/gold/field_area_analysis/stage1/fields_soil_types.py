@@ -39,6 +39,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         # Keep agricultural fields as original multipolygons for consistency with other stages
         self.log.info("Preparing agricultural fields (keeping original multipolygons)...")
+        self.log.info("Applying ST_MakeValid to ensure geometry validity...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
             SELECT
@@ -47,8 +48,8 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 cvr_number,
                 year,
                 field_uuid,
-                geometry,
-                ST_Area_Spheroid(geometry) as field_area_m2
+                ST_MakeValid(geometry) as geometry,
+                ST_Area_Spheroid(ST_MakeValid(geometry)) as field_area_m2
             FROM agricultural_fields_raw
         """)
 
@@ -63,12 +64,13 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
         # OPTIMIZATION: Decompose soil types with ST_Dump for optimal spatial indexing
         self.log.info("Decomposing soil types with ST_Dump for optimal spatial indexing...")
+        self.log.info("Applying ST_MakeValid to ensure soil type geometry validity...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE soil_types AS
             SELECT
                 soil_description,  -- Only keep useful Danish soil type classification
-                UNNEST(ST_Dump(geometry)).geom as geometry,
-                ST_Area_Spheroid(UNNEST(ST_Dump(geometry)).geom) as soil_area_m2
+                ST_MakeValid(UNNEST(ST_Dump(geometry)).geom) as geometry,
+                ST_Area_Spheroid(ST_MakeValid(UNNEST(ST_Dump(geometry)).geom)) as soil_area_m2
             FROM soil_types_raw
         """)
 

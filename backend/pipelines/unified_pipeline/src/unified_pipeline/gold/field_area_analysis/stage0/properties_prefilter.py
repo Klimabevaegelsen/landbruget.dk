@@ -32,17 +32,20 @@ class PropertiesPreFilter(PreFilteringStageBase):
         self.log.info("Loading full cadastral dataset (6.5M properties)...")
         self._load_silver_dataset("cadastral", "properties_raw")
 
-        # Add memory optimization and basic geometry validation
-        self.log.info("Preparing properties dataset with memory optimization...")
+        # Add memory optimization and geometry validation with ST_MakeValid
+        self.log.info(
+            "Preparing properties dataset with memory optimization and geometry repair..."
+        )
         self.conn.execute("""
             CREATE OR REPLACE TABLE properties_full AS
             SELECT
                 bfe_number,
-                geometry
+                ST_MakeValid(geometry) as geometry
             FROM properties_raw
             WHERE geometry IS NOT NULL
               AND bfe_number IS NOT NULL
         """)
+        self.log.info("✅ Applied ST_MakeValid to repair any invalid cadastral geometries")
 
         # Log dataset sizes and validate data integrity
         properties_count = self.conn.execute("SELECT COUNT(*) FROM properties_full").fetchone()[0]
@@ -65,7 +68,7 @@ class PropertiesPreFilter(PreFilteringStageBase):
                 )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
-                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
+                    self.log.info(f"   Raw WKT {i + 1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
                     if wkt and "POINT(" in wkt:
                         coords_str = wkt.replace("POINT(", "").replace(")", "")
@@ -75,17 +78,17 @@ class PropertiesPreFilter(PreFilteringStageBase):
                                 first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
                                 coord_pairs.append((first_val, second_val))
                                 self.log.info(
-                                    f"   Property {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                    f"   Property {i + 1}: POINT({first_val:.6f} {second_val:.6f})"
                                 )
                             else:
                                 self.log.warning(
-                                    f"   Property {i+1}: Invalid coordinate format: {coords_str}"
+                                    f"   Property {i + 1}: Invalid coordinate format: {coords_str}"
                                 )
                         except Exception as parse_e:
-                            self.log.warning(f"   Property {i+1}: Parse error: {parse_e}")
+                            self.log.warning(f"   Property {i + 1}: Parse error: {parse_e}")
                             continue
                     else:
-                        self.log.warning(f"   Property {i+1}: Not a POINT geometry: {wkt}")
+                        self.log.warning(f"   Property {i + 1}: Not a POINT geometry: {wkt}")
 
                 if coord_pairs:
                     self.log.info(

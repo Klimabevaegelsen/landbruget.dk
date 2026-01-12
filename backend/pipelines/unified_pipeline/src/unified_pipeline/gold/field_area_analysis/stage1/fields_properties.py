@@ -48,6 +48,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         self.conn.execute("SET threads=4")  # Can use more threads due to smaller dataset
 
         self.log.info("Preparing fields as BUILD side (spatial index will be created)...")
+        self.log.info("Applying ST_MakeValid to ensure geometry validity...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
             SELECT
@@ -55,18 +56,19 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
-                geometry,
+                ST_MakeValid(geometry) as geometry,
                 field_uuid,
-                ST_Area_Spheroid(geometry) as field_area_m2
+                ST_Area_Spheroid(ST_MakeValid(geometry)) as field_area_m2
             FROM agricultural_fields_full
         """)
 
         self.log.info("Preparing pre-filtered properties as PROBE side...")
+        self.log.info("Applying ST_MakeValid to ensure property geometry validity...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE properties AS
             SELECT
                 bfe_number,
-                geometry,
+                ST_MakeValid(geometry) as geometry,
                 property_area_m2
             FROM properties_full
         """)

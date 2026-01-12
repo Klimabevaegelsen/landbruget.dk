@@ -122,8 +122,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
         if coord_validation:
             min_x, max_x, min_y, max_y = coord_validation
             self.log.info(
-                f"📍 Coordinate bounds: X({min_x:.2f}, {max_x:.2f}), "
-                f"Y({min_y:.2f}, {max_y:.2f})"
+                f"📍 Coordinate bounds: X({min_x:.2f}, {max_x:.2f}), Y({min_y:.2f}, {max_y:.2f})"
             )
 
             # Check if coordinates are in expected ranges for Denmark
@@ -134,8 +133,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 )
             elif min_x >= 440000 and max_x <= 900000 and min_y >= 6040000 and max_y <= 6420000:
                 self.log.info(
-                    "✅ Coordinates appear to be in UTM Zone 32N (EPSG:25832) - "
-                    "Denmark bounds OK"
+                    "✅ Coordinates appear to be in UTM Zone 32N (EPSG:25832) - Denmark bounds OK"
                 )
             else:
                 self.log.warning("⚠️ Coordinates outside expected Denmark bounds!")
@@ -165,7 +163,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
                 )
                 coord_pairs = []
                 for i, (wkt,) in enumerate(sample_wkt[:3]):
-                    self.log.info(f"   Raw WKT {i+1}: {wkt}")
+                    self.log.info(f"   Raw WKT {i + 1}: {wkt}")
                     # Extract coordinates from "POINT(x y)" format
                     if wkt and "POINT(" in wkt:
                         coords_str = wkt.replace("POINT(", "").replace(")", "")
@@ -175,17 +173,17 @@ class WetlandsPreFilter(PreFilteringStageBase):
                                 first_val, second_val = float(coord_parts[0]), float(coord_parts[1])
                                 coord_pairs.append((first_val, second_val))
                                 self.log.info(
-                                    f"   Wetland {i+1}: POINT({first_val:.6f} {second_val:.6f})"
+                                    f"   Wetland {i + 1}: POINT({first_val:.6f} {second_val:.6f})"
                                 )
                             else:
                                 self.log.warning(
-                                    f"   Wetland {i+1}: Invalid coordinate format: {coords_str}"
+                                    f"   Wetland {i + 1}: Invalid coordinate format: {coords_str}"
                                 )
                         except Exception as parse_e:
-                            self.log.warning(f"   Wetland {i+1}: Parse error: {parse_e}")
+                            self.log.warning(f"   Wetland {i + 1}: Parse error: {parse_e}")
                             continue
                     else:
-                        self.log.warning(f"   Wetland {i+1}: Not a POINT geometry: {wkt}")
+                        self.log.warning(f"   Wetland {i + 1}: Not a POINT geometry: {wkt}")
 
                 if coord_pairs:
                     self.log.info(
@@ -250,11 +248,12 @@ class WetlandsPreFilter(PreFilteringStageBase):
         # Handle different geometry formats (WKT string, WKB binary, or already parsed geometry)
         # Use simpler approach: since we know geometry is GEOMETRY type, use it directly
         try:
+            self.log.info("Applying ST_MakeValid to ensure wetlands geometry validity...")
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetlands_full AS
                 SELECT
                     toerv_pct,
-                    UNNEST(ST_Dump(geometry)).geom as geometry
+                    ST_MakeValid(UNNEST(ST_Dump(geometry)).geom) as geometry
                 FROM wetlands_raw
                 WHERE geometry IS NOT NULL
             """)
@@ -263,11 +262,12 @@ class WetlandsPreFilter(PreFilteringStageBase):
             self.log.info("🔄 Trying with type-safe CASE statement...")
 
             # Fallback: Use type-safe approach with explicit type checking
+            self.log.info("Applying ST_MakeValid in fallback case...")
             self.conn.execute("""
                 CREATE OR REPLACE TABLE wetlands_full AS
                 SELECT
                     toerv_pct,
-                    UNNEST(ST_Dump(
+                    ST_MakeValid(UNNEST(ST_Dump(
                         CASE
                             WHEN typeof(geometry) = 'VARCHAR' AND geometry != '' THEN
                                 ST_GeomFromText(geometry)
@@ -276,7 +276,7 @@ class WetlandsPreFilter(PreFilteringStageBase):
                             ELSE
                                 geometry
                         END
-                    )).geom as geometry
+                    )).geom) as geometry
                 FROM wetlands_raw
                 WHERE geometry IS NOT NULL
             """)
