@@ -40,6 +40,39 @@ on:
           - WARNING
           - ERROR
         default: "INFO"
+  workflow_call:
+    inputs:
+      test_limit:
+        description: "Test limit (number of CVR numbers to process, empty for no limit)"
+        required: false
+        type: string
+      skip_steps:
+        description: "Comma-separated list of steps to skip (collection,company_fetching,data_parsing,data_consolidation,pnumber_fetching,financial_documents,address_geocoding)"
+        required: false
+        type: string
+      run_only_step:
+        description: "Run only a specific step independently (collection,company_fetching,pnumber_fetching,financial_documents,address_geocoding). Note: data_parsing and data_consolidation require full pipeline run."
+        required: false
+        type: string
+        default: "none"
+      log_level:
+        description: "Logging level"
+        type: string
+        required: false
+        default: "INFO"
+    secrets:
+      GCP_SA_KEY:
+        required: true
+      CVR_USERNAME:
+        required: true
+      CVR_PASSWORD:
+        required: true
+      GCS_ACCESS_KEY_ID:
+        required: true
+      GCS_SECRET_ACCESS_KEY:
+        required: true
+      LANDBRUGSDATA_UUID_NAMESPACE:
+        required: true
   schedule:
     # Run monthly on the 1st at 02:00 UTC
     - cron: "0 2 1 * *"
