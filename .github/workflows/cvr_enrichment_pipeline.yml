@@ -91,7 +91,7 @@ jobs:
   cvr_collection:
     name: "CVR Collection"
     runs-on: ubuntu-latest
-    if: ${{ (github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'collection')) || github.event.inputs.run_only_step == 'collection' }}
+    if: ${{ (inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'collection')) || inputs.run_only_step == 'collection' }}
     outputs:
       collection_success: ${{ steps.collection.outputs.success }}
       pipeline_timestamp: ${{ steps.set_timestamp.outputs.timestamp }}
@@ -128,7 +128,7 @@ jobs:
       - name: Run CVR Collection
         id: collection
         env:
-          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
           PYTHONUNBUFFERED: 1
         run: |
           cd backend/pipelines/unified_pipeline
@@ -136,8 +136,8 @@ jobs:
           # Build command with optional parameters - force unbuffered output
           CMD="python -u -m unified_pipeline run -s cvr_enrichment -j collection"
 
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          if [ -n "${{ inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ inputs.test_limit }}"
           fi
 
           echo "🚀 Starting CVR Collection Step"
@@ -165,7 +165,7 @@ jobs:
     name: "Company Fetching (Part 1/2)"
     runs-on: ubuntu-latest
     needs: cvr_collection
-    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
+    if: ${{ !cancelled() && ((inputs.run_only_step == 'none' && needs.cvr_collection.outputs.collection_success == 'true' && !contains(inputs.skip_steps, 'company_fetching')) || inputs.run_only_step == 'company_fetching') }}
 
     steps:
       - name: Checkout code
@@ -190,7 +190,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Download CVR Collection Data
-        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        if: ${{ inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-collection-data
@@ -201,7 +201,7 @@ jobs:
         env:
           CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
           CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
-          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
           PYTHONUNBUFFERED: 1
           PIPELINE_START_TIME: ${{ needs.cvr_collection.outputs.pipeline_timestamp }}
         run: |
@@ -209,8 +209,8 @@ jobs:
 
           CMD="python -u -m unified_pipeline run -s cvr_enrichment -j company_fetching --batch-number 1 --total-batches 2"
 
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          if [ -n "${{ inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ inputs.test_limit }}"
           fi
 
           echo "🚀 Starting Company Fetching Part 1/2"
@@ -227,7 +227,7 @@ jobs:
     name: "Company Fetching (Part 2/2)"
     runs-on: ubuntu-latest
     needs: [cvr_collection, company_fetching_part1]
-    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
+    if: ${{ !cancelled() && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'company_fetching')) || inputs.run_only_step == 'company_fetching') }}
 
     steps:
       - name: Checkout code
@@ -252,7 +252,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Download CVR Collection Data
-        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        if: ${{ inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-collection-data
@@ -263,7 +263,7 @@ jobs:
         env:
           CVR_USERNAME: ${{ secrets.CVR_USERNAME }}
           CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
-          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
           PYTHONUNBUFFERED: 1
           PIPELINE_START_TIME: ${{ needs.cvr_collection.outputs.pipeline_timestamp }}
         run: |
@@ -271,8 +271,8 @@ jobs:
 
           CMD="python -u -m unified_pipeline run -s cvr_enrichment -j company_fetching --batch-number 2 --total-batches 2"
 
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          if [ -n "${{ inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ inputs.test_limit }}"
           fi
 
           echo "🚀 Starting Company Fetching Part 2/2"
@@ -289,7 +289,7 @@ jobs:
     name: "Company Fetching (Consolidate)"
     runs-on: ubuntu-latest
     needs: company_fetching_part2
-    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'company_fetching')) || github.event.inputs.run_only_step == 'company_fetching') }}
+    if: ${{ !cancelled() && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'company_fetching')) || inputs.run_only_step == 'company_fetching') }}
 
     steps:
       - name: Checkout code
@@ -454,7 +454,7 @@ jobs:
     name: "Data Parsing (Silver Layer)"
     runs-on: ubuntu-latest
     needs: company_fetching_consolidate
-    if: ${{ !cancelled() && (github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'data_parsing')) }}
+    if: ${{ !cancelled() && (inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'data_parsing')) }}
 
     steps:
       - name: Checkout code
@@ -479,7 +479,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Download Raw Company Data
-        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        if: ${{ inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-raw-company-data
@@ -488,15 +488,15 @@ jobs:
 
       - name: Run Data Parsing
         env:
-          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
           PYTHONUNBUFFERED: 1
         run: |
           cd backend/pipelines/unified_pipeline
 
           CMD="python -u -m unified_pipeline run -s cvr_enrichment -j data_parsing"
 
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          if [ -n "${{ inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ inputs.test_limit }}"
           fi
 
           echo "🚀 Starting Data Parsing Step"
@@ -520,7 +520,7 @@ jobs:
     name: "Data Consolidation (Gold Layer)"
     runs-on: ubuntu-latest
     needs: data_parsing
-    if: ${{ !cancelled() && (github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'data_consolidation')) }}
+    if: ${{ !cancelled() && (inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'data_consolidation')) }}
 
     steps:
       - name: Checkout code
@@ -545,7 +545,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Download Silver Layer Data
-        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        if: ${{ inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-silver-data
@@ -554,15 +554,15 @@ jobs:
 
       - name: Run Data Consolidation
         env:
-          LOG_LEVEL: ${{ github.event.inputs.log_level || 'INFO' }}
+          LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
           PYTHONUNBUFFERED: 1
         run: |
           cd backend/pipelines/unified_pipeline
 
           CMD="python -u -m unified_pipeline run -s cvr_enrichment -j data_consolidation"
 
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          if [ -n "${{ inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ inputs.test_limit }}"
           fi
 
           echo "🚀 Starting Data Consolidation Step"
@@ -586,7 +586,7 @@ jobs:
     name: "P-Number Fetching"
     runs-on: ubuntu-latest
     needs: [cvr_collection, data_consolidation]
-    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'pnumber_fetching')) || github.event.inputs.run_only_step == 'pnumber_fetching') }}
+    if: ${{ !cancelled() && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'pnumber_fetching')) || inputs.run_only_step == 'pnumber_fetching') }}
 
     steps:
       - name: Checkout code
@@ -611,7 +611,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Download Company Data
-        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        if: ${{ inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
@@ -627,8 +627,8 @@ jobs:
 
           CMD="python -u -m unified_pipeline run -s cvr_enrichment -j pnumber_fetching"
 
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          if [ -n "${{ inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ inputs.test_limit }}"
           fi
 
           echo "Running: $CMD"
@@ -682,7 +682,7 @@ jobs:
     name: "Financial Documents"
     runs-on: ubuntu-latest
     needs: [cvr_collection, data_consolidation]
-    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'financial_documents')) || github.event.inputs.run_only_step == 'financial_documents') }}
+    if: ${{ !cancelled() && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'financial_documents')) || inputs.run_only_step == 'financial_documents') }}
 
     steps:
       - name: Checkout code
@@ -707,7 +707,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Download Company Data
-        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        if: ${{ inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
@@ -723,8 +723,8 @@ jobs:
 
           CMD="python -u -m unified_pipeline run -s cvr_enrichment -j financial_documents"
 
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          if [ -n "${{ inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ inputs.test_limit }}"
           fi
 
           echo "Running: $CMD"
@@ -772,7 +772,7 @@ jobs:
     name: "Address Geocoding"
     runs-on: ubuntu-latest
     needs: [cvr_collection, data_consolidation, pnumber_fetching]
-    if: ${{ !cancelled() && ((github.event.inputs.run_only_step == 'none' && !contains(github.event.inputs.skip_steps, 'address_geocoding')) || github.event.inputs.run_only_step == 'address_geocoding') }}
+    if: ${{ !cancelled() && ((inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'address_geocoding')) || inputs.run_only_step == 'address_geocoding') }}
 
     steps:
       - name: Checkout code
@@ -797,7 +797,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Download Company and P-Number Data
-        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        if: ${{ inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-company-data
@@ -805,7 +805,7 @@ jobs:
         continue-on-error: true
 
       - name: Download P-Number Data
-        if: ${{ github.event.inputs.run_only_step == 'none' }}
+        if: ${{ inputs.run_only_step == 'none' }}
         uses: actions/download-artifact@v4
         with:
           name: cvr-pnumber-data
@@ -818,8 +818,8 @@ jobs:
 
           CMD="python -u -m unified_pipeline run -s cvr_enrichment -j address_geocoding"
 
-          if [ -n "${{ github.event.inputs.test_limit }}" ]; then
-            CMD="$CMD --test-limit ${{ github.event.inputs.test_limit }}"
+          if [ -n "${{ inputs.test_limit }}" ]; then
+            CMD="$CMD --test-limit ${{ inputs.test_limit }}"
           fi
 
           echo "Running: $CMD"
@@ -885,9 +885,9 @@ jobs:
         run: |
           echo "🎉 CVR Enrichment Pipeline completed!"
           echo "📊 Pipeline Configuration:"
-          echo "   • Test limit: ${{ github.event.inputs.test_limit || 'None (full dataset)' }}"
+          echo "   • Test limit: ${{ inputs.test_limit || 'None (full dataset)' }}"
           echo "   • Processing mode: Split into 2 parts (to avoid 6h timeout)"
-          echo "   • Skipped steps: ${{ github.event.inputs.skip_steps || 'None' }}"
+          echo "   • Skipped steps: ${{ inputs.skip_steps || 'None' }}"
           echo ""
           echo "📋 Steps Status:"
           echo "   • CVR Collection: ${{ needs.cvr_collection.result }}"
