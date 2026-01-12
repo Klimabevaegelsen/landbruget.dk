@@ -12,6 +12,7 @@ on:
         description: "Specific weekly source to run (optional - runs all weekly sources if not specified)"
         required: false
         type: choice
+        default: "all_weekly"
         options:
           - "all_weekly"
           - "cvr_enrichment"
