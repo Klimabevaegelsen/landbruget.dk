@@ -469,9 +469,9 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     fetch_timestamp,
                     idx as leadership_idx
                 FROM raw_data_with_varchar
-                CROSS JOIN unnest(generate_series(0::BIGINT, (
-                    json_array_length(json_extract(raw_json_str, '$.leadership')) - 1
-                )::BIGINT)) as t(idx)
+                CROSS JOIN unnest(generate_series(0::BIGINT,
+                    GREATEST(0, json_array_length(json_extract(raw_json_str, '$.leadership')) - 1)::BIGINT
+                )) as t(idx)
                 WHERE json_array_length(json_extract(raw_json_str, '$.leadership')) > 0
             )
             SELECT
@@ -521,9 +521,9 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     fetch_timestamp,
                     idx as employment_idx
                 FROM raw_data_with_varchar
-                CROSS JOIN unnest(generate_series(0::BIGINT, (
-                    json_array_length(json_extract(raw_json_str, '$.employment')) - 1
-                )::BIGINT)) as t(idx)
+                CROSS JOIN unnest(generate_series(0::BIGINT,
+                    GREATEST(0, json_array_length(json_extract(raw_json_str, '$.employment')) - 1)::BIGINT
+                )) as t(idx)
                 WHERE json_array_length(json_extract(raw_json_str, '$.employment')) > 0
             )
             SELECT
