@@ -313,15 +313,15 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
             SELECT
                 cvr_number,
                 company_uuid(cvr_number) as company_uuid,
-                json_extract_string(raw_json, '$.company_name') as company_name,
-                json_extract_string(raw_json, '$.company_type_description')
+                json_extract_string(raw_json::VARCHAR, '$.company_name') as company_name,
+                json_extract_string(raw_json::VARCHAR, '$.company_type_description')
                     as company_type_description,
-                json_extract_string(raw_json, '$.status') as status,
-                json_extract_string(raw_json, '$.founded_date') as founded_date,
-                json_extract_string(raw_json, '$.dissolution_date') as dissolution_date,
-                json_extract(raw_json, '$.advertisement_protection')::BOOLEAN
+                json_extract_string(raw_json::VARCHAR, '$.status') as status,
+                json_extract_string(raw_json::VARCHAR, '$.founded_date') as founded_date,
+                json_extract_string(raw_json::VARCHAR, '$.dissolution_date') as dissolution_date,
+                json_extract(raw_json::VARCHAR, '$.advertisement_protection')::BOOLEAN
                     as advertisement_protection,
-                json_extract(raw_json, '$.pnumber_count')::INTEGER as pnumber_count,
+                json_extract(raw_json::VARCHAR, '$.pnumber_count')::INTEGER as pnumber_count,
                 -- Address fields (will be populated by Address Geocoding step)
                 NULL::VARCHAR as current_full_address,
                 NULL::VARCHAR as current_street_name,
@@ -340,14 +340,14 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                 NULL::BOOLEAN as dawa_enriched,
                 -- Extract industry information
                 CASE
-                    WHEN json_array_length(json_extract(raw_json, '$.industries')) > 0 THEN
-                        json_extract_string(json_extract(raw_json, '$.industries[0]'),
+                    WHEN json_array_length(json_extract(raw_json::VARCHAR, '$.industries')) > 0 THEN
+                        json_extract_string(json_extract(raw_json::VARCHAR, '$.industries[0]'),
                                           '$.industry_code')
                     ELSE NULL
                 END as primary_industry_code,
                 CASE
-                    WHEN json_array_length(json_extract(raw_json, '$.industries')) > 0 THEN
-                        json_extract_string(json_extract(raw_json, '$.industries[0]'),
+                    WHEN json_array_length(json_extract(raw_json::VARCHAR, '$.industries')) > 0 THEN
+                        json_extract_string(json_extract(raw_json::VARCHAR, '$.industries[0]'),
                                           '$.industry_description')
                     ELSE NULL
                 END as primary_industry_description,
@@ -372,16 +372,12 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
     def _get_agricultural_classification_sql(self) -> str:
         """Get SQL for agricultural company classification."""
         # Extract industry code for readability
-        industry_code_expr = (
-            "json_extract_string(json_extract(raw_json, '$.industries[0]'), '$.industry_code')"
-        )
-        is_current_expr = (
-            "json_extract(json_extract(raw_json, '$.industries[0]'), '$.is_current')::BOOLEAN"
-        )
+        industry_code_expr = "json_extract_string(json_extract(raw_json::VARCHAR, '$.industries[0]'), '$.industry_code')"
+        is_current_expr = "json_extract(json_extract(raw_json::VARCHAR, '$.industries[0]'), '$.is_current')::BOOLEAN"
 
         return f"""
             CASE
-                WHEN json_array_length(json_extract(raw_json, '$.industries')) > 0 THEN
+                WHEN json_array_length(json_extract(raw_json::VARCHAR, '$.industries')) > 0 THEN
                     CASE
                         WHEN {industry_code_expr} IS NOT NULL
                         AND {is_current_expr} = true
@@ -447,9 +443,9 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     idx as leadership_idx
                 FROM {raw_data_table}
                 CROSS JOIN unnest(generate_series(0::BIGINT, (
-                    json_array_length(json_extract(raw_json, '$.leadership')) - 1
+                    json_array_length(json_extract(raw_json::VARCHAR, '$.leadership')) - 1
                 )::BIGINT)) as t(idx)
-                WHERE json_array_length(json_extract(raw_json, '$.leadership')) > 0
+                WHERE json_array_length(json_extract(raw_json::VARCHAR, '$.leadership')) > 0
             )
             SELECT
                 uuid() as person_uuid,
@@ -458,10 +454,10 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                 lf.leadership_idx,
                 'leadership' as relation_type,
                 json_extract_string(
-                    json_extract(rd.raw_json, '$.leadership[' || lf.leadership_idx || ']'),
+                    json_extract(rd.raw_json::VARCHAR, '$.leadership[' || lf.leadership_idx || ']'),
                     '$.relation_type'
                 ) as person_relation_type,
-                json_extract(rd.raw_json, '$.leadership[' || lf.leadership_idx || ']')
+                json_extract(rd.raw_json::VARCHAR, '$.leadership[' || lf.leadership_idx || ']')
                     as person_data_json,
                 rd.fetch_timestamp as processing_timestamp
             FROM leadership_flattened lf
@@ -490,9 +486,9 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     idx as employment_idx
                 FROM {raw_data_table}
                 CROSS JOIN unnest(generate_series(0::BIGINT, (
-                    json_array_length(json_extract(raw_json, '$.employment')) - 1
+                    json_array_length(json_extract(raw_json::VARCHAR, '$.employment')) - 1
                 )::BIGINT)) as t(idx)
-                WHERE json_array_length(json_extract(raw_json, '$.employment')) > 0
+                WHERE json_array_length(json_extract(raw_json::VARCHAR, '$.employment')) > 0
             )
             SELECT
                 uuid() as employment_uuid,
@@ -500,22 +496,22 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                 company_uuid(ef.cvr_number) as company_uuid,
                 ef.employment_idx,
                 json_extract(
-                    json_extract(rd.raw_json, '$.employment[' || ef.employment_idx || ']'),
+                    json_extract(rd.raw_json::VARCHAR, '$.employment[' || ef.employment_idx || ']'),
                     '$.employee_count'
                 )::INTEGER as employee_count,
                 json_extract_string(
-                    json_extract(rd.raw_json, '$.employment[' || ef.employment_idx || ']'),
+                    json_extract(rd.raw_json::VARCHAR, '$.employment[' || ef.employment_idx || ']'),
                     '$.period_start'
                 ) as period_start,
                 json_extract_string(
-                    json_extract(rd.raw_json, '$.employment[' || ef.employment_idx || ']'),
+                    json_extract(rd.raw_json::VARCHAR, '$.employment[' || ef.employment_idx || ']'),
                     '$.period_end'
                 ) as period_end,
                 json_extract(
-                    json_extract(rd.raw_json, '$.employment[' || ef.employment_idx || ']'),
+                    json_extract(rd.raw_json::VARCHAR, '$.employment[' || ef.employment_idx || ']'),
                     '$.is_current'
                 )::BOOLEAN as is_current,
-                json_extract(rd.raw_json, '$.employment[' || ef.employment_idx || ']')
+                json_extract(rd.raw_json::VARCHAR, '$.employment[' || ef.employment_idx || ']')
                     as employment_data_json,
                 rd.fetch_timestamp as processing_timestamp
             FROM employment_flattened ef
