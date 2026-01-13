@@ -129,6 +129,7 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
             raise ValueError("LANDBRUGSDATA_UUID_NAMESPACE environment variable is required")
 
         # Create company UUID function using namespace from environment
+        # Cast crypto_hash BLOB result to VARCHAR to avoid substr() type errors
         self.conn.execute(f"""
             CREATE OR REPLACE FUNCTION company_uuid(cvr_number) AS (
                 SELECT CASE
@@ -137,16 +138,16 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                                                '^[1-9][0-9]{{7}}$')
                     THEN NULL
                     ELSE CONCAT(
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                               TRIM(CAST(cvr_number AS VARCHAR)))), 1, 8), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                               TRIM(CAST(cvr_number AS VARCHAR)))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                                      TRIM(CAST(cvr_number AS VARCHAR)))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                                               TRIM(CAST(cvr_number AS VARCHAR)))), 17, 3)), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
-                               TRIM(CAST(cvr_number AS VARCHAR)))), 21, 12)
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 1, 8), '-',
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 9, 4), '-',
+                        '5', SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                      TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 13, 3), '-',
+                        CONCAT('8', SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                                               TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 17, 3)), '-',
+                        SUBSTR(CAST(crypto_hash('md5', CONCAT('{namespace}', 'company-cvr-',
+                               TRIM(CAST(cvr_number AS VARCHAR)))) AS VARCHAR), 21, 12)
                     )
                 END
             )
