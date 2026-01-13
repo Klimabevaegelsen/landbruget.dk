@@ -11,6 +11,7 @@ from typing import Any, Dict
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 
 class FieldsPropertiesIntersection(FieldAnalysisStageBase):
@@ -23,6 +24,10 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load agricultural fields and Stage 0 pre-filtered properties."""
+        # Set up UUID generation functions in DuckDB
+        self.log.info("Setting up UUID generation functions...")
+        LandbrugsdataUUID.setup_duckdb_functions(self.conn)
+
         # Load agricultural fields (600K fields)
         self.log.info("Loading agricultural fields dataset...")
         self._load_silver_dataset(
@@ -48,6 +53,8 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         self.conn.execute("SET threads=4")  # Can use more threads due to smaller dataset
 
         self.log.info("Preparing fields as BUILD side (spatial index will be created)...")
+        # Generate field_uuid from geometry using the UUID function
+        # The silver layer doesn't have field_uuid, so we generate it here
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
             SELECT
@@ -56,7 +63,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 cvr_number,
                 year,
                 geometry,
-                field_uuid,
+                field_uuid(geometry) as field_uuid,
                 ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_full
         """)

@@ -19,6 +19,7 @@ from typing import Any, Dict
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 
 class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
@@ -31,10 +32,26 @@ class FieldsBNBOWaterCoverage(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load foundation data from Stage 1 for geometric intersections."""
+        # Set up UUID generation functions in DuckDB
+        self.log.info("Setting up UUID generation functions...")
+        LandbrugsdataUUID.setup_duckdb_functions(self.conn)
+
         updated_outputs = CONFIG.update_outputs_for_year()
 
         # Load agricultural fields (BUILD side for spatial joins)
-        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields")
+        self._load_silver_dataset(
+            CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_raw"
+        )
+
+        # Generate field_uuid from geometry
+        self.log.info("Generating field_uuid from geometry...")
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE agricultural_fields AS
+            SELECT
+                *,
+                field_uuid(geometry) as field_uuid
+            FROM agricultural_fields_raw
+        """)
 
         # Load Stage 0 pre-filtered BNBO data
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")

@@ -20,6 +20,7 @@ from typing import Any, Dict
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 
 class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
@@ -32,12 +33,17 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load agricultural fields and Stage 0 pre-filtered soil types."""
+        # Set up UUID generation functions in DuckDB
+        self.log.info("Setting up UUID generation functions...")
+        LandbrugsdataUUID.setup_duckdb_functions(self.conn)
+
         # Load agricultural fields (600K fields)
         self._load_silver_dataset(
             CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_raw"
         )
 
         # Keep agricultural fields as original multipolygons for consistency with other stages
+        # Generate field_uuid from geometry using the UUID function
         self.log.info("Preparing agricultural fields (keeping original multipolygons)...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
@@ -46,7 +52,7 @@ class FieldsSoilTypesIntersection(FieldAnalysisStageBase):
                 block_id,
                 cvr_number,
                 year,
-                field_uuid,
+                field_uuid(geometry) as field_uuid,
                 geometry,
                 ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_raw
