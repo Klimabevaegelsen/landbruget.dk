@@ -361,61 +361,66 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         self.log.info("🔧 PRE-AGGREGATING property intersection data to prevent JOIN explosion...")
 
         # Pre-aggregate property BNBO intersections by (field_uuid, bfe_number)
+        # NOTE: property_bnbo_geometry is loaded from parquet as BLOB (WKB format)
+        # Must convert to GEOMETRY using ST_GeomFromWKB before ST_Area_Spheroid
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_bnbo_aggregates AS
             SELECT
                 field_uuid,
                 bfe_number,
-                SUM(ST_Area_Spheroid(property_bnbo_geometry)) as property_bnbo_total_m2,
+                SUM(ST_Area_Spheroid(ST_GeomFromWKB(property_bnbo_geometry))) as property_bnbo_total_m2,
                 COUNT(DISTINCT status_category) as property_bnbo_status_count,
                 STRING_AGG(DISTINCT status_category, ', ' ORDER BY status_category)
                     as property_bnbo_status_categories,
                 SUM(CASE WHEN status_category = 'Action Required'
-                    THEN ST_Area_Spheroid(property_bnbo_geometry) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(ST_GeomFromWKB(property_bnbo_geometry)) ELSE 0 END) / 10000.0
                     as property_bnbo_action_required_hectares,
                 SUM(CASE WHEN status_category = 'Completed'
-                    THEN ST_Area_Spheroid(property_bnbo_geometry) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(ST_GeomFromWKB(property_bnbo_geometry)) ELSE 0 END) / 10000.0
                     as property_bnbo_completed_hectares
             FROM property_bnbo_intersections
             GROUP BY field_uuid, bfe_number
         """)
 
         # Pre-aggregate property BNBO water intersections
+        # NOTE: property_bnbo_water_geometry is loaded from parquet as BLOB (WKB format)
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_bnbo_water_aggregates AS
             SELECT
                 field_uuid,
                 bfe_number,
-                SUM(ST_Area_Spheroid(property_bnbo_water_geometry))
+                SUM(ST_Area_Spheroid(ST_GeomFromWKB(property_bnbo_water_geometry)))
                     as property_bnbo_water_covered_m2,
                 SUM(CASE WHEN status_category = 'Action Required'
-                    THEN ST_Area_Spheroid(property_bnbo_water_geometry) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(ST_GeomFromWKB(property_bnbo_water_geometry)) ELSE 0 END) / 10000.0
                     as property_bnbo_action_required_water_covered_hectares,
                 SUM(CASE WHEN status_category = 'Completed'
-                    THEN ST_Area_Spheroid(property_bnbo_water_geometry) ELSE 0 END) / 10000.0
+                    THEN ST_Area_Spheroid(ST_GeomFromWKB(property_bnbo_water_geometry)) ELSE 0 END) / 10000.0
                     as property_bnbo_completed_water_covered_hectares
             FROM property_bnbo_water_intersections
             GROUP BY field_uuid, bfe_number
         """)
 
         # Pre-aggregate property wetland intersections
+        # NOTE: property_wetland_geometry is loaded from parquet as BLOB (WKB format)
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_wetland_aggregates AS
             SELECT
                 field_uuid,
                 bfe_number,
-                SUM(ST_Area_Spheroid(property_wetland_geometry)) as property_wetland_total_m2
+                SUM(ST_Area_Spheroid(ST_GeomFromWKB(property_wetland_geometry))) as property_wetland_total_m2
             FROM property_wetland_intersections
             GROUP BY field_uuid, bfe_number
         """)
 
         # Pre-aggregate property wetland water intersections
+        # NOTE: property_wetland_water_geometry is loaded from parquet as BLOB (WKB format)
         self.conn.execute("""
             CREATE OR REPLACE TABLE property_wetland_water_aggregates AS
             SELECT
                 field_uuid,
                 bfe_number,
-                SUM(ST_Area_Spheroid(property_wetland_water_geometry))
+                SUM(ST_Area_Spheroid(ST_GeomFromWKB(property_wetland_water_geometry)))
                     as property_wetland_water_covered_m2
             FROM property_wetland_water_intersections
             GROUP BY field_uuid, bfe_number
@@ -424,6 +429,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         self.log.info("✅ Property pre-aggregation completed - no more massive JOINs!")
 
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
+        # NOTE: fp.intersection_geometry is loaded from parquet as BLOB (WKB format)
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_environmental_analysis_properties AS
             SELECT
@@ -433,7 +439,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 fp.block_id,
                 fp.cvr_number,
                 fp.year,
-                ST_Area_Spheroid(fp.intersection_geometry) as property_intersection_area_m2,
+                ST_Area_Spheroid(ST_GeomFromWKB(fp.intersection_geometry)) as property_intersection_area_m2,
 
                 -- Environmental data from pre-aggregated tables
                 COALESCE(pba.property_bnbo_total_m2, 0) as property_bnbo_total_m2,
