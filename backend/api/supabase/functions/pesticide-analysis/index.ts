@@ -89,12 +89,12 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Use the RPC function instead of direct table query to get properly aggregated data
-    const { data: rawCompanies, error: companiesError } = await supabase.rpc(
+    const { data: rawCompanies, error: companiesError} = await supabase.rpc(
       "get_pesticide_companies",
       {
         p_years: params.years && params.years.length > 0 ? params.years : null,
         p_geography: params.geography !== "country" ? params.geography : null,
-        p_cvr: params.cvr ? BigInt(params.cvr) : null,
+        p_cvr: params.cvr ? parseInt(params.cvr) : null,
         p_pesticide_type: params.type || "total",
         p_sort_by: params.sortBy || "total_belastning",
         p_sort_order: params.sortOrder || "desc",
@@ -111,7 +111,7 @@ serve(async (req) => {
       {
         p_years: params.years && params.years.length > 0 ? params.years : null,
         p_geography: params.geography !== "country" ? params.geography : null,
-        p_cvr: params.cvr ? BigInt(params.cvr) : null,
+        p_cvr: params.cvr ? parseInt(params.cvr) : null,
       }
     );
 
