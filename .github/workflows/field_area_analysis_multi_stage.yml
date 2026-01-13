@@ -41,6 +41,7 @@ env:
   GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
   GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
   GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+  LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
 
 jobs:
   # Verify silver data availability before running stage0 prefilters
