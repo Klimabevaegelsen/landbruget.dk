@@ -424,6 +424,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         self.log.info("✅ Property pre-aggregation completed - no more massive JOINs!")
 
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
+        # NOTE: fp.intersection_geometry is stored as native GEOMETRY type (verified in GCS)
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_environmental_analysis_properties AS
             SELECT
