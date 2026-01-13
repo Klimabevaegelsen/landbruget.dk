@@ -41,6 +41,7 @@ jobs:
     outputs:
       years: ${{ steps.detect.outputs.years }}
       should_run_matrix: ${{ steps.detect.outputs.should_run_matrix }}
+      has_years: ${{ steps.detect.outputs.has_years }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -69,6 +70,9 @@ jobs:
 
       - name: Detect available years
         id: detect
+        env:
+          GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+          GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
         run: |
           cd backend/pipelines/unified_pipeline
 
@@ -123,10 +127,26 @@ jobs:
           " > detected_years_raw.txt 2>&1
             # Extract only the JSON line (last line should be the JSON output)
             years=$(tail -1 detected_years_raw.txt | grep '^\[' || echo '[]')
-            echo "years<<EOF" >> $GITHUB_OUTPUT
-            echo "$years" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-            echo "should_run_matrix=true" >> $GITHUB_OUTPUT
+
+            # Debug: show what was detected
+            echo "DEBUG: Contents of detected_years_raw.txt:"
+            cat detected_years_raw.txt
+            echo "DEBUG: Extracted years: $years"
+
+            # Check if years array is empty
+            if [ "$years" == "[]" ]; then
+              echo "WARNING: No years detected!"
+              echo "years=[]" >> $GITHUB_OUTPUT
+              echo "should_run_matrix=false" >> $GITHUB_OUTPUT
+              echo "has_years=false" >> $GITHUB_OUTPUT
+            else
+              # Use heredoc format for safety with complex JSON
+              echo "years<<EOF" >> $GITHUB_OUTPUT
+              echo "$years" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+              echo "should_run_matrix=true" >> $GITHUB_OUTPUT
+              echo "has_years=true" >> $GITHUB_OUTPUT
+            fi
           fi
 
   generate-environmental:
@@ -181,7 +201,7 @@ jobs:
   generate-field-analysis:
     runs-on: ubuntu-latest
     needs: detect-years
-    if: ${{ needs.detect-years.outputs.should_run_matrix == 'true' && (github.event.inputs.target_year != '' || github.event.inputs.years_range != '') }}
+    if: ${{ needs.detect-years.outputs.should_run_matrix == 'true' && needs.detect-years.outputs.has_years == 'true' && (github.event.inputs.target_year != '' || github.event.inputs.years_range != '') }}
     strategy:
       matrix:
         year: ${{ fromJson(needs.detect-years.outputs.years) }}
@@ -236,7 +256,7 @@ jobs:
   generate-all:
     runs-on: ubuntu-latest
     needs: detect-years
-    if: ${{ needs.detect-years.outputs.should_run_matrix == 'true' && github.event.inputs.environmental_only != 'true' && github.event.inputs.target_year == '' && github.event.inputs.years_range == '' }}
+    if: ${{ needs.detect-years.outputs.should_run_matrix == 'true' && needs.detect-years.outputs.has_years == 'true' && github.event.inputs.environmental_only != 'true' && github.event.inputs.target_year == '' && github.event.inputs.years_range == '' }}
     strategy:
       matrix:
         year: ${{ fromJson(needs.detect-years.outputs.years) }}
