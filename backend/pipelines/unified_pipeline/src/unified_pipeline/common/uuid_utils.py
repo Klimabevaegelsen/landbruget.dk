@@ -255,7 +255,7 @@ class LandbrugsdataUUID:
                 CREATE OR REPLACE FUNCTION field_uuid(geometry_data) AS (
                     SELECT CASE
                         WHEN geometry_data IS NULL THEN NULL
-                        ELSE landbrugsdata_uuid5('field-geometry', encode(geometry_data, 'hex'))
+                        ELSE landbrugsdata_uuid5('field-geometry', hex(ST_AsWKB(geometry_data)))
                     END
                 )
             """)
