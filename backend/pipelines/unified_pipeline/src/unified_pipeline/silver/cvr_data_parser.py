@@ -112,14 +112,16 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
         self.log.info("🔧 Applying CVR data parser memory optimizations...")
 
         # Conservative memory settings for parsing
-        self.conn.execute("SET memory_limit = '4GB'")
-        self.conn.execute("SET max_memory = '4GB'")
+        self.conn.execute("SET memory_limit = '6GB'")
+        self.conn.execute("SET max_memory = '6GB'")
         self.conn.execute("SET threads = 2")
         self.conn.execute("SET temp_directory = '/tmp'")
+        self.conn.execute("SET preserve_insertion_order = false")
 
         self.log.info("✅ CVR data parser memory optimizations applied")
-        self.log.info("   • Memory limit: 4GB")
+        self.log.info("   • Memory limit: 6GB")
         self.log.info("   • Threads: 2")
+        self.log.info("   • Preserve insertion order: false")
         self.log.info("   • Processing: Batch-based with immediate cleanup")
 
     def _setup_uuid_functions(self):
