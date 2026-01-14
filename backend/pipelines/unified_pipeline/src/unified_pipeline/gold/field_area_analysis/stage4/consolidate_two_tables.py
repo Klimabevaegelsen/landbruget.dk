@@ -150,8 +150,8 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 # Get column type
                 col_type = next((c[1] for c in cols if c[0] == geom_col), None)
 
-                if col_type == "BLOB":
-                    # Convert BLOB to GEOMETRY using ST_GeomFromWKB
+                if col_type in ("BLOB", "WKB_BLOB"):
+                    # Convert BLOB/WKB_BLOB to GEOMETRY using ST_GeomFromWKB
                     self.conn.execute(f"""
                         CREATE OR REPLACE TABLE {table_name} AS
                         SELECT
