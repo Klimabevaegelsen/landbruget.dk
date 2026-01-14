@@ -22,6 +22,7 @@ class FieldAreaAnalysisConfig(BaseModel):
     wetlands_dataset: str = "wetlands_dissolved"  # Use dissolved wetlands - now preserves
     # toerv_pct AND eliminates overlaps
     water_projects_dataset: str = "water_projects_dissolved"
+    grukos_dataset: str = "grukos_dissolved"  # Groundwater action areas (indsatsområder)
 
     # Stage 0 pre-filtered dataset names (dramatically reduced sizes)
     properties_filtered_dataset: str = "stage0_properties_filtered"  # 6.5M → ~500K (90% reduction)
@@ -31,6 +32,7 @@ class FieldAreaAnalysisConfig(BaseModel):
         "stage0_water_projects_filtered"  # 2.4K → ~500 (80% reduction)
     )
     soil_types_filtered_dataset: str = "stage0_soil_types_filtered"  # 13K → ~8K (40% reduction)
+    grukos_filtered_dataset: str = "stage0_grukos_filtered"  # ~1 dissolved → filtered to fields
 
     # Processing parameters optimized for GitHub Actions with Stage 0 pre-filtering
     # Batch sizes can be larger due to dramatically reduced probe sizes
@@ -64,6 +66,7 @@ class FieldAreaAnalysisConfig(BaseModel):
         "wetlands_prefiltered": "stage0_wetlands_filtered",
         "water_projects_prefiltered": "stage0_water_projects_filtered",
         "soil_types_prefiltered": "stage0_soil_types_filtered",
+        "grukos_prefiltered": "stage0_grukos_filtered",
         # Stage 1 outputs (using pre-filtered datasets)
         "bnbo_water_coverage": "field_analysis_bnbo_water_coverage",
         "water_projects_bnbo_intersections": "field_analysis_water_projects_bnbo_intersections",
@@ -75,6 +78,7 @@ class FieldAreaAnalysisConfig(BaseModel):
         "field_soil_intersections": "field_analysis_soil_intersections",
         # Stage 2 outputs (field-level intersection geometries only - aggregations moved to Stage 4)
         "field_bnbo_intersections": "field_analysis_field_bnbo_intersections",
+        "field_grukos_intersections": "field_analysis_field_grukos_intersections",
         # For Stage 3 optimization
         "field_bnbo_water_intersections": (
             "field_analysis_field_bnbo_water_intersections"  # For Stage 3 optimization
@@ -100,7 +104,9 @@ class FieldAreaAnalysisConfig(BaseModel):
         "property_wetland_water_intersections": (
             "field_analysis_property_wetland_water_intersections"
         ),
-        # For two-table architecture
+        "property_grukos_intersections": (
+            "field_analysis_property_grukos_intersections"  # For two-table architecture
+        ),
         # Stage 4 outputs (consolidation) - Two-Table Architecture
         "consolidated": "field_analysis",  # Legacy single table (deprecated)
         "field_environmental_analysis": "field_environmental",  # Table 1: Field-level (legacy)
