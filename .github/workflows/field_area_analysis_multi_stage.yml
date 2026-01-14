@@ -305,6 +305,45 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=0 --job=soil_types_prefilter
 
+  stage0-grukos-prefilter:
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage0' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Grukos Pre-filtering (groundwater action areas)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=0 --job=grukos_prefilter
+
   # Stage 1: Base Intersections (Parallel - now using pre-filtered data)
   stage1-water-projects-bnbo:
     needs: [stage0-bnbo-prefilter, stage0-water-projects-prefilter]
@@ -574,6 +613,46 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=2 --job=fields_wetland_water
 
+  stage2-fields-grukos:
+    needs: [stage0-grukos-prefilter]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == 'stage2' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Fields × Grukos Coverage (groundwater action areas)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=2 --job=fields_grukos
+
   # Stage 3A: Final Analysis (Sequential mode - only when 'all')
   stage3-final-bnbo-sequential:
     needs: [stage2-fields-bnbo-water, stage1-fields-properties]
@@ -736,10 +815,91 @@ jobs:
           python -m unified_pipeline.gold.field_area_analysis.cli \
             --stage=3 --job=final_wetland
 
+  # Stage 3E: Final Grukos Analysis (Sequential mode - only when 'all')
+  stage3-final-grukos-sequential:
+    needs: [stage2-fields-grukos, stage1-fields-properties]
+    if: ${{ github.event.inputs.stage == 'all' || github.event.inputs.stage == '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Final Grukos Analysis (Sequential)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=3 --job=final_grukos
+
+  # Stage 3F: Final Grukos Analysis (Independent mode - uses latest GCS data)
+  stage3-final-grukos-independent:
+    if: ${{ github.event.inputs.stage == 'stage3' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    strategy:
+      matrix:
+        agricultural_fields_year: ${{ github.event.inputs.agricultural_fields_year == 'both' && fromJSON('["2024", "2025"]') || github.event.inputs.agricultural_fields_year == '2024' && fromJSON('["2024"]') || github.event.inputs.agricultural_fields_year == '2025' && fromJSON('["2025"]') || fromJSON('["2024", "2025"]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          cd backend/pipelines/unified_pipeline
+          pip install -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Final Grukos Analysis (Independent)
+        env:
+          AGRICULTURAL_FIELDS_YEAR: ${{ matrix.agricultural_fields_year }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing agricultural fields year: $AGRICULTURAL_FIELDS_YEAR"
+          python -m unified_pipeline.gold.field_area_analysis.cli \
+            --stage=3 --job=final_grukos
+
   # Stage 4A: Consolidation (Sequential mode - waits for stage 3 and needs stage 1 data)
   stage4-consolidate-sequential:
-    needs: [verify-silver-data, stage3-final-bnbo-sequential, stage3-final-wetland-sequential, stage1-fields-properties, stage1-fields-soil-types]
-    if: ${{ always() && (github.event.inputs.stage == 'all' || github.event.inputs.stage == '') && (needs.stage3-final-bnbo-sequential.result == 'success' || needs.stage3-final-bnbo-sequential.result == 'skipped') && (needs.stage3-final-wetland-sequential.result == 'success' || needs.stage3-final-wetland-sequential.result == 'skipped') }}
+    needs: [verify-silver-data, stage3-final-bnbo-sequential, stage3-final-wetland-sequential, stage3-final-grukos-sequential, stage1-fields-properties, stage1-fields-soil-types]
+    if: ${{ always() && (github.event.inputs.stage == 'all' || github.event.inputs.stage == '') && (needs.stage3-final-bnbo-sequential.result == 'success' || needs.stage3-final-bnbo-sequential.result == 'skipped') && (needs.stage3-final-wetland-sequential.result == 'success' || needs.stage3-final-wetland-sequential.result == 'skipped') && (needs.stage3-final-grukos-sequential.result == 'success' || needs.stage3-final-grukos-sequential.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
