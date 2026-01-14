@@ -224,6 +224,7 @@ jobs:
         env:
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/unified_pipeline
           STAGE="${{ github.event.inputs.stage || github.event.client_payload.stage || 'bronze' }}"
@@ -306,6 +307,7 @@ jobs:
         env:
           GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
           GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+          LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
         run: |
           cd backend/pipelines/unified_pipeline
           echo "🌱 Running enrichment for year ${{ matrix.year }}..."
