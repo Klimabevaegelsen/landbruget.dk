@@ -112,9 +112,59 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         )
         self.log.info("✅ Loaded Stage 3B property-wetland geometric outputs")
 
+        # Convert BLOB geometry columns to GEOMETRY type for ST_Area_Spheroid calculations
+        # Parquet stores geometry as WKB BLOB, but DuckDB spatial functions need GEOMETRY type
+        self.log.info("🔄 Converting geometry columns from BLOB to GEOMETRY type...")
+        self._convert_geometry_columns()
+
         self.log.info(
             "🚀 REDESIGNED STAGE 4: All geometric data loaded for centralized calculations"
         )
+
+    def _convert_geometry_columns(self):
+        """Convert BLOB geometry columns to GEOMETRY type for spatial calculations."""
+        # Tables with geometry columns that need conversion
+        geometry_conversions = [
+            ("agricultural_fields", "geometry"),
+            ("field_property_intersections", "intersection_geometry"),
+            ("field_bnbo_intersections", "field_bnbo_geometry"),
+            ("field_bnbo_water_intersections", "field_bnbo_water_geometry"),
+            ("field_wetland_intersections", "field_wetland_geometry"),
+            ("field_wetland_water_intersections", "field_wetland_water_geometry"),
+            ("property_bnbo_intersections", "property_bnbo_geometry"),
+            ("property_bnbo_water_intersections", "property_bnbo_water_geometry"),
+            ("property_wetland_intersections", "property_wetland_geometry"),
+            ("property_wetland_water_intersections", "property_wetland_water_geometry"),
+        ]
+
+        for table_name, geom_col in geometry_conversions:
+            try:
+                # Check if table exists and has the geometry column
+                cols = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+                col_names = [c[0] for c in cols]
+
+                if geom_col not in col_names:
+                    self.log.warning(f"Column {geom_col} not found in {table_name}, skipping")
+                    continue
+
+                # Get column type
+                col_type = next((c[1] for c in cols if c[0] == geom_col), None)
+
+                if col_type == "BLOB":
+                    # Convert BLOB to GEOMETRY using ST_GeomFromWKB
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT
+                            * EXCLUDE ({geom_col}),
+                            ST_GeomFromWKB({geom_col}) as {geom_col}
+                        FROM {table_name}
+                    """)
+                    self.log.info(f"  ✅ Converted {table_name}.{geom_col} from BLOB to GEOMETRY")
+                else:
+                    self.log.debug(f"  ℹ️ {table_name}.{geom_col} is already {col_type}")
+
+            except Exception as e:
+                self.log.warning(f"Could not convert {table_name}.{geom_col}: {e}")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """Execute redesigned Stage 4 consolidation with centralized area calculations."""
