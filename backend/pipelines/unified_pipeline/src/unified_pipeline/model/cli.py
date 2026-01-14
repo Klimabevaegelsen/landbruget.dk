@@ -55,6 +55,7 @@ class Source(Enum):
         arbejdstilsynet_inspections: Danish Work Environment Authority inspections data
         drive_data: Google Drive regulatory compliance documents
         bbr_buildings: BBR Buildings and GeoDanmark infrastructure data
+        grukos: Groundwater mapping data (indsatsområder) from MiljøGIS
     """
 
     bnbo = "bnbo"
@@ -84,6 +85,7 @@ class Source(Enum):
     work_permits = "work_permits"
     drive_data = "drive_data"
     bbr_buildings = "bbr_buildings"
+    grukos = "grukos"
 
 
 class Stage(Enum):

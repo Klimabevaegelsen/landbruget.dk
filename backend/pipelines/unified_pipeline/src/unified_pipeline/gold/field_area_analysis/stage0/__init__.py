@@ -11,6 +11,7 @@ PERFORMANCE OPTIMIZATION STRATEGY:
 - Pre-filter Wetlands: 1.6M → ~200K (estimated 85% reduction)
 - Pre-filter Water Projects: ~2.4K → ~500 (estimated 80% reduction)
 - Pre-filter Soil Types: 13K → ~8K (estimated 40% reduction)
+- Pre-filter Grukos: 1 dissolved → filtered intersection geometry
 
 This reduces subsequent stage complexity from:
 - Stage 1: 600K × 6.5M = 3.9B combinations → 600K × 500K = 300M combinations (13x reduction)
@@ -20,3 +21,21 @@ This reduces subsequent stage complexity from:
 
 All subsequent stages will use these pre-filtered datasets as input.
 """
+
+from .bnbo_prefilter import BNBOPreFilter
+from .grukos_prefilter import GrukosPreFilter
+from .orchestrator import run_stage0_prefiltering
+from .properties_prefilter import PropertiesPreFilter
+from .soil_types_prefilter import SoilTypesPreFilter
+from .water_projects_prefilter import WaterProjectsPreFilter
+from .wetlands_prefilter import WetlandsPreFilter
+
+__all__ = [
+    "run_stage0_prefiltering",
+    "PropertiesPreFilter",
+    "BNBOPreFilter",
+    "WetlandsPreFilter",
+    "WaterProjectsPreFilter",
+    "SoilTypesPreFilter",
+    "GrukosPreFilter",
+]

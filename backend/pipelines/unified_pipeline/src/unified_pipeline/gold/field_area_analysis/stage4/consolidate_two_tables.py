@@ -112,6 +112,22 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         )
         self.log.info("✅ Loaded Stage 3B property-wetland geometric outputs")
 
+        # Load Stage 2C outputs: field × grukos geometries
+        stage2c_grukos_dataset = updated_outputs["field_grukos_intersections"]
+        stage2c_grukos_path = self._get_latest_gold_path(stage2c_grukos_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage2c_grukos_path, "SELECT *", "field_grukos_intersections"
+        )
+        self.log.info("✅ Loaded Stage 2C grukos geometric outputs")
+
+        # Load Stage 3C outputs: property × grukos geometries
+        stage3c_grukos_dataset = updated_outputs["property_grukos_intersections"]
+        stage3c_grukos_path = self._get_latest_gold_path(stage3c_grukos_dataset)
+        self.gcs_access.query_parquet_direct(
+            stage3c_grukos_path, "SELECT *", "property_grukos_intersections"
+        )
+        self.log.info("✅ Loaded Stage 3C property-grukos geometric outputs")
+
         # Convert BLOB geometry columns to GEOMETRY type for ST_Area_Spheroid calculations
         # Parquet stores geometry as WKB BLOB, but DuckDB spatial functions need GEOMETRY type
         self.log.info("🔄 Converting geometry columns from BLOB to GEOMETRY type...")
@@ -140,6 +156,8 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             ("property_bnbo_water_intersections", "property_bnbo_water_geometry"),
             ("property_wetland_intersections", "property_wetland_geometry"),
             ("property_wetland_water_intersections", "property_wetland_water_geometry"),
+            ("field_grukos_intersections", "field_grukos_geometry"),
+            ("property_grukos_intersections", "property_grukos_geometry"),
         ]
 
         for table_name, geom_col in geometry_conversions:
@@ -316,6 +334,16 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             GROUP BY field_uuid
         """)
 
+        # Pre-aggregate grukos intersections by field
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE grukos_field_aggregates AS
+            SELECT
+                field_uuid,
+                SUM(ST_Area_Spheroid(field_grukos_geometry)) as field_grukos_total_m2
+            FROM field_grukos_intersections
+            GROUP BY field_uuid
+        """)
+
         self.log.info("✅ Pre-aggregation completed - no more Cartesian products!")
 
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
@@ -426,7 +454,25 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                     ELSE 0
                 END as field_soil_coverage_pct,
                 COALESCE(sa.soil_type_count, 0) as soil_type_count,
-                sa.soil_coverage_details
+                sa.soil_coverage_details,
+
+                -- Grukos Analysis (groundwater action areas - indsatsområder)
+                COALESCE(ga.field_grukos_total_m2, 0) as field_grukos_total_m2,
+                CASE
+                    WHEN COALESCE(ga.field_grukos_total_m2, 0) > 0
+                    THEN (
+                        LEAST(
+                            COALESCE(ga.field_grukos_total_m2, 0),
+                            CASE
+                                WHEN COALESCE(ga.field_grukos_total_m2, 0) -
+                                     ST_Area_Spheroid(f.geometry) <= 0.1
+                                THEN ST_Area_Spheroid(f.geometry)
+                                ELSE COALESCE(ga.field_grukos_total_m2, 0)
+                            END
+                        ) / ST_Area_Spheroid(f.geometry)
+                    ) * 100.0
+                    ELSE 0
+                END as field_grukos_coverage_pct
 
             FROM agricultural_fields f
             LEFT JOIN bnbo_field_aggregates ba ON f.field_uuid = ba.field_uuid
@@ -434,6 +480,7 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             LEFT JOIN wetland_field_aggregates wa ON f.field_uuid = wa.field_uuid
             LEFT JOIN wetland_water_field_aggregates wwa ON f.field_uuid = wwa.field_uuid
             LEFT JOIN soil_field_aggregates sa ON f.field_uuid = sa.field_uuid
+            LEFT JOIN grukos_field_aggregates ga ON f.field_uuid = ga.field_uuid
         """)
 
         field_count = self.conn.execute(
@@ -512,6 +559,17 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
             GROUP BY field_uuid, bfe_number
         """)
 
+        # Pre-aggregate property grukos intersections
+        self.conn.execute("""
+            CREATE OR REPLACE TABLE property_grukos_aggregates AS
+            SELECT
+                field_uuid,
+                bfe_number,
+                SUM(ST_Area_Spheroid(property_grukos_geometry)) as property_grukos_total_m2
+            FROM property_grukos_intersections
+            GROUP BY field_uuid, bfe_number
+        """)
+
         self.log.info("✅ Property pre-aggregation completed - no more massive JOINs!")
 
         # Create the final table using pre-aggregated data (NO CARTESIAN PRODUCT)
@@ -545,7 +603,10 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COALESCE(pbwa.property_bnbo_action_required_water_covered_hectares, 0)
                     as property_bnbo_action_required_water_covered_hectares,
                 COALESCE(pbwa.property_bnbo_completed_water_covered_hectares, 0)
-                    as property_bnbo_completed_water_covered_hectares
+                    as property_bnbo_completed_water_covered_hectares,
+
+                -- Grukos Analysis (groundwater action areas - indsatsområder)
+                COALESCE(pga.property_grukos_total_m2, 0) as property_grukos_total_m2
 
             FROM field_property_intersections fp
             LEFT JOIN property_bnbo_aggregates pba
@@ -556,6 +617,8 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 ON fp.field_uuid = pwa.field_uuid AND fp.bfe_number = pwa.bfe_number
             LEFT JOIN property_wetland_water_aggregates pwwa
                 ON fp.field_uuid = pwwa.field_uuid AND fp.bfe_number = pwwa.bfe_number
+            LEFT JOIN property_grukos_aggregates pga
+                ON fp.field_uuid = pga.field_uuid AND fp.bfe_number = pga.bfe_number
         """)
 
         property_count = self.conn.execute(
@@ -574,9 +637,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COUNT(*) as total_fields,
                 COUNT(CASE WHEN field_bnbo_total_m2 > 0 THEN 1 END) as fields_with_bnbo,
                 COUNT(CASE WHEN field_wetland_total_m2 > 0 THEN 1 END) as fields_with_wetlands,
+                COUNT(CASE WHEN field_grukos_total_m2 > 0 THEN 1 END) as fields_with_grukos,
                 AVG(field_area_m2) as avg_field_area_m2,
                 SUM(field_bnbo_total_m2) as total_bnbo_area_m2,
-                SUM(field_wetland_total_m2) as total_wetland_area_m2
+                SUM(field_wetland_total_m2) as total_wetland_area_m2,
+                SUM(field_grukos_total_m2) as total_grukos_area_m2
             FROM field_environmental_analysis_fields
         """).fetchone()
 
@@ -588,9 +653,12 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 COUNT(CASE WHEN property_bnbo_total_m2 > 0 THEN 1 END) as properties_with_bnbo,
                 COUNT(CASE WHEN property_wetland_total_m2 > 0 THEN 1 END)
                     as properties_with_wetlands,
+                COUNT(CASE WHEN property_grukos_total_m2 > 0 THEN 1 END)
+                    as properties_with_grukos,
                 AVG(property_intersection_area_m2) as avg_property_area_m2,
                 SUM(property_bnbo_total_m2) as total_property_bnbo_area_m2,
-                SUM(property_wetland_total_m2) as total_property_wetland_area_m2
+                SUM(property_wetland_total_m2) as total_property_wetland_area_m2,
+                SUM(property_grukos_total_m2) as total_property_grukos_area_m2
             FROM field_environmental_analysis_properties
             """).fetchone()
 
@@ -599,18 +667,22 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
                 "total_fields": field_stats[0],
                 "fields_with_bnbo": field_stats[1],
                 "fields_with_wetlands": field_stats[2],
-                "avg_field_area_m2": field_stats[3],
-                "total_bnbo_area_m2": field_stats[4],
-                "total_wetland_area_m2": field_stats[5],
+                "fields_with_grukos": field_stats[3],
+                "avg_field_area_m2": field_stats[4],
+                "total_bnbo_area_m2": field_stats[5],
+                "total_wetland_area_m2": field_stats[6],
+                "total_grukos_area_m2": field_stats[7],
             },
             "property_level": {
                 "total_property_combinations": property_stats[0],
                 "fields_with_properties": property_stats[1],
                 "properties_with_bnbo": property_stats[2],
                 "properties_with_wetlands": property_stats[3],
-                "avg_property_area_m2": property_stats[4],
-                "total_property_bnbo_area_m2": property_stats[5],
-                "total_property_wetland_area_m2": property_stats[6],
+                "properties_with_grukos": property_stats[4],
+                "avg_property_area_m2": property_stats[5],
+                "total_property_bnbo_area_m2": property_stats[6],
+                "total_property_wetland_area_m2": property_stats[7],
+                "total_property_grukos_area_m2": property_stats[8],
             },
         }
 
