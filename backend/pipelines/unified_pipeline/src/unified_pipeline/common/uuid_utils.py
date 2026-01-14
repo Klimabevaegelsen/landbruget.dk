@@ -220,7 +220,10 @@ class LandbrugsdataUUID:
             # Create UUID5 function using MD5 hash (DuckDB doesn't have built-in uuid5)
             namespace = cls._get_namespace()
             # Create UUID5 function with shorter lines
-            hash_expr = f"crypto_hash('md5', CONCAT('{namespace}', entity_type, '-', identifier))"
+            # crypto_hash returns BLOB, hex() converts to VARCHAR for SUBSTR to work
+            hash_expr = (
+                f"hex(crypto_hash('md5', CONCAT('{namespace}', entity_type, '-', identifier)))"
+            )
             conn.execute(f"""
                 CREATE OR REPLACE FUNCTION landbrugsdata_uuid5(entity_type, identifier) AS (
                     SELECT CASE

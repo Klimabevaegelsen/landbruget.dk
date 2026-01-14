@@ -29,6 +29,7 @@ from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 # Add CVR collection imports
 try:
@@ -1133,15 +1134,15 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 )
                 return
 
-            # Add UUID column and generate UUIDs based on geometry
+            # Set up UUID generation functions in DuckDB
+            LandbrugsdataUUID.setup_duckdb_functions(self.conn)
+
+            # Add UUID column and generate UUIDs based on geometry using field_uuid function
             self.conn.execute(f"""
                 ALTER TABLE {table_name} ADD COLUMN field_uuid VARCHAR;
 
                 UPDATE {table_name}
-                SET field_uuid = uuid5(
-                    '{self.config.uuid_namespace}',
-                    ST_AsWKB(geometry)
-                )
+                SET field_uuid = field_uuid(geometry)
                 WHERE geometry IS NOT NULL;
             """)
 
@@ -1154,6 +1155,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
         except Exception as e:
             self.log.error(f"Error adding field UUIDs to {table_name}: {e}")
+            raise  # Re-raise to fail loudly instead of silently continuing
 
     async def _process_layer_type(
         self,
@@ -1950,7 +1952,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
             update_sql = f"""
                 CREATE OR REPLACE TABLE {temp_table} AS
                 SELECT *,
-                    CASE {' '.join(update_cases)}
+                    CASE {" ".join(update_cases)}
                          ELSE cvr_number
                     END as updated_cvr_number
                 FROM {marker_table}
@@ -2483,7 +2485,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
             self.log.info(
                 f"  📊 Spatial intersection: {assigned_count}/{total_count} fields "
-                f"({assigned_count/total_count*100:.1f}%)"
+                f"({assigned_count / total_count * 100:.1f}%)"
             )
 
             # Step 2: Closest distance assignment for remaining fields
@@ -2537,7 +2539,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
 
                 self.log.info(
                     f"  ✅ Final municipality assignment: {final_assigned}/{total_count} "
-                    f"fields ({final_assigned/total_count*100:.1f}%)"
+                    f"fields ({final_assigned / total_count * 100:.1f}%)"
                 )
             else:
                 self.log.info(
@@ -2771,7 +2773,7 @@ class FVMWFSSilver(BaseSource[FVMWFSSilverConfig], SilverJobInterface):
                 f"✅ CVR enrichment completed for year {year}: "
                 f"{enriched_count:,} records potentially enriched, "
                 f"{complete_cvr_count:,}/{total_records:,} "
-                f"({complete_cvr_count/total_records*100:.1f}%) now have complete CVR numbers"
+                f"({complete_cvr_count / total_records * 100:.1f}%) now have complete CVR numbers"
             )
 
             # Clean up temporary table
