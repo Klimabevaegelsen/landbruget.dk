@@ -112,9 +112,100 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         )
         self.log.info("✅ Loaded Stage 3B property-wetland geometric outputs")
 
+        # Convert BLOB geometry columns to GEOMETRY type for ST_Area_Spheroid calculations
+        # Parquet stores geometry as WKB BLOB, but DuckDB spatial functions need GEOMETRY type
+        self.log.info("🔄 Converting geometry columns from BLOB to GEOMETRY type...")
+        self._convert_geometry_columns()
+
+        # Generate field_uuid from geometry for agricultural_fields
+        # Silver layer may have NULL field_uuid, so we generate it here
+        self.log.info("🔑 Generating field_uuid from geometry for agricultural_fields...")
+        self._generate_field_uuids()
+
         self.log.info(
             "🚀 REDESIGNED STAGE 4: All geometric data loaded for centralized calculations"
         )
+
+    def _convert_geometry_columns(self):
+        """Convert BLOB geometry columns to GEOMETRY type for spatial calculations."""
+        # Tables with geometry columns that need conversion
+        geometry_conversions = [
+            ("agricultural_fields", "geometry"),
+            ("field_property_intersections", "intersection_geometry"),
+            ("field_bnbo_intersections", "field_bnbo_geometry"),
+            ("field_bnbo_water_intersections", "field_bnbo_water_geometry"),
+            ("field_wetland_intersections", "field_wetland_geometry"),
+            ("field_wetland_water_intersections", "field_wetland_water_geometry"),
+            ("property_bnbo_intersections", "property_bnbo_geometry"),
+            ("property_bnbo_water_intersections", "property_bnbo_water_geometry"),
+            ("property_wetland_intersections", "property_wetland_geometry"),
+            ("property_wetland_water_intersections", "property_wetland_water_geometry"),
+        ]
+
+        for table_name, geom_col in geometry_conversions:
+            try:
+                # Check if table exists and has the geometry column
+                cols = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
+                col_names = [c[0] for c in cols]
+
+                if geom_col not in col_names:
+                    self.log.warning(f"Column {geom_col} not found in {table_name}, skipping")
+                    continue
+
+                # Get column type
+                col_type = next((c[1] for c in cols if c[0] == geom_col), None)
+
+                if col_type in ("BLOB", "WKB_BLOB"):
+                    # Convert BLOB/WKB_BLOB to GEOMETRY using ST_GeomFromWKB
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT
+                            * EXCLUDE ({geom_col}),
+                            ST_GeomFromWKB({geom_col}) as {geom_col}
+                        FROM {table_name}
+                    """)
+                    self.log.info(f"  ✅ Converted {table_name}.{geom_col} from BLOB to GEOMETRY")
+                else:
+                    self.log.debug(f"  ℹ️ {table_name}.{geom_col} is already {col_type}")
+
+            except Exception as e:
+                self.log.warning(f"Could not convert {table_name}.{geom_col}: {e}")
+
+    def _generate_field_uuids(self):
+        """Generate field_uuid from geometry for agricultural_fields table.
+
+        The silver layer may have NULL field_uuid values, so we generate them here
+        using the field_uuid() UDF that creates deterministic UUIDs from geometry.
+        """
+        from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+
+        # Set up UUID generation functions in DuckDB
+        LandbrugsdataUUID.setup_duckdb_functions(self.conn)
+
+        # Check if agricultural_fields has NULL field_uuids
+        null_count = self.conn.execute(
+            "SELECT COUNT(*) FROM agricultural_fields WHERE field_uuid IS NULL"
+        ).fetchone()[0]
+
+        if null_count > 0:
+            self.log.info(f"  Found {null_count:,} fields with NULL field_uuid, generating...")
+
+            # Generate field_uuid from geometry, replacing NULL values
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE agricultural_fields AS
+                SELECT
+                    * EXCLUDE (field_uuid),
+                    COALESCE(field_uuid, field_uuid(geometry)) as field_uuid
+                FROM agricultural_fields
+            """)
+
+            # Verify
+            new_null_count = self.conn.execute(
+                "SELECT COUNT(*) FROM agricultural_fields WHERE field_uuid IS NULL"
+            ).fetchone()[0]
+            self.log.info(f"  ✅ Generated field_uuids, remaining NULL: {new_null_count:,}")
+        else:
+            self.log.info("  ✅ All fields already have field_uuid")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """Execute redesigned Stage 4 consolidation with centralized area calculations."""

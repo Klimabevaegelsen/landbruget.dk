@@ -43,12 +43,12 @@ class FieldsWetlandWaterCoverage(FieldAnalysisStageBase):
             CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_raw"
         )
 
-        # Generate field_uuid from geometry
+        # Generate field_uuid from geometry (exclude existing NULL column to avoid duplicate)
         self.log.info("Generating field_uuid from geometry...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
             SELECT
-                *,
+                * EXCLUDE (field_uuid),
                 field_uuid(geometry) as field_uuid
             FROM agricultural_fields_raw
         """)
