@@ -117,6 +117,11 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
         self.log.info("🔄 Converting geometry columns from BLOB to GEOMETRY type...")
         self._convert_geometry_columns()
 
+        # Generate field_uuid from geometry for agricultural_fields
+        # Silver layer may have NULL field_uuid, so we generate it here
+        self.log.info("🔑 Generating field_uuid from geometry for agricultural_fields...")
+        self._generate_field_uuids()
+
         self.log.info(
             "🚀 REDESIGNED STAGE 4: All geometric data loaded for centralized calculations"
         )
@@ -165,6 +170,42 @@ class ConsolidateResultsTwoTables(FieldAnalysisStageBase):
 
             except Exception as e:
                 self.log.warning(f"Could not convert {table_name}.{geom_col}: {e}")
+
+    def _generate_field_uuids(self):
+        """Generate field_uuid from geometry for agricultural_fields table.
+
+        The silver layer may have NULL field_uuid values, so we generate them here
+        using the field_uuid() UDF that creates deterministic UUIDs from geometry.
+        """
+        from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
+
+        # Set up UUID generation functions in DuckDB
+        LandbrugsdataUUID.setup_duckdb_functions(self.conn)
+
+        # Check if agricultural_fields has NULL field_uuids
+        null_count = self.conn.execute(
+            "SELECT COUNT(*) FROM agricultural_fields WHERE field_uuid IS NULL"
+        ).fetchone()[0]
+
+        if null_count > 0:
+            self.log.info(f"  Found {null_count:,} fields with NULL field_uuid, generating...")
+
+            # Generate field_uuid from geometry, replacing NULL values
+            self.conn.execute("""
+                CREATE OR REPLACE TABLE agricultural_fields AS
+                SELECT
+                    * EXCLUDE (field_uuid),
+                    COALESCE(field_uuid, field_uuid(geometry)) as field_uuid
+                FROM agricultural_fields
+            """)
+
+            # Verify
+            new_null_count = self.conn.execute(
+                "SELECT COUNT(*) FROM agricultural_fields WHERE field_uuid IS NULL"
+            ).fetchone()[0]
+            self.log.info(f"  ✅ Generated field_uuids, remaining NULL: {new_null_count:,}")
+        else:
+            self.log.info("  ✅ All fields already have field_uuid")
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
         """Execute redesigned Stage 4 consolidation with centralized area calculations."""
