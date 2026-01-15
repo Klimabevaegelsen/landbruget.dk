@@ -88,8 +88,8 @@ class PMTilesGeneratorConfig(BaseJobConfig):
         description="Pesticide proximity path template",
     )
     nles5_estimation_path: str = Field(
-        default="gold/nles5_nitrogen_estimation/latest/",
-        description="NLES5 nitrogen estimation path",
+        default="gold/nles5_nitrogen_estimation_nitrogen_estimates/latest/",
+        description="NLES5 nitrogen estimation path (uses latest timestamped directory)",
     )
 
     # Environmental layers (year-independent)

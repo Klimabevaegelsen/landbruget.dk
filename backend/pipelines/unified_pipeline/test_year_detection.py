@@ -35,8 +35,8 @@ async def main():
         cloudflare_r2_bucket="",
     )
 
-    # Initialize GCS access and year detector
-    gcs_access = GCSDataAccess(config)
+    # Initialize GCS access (creates its own DuckDB connection) and year detector
+    gcs_access = GCSDataAccess()  # No connection parameter - creates new one
     year_detector = DataSourceYearDetector(config, gcs_access)
 
     # Detect available years
