@@ -152,23 +152,59 @@ class DataSourceYearDetector:
             List of available years from the NLES5 dataset
         """
         try:
-            # NLES5 data is in a single 'latest' directory, but contains multiple years
-            # We need to check the actual data to see what years are available
-            nles5_path = f"gs://{self.config.gcs_bucket}/gold/nles5_nitrogen_estimation/latest/"
+            # NLES5 data is stored in timestamped directories under
+            # gold/nles5_nitrogen_estimation_nitrogen_estimates/{timestamp}/
+            nles5_base_path = (
+                f"gs://{self.config.gcs_bucket}/gold/nles5_nitrogen_estimation_nitrogen_estimates/"
+            )
 
-            # Check if the path exists
-            paths = await asyncio.to_thread(self.gcs.list_files, f"{nles5_path}*")
+            # Check if the base path exists
+            paths = await asyncio.to_thread(self.gcs.list_files, f"{nles5_base_path}*")
             if not paths:
                 logger.warning("NLES5 data path not found")
                 return []
 
-            # For now, return the known years from the documentation
-            # TODO: In a full implementation, we could query the actual data to get available years
-            # Based on the plan, NLES5 covers 2021-2022 and can be extended to 2025
-            known_nles5_years = [2021, 2022]
+            # Find timestamped directories (format: YYYYMMDD_HHMMSS)
+            timestamp_dirs = []
+            for path in paths:
+                # Extract directory name from path
+                parts = path.replace(nles5_base_path, "").split("/")
+                if parts and parts[0] and parts[0][0].isdigit():
+                    timestamp_dirs.append(parts[0])
 
-            logger.info(f"NLES5 data found, assuming years: {known_nles5_years}")
-            return known_nles5_years
+            if not timestamp_dirs:
+                logger.warning("No NLES5 timestamped directories found")
+                return []
+
+            # Use the most recent timestamp directory
+            latest_timestamp = sorted(timestamp_dirs)[-1]
+            latest_path = f"{nles5_base_path}{latest_timestamp}/data.parquet"
+
+            logger.info(f"Checking NLES5 data in latest directory: {latest_timestamp}")
+
+            # Query the parquet file to get available years using DuckDB
+            try:
+                query = f"""
+                SELECT DISTINCT year
+                FROM read_parquet('{latest_path}')
+                ORDER BY year
+                """
+                result = await asyncio.to_thread(self.gcs.duckdb_conn.execute, query)
+                years = [row[0] for row in result.fetchall()]
+
+                if years:
+                    logger.info(f"NLES5 years detected from data: {years}")
+                    return years
+                else:
+                    logger.warning("No years found in NLES5 data")
+                    return []
+
+            except Exception as query_error:
+                logger.warning(f"Could not query NLES5 data for years: {query_error}")
+                # Fallback to known years from documentation
+                known_years = [2021, 2022]
+                logger.info(f"Using fallback NLES5 years: {known_years}")
+                return known_years
 
         except Exception as e:
             logger.error(f"Error detecting NLES5 years: {e}")
