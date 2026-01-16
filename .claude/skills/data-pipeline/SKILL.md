@@ -102,16 +102,19 @@ gdf = gdf.to_crs('EPSG:4326')
 
 ## GCS Operations
 
-**Bucket**: `gs://landbrugsdata-raw-data/`
+**Bucket**: Set via `GCS_BUCKET` environment variable (see `.env`)
 
 ### Upload to GCS with DuckDB
 ```python
+import os
 from google.cloud import storage
 import duckdb
 import io
 
-def upload_to_gcs_duckdb(query: str, gcs_path: str, bucket: str = 'landbrugsdata-raw-data'):
+def upload_to_gcs_duckdb(query: str, gcs_path: str, bucket_name: str = None):
     """Query with DuckDB and upload directly to GCS."""
+    bucket_name = bucket_name or os.environ.get('GCS_BUCKET')
+
     # Execute query and get result
     result = duckdb.query(query)
 
@@ -122,7 +125,7 @@ def upload_to_gcs_duckdb(query: str, gcs_path: str, bucket: str = 'landbrugsdata
 
     # Upload to GCS
     client = storage.Client()
-    bucket = client.bucket(bucket)
+    bucket = client.bucket(bucket_name)
     blob = bucket.blob(gcs_path)
     blob.upload_from_file(buffer, content_type='application/octet-stream')
 
@@ -135,16 +138,19 @@ upload_to_gcs_duckdb(
 
 ### Query Files Directly from GCS with DuckDB
 ```python
+import os
 import duckdb
 
 # Install and load httpfs extension
 duckdb.execute("INSTALL httpfs")
 duckdb.execute("LOAD httpfs")
 
-# Query parquet directly from GCS (public bucket)
-result = duckdb.query("""
+bucket = os.environ.get('GCS_BUCKET')
+
+# Query parquet directly from GCS
+result = duckdb.query(f"""
     SELECT cvr_number, SUM(area_ha) as total_area
-    FROM 'gs://landbrugsdata-raw-data/silver/fields.parquet'
+    FROM 'gs://{bucket}/silver/fields.parquet'
     GROUP BY cvr_number
 """).df()
 
