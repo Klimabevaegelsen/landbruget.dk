@@ -1,0 +1,83 @@
+{
+  "table_name": "Tabel 32: Effekter af udtagning af organogen jord (Olesen et al., 2018 DCA rapport nr. 130) (Side 97)",
+  "note": "This table is an image and has been transcribed. Values are in ton CO2-ækv/ha/år.",
+  "headers": [
+    "Effekt",
+    "> 12% OC - Omdrift",
+    "> 12% OC - Perm. græs",
+    "6-12% OC - Omdrift",
+    "6-12% OC - Perm. græs"
+  ],
+  "data": [
+    {
+      "Effekt": "Mindre CO2 fra nedbrydning",
+      "> 12% OC - Omdrift": 42.17,
+      "> 12% OC - Perm. græs": 30.8,
+      "6-12% OC - Omdrift": 21.08,
+      "6-12% OC - Perm. græs": 15.4
+    },
+    {
+      "Effekt": "Øget metan",
+      "> 12% OC - Omdrift": -7.2,
+      "> 12% OC - Perm. græs": -6.8,
+      "6-12% OC - Omdrift": -7.2,
+      "6-12% OC - Perm. græs": -6.8
+    },
+    {
+      "Effekt": "Mindre lattergas fra nedbrydning",
+      "> 12% OC - Omdrift": 3.87,
+      "> 12% OC - Perm. græs": 2.44,
+      "6-12% OC - Omdrift": 0.0,
+      "6-12% OC - Perm. græs": 0.0
+    },
+    {
+      "Effekt": "Sparet N-gødning",
+      "> 12% OC - Omdrift": 0.78,
+      "> 12% OC - Perm. græs": 0.78,
+      "6-12% OC - Omdrift": 0.78,
+      "6-12% OC - Perm. græs": 0.78
+    },
+    {
+      "Effekt": "Sparet ammoniakfordampning",
+      "> 12% OC - Omdrift": 0.01,
+      "> 12% OC - Perm. græs": 0.01,
+      "6-12% OC - Omdrift": 0.01,
+      "6-12% OC - Perm. græs": 0.01
+    },
+    {
+      "Effekt": "Reduceret N-udvaskning",
+      "> 12% OC - Omdrift": 0.15,
+      "> 12% OC - Perm. græs": 0.1,
+      "6-12% OC - Omdrift": 0.15,
+      "6-12% OC - Perm. græs": 0.1
+    },
+    {
+      "Effekt": "Reduceret brændstofforbrug",
+      "> 12% OC - Omdrift": 0.4,
+      "> 12% OC - Perm. græs": 0.4,
+      "6-12% OC - Omdrift": 0.4,
+      "6-12% OC - Perm. græs": 0.4
+    },
+    {
+      "Effekt": "I alt under LULUCF",
+      "> 12% OC - Omdrift": 34.97,
+      "> 12% OC - Perm. græs": 24.0,
+      "6-12% OC - Omdrift": 13.88,
+      "6-12% OC - Perm. græs": 8.6
+    },
+    {
+      "Effekt": "I alt under landbrug",
+      "> 12% OC - Omdrift": 4.82,
+      "> 12% OC - Perm. græs": 3.34,
+      "6-12% OC - Omdrift": 0.95,
+      "6-12% OC - Perm. græs": 0.89
+    },
+    {
+      "Effekt": "I alt under fossil energi",
+      "> 12% OC - Omdrift": 0.4,
+      "> 12% OC - Perm. græs": 0.4,
+      "6-12% OC - Omdrift": 0.4,
+      "6-12% OC - Perm. græs": 0.4
+    }
+  ]
+}

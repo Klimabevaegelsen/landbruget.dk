@@ -1,0 +1,45 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Kulstofbalancen i jorden, Side 104)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 26,
+      "Aktivitetsdata_Beskrivelse": "Organiske jorde",
+      "Virkemiddel": "Afskær dræn/hæv vandstanden"
+    },
+    {
+      "Aktivitetsdata_Nummer": 27,
+      "Aktivitetsdata_Beskrivelse": "Efterafgrøder",
+      "Virkemiddel": "Afskær dræn/hæv vandstanden"
+    },
+    {
+      "Aktivitetsdata_Nummer": 28,
+      "Aktivitetsdata_Beskrivelse": "Antal træer/buske/læhegn?",
+      "Virkemiddel": "Øg antallet af læhegn/træer"
+    },
+    {
+      "Aktivitetsdata_Nummer": 29,
+      "Aktivitetsdata_Beskrivelse": "Andel af græs/flerårige afgrøder i sædskiftet",
+      "Virkemiddel": "Øg andelen"
+    },
+    {
+      "Aktivitetsdata_Nummer": 30,
+      "Aktivitetsdata_Beskrivelse": "Jordbehandling",
+      "Virkemiddel": "Reducer ompløjningsinterval"
+    },
+    {
+      "Aktivitetsdata_Nummer": 31,
+      "Aktivitetsdata_Beskrivelse": "Halmnedmuldning",
+      "Virkemiddel": "Udfør halmnedmuldning"
+    },
+    {
+      "Aktivitetsdata_Nummer": 32,
+      "Aktivitetsdata_Beskrivelse": "Gødningstype",
+      "Virkemiddel": null
+    },
+    {
+      "Aktivitetsdata_Nummer": 33,
+      "Aktivitetsdata_Beskrivelse": "Afgrødetype",
+      "Virkemiddel": "Mere græs i sædskiftet"
+    }
+  ]
+}

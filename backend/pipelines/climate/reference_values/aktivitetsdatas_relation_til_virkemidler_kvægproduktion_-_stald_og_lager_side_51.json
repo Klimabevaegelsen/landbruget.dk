@@ -1,0 +1,25 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Kvægproduktion - Stald og lager, Side 51)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 4,
+      "Aktivitetsdata_Beskrivelse": "Staldtype og teknologier",
+      "Virkemiddel": "Staldforsuring"
+    },
+    {
+      "Aktivitetsdata_Nummer": 5,
+      "Aktivitetsdata_Beskrivelse": "Opholdstid af gylle i stald",
+      "Virkemiddel": "Biogas"
+    },
+    {
+      "Aktivitetsdata_Nummer": 6,
+      "Aktivitetsdata_Beskrivelse": "Mængde strøelse",
+      "Virkemiddel": null
+    },
+    {
+      "Aktivitetsdata_Nummer": 7,
+      "Aktivitetsdata_Beskrivelse": "Gyllehåndtering",
+      "Virkemiddel": null
+    }
+  ]
+}

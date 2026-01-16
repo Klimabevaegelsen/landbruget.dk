@@ -1,0 +1,15 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Markens emissioner - Anden organisk gødning, Side 84)",
+  "data": [
+    {
+      "Aktivitetsparametre_Nummer": 8,
+      "Aktivitetsparametre_Beskrivelse": "Mængde N",
+      "Virkemiddel": "Nitrifikationshæmmere"
+    },
+    {
+      "Aktivitetsparametre_Nummer": 9,
+      "Aktivitetsparametre_Beskrivelse": "Type gødning",
+      "Virkemiddel": null
+    }
+  ]
+}

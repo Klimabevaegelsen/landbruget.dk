@@ -164,6 +164,28 @@ service-account*.json
 *.env.prod
 *.env.production
 
+# Devevnv (devenv.sh)
+devenv.*
+.devenv.flake.nix
+devenv.yaml
+
+.envrc
+# For direnv integration
+.direnv/
+
+.env
+.direnv
+.env
+.envrc
+.direnv
+.env
+.envrc
+.direnv
+.env
+.envrc
+
+.devenv
+.direnv
 # Analysis directories and generated content
 /src/
 /docs/

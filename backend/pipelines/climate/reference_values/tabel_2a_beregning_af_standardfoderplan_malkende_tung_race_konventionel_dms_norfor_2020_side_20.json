@@ -1,0 +1,101 @@
+{
+  "table_name": "Tabel 2a: Beregning af standardfoderplan malkende tung race, konventionel (DMS_NorFor, 2020) (Side 20)",
+  "data": [
+    {
+      "fodermiddel": "Majsensilage",
+      "kg_ts_std_plan": 8.1,
+      "pct_af_foderoptag": 33.74,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Kløvergræs-/græsensilage",
+      "kg_ts_std_plan": 5.2,
+      "pct_af_foderoptag": 21.75,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Halm",
+      "kg_ts_std_plan": 0.1,
+      "pct_af_foderoptag": 0.58,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Andet grovfoder (roer, helsæd mv.)",
+      "kg_ts_std_plan": 0.5,
+      "pct_af_foderoptag": 1.92,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Sojaprodukter",
+      "kg_ts_std_plan": 1.4,
+      "pct_af_foderoptag": 5.76,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "Rapsprodukter",
+      "kg_ts_std_plan": 2.0,
+      "pct_af_foderoptag": 8.23,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "Kraftfoder > 25 % protein",
+      "kg_ts_std_plan": 0.8,
+      "pct_af_foderoptag": 3.42,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "Kraftfoder < 25 % protein",
+      "kg_ts_std_plan": 2.5,
+      "pct_af_foderoptag": 10.48,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "Hestebønner/ærter",
+      "kg_ts_std_plan": 0.0,
+      "pct_af_foderoptag": 0.08,
+      "andel_indkøbt_pct": 50
+    },
+    {
+      "fodermiddel": "Andet proteinfoder (bærme, solsikke m.v.)",
+      "kg_ts_std_plan": 0.0,
+      "pct_af_foderoptag": 0.17,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "Korn",
+      "kg_ts_std_plan": 2.0,
+      "pct_af_foderoptag": 8.35,
+      "andel_indkøbt_pct": 50
+    },
+    {
+      "fodermiddel": "Roepiller",
+      "kg_ts_std_plan": 0.5,
+      "pct_af_foderoptag": 1.92,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "Fedttilskud",
+      "kg_ts_std_plan": 0.1,
+      "pct_af_foderoptag": 0.58,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "Mineraler og vitaminer",
+      "kg_ts_std_plan": 0.4,
+      "pct_af_foderoptag": 1.71,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "Biprodukter (mask, HP-pulp, mv.)",
+      "kg_ts_std_plan": 0.3,
+      "pct_af_foderoptag": 1.29,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "sum",
+      "kg_ts_std_plan": 23.95,
+      "pct_af_foderoptag": 100,
+      "andel_indkøbt_pct": null
+    }
+  ]
+}

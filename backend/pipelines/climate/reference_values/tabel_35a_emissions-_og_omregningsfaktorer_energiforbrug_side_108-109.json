@@ -1,0 +1,61 @@
+{
+  "table_name": "Tabel 35a: Emissions- og omregningsfaktorer (Energiforbrug, Side 108-109)",
+  "data": [
+    {
+      "Energikilde": "Træ",
+      "Engelsk": "Wood",
+      "Omregningsfaktor_GJ": "(Skovflis)\n9,3 GJ/ton\n2,8 GJ/m3",
+      "CO2_emissionsfaktor_Kg_CO2_GJ": 112,
+      "Kilde_CO2": "IPCC 2006"
+    },
+    {
+      "Energikilde": "Træpiller",
+      "Engelsk": "Wood pellets",
+      "Omregningsfaktor_GJ": "17,5 GJ/ton",
+      "CO2_emissionsfaktor_Kg_CO2_GJ": 112,
+      "Kilde_CO2": "IPCC 2006"
+    },
+    {
+      "Energikilde": "Biogas",
+      "Engelsk": "Biogas",
+      "Omregningsfaktor_GJ": "23 GJ/1000m3",
+      "CO2_emissionsfaktor_Kg_CO2_GJ": 84.1,
+      "Kilde_CO2": "(Landespecifik)"
+    },
+    {
+      "Energikilde": "Naturgas",
+      "Engelsk": "Natural gas, offshore gas turbines",
+      "Omregningsfaktor_GJ": "38,81 GJ/1000 Nm3",
+      "CO2_emissionsfaktor_Kg_CO2_GJ": 57.639,
+      "Kilde_CO2": "(Landespecifik)"
+    },
+    {
+      "Energikilde": "Spildolie",
+      "Engelsk": "Residual oil",
+      "Omregningsfaktor_GJ": "41,9 GJ/ton",
+      "CO2_emissionsfaktor_Kg_CO2_GJ": 79.42,
+      "Kilde_CO2": "(Landespecifik)"
+    },
+    {
+      "Energikilde": "Dieselolie",
+      "Engelsk": "Gas oil",
+      "Omregningsfaktor_GJ": "42,7 GJ/ton",
+      "CO2_emissionsfaktor_Kg_CO2_GJ": 74.1,
+      "Kilde_CO2": "(Landespecifik)"
+    },
+    {
+      "Energikilde": "Petroleum",
+      "Engelsk": "Kerosene",
+      "Omregningsfaktor_GJ": "43,5 GJ/ton",
+      "CO2_emissionsfaktor_Kg_CO2_GJ": 71.9,
+      "Kilde_CO2": "IPCC 2006"
+    },
+    {
+      "Energikilde": "Kul",
+      "Engelsk": "Coal",
+      "Omregningsfaktor_GJ": "23,89 GJ/ton",
+      "CO2_emissionsfaktor_Kg_CO2_GJ": 94.04,
+      "Kilde_CO2": "(Landespecifik)"
+    }
+  ]
+}

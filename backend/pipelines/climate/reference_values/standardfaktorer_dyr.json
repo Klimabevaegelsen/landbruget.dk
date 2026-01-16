@@ -1,0 +1,238 @@
+{
+  "table_name": "Standardfaktorer for Husdyr (Livestock Standard Factors)",
+  "source": "KB_21_5397_AP2: Notat beregningsgrundlag for Landbrugets klimaværktøj",
+  "source_page": "Page 28",
+  "source_date": "2021-10-15",
+  "source_organization": "SEGES Innovation",
+  "description": "Standard feed intake and production parameters for Danish livestock by animal type and production system",
+  "units": {
+    "feed_energy": "FE (Foderenheder) per animal per year or per kg gain",
+    "dry_matter": "kg TS (Tørstof) per day",
+    "body_weight": "kg",
+    "milk_production": "kg per year"
+  },
+  "production_systems": {
+    "conventional": "Konventionel produktion - standard intensive farming",
+    "organic": "Økologisk produktion - organic farming with outdoor access",
+    "frats": "FRATS - specific pig breeding system with by-products"
+  },
+  "notes": [
+    "Values extracted from Table on page 28 of KB_21_5397_AP2",
+    "These are national standard values (Standardfaktorer) for Denmark",
+    "Used when farm-specific feed data is not available",
+    "Represents typical Danish production conditions as of 2021"
+  ],
+  "data": {
+    "grise": {
+      "årssøer": {
+        "conventional": {
+          "fe_per_year": 1492,
+          "system_type": "conventional_indoor",
+          "description": "Annual sows - conventional production",
+          "source": "KB_21_5397_AP2 page 28, SEGES 2021"
+        },
+        "organic": {
+          "fe_per_year": 1843,
+          "system_type": "organic_outdoor_access",
+          "description": "Annual sows - organic production",
+          "source": "KB_21_5397_AP2 page 28, SEGES 2021"
+        }
+      },
+      "smågrise": {
+        "conventional": {
+          "fe_per_kg_gain": 1.87,
+          "avg_weight_gain_kg": 24.3,
+          "fe_per_animal": 45.4,
+          "system_type": "conventional_indoor",
+          "description": "Weaners/piglets - conventional production (7-30 kg)",
+          "source": "KB_21_5397_AP2 page 28, SEGES 2021"
+        },
+        "organic": {
+          "fe_per_kg_gain": 2.11,
+          "avg_weight_gain_kg": 16.0,
+          "fe_per_animal": 33.8,
+          "system_type": "organic_outdoor_access",
+          "description": "Weaners/piglets - organic production (7-30 kg)",
+          "source": "KB_21_5397_AP2 page 28, SEGES 2021"
+        }
+      },
+      "slagtesvin": {
+        "conventional": {
+          "fe_per_kg_gain": 2.77,
+          "avg_weight_gain_kg": 82.0,
+          "fe_per_animal": 227.1,
+          "system_type": "conventional_indoor",
+          "description": "Finisher pigs - conventional production (30-112 kg)",
+          "source": "KB_21_5397_AP2 page 28, SEGES 2021"
+        },
+        "organic": {
+          "fe_per_kg_gain": 2.94,
+          "avg_weight_gain_kg": 82.0,
+          "fe_per_animal": 241.1,
+          "system_type": "organic_outdoor_access",
+          "description": "Finisher pigs - organic production (30-112 kg)",
+          "source": "KB_21_5397_AP2 page 28, SEGES 2021"
+        },
+        "frats": {
+          "fe_per_kg_gain": 2.56,
+          "avg_weight_gain_kg": 82.0,
+          "fe_per_animal": 209.9,
+          "system_type": "frats_byproduct",
+          "description": "Finisher pigs - FRATS production with by-products",
+          "source": "KB_21_5397_AP2 page 28, SEGES 2021"
+        }
+      }
+    },
+    "kvæg": {
+      "malkekøer": {
+        "heavy_breed_conventional": {
+          "ts_per_day": 23.05,
+          "milk_production_kg_per_year": 10000,
+          "system_type": "conventional_indoor",
+          "description": "Dairy cows heavy breed (Holstein) - conventional standard feed plan",
+          "source": "KB_21_5397_AP2 Table 2a (pages 20-21), SEGES 2021",
+          "data_quality": "standard",
+          "feed_plan_components": {
+            "majsensilage": 3.2,
+            "kløvergræs_græsensilage": 3.2,
+            "andet_grovfoder": 0.5,
+            "rapsprodukter": 1.0,
+            "kraftfoder_high_protein": 0.9,
+            "kraftfoder_low_protein": 2.8,
+            "andet_proteinfoder": 0.2,
+            "roepiller": 0.5,
+            "fedttilskud": 0.1,
+            "mineraler_vitaminer": 0.4,
+            "biprodukter": 0.3
+          },
+          "notes": "Standard feed plan from Table 2a: total 23.05 kg TS/day"
+        },
+        "jersey_conventional": {
+          "ts_per_day": 19.6,
+          "milk_production_kg_per_year": 7500,
+          "system_type": "conventional_indoor",
+          "description": "Dairy cows Jersey breed - conventional standard feed plan",
+          "source": "KB_21_5397_AP2 Table 2b (page 21), SEGES 2021",
+          "data_quality": "standard",
+          "feed_plan_components": {
+            "majsensilage": 6.7,
+            "kløvergræs_græsensilage": 3.3,
+            "halm": 0.2,
+            "andet_grovfoder": 0.2,
+            "sojaprodukter": 0.8,
+            "rapsprodukter": 1.8,
+            "kraftfoder_high_protein": 1.1,
+            "kraftfoder_low_protein": 2.4,
+            "korn": 1.6,
+            "roepiller": 0.3,
+            "fedttilskud": 0.1,
+            "mineraler_vitaminer": 0.4,
+            "biprodukter": 0.6
+          },
+          "notes": "Standard feed plan from Table 2b: total 19.6 kg TS/day"
+        }
+      },
+      "kvier": {
+        "heavy_breed_0_6_months": {
+          "ts_per_day": 3.0,
+          "avg_body_weight_kg": 150,
+          "system_type": "conventional_indoor",
+          "description": "Calves/heifers heavy breed 0-6 months - standard feed plan",
+          "source": "KB_21_5397_AP2 Table 2c (page 22), SEGES 2021",
+          "data_quality": "standard",
+          "notes": "Opdræt start 0-6 mdr., balancing (DMS_NorFor 2020)"
+        },
+        "heavy_breed_6_months_plus": {
+          "ts_per_day": 7.5,
+          "avg_body_weight_kg": 400,
+          "system_type": "conventional_indoor",
+          "description": "Heifers heavy breed 6+ months - standard feed plan",
+          "source": "KB_21_5397_AP2 Table 2d (page 22), SEGES 2021",
+          "data_quality": "standard",
+          "notes": "Opdræt ældre 6 mdr+, balancing (DMS_NorFor 2020)"
+        }
+      },
+      "tyre_stude": {
+        "heavy_breed_0_6_months": {
+          "ts_per_day": 3.68,
+          "avg_body_weight_kg": 150,
+          "system_type": "conventional_indoor",
+          "description": "Bulls heavy breed 0-6 months - standard value",
+          "source": "KB_21_5397_AP2 Table on page 17, SEGES 2021",
+          "data_quality": "standard",
+          "notes": "Tyre 0-6 mdr., Tung race standardfaktor"
+        },
+        "heavy_breed_6_months_to_slaughter": {
+          "ts_per_day": 13.22,
+          "avg_body_weight_kg": 550,
+          "system_type": "conventional_indoor",
+          "description": "Bulls heavy breed 6 months to slaughter - standard value",
+          "source": "KB_21_5397_AP2 Table on page 17, SEGES 2021",
+          "data_quality": "standard",
+          "notes": "Tyre 6-mdr.-slagt., Tung race standardfaktor"
+        },
+        "jersey_6_months_to_slaughter": {
+          "ts_per_day": 9.67,
+          "avg_body_weight_kg": 450,
+          "system_type": "conventional_indoor",
+          "description": "Bulls Jersey breed 6 months to slaughter - standard value",
+          "source": "KB_21_5397_AP2 Table on page 17 and Table 2f (page 23), SEGES 2021",
+          "data_quality": "standard",
+          "notes": "Tyre Jersey 6-mdr.-slagt. standardfaktor"
+        }
+      }
+    }
+  },
+  "feed_energy_conversion": {
+    "pigs": {
+      "sows": {
+        "mj_per_fe": 17.5,
+        "description": "Metabolizable energy per FE for sows",
+        "source": "Table 5"
+      },
+      "weaners": {
+        "mj_per_fe": 16.5,
+        "description": "Metabolizable energy per FE for weaners",
+        "source": "Table 5"
+      },
+      "finishers": {
+        "mj_per_fe": 17.3,
+        "description": "Metabolizable energy per FE for finishers",
+        "source": "Table 5"
+      }
+    },
+    "cattle": {
+      "dairy_cows": {
+        "mj_per_kg_ts": 12.0,
+        "description": "Metabolizable energy per kg dry matter for dairy cows (typical TMR)",
+        "source": "IPCC Guidelines, typical dairy ration"
+      }
+    }
+  },
+  "validation_notes": [
+    "Pig values (FE) are from KB_21_5397_AP2 page 28 and match Table 4",
+    "Cattle values extracted from KB_21_5397_AP2 Tables 2a-2f (pages 17, 20-23) - COMPLETED 2026-01-11",
+    "All pig values validated against reference implementation and SR671 2023 data (±5.4%)",
+    "Cattle standardfaktorer now include: dairy (heavy breed + Jersey), heifers (0-6 mdr + 6+), bulls (all ages)",
+    "All cattle values upgraded from 'estimated' to 'standard' data quality",
+    "Feed plan components included for dairy cows (Tables 2a and 2b)"
+  ],
+  "extraction_completion": {
+    "date": "2026-01-11",
+    "extracted_by": "Davis-v2 AI Agent",
+    "source_pages": {
+      "pigs": "KB_21_5397_AP2 page 28",
+      "cattle": "KB_21_5397_AP2 pages 17, 20-23 (Tables 2a-2f)"
+    },
+    "validation_status": {
+      "pigs": "Validated against SR671 2023 (within ±5.4%)",
+      "cattle": "Pending SR671 validation (requires calculation comparison)"
+    }
+  },
+  "next_steps": [
+    "Validate cattle standardfaktorer against SR671 Gennemsnitlig_emission_sub.csv 2023 data",
+    "Add production level variants for dairy (low, medium, high milk production) if available",
+    "Add organic cattle variants when data is available in KB_21_5397_AP2",
+    "Update climate_calculator.py to use new cattle standardfaktorer values"
+  ]
+}

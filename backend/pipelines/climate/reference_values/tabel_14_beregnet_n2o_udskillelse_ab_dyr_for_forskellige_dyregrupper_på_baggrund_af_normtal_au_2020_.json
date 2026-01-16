@@ -1,0 +1,45 @@
+{
+  "table_name": "Tabel 14: Beregnet N2O udskillelse ab dyr for forskellige dyregrupper på baggrund af Normtal (AU, 2020). (Side 54)",
+  "data": [
+    {
+      "Dyretype": "1 årsko uden opdræt, malkekvæg, tung race",
+      "kg_N2O_ab_dyr_pr_år": 3.21
+    },
+    {
+      "Dyretype": "1 årsko uden opdræt, malkekvæg, Jersey",
+      "kg_N2O_ab_dyr_pr_år": 2.61
+    },
+    {
+      "Dyretype": "Årsopdræt, 0-6 mdr., småkalv, tung race",
+      "kg_N2O_ab_dyr_pr_år": 0.53
+    },
+    {
+      "Dyretype": "Årsopdræt, 0-6 mdr., småkalv, Jersey",
+      "kg_N2O_ab_dyr_pr_år": 0.402
+    },
+    {
+      "Dyretype": "1 årsopdræt (kvier/stude 6 mdr. - kælvning (27 mdr)/slagtning, tung race)",
+      "kg_N2O_ab_dyr_pr_år": 1.008
+    },
+    {
+      "Dyretype": "1 årsopdræt (kvier/stude 6 mdr. - kælvning (25 mdr)/slagtning, Jersey)",
+      "kg_N2O_ab_dyr_pr_år": 0.758
+    },
+    {
+      "Dyretype": "1 stk. slagtekalv, 0-6 mdr., tung race.",
+      "kg_N2O_ab_dyr_pr_år": 0.251
+    },
+    {
+      "Dyretype": "1 stk. slagtekalv, 0-6 mdr., Jersey.",
+      "kg_N2O_ab_dyr_pr_år": 0.182
+    },
+    {
+      "Dyretype": "1 stk. slagtekalve, 6 mdr. - slagtning (440 kg), tung race.",
+      "kg_N2O_ab_dyr_pr_år": 0.47
+    },
+    {
+      "Dyretype": "1 stk. slagtekalve 6 mdr. - slagtning (328 kg), Jersey.",
+      "kg_N2O_ab_dyr_pr_år": 0.368
+    }
+  ]
+}

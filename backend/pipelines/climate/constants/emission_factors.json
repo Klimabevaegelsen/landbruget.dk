@@ -1,0 +1,399 @@
+{
+  "metadata": {
+    "source": "Danish Climate Tool for Agriculture - Klimaværktøj til landbruget",
+    "description": "Commonly used emission factors extracted from reference_values tables",
+    "note": "These are default/baseline values. Specific values for different conditions are available in the detailed reference_values tables.",
+    "gwp_version": "IPCC AR6 (2021)",
+    "gwp_note": "Using IPCC Sixth Assessment Report GWP values (most recent science)"
+  },
+  "gwp_factors": {
+    "AR6": {
+      "description": "IPCC Sixth Assessment Report (2021) - CURRENT VALUES USED",
+      "year": 2021,
+      "N2O": {
+        "value": 273,
+        "unit": "kg CO2e per kg N2O",
+        "timeframe": "100-year GWP",
+        "reference": "IPCC AR6 WG1 Chapter 7"
+      },
+      "CH4_biogenic": {
+        "value": 27,
+        "unit": "kg CO2e per kg CH4",
+        "timeframe": "100-year GWP",
+        "description": "Non-fossil methane (livestock, manure)",
+        "reference": "IPCC AR6 WG1 Chapter 7"
+      },
+      "CH4_fossil": {
+        "value": 30,
+        "unit": "kg CO2e per kg CH4",
+        "timeframe": "100-year GWP",
+        "description": "Fossil methane (natural gas, coal)",
+        "reference": "IPCC AR6 WG1 Chapter 7"
+      }
+    },
+    "AR5": {
+      "description": "IPCC Fifth Assessment Report (2014) - PREVIOUS VALUES",
+      "year": 2014,
+      "N2O": {
+        "value": 265,
+        "unit": "kg CO2e per kg N2O",
+        "reference": "IPCC AR5 WG1 Chapter 8"
+      },
+      "CH4": {
+        "value": 28,
+        "unit": "kg CO2e per kg CH4",
+        "reference": "IPCC AR5 WG1 Chapter 8"
+      }
+    },
+    "AR4": {
+      "description": "IPCC Fourth Assessment Report (2007) - REFERENCE VALUES",
+      "year": 2007,
+      "N2O": {
+        "value": 298,
+        "unit": "kg CO2e per kg N2O",
+        "reference": "IPCC AR4 WG1 Chapter 2"
+      },
+      "CH4": {
+        "value": 25,
+        "unit": "kg CO2e per kg CH4",
+        "reference": "IPCC AR4 WG1 Chapter 2"
+      }
+    }
+  },
+  "manure_storage": {
+    "mcf": {
+      "gylle": {
+        "value": 12.4,
+        "unit": "%",
+        "description": "Methane Conversion Factor for slurry storage",
+        "reference": "Nielsen et al. 2020",
+        "storage_days": 182.5
+      },
+      "dybstrøelse": {
+        "value": 17,
+        "unit": "%",
+        "description": "Methane Conversion Factor for deep litter",
+        "reference": "IPCC, 2006",
+        "storage_days": 182.5
+      },
+      "afgræsning": {
+        "value": 1,
+        "unit": "%",
+        "description": "Methane Conversion Factor for grazing",
+        "reference": "IPCC, 2006"
+      },
+      "staldforsuring_reduction": {
+        "value": -60,
+        "unit": "%",
+        "description": "MCF reduction when using barn acidification",
+        "reference": "Olesen et al., 2018"
+      },
+      "biogas_reduction": {
+        "value": -40,
+        "unit": "%",
+        "description": "MCF reduction when using biogas",
+        "reference": "Nielsen et al. 2020"
+      }
+    },
+    "b0_factors": {
+      "malkekøer": {
+        "value": 0.24,
+        "unit": "m3 CH4/kg VS",
+        "description": "Maximum CH4 producing capacity for dairy cows",
+        "reference": "IPCC, 2006"
+      },
+      "andre_kvæg": {
+        "value": 0.18,
+        "unit": "m3 CH4/kg VS",
+        "description": "Maximum CH4 producing capacity for other cattle",
+        "reference": "IPCC, 2006"
+      }
+    }
+  },
+  "housing_emissions": {
+    "n2o": {
+      "gylle": {
+        "value": 0.2,
+        "unit": "% of N",
+        "description": "N2O emission factor for slurry in barn",
+        "reference": "IPCC, 2006"
+      },
+      "dybstrøelse": {
+        "value": 1.0,
+        "unit": "% of N",
+        "description": "N2O emission factor for deep litter in barn",
+        "reference": "IPCC, 2006"
+      },
+      "afgræsning": {
+        "value": 2.0,
+        "unit": "% of N",
+        "description": "N2O emission factor for grazing",
+        "reference": "IPCC, 2006"
+      }
+    },
+    "nh3": {
+      "bindestald_grebning_gylle": {
+        "value": 10,
+        "unit": "% of TAN",
+        "description": "NH3 emission from tie stall with scraping (slurry)",
+        "reference": "Normtal 2020"
+      },
+      "bindestald_riste": {
+        "value": 6,
+        "unit": "% of TAN",
+        "description": "NH3 emission from tie stall with slatted floor",
+        "reference": "Normtal 2020"
+      },
+      "sengestald_spalter_kanal": {
+        "value": 13.5,
+        "unit": "% of TAN",
+        "description": "NH3 emission from cubicle barn with slatted floor (canal system)",
+        "reference": "Normtal 2020"
+      },
+      "dybstrøelse": {
+        "value": 6,
+        "unit": "% of total N",
+        "description": "NH3 emission from deep litter housing",
+        "reference": "Normtal 2020"
+      },
+      "afgræsning": {
+        "value": 2,
+        "unit": "% of total N",
+        "description": "NH3 emission from grazing",
+        "reference": "IPCC, 2006"
+      }
+    }
+  },
+  "field_application": {
+    "nh3": {
+      "handelsgødning": {
+        "value": 0.025,
+        "unit": "kg NH3-N per kg N",
+        "description": "NH3 emission factor for mineral fertilizer application",
+        "reference": "Danish Climate Tool"
+      },
+      "svinegylle": {
+        "value": 0.107,
+        "unit": "kg NH3-N per kg TAN",
+        "tan_percent": 74.9,
+        "description": "NH3 emission factor for pig slurry application",
+        "reference": "Danish Climate Tool"
+      },
+      "kvæggylle": {
+        "value": 0.132,
+        "unit": "kg NH3-N per kg TAN",
+        "tan_percent": 60.0,
+        "description": "NH3 emission factor for cattle slurry application",
+        "reference": "Danish Climate Tool"
+      },
+      "fjerkrægylle": {
+        "value": 0.132,
+        "unit": "kg NH3-N per kg TAN",
+        "tan_percent": 64.9,
+        "description": "NH3 emission factor for poultry slurry application",
+        "reference": "Danish Climate Tool"
+      },
+      "fast_gødning": {
+        "value": 0.067,
+        "unit": "kg NH3-N per kg total N",
+        "description": "NH3 emission factor for solid manure application",
+        "reference": "Danish Climate Tool"
+      },
+      "dybstrøelse": {
+        "value": 0.067,
+        "unit": "kg NH3-N per kg total N",
+        "description": "NH3 emission factor for deep litter application",
+        "reference": "Danish Climate Tool"
+      }
+    },
+    "n2o": {
+      "direct": {
+        "value": 0.01,
+        "unit": "kg N2O-N per kg NH3-N",
+        "description": "Direct N2O emission factor from field application (after NH3 volatilization)",
+        "reference": "Danish Climate Tool"
+      },
+      "indirect_atmospheric_deposition": {
+        "value": 0.01,
+        "unit": "kg N2O-N per kg NH3-N",
+        "description": "Indirect N2O from atmospheric deposition of NH3",
+        "reference": "IPCC default"
+      },
+      "indirect_leaching": {
+        "value": 0.0075,
+        "unit": "kg N2O-N per kg N leached",
+        "description": "Indirect N2O from leaching and runoff",
+        "reference": "IPCC default"
+      }
+    }
+  },
+  "grazing": {
+    "nh3": {
+      "kvæg": {
+        "value": 0.14,
+        "unit": "kg NH3-N per kg TAN",
+        "tan_percent": 60.0,
+        "description": "NH3 emission factor for cattle grazing",
+        "reference": "Danish Climate Tool"
+      },
+      "svin": {
+        "value": 0.31,
+        "unit": "kg NH3-N per kg TAN",
+        "tan_percent": 74.9,
+        "description": "NH3 emission factor for pig grazing",
+        "reference": "Danish Climate Tool"
+      },
+      "heste": {
+        "value": 0.35,
+        "unit": "kg NH3-N per kg TAN",
+        "tan_percent": 74.9,
+        "description": "NH3 emission factor for horse grazing",
+        "reference": "Danish Climate Tool"
+      },
+      "får": {
+        "value": 0.09,
+        "unit": "kg NH3-N per kg TAN",
+        "tan_percent": 60.0,
+        "description": "NH3 emission factor for sheep grazing",
+        "reference": "Danish Climate Tool"
+      },
+      "fjerkræ": {
+        "value": 0.31,
+        "unit": "kg NH3-N per kg TAN",
+        "tan_percent": 64.9,
+        "description": "NH3 emission factor for poultry grazing",
+        "reference": "Danish Climate Tool"
+      }
+    },
+    "n2o": {
+      "value": 0.01,
+      "unit": "kg N2O-N per kg NH3-N",
+      "description": "N2O emission factor for grazing (after NH3 volatilization)",
+      "reference": "Danish Climate Tool"
+    }
+  },
+  "crop_residues": {
+    "ipcc_2006_dry_matter": {
+      "grains": {
+        "dry_content": 0.88,
+        "slope": 1.09,
+        "intercept": 0.88,
+        "description": "Dry matter and residue calculation for grains"
+      },
+      "wheat": {
+        "dry_content": 0.89,
+        "slope": 1.51,
+        "intercept": 0.52,
+        "description": "Dry matter and residue calculation for wheat"
+      },
+      "barley": {
+        "dry_content": 0.89,
+        "slope": 0.95,
+        "intercept": 0.29,
+        "description": "Dry matter and residue calculation for barley"
+      },
+      "maize": {
+        "dry_content": 0.87,
+        "slope": 1.03,
+        "intercept": 0.61,
+        "description": "Dry matter and residue calculation for maize"
+      },
+      "potato": {
+        "dry_content": 0.22,
+        "slope": 0.39,
+        "intercept": 1.06,
+        "description": "Dry matter and residue calculation for potato"
+      }
+    },
+    "nitrogen_content": {
+      "grains_aboveground": {
+        "value": 0.006,
+        "unit": "kg N per kg dry matter",
+        "description": "N content in aboveground residues for grains",
+        "reference": "IPCC 2006"
+      },
+      "grains_belowground": {
+        "value": 0.009,
+        "unit": "kg N per kg dry matter",
+        "description": "N content in belowground residues for grains",
+        "reference": "IPCC 2006"
+      },
+      "wheat_aboveground": {
+        "value": 0.006,
+        "unit": "kg N per kg dry matter",
+        "description": "N content in aboveground residues for wheat",
+        "reference": "IPCC 2006"
+      },
+      "wheat_belowground": {
+        "value": 0.009,
+        "unit": "kg N per kg dry matter",
+        "description": "N content in belowground residues for wheat",
+        "reference": "IPCC 2006"
+      },
+      "barley_aboveground": {
+        "value": 0.007,
+        "unit": "kg N per kg dry matter",
+        "description": "N content in aboveground residues for barley",
+        "reference": "IPCC 2006"
+      },
+      "barley_belowground": {
+        "value": 0.014,
+        "unit": "kg N per kg dry matter",
+        "description": "N content in belowground residues for barley",
+        "reference": "IPCC 2006"
+      }
+    }
+  },
+  "energy": {
+    "diesel": {
+      "scope1_combustion": {
+        "value": 2.689,
+        "unit": "kg CO2e per liter",
+        "description": "Direct combustion emissions (CO2, CH4, N2O)",
+        "reference": "DCE National Inventory 2017, Table 36",
+        "breakdown": {
+          "co2": 2.654,
+          "ch4_co2e": 0.000896,
+          "n2o_co2e": 0.033655
+        }
+      },
+      "scope3_production": {
+        "value": 0.6,
+        "unit": "kg CO2e per liter",
+        "description": "Upstream production and distribution emissions",
+        "reference": "Ecoinvent LCA database (typical value)",
+        "note": "Using literature value"
+      }
+    },
+    "electricity": {
+      "danish_grid_2023": {
+        "value": 0.152,
+        "unit": "kg CO2e per kWh",
+        "description": "Danish electricity grid emission factor (2023)",
+        "reference": "Danish Energy Agency",
+        "note": "Using national statistics"
+      },
+      "danish_grid_2024": {
+        "value": 0.135,
+        "unit": "kg CO2e per kWh",
+        "description": "Danish electricity grid emission factor (2024 estimated)",
+        "reference": "Danish Energy Agency",
+        "note": "Decreasing due to renewable energy expansion"
+      }
+    },
+    "heating": {
+      "natural_gas": {
+        "value": 0.202,
+        "unit": "kg CO2e per kWh",
+        "description": "Natural gas combustion emissions",
+        "reference": "IPCC default"
+      },
+      "fuel_oil": {
+        "value": 0.279,
+        "unit": "kg CO2e per kWh",
+        "description": "Fuel oil combustion emissions",
+        "reference": "IPCC default"
+      }
+    }
+  }
+}

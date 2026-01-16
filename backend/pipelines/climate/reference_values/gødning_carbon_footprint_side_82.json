@@ -1,0 +1,17 @@
+{
+  "table_name": "Gødning Carbon Footprint (Side 82)",
+  "data": [
+    {
+      "Mineral_Kg": "Kvælstof (N)",
+      "Carbon_Footprint_CO2_aekv_per_kg": "6,6 (Agrifootprint 2015)"
+    },
+    {
+      "Mineral_Kg": "Fosfor (P)",
+      "Carbon_Footprint_CO2_aekv_per_kg": "3,6 (Ecoinvent 2013)"
+    },
+    {
+      "Mineral_Kg": "Kalium (K)",
+      "Carbon_Footprint_CO2_aekv_per_kg": "0,7 (Ecoinvent 2013)"
+    }
+  ]
+}

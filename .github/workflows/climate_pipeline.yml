@@ -1,0 +1,603 @@
+name: Climate Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Years to process (comma-separated, e.g., "2021,2022,2023")'
+        type: string
+        default: '2021,2022,2023'
+        required: true
+      test_limit:
+        description: 'Limit CVRs for testing (0 = no limit)'
+        type: string
+        default: '0'
+        required: false
+      max_parallel_jobs:
+        description: 'Maximum number of parallel batch jobs'
+        type: string
+        default: '10'
+        required: true
+      batch_size:
+        description: 'CVRs per batch'
+        type: string
+        default: '500'
+        required: true
+      dry_run:
+        description: 'Dry run mode (discover CVRs only, no calculations)'
+        type: boolean
+        default: false
+
+env:
+  ENVIRONMENT: production
+  GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+
+jobs:
+  discover-cvrs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      matrix:
+        year: ${{ fromJson(format('[{0}]', inputs.years)) }}
+
+    outputs:
+      # Outputs are per-year, stored as artifacts
+      batch_count_2021: ${{ steps.discover.outputs.batch_count_2021 }}
+      batch_count_2022: ${{ steps.discover.outputs.batch_count_2022 }}
+      batch_count_2023: ${{ steps.discover.outputs.batch_count_2023 }}
+
+    name: Discover CVRs (${{ matrix.year }})
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+        pip install pandas pyarrow
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Discover CVRs for year ${{ matrix.year }}
+      id: discover
+      working-directory: backend/pipelines/climate
+      run: |
+        test_limit="${{ inputs.test_limit }}"
+
+        if [ "$test_limit" = "0" ] || [ -z "$test_limit" ]; then
+          python cli.py --discover --year ${{ matrix.year }} --output /tmp/cvrs_${{ matrix.year }}.json
+        else
+          python cli.py --discover --year ${{ matrix.year }} --output /tmp/cvrs_${{ matrix.year }}.json --test-limit $test_limit
+        fi
+
+        # Extract batch count for output
+        batch_count=$(jq '.batch_count' /tmp/cvrs_${{ matrix.year }}.json)
+        cvr_count=$(jq '.count' /tmp/cvrs_${{ matrix.year }}.json)
+
+        echo "Discovered $cvr_count CVRs for year ${{ matrix.year }} ($batch_count batches)"
+        echo "batch_count_${{ matrix.year }}=$batch_count" >> $GITHUB_OUTPUT
+
+        # Store batch info in a separate file for matrix generation
+        echo "{\"batches\": $(seq 0 $((batch_count - 1)) | jq -R . | jq -s .)}" > /tmp/batches_${{ matrix.year }}.json
+
+    - name: Upload CVR list artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cvrs-${{ matrix.year }}
+        path: /tmp/cvrs_${{ matrix.year }}.json
+        retention-days: 1
+
+    - name: Upload batch info artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: batches-${{ matrix.year }}
+        path: /tmp/batches_${{ matrix.year }}.json
+        retention-days: 1
+
+  # Generate batch matrix for each year
+  generate-matrix:
+    needs: discover-cvrs
+    runs-on: ubuntu-latest
+    outputs:
+      matrix_2021: ${{ steps.gen.outputs.matrix_2021 }}
+      matrix_2022: ${{ steps.gen.outputs.matrix_2022 }}
+      matrix_2023: ${{ steps.gen.outputs.matrix_2023 }}
+
+    steps:
+    - name: Download batch info
+      uses: actions/download-artifact@v4
+      with:
+        pattern: batches-*
+        path: /tmp/batch_info
+        merge-multiple: true
+
+    - name: Generate batch matrices
+      id: gen
+      run: |
+        for year in 2021 2022 2023; do
+          batch_file="/tmp/batch_info/batches_${year}.json"
+          if [ -f "$batch_file" ]; then
+            batches=$(jq -c '.batches' "$batch_file")
+            echo "matrix_${year}=$batches" >> $GITHUB_OUTPUT
+            echo "Year $year batches: $batches"
+          else
+            echo "matrix_${year}=[]" >> $GITHUB_OUTPUT
+            echo "Year $year: no batch file found"
+          fi
+        done
+
+  # Process batches for 2021
+  process-2021:
+    if: ${{ !inputs.dry_run && contains(inputs.years, '2021') }}
+    needs: [discover-cvrs, generate-matrix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false
+      matrix:
+        batch: ${{ fromJson(needs.generate-matrix.outputs.matrix_2021 || '[]') }}
+
+    name: Process 2021 Batch ${{ matrix.batch }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+        pip install pandas pyarrow
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Download CVR list
+      uses: actions/download-artifact@v4
+      with:
+        name: cvrs-2021
+        path: /tmp
+
+    - name: Process batch ${{ matrix.batch }}
+      working-directory: backend/pipelines/climate
+      run: |
+        python cli.py \
+          --batch ${{ matrix.batch }} \
+          --batch-size ${{ inputs.batch_size }} \
+          --year 2021 \
+          --cvr-file /tmp/cvrs_2021.json \
+          --output-dir /tmp/climate_output_2021
+
+    - name: Upload batch result
+      uses: actions/upload-artifact@v4
+      with:
+        name: batch-2021-${{ matrix.batch }}
+        path: /tmp/climate_output_2021/batch_*.parquet
+        retention-days: 1
+
+  # Process batches for 2022
+  process-2022:
+    if: ${{ !inputs.dry_run && contains(inputs.years, '2022') }}
+    needs: [discover-cvrs, generate-matrix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false
+      matrix:
+        batch: ${{ fromJson(needs.generate-matrix.outputs.matrix_2022 || '[]') }}
+
+    name: Process 2022 Batch ${{ matrix.batch }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+        pip install pandas pyarrow
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Download CVR list
+      uses: actions/download-artifact@v4
+      with:
+        name: cvrs-2022
+        path: /tmp
+
+    - name: Process batch ${{ matrix.batch }}
+      working-directory: backend/pipelines/climate
+      run: |
+        python cli.py \
+          --batch ${{ matrix.batch }} \
+          --batch-size ${{ inputs.batch_size }} \
+          --year 2022 \
+          --cvr-file /tmp/cvrs_2022.json \
+          --output-dir /tmp/climate_output_2022
+
+    - name: Upload batch result
+      uses: actions/upload-artifact@v4
+      with:
+        name: batch-2022-${{ matrix.batch }}
+        path: /tmp/climate_output_2022/batch_*.parquet
+        retention-days: 1
+
+  # Process batches for 2023
+  process-2023:
+    if: ${{ !inputs.dry_run && contains(inputs.years, '2023') }}
+    needs: [discover-cvrs, generate-matrix]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false
+      matrix:
+        batch: ${{ fromJson(needs.generate-matrix.outputs.matrix_2023 || '[]') }}
+
+    name: Process 2023 Batch ${{ matrix.batch }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+        pip install pandas pyarrow
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Download CVR list
+      uses: actions/download-artifact@v4
+      with:
+        name: cvrs-2023
+        path: /tmp
+
+    - name: Process batch ${{ matrix.batch }}
+      working-directory: backend/pipelines/climate
+      run: |
+        python cli.py \
+          --batch ${{ matrix.batch }} \
+          --batch-size ${{ inputs.batch_size }} \
+          --year 2023 \
+          --cvr-file /tmp/cvrs_2023.json \
+          --output-dir /tmp/climate_output_2023
+
+    - name: Upload batch result
+      uses: actions/upload-artifact@v4
+      with:
+        name: batch-2023-${{ matrix.batch }}
+        path: /tmp/climate_output_2023/batch_*.parquet
+        retention-days: 1
+
+  # Consolidate results for each year
+  consolidate-2021:
+    if: ${{ !inputs.dry_run && contains(inputs.years, '2021') && always() }}
+    needs: [discover-cvrs, generate-matrix, process-2021]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+        pip install pandas pyarrow
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Download all batch results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: batch-2021-*
+        path: /tmp/climate_output_2021
+        merge-multiple: true
+
+    - name: Download CVR info for batch count
+      uses: actions/download-artifact@v4
+      with:
+        name: cvrs-2021
+        path: /tmp
+
+    - name: Consolidate and upload to GCS
+      working-directory: backend/pipelines/climate
+      run: |
+        batch_count=$(jq '.batch_count' /tmp/cvrs_2021.json)
+        timestamp=$(date +%Y%m%d_%H%M%S)
+        gcs_path="gs://${{ secrets.GCS_BUCKET }}/gold/carbon_emissions_2021/${timestamp}"
+
+        python -c "
+        from batch_processor import BatchProcessor
+        import json
+
+        processor = BatchProcessor(output_dir='/tmp/climate_output_2021')
+        result = processor.consolidate_batches(
+            year=2021,
+            batch_count=${batch_count},
+            gcs_output_path='${gcs_path}',
+            cleanup=True
+        )
+        print(json.dumps(result, indent=2))
+        "
+
+        echo "## 2021 Results" >> $GITHUB_STEP_SUMMARY
+        echo "GCS Path: ${gcs_path}" >> $GITHUB_STEP_SUMMARY
+
+  consolidate-2022:
+    if: ${{ !inputs.dry_run && contains(inputs.years, '2022') && always() }}
+    needs: [discover-cvrs, generate-matrix, process-2022]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+        pip install pandas pyarrow
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Download all batch results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: batch-2022-*
+        path: /tmp/climate_output_2022
+        merge-multiple: true
+
+    - name: Download CVR info for batch count
+      uses: actions/download-artifact@v4
+      with:
+        name: cvrs-2022
+        path: /tmp
+
+    - name: Consolidate and upload to GCS
+      working-directory: backend/pipelines/climate
+      run: |
+        batch_count=$(jq '.batch_count' /tmp/cvrs_2022.json)
+        timestamp=$(date +%Y%m%d_%H%M%S)
+        gcs_path="gs://${{ secrets.GCS_BUCKET }}/gold/carbon_emissions_2022/${timestamp}"
+
+        python -c "
+        from batch_processor import BatchProcessor
+        import json
+
+        processor = BatchProcessor(output_dir='/tmp/climate_output_2022')
+        result = processor.consolidate_batches(
+            year=2022,
+            batch_count=${batch_count},
+            gcs_output_path='${gcs_path}',
+            cleanup=True
+        )
+        print(json.dumps(result, indent=2))
+        "
+
+        echo "## 2022 Results" >> $GITHUB_STEP_SUMMARY
+        echo "GCS Path: ${gcs_path}" >> $GITHUB_STEP_SUMMARY
+
+  consolidate-2023:
+    if: ${{ !inputs.dry_run && contains(inputs.years, '2023') && always() }}
+    needs: [discover-cvrs, generate-matrix, process-2023]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd backend/pipelines/unified_pipeline
+        pip install -e .
+        pip install pandas pyarrow
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Google Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Download all batch results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: batch-2023-*
+        path: /tmp/climate_output_2023
+        merge-multiple: true
+
+    - name: Download CVR info for batch count
+      uses: actions/download-artifact@v4
+      with:
+        name: cvrs-2023
+        path: /tmp
+
+    - name: Consolidate and upload to GCS
+      working-directory: backend/pipelines/climate
+      run: |
+        batch_count=$(jq '.batch_count' /tmp/cvrs_2023.json)
+        timestamp=$(date +%Y%m%d_%H%M%S)
+        gcs_path="gs://${{ secrets.GCS_BUCKET }}/gold/carbon_emissions_2023/${timestamp}"
+
+        python -c "
+        from batch_processor import BatchProcessor
+        import json
+
+        processor = BatchProcessor(output_dir='/tmp/climate_output_2023')
+        result = processor.consolidate_batches(
+            year=2023,
+            batch_count=${batch_count},
+            gcs_output_path='${gcs_path}',
+            cleanup=True
+        )
+        print(json.dumps(result, indent=2))
+        "
+
+        echo "## 2023 Results" >> $GITHUB_STEP_SUMMARY
+        echo "GCS Path: ${gcs_path}" >> $GITHUB_STEP_SUMMARY
+
+  # Final summary
+  summary:
+    if: ${{ always() }}
+    needs: [discover-cvrs, consolidate-2021, consolidate-2022, consolidate-2023]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Pipeline Summary
+      run: |
+        echo "## Climate Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Years Processed:** ${{ inputs.years }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Batch Size:** ${{ inputs.batch_size }} CVRs" >> $GITHUB_STEP_SUMMARY
+        echo "**Max Parallel Jobs:** ${{ inputs.max_parallel_jobs }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Test Limit:** ${{ inputs.test_limit || 'None' }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ "${{ inputs.dry_run }}" = "true" ]; then
+          echo "This was a dry run - no calculations were performed." >> $GITHUB_STEP_SUMMARY
+        else
+          echo "Results uploaded to GCS gold layer:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`gs://${{ secrets.GCS_BUCKET }}/gold/carbon_emissions_{year}/{timestamp}/\`" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  # Dry run summary
+  dry-run-summary:
+    if: ${{ inputs.dry_run }}
+    needs: discover-cvrs
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Download all CVR lists
+      uses: actions/download-artifact@v4
+      with:
+        pattern: cvrs-*
+        path: /tmp/cvr_lists
+        merge-multiple: true
+
+    - name: Dry Run Summary
+      run: |
+        echo "## Climate Pipeline - Dry Run" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        for year in 2021 2022 2023; do
+          cvr_file="/tmp/cvr_lists/cvrs_${year}.json"
+          if [ -f "$cvr_file" ]; then
+            cvr_count=$(jq '.count' "$cvr_file")
+            batch_count=$(jq '.batch_count' "$cvr_file")
+            echo "### Year $year" >> $GITHUB_STEP_SUMMARY
+            echo "- CVRs discovered: $cvr_count" >> $GITHUB_STEP_SUMMARY
+            echo "- Batches: $batch_count" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "To run the actual processing, set 'Dry run mode' to false." >> $GITHUB_STEP_SUMMARY

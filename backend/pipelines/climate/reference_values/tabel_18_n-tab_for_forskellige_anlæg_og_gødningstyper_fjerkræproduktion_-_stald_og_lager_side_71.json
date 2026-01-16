@@ -1,0 +1,108 @@
+{
+  "table_name": "Tabel 18: N-tab (%) for forskellige anlæg og gødningstyper (Fjerkræproduktion - Stald og lager, Side 71)",
+  "data": [
+    {
+      "Anlæg": "Konsumæg, (Gulvdrift + gødningskumme) fritgående høner",
+      "Gødningstype": "Dybstrøelse",
+      "Fordeling_mellem_gødningstyper_pct": 30,
+      "N_tab_pct": 25
+    },
+    {
+      "Anlæg": "Konsumæg, (Gulvdrift + gødningskumme) fritgående høner",
+      "Gødningstype": "Fast gødning",
+      "Fordeling_mellem_gødningstyper_pct": 60,
+      "N_tab_pct": 40
+    },
+    {
+      "Anlæg": "Konsumæg, (Gulvdrift + gødningskumme) fritgående høner",
+      "Gødningstype": "Udeareal",
+      "Fordeling_mellem_gødningstyper_pct": 10,
+      "N_tab_pct": null
+    },
+    {
+      "Anlæg": "Konsumæg, (Gulvdrift + gødningskumme) Økologiske høner",
+      "Gødningstype": "Dybstrøelse",
+      "Fordeling_mellem_gødningstyper_pct": 30,
+      "N_tab_pct": 25
+    },
+    {
+      "Anlæg": "Konsumæg, (Gulvdrift + gødningskumme) Økologiske høner",
+      "Gødningstype": "Fast gødning",
+      "Fordeling_mellem_gødningstyper_pct": 60,
+      "N_tab_pct": 40
+    },
+    {
+      "Anlæg": "Konsumæg, (Gulvdrift + gødningskumme) Økologiske høner",
+      "Gødningstype": "Udeareal",
+      "Fordeling_mellem_gødningstyper_pct": 10,
+      "N_tab_pct": null
+    },
+    {
+      "Anlæg": "Konsumæg, (etageanlæg + gødningsbånd) Økologiske høner",
+      "Gødningstype": "Dybstrøelse",
+      "Fordeling_mellem_gødningstyper_pct": 30,
+      "N_tab_pct": 25
+    },
+    {
+      "Anlæg": "Konsumæg, (etageanlæg + gødningsbånd) Økologiske høner",
+      "Gødningstype": "Fast gødning",
+      "Fordeling_mellem_gødningstyper_pct": 60,
+      "N_tab_pct": 10
+    },
+    {
+      "Anlæg": "Konsumæg, (etageanlæg + gødningsbånd) Økologiske høner",
+      "Gødningstype": "Udeareal",
+      "Fordeling_mellem_gødningstyper_pct": 10,
+      "N_tab_pct": null
+    },
+    {
+      "Anlæg": "Konsumæg, (Gulvdrift + gødningskumme) Skrabehøner",
+      "Gødningstype": "Dybstrøelse",
+      "Fordeling_mellem_gødningstyper_pct": 33,
+      "N_tab_pct": 25
+    },
+    {
+      "Anlæg": "Konsumæg, (Gulvdrift + gødningskumme) Skrabehøner",
+      "Gødningstype": "Fast gødning",
+      "Fordeling_mellem_gødningstyper_pct": 67,
+      "N_tab_pct": 40
+    },
+    {
+      "Anlæg": "Konsumæg (etageanlæg + gødningsbånd) Skrabehøner",
+      "Gødningstype": "Dybstrøelse",
+      "Fordeling_mellem_gødningstyper_pct": 25,
+      "N_tab_pct": 25
+    },
+    {
+      "Anlæg": "Konsumæg (etageanlæg + gødningsbånd) Skrabehøner",
+      "Gødningstype": "Fast gødning",
+      "Fordeling_mellem_gødningstyper_pct": 75,
+      "N_tab_pct": 10
+    },
+    {
+      "Anlæg": "Konsumæg (gødningsbånd)",
+      "Gødningstype": "Fast gødning/gylle",
+      "Fordeling_mellem_gødningstyper_pct": null,
+      "N_tab_pct": 10
+    },
+    {
+      "Anlæg": "Burhøns Hønniker Konsum (netdrift/bur)",
+      "Gødningstype": "Fast gødning",
+      "Fordeling_mellem_gødningstyper_pct": null,
+      "N_tab_pct": 40
+    },
+    {
+      "Anlæg": "Hønniker Konsum (gulvdrift)",
+      "Gødningstype": "Dybstrøelse",
+      "Fordeling_mellem_gødningstyper_pct": null,
+      "N_tab_pct": 25
+    },
+    {
+      "Anlæg": "Rugeægshøner (Gulvdrift)",
+      "Gødningstype": "Dybstrøelse",
+      "Fordeling_mellem_gødningstyper_pct": 100,
+      "N_tab_pct": 40
+    }
+  ],
+  "footnote": "1 Fast staldgødning uden vandtilsætning eller gylle (fast gødning opblandes med vand til 12 % tørstof ab lager)."
+}

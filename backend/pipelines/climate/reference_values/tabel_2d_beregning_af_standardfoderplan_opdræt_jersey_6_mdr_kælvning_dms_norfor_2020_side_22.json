@@ -1,0 +1,41 @@
+{
+  "table_name": "Tabel 2d: Beregning af standardfoderplan opdræt Jersey 6 mdr. – kælvning (DMS_NorFor, 2020) (Side 22)",
+  "data": [
+    {
+      "fodermiddel": "Majsensilage",
+      "kg_ts_std_plan": 0.8,
+      "pct_af_foderoptag": 15.38,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Kløvergræs-/græsensilage ( >20 % kløver)",
+      "kg_ts_std_plan": 2.9,
+      "pct_af_foderoptag": 55.77,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Halm",
+      "kg_ts_std_plan": 1.0,
+      "pct_af_foderoptag": 19.23,
+      "andel_indkøbt_pct": 0
+    },
+    {
+      "fodermiddel": "Rapsprodukter",
+      "kg_ts_std_plan": 0.4,
+      "pct_af_foderoptag": 7.69,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "mineraler og vitaminer",
+      "kg_ts_std_plan": 0.1,
+      "pct_af_foderoptag": 1.92,
+      "andel_indkøbt_pct": 100
+    },
+    {
+      "fodermiddel": "sum",
+      "kg_ts_std_plan": 5.2,
+      "pct_af_foderoptag": 100,
+      "andel_indkøbt_pct": null
+    }
+  ]
+}
