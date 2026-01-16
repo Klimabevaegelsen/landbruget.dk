@@ -137,47 +137,7 @@ def normalize_cvr_column_duckdb(
         >>> normalize_cvr_column_duckdb(conn, "raw_subsidies", "CVR_NR", "cvr")
         24993
     """
-    # SQL to normalize CVR with all transformations
-    normalize_sql = f"""
-    ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {target_column} VARCHAR;
-
-    UPDATE {table_name}
-    SET {target_column} = (
-        WITH cleaned AS (
-            SELECT
-                -- Handle float: 12345678.0 → 12345678
-                CASE
-                    WHEN CAST({source_column} AS VARCHAR) LIKE '%.%'
-                    THEN CAST(CAST(TRY_CAST({source_column} AS DOUBLE) AS BIGINT) AS VARCHAR)
-                    ELSE CAST({source_column} AS VARCHAR)
-                END AS step1
-        )
-        SELECT
-            -- Zero-pad to 8 digits
-            LPAD(
-                -- Extract only digits using regexp_replace
-                regexp_replace(
-                    -- Decode XML hex: _x0034_ → 4 (simplified - handles common cases)
-                    regexp_replace(
-                        step1,
-                        '_x00([3-3][0-9])_',
-                        chr(CAST('0x' || '\\1' AS INTEGER))
-                    ),
-                    '[^0-9]',
-                    '',
-                    'g'
-                ),
-                8,
-                '0'
-            )
-        FROM cleaned
-    )
-    WHERE {source_column} IS NOT NULL;
-    """
-
-    # Simpler approach - update with Python UDF
-    # DuckDB's regexp_replace is limited, so we use a cleaner approach
-
+    # Use Python UDF for normalization - cleaner than complex SQL regex
     conn.execute(f"""
     ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {target_column} VARCHAR;
     """)

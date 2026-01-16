@@ -2,8 +2,6 @@
 Tests for subsidy scheme classification utility.
 """
 
-import pytest
-
 from unified_pipeline.util.subsidy_scheme_classifier import (
     DERIVED_PAYMENT_RATES,
     classify_deminimis,

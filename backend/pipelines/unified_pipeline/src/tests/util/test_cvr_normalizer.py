@@ -6,8 +6,6 @@ CVR Format:
 - Stored as string (to preserve leading zeros)
 """
 
-import pytest
-
 from unified_pipeline.util.cvr_normalizer import (
     CVR_COLUMN_ALIASES,
     find_cvr_column,
