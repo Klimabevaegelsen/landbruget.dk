@@ -235,13 +235,19 @@ function SearchOverlay({
           className="h-12 rounded-t-lg rounded-b-none border-none focus:ring-0 focus-visible:ring-0"
           endIcon={<MagnifyingGlassIcon className="size-6" />}
         />
-        <div className="bg-primary-foreground flex items-stretch gap-2 overflow-x-auto" role="tablist">
+        <div
+          className="bg-primary-foreground flex items-stretch gap-2 overflow-x-auto"
+          role="tablist"
+        >
           {tabs.map((tab, i) => (
             <button
               key={tab}
               type="button"
               role="tab"
+              id={`search-tab-${i}`}
               aria-selected={activeTab === i}
+              aria-controls={`search-tabpanel-${i}`}
+              tabIndex={activeTab === i ? 0 : -1}
               onClick={() => setActiveTab(i)}
               className={cn(
                 'flex-1 px-4 py-4 text-center text-xs hover:font-semibold',
@@ -254,7 +260,12 @@ function SearchOverlay({
             </button>
           ))}
         </div>
-        <div className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg">
+        <div
+          id={`search-tabpanel-${activeTab}`}
+          role="tabpanel"
+          aria-labelledby={`search-tab-${activeTab}`}
+          className="bg-background max-h-[400px] min-h-[200px] overflow-auto rounded-b-lg"
+        >
           {isLoading && (
             <div className="space-y-2 p-4">
               {/* Skeleton loading state matching search result structure */}

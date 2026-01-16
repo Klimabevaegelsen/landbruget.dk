@@ -1,4 +1,4 @@
-import { apiFetch } from "./config";
+import { apiFetch } from './config';
 
 export interface ClimateEmission {
   id: string;
@@ -37,7 +37,7 @@ export async function getClimateEmissions(
     const data = await response.json();
     return data;
   } catch (error) {
-    console.error("Error fetching climate emissions:", error);
+    console.error('Error fetching climate emissions:', error);
     throw error;
   }
 }

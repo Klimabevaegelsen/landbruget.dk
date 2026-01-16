@@ -28,7 +28,7 @@ module.exports = {
         popover: '60',
         tooltip: '70',
         toast: '80',
-        'max': '100',
+        max: '100',
       },
       animation: {
         typing: 'typing 2s steps(20, end), blink 0.75s step-end infinite',

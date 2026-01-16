@@ -28,7 +28,7 @@ import {
   Copy,
   ExternalLinkIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useCompanyNavigation } from '@/hooks/useCompanyNavigation';
 import { useCompanyCache } from '@/hooks/useCompanyCache';
 
@@ -104,6 +104,19 @@ export default function RankingTableEnhanced({
   const [sortField, setSortField] = useState<SortField>('rank');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showAll, setShowAll] = useState(false);
+
+  // Memoize clipboard handler
+  const handleCopyCVR = useCallback((cvrNumber: string) => {
+    navigator.clipboard.writeText(cvrNumber);
+  }, []);
+
+  // Memoize external link handler
+  const handleOpenInCVR = useCallback((cvrNumber: string) => {
+    window.open(
+      `https://datacvr.virk.dk/enhed/virksomhed/${cvrNumber}`,
+      '_blank'
+    );
+  }, []);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -218,24 +231,16 @@ export default function RankingTableEnhanced({
                   const isCached =
                     getCompanyForDisplay(item.company_id) !== null;
 
-                  const handleCopyCVR = () => {
-                    navigator.clipboard.writeText(item.cvr_number);
-                  };
-
-                  const handleOpenInCVR = () => {
-                    window.open(
-                      `https://datacvr.virk.dk/enhed/virksomhed/${item.cvr_number}`,
-                      '_blank'
-                    );
-                  };
-
                   return (
                     <ContextMenu key={`${item.company_id}-${item.rank}`}>
                       <ContextMenuTrigger asChild>
                         <TableRow
                           className="hover:bg-muted/50 cursor-pointer"
                           onClick={() =>
-                            navigateToCompany(item.company_id, item.company_name)
+                            navigateToCompany(
+                              item.company_id,
+                              item.company_name
+                            )
                           }
                         >
                           <TableCell className="font-medium">
@@ -288,18 +293,25 @@ export default function RankingTableEnhanced({
                       <ContextMenuContent>
                         <ContextMenuItem
                           onClick={() =>
-                            navigateToCompany(item.company_id, item.company_name)
+                            navigateToCompany(
+                              item.company_id,
+                              item.company_name
+                            )
                           }
                         >
                           <Building2 className="mr-2 h-4 w-4" />
                           Se virksomhed
                         </ContextMenuItem>
                         <ContextMenuSeparator />
-                        <ContextMenuItem onClick={handleCopyCVR}>
+                        <ContextMenuItem
+                          onClick={() => handleCopyCVR(item.cvr_number)}
+                        >
                           <Copy className="mr-2 h-4 w-4" />
                           Kopiér CVR-nummer
                         </ContextMenuItem>
-                        <ContextMenuItem onClick={handleOpenInCVR}>
+                        <ContextMenuItem
+                          onClick={() => handleOpenInCVR(item.cvr_number)}
+                        >
                           <ExternalLinkIcon className="mr-2 h-4 w-4" />
                           Åbn i CVR-registeret
                         </ContextMenuItem>

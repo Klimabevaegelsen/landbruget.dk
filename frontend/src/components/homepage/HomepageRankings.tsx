@@ -3,13 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import {
-  Loader2,
-  Filter,
-  RefreshCw,
-  Clock,
-  Database,
-} from 'lucide-react';
+import { Loader2, Filter, RefreshCw, Clock, Database } from 'lucide-react';
 import {
   Carousel,
   CarouselContent,

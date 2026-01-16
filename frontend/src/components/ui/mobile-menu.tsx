@@ -85,7 +85,14 @@ const MobileMenuSection = React.forwardRef<
   MobileMenuSectionProps
 >(
   (
-    { className, title, children, defaultOpen = true, collapsible = true, ...props },
+    {
+      className,
+      title,
+      children,
+      defaultOpen = true,
+      collapsible = true,
+      ...props
+    },
     ref
   ) => {
     if (!collapsible) {
@@ -103,7 +110,10 @@ const MobileMenuSection = React.forwardRef<
     }
 
     return (
-      <Collapsible defaultOpen={defaultOpen} className={cn('space-y-2', className)}>
+      <Collapsible
+        defaultOpen={defaultOpen}
+        className={cn('space-y-2', className)}
+      >
         <div ref={ref} {...props}>
           {title && (
             <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-left">
