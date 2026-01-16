@@ -1,6 +1,6 @@
 # Climate Components
 
-Frontend components for displaying farm climate emissions data.
+Frontend components for displaying farm carbon emissions data.
 
 ## Components
 
@@ -78,7 +78,7 @@ The climate service (`frontend/src/services/supabase/climate.ts`) provides:
 
 ### getClimateEmissions(cvr, year?)
 
-Fetches climate emissions data for a given CVR number, optionally filtered by year.
+Fetches carbon emissions data for a given CVR number, optionally filtered by year.
 
 **Example:**
 ```typescript
@@ -115,7 +115,7 @@ interface ClimateEmission {
 
 ## Database
 
-Data is stored in the `farm_climate_emissions` table with the following key fields:
+Data is stored in the `farm_carbon_emissions` table with the following key fields:
 - `cvr_number`: Company CVR (8 digits)
 - `year`: Calendar year
 - `total_co2e_kg`: Total emissions in kg CO₂ equivalents
@@ -124,4 +124,6 @@ Data is stored in the `farm_climate_emissions` table with the following key fiel
 - `co2e_per_animal_unit`: Emissions per animal unit
 - `data_completeness`: Quality metric (0.00-1.00)
 
-See migration: `supabase/migrations/20260110225256_create_farm_climate_emissions.sql`
+See migrations:
+- `supabase/migrations/20260110225256_create_farm_climate_emissions.sql` (original)
+- `supabase/migrations/20260116000000_rename_climate_to_carbon_emissions.sql` (rename)
