@@ -8,12 +8,13 @@ from typing import Tuple, Any, Optional
 
 import sys
 from pathlib import Path as SysPath
+
 # Add climate root to path for imports
 _climate_root = SysPath(__file__).resolve().parent.parent.parent
 if str(_climate_root) not in sys.path:
     sys.path.insert(0, str(_climate_root))
 
-from crop_parameters import get_crop_params
+from crop_parameters import get_crop_params  # noqa: E402
 
 
 # Utility function to load data from JSON files

@@ -1,4 +1,3 @@
-from typing import Dict, Any
 from ..utils.conversions import ch4_to_co2e, n2o_to_co2e, nh3_to_indirect_co2e
 from .base_source import EmissionSource
 
@@ -161,7 +160,6 @@ class ManureFieldApplication(EmissionSource):
 
         for application in manure_applications:
             # Get application details
-            manure_type = application['type']  # e.g., 'deep_liquid', 'solid_storage'
             application_method = application['method']  # e.g., 'injection', 'broadcast'
             season = application['season']  # e.g., 'spring', 'summer'
             n_applied = application['n_applied']  # kg N/ha

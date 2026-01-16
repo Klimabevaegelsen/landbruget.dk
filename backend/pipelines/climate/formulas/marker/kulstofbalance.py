@@ -13,10 +13,10 @@ from .afgroederester import calculate_crop_residue_emissions
 # Import crop parameters for lookup
 import sys
 from pathlib import Path as SysPath
+
 _climate_root = SysPath(__file__).resolve().parent.parent.parent
 if str(_climate_root) not in sys.path:
     sys.path.insert(0, str(_climate_root))
-from crop_parameters import get_crop_params
 
 # Constants from the notebook
 C_FRAK_TORSTOF_TIL_C = 0.45  # Den antagede kulstoffraktion i tørstof [kg C/kg ts]

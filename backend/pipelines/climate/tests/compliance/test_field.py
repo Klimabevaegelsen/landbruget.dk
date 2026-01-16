@@ -12,7 +12,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from formulas.marker import nitratudvaskning, afgroederester, kalkning
+from formulas.marker import nitratudvaskning
 
 
 class TestNitrateLeachingCompliance:

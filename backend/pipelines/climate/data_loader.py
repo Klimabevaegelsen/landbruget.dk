@@ -21,10 +21,10 @@ Usage:
     fields_df = loader.load_fields(cvr="12345678", year=2024)
 """
 
-import os
 import sys
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 from pathlib import Path
+
 import pandas as pd
 
 # Add unified_pipeline to path for GCSDataAccess import
@@ -32,8 +32,8 @@ unified_pipeline_path = Path(__file__).parent.parent / "unified_pipeline" / "src
 if str(unified_pipeline_path) not in sys.path:
     sys.path.insert(0, str(unified_pipeline_path))
 
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.log_util import Logger
+from unified_pipeline.util.gcs_access import GCSDataAccess  # noqa: E402
+from unified_pipeline.util.log_util import Logger  # noqa: E402
 
 logger = Logger.get_logger()
 
@@ -374,7 +374,6 @@ class ClimateDataLoader:
             # Build query based on available columns
             # Note: Some versions may have different column names
             has_toerv = 'toerv_pct' in columns or 'toerv' in columns
-            has_cvr = 'cvr_number' in columns or 'cvr' in columns
             has_year = 'year' in columns
 
             if not has_toerv:
@@ -638,7 +637,6 @@ class ClimateDataLoader:
             logger.info(f"✅ Loaded {len(result_df)} NLES5 nitrogen records for CVR {cvr_padded}")
 
             if not result_df.empty:
-                total_n_washout = result_df['nitrogen_washout_kg_ha'].sum() * result_df['area_ha'].sum() / len(result_df)
                 avg_n_washout = result_df['nitrogen_washout_kg_ha'].mean()
                 logger.info(f"   Average nitrogen washout: {avg_n_washout:.1f} kg N/ha")
 

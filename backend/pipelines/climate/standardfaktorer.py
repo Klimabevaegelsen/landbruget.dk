@@ -13,7 +13,6 @@ used as defaults when actual farm data is unavailable.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from dataclasses import dataclass

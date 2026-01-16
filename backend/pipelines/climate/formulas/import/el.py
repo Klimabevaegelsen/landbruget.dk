@@ -1,5 +1,3 @@
-from typing import List, Dict
-
 def beregn_co2e_el_bedrift(e_ind_kwh: float, e_egen_kwh: float, o_el_kg_co2e_pr_kwh: float) -> float:
     """
     Beregner CO2e fra elforbrug på bedriftsniveau.

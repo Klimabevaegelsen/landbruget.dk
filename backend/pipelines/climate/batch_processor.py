@@ -7,11 +7,10 @@ Processes a subset of CVRs and writes results to parquet files.
 
 import json
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Optional
 
 import pandas as pd
 
@@ -306,7 +305,7 @@ class BatchProcessor:
 
             gcs_path = f"{gcs_base_path.rstrip('/')}/{filename}"
             cmd = ["gcloud", "storage", "cp", str(local_file), gcs_path]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
             logger.info(f"Uploaded {local_file} to {gcs_path}")
         except Exception as e:
             logger.error(f"Failed to upload {local_file} to GCS: {e}")

@@ -23,7 +23,7 @@ from data_transformer import (
 )
 
 # Import existing formula modules
-from formulas.kvaeg import enterisk_metan, stald_og_lager, bedriftsaftryk
+from formulas.kvaeg import enterisk_metan
 from formulas.kvaeg.foder import calculate_feed_emissions_kvaeg
 from formulas.kvaeg.ammoniak import calculate_nh3_emissions_kvaeg
 from formulas.svin import (
@@ -43,7 +43,7 @@ from formulas.marker import (
 from formulas.marker.ammoniak import calculate_nh3_field_per_ha
 
 # Import standardfaktorer module for feed intake lookups
-from standardfaktorer import lookup_pig_fe, lookup_cattle_ts, get_lookup
+from standardfaktorer import lookup_pig_fe, lookup_cattle_ts
 
 logger = logging.getLogger(__name__)
 

@@ -115,7 +115,6 @@ def calculate_ch4_enteric_svin(
     # Get FE per animal
     if dyretype_clean in ["søer", "so", "sow", "sows"]:
         # Sows: FE per year-sow
-        lookup_key = f"{production} søer"
         fe_per_animal = 1492 if production == "konventionelle" else 1843
         mj_per_fe = MJ_PER_FE["søer"]
 

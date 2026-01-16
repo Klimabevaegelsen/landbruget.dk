@@ -4,7 +4,6 @@ These conversion factors are loaded from centralized constants files.
 """
 
 import json
-import os
 from pathlib import Path
 
 # Get constants directory path
@@ -56,7 +55,7 @@ def ch4_to_co2e(ch4_kg: float, config=None) -> float:
         try:
             gwp = config.get_factor("gwp_factors", "gwp_100.CH4")
             return ch4_kg * gwp
-        except:
+        except Exception:
             pass
     # Use loaded constant
     return ch4_kg * CH4_GWP
@@ -78,7 +77,7 @@ def n2o_to_co2e(n2o_kg: float, config=None) -> float:
         try:
             gwp = config.get_factor("gwp_factors", "gwp_100.N2O")
             return n2o_kg * gwp
-        except:
+        except Exception:
             pass
     # Use loaded constant
     return n2o_kg * N2O_GWP
@@ -122,7 +121,7 @@ def nh3_to_indirect_co2e(nh3_n_kg: float, config=None) -> float:
 
             # Convert to CO2e
             return n2o_to_co2e(n2o_kg, config)
-        except:
+        except Exception:
             pass
 
     # Use loaded constants

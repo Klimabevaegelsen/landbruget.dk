@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, Any
 
 
 class ComplianceReportGenerator:

@@ -6,7 +6,7 @@ af alle marker, hvor en bestemt afgrøde dyrkes, for at beregne et gennemsnitlig
 produktaftryk pr. hektar for den pågældende afgrøde.
 """
 
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any
 
 # Define a type alias for a field data structure for clarity
 # Each field would have its area and CO2e contributions from various sources.

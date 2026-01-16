@@ -1,4 +1,3 @@
-from typing import Dict, Any
 from ..utils.conversions import ch4_to_co2e
 from .base_source import EmissionSource
 

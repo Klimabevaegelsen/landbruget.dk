@@ -8,8 +8,6 @@ This module tests the output writer functionality including:
 - Report listing
 """
 
-import pytest
-from datetime import datetime
 from climate_calculator import EmissionReport, EmissionCategory
 from output_writer import ClimateOutputWriter
 

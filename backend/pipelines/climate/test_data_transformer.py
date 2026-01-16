@@ -15,7 +15,7 @@ climate_path = Path(__file__).parent
 if str(climate_path) not in sys.path:
     sys.path.insert(0, str(climate_path))
 
-from data_transformer import (
+from data_transformer import (  # noqa: E402
     GreenAccountsTransformer,
     GKEATransformer,
     FVMTransformer,

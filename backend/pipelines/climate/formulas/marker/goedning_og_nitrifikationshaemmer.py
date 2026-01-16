@@ -119,7 +119,6 @@ def calculate_n2o_components(
     # N2O fra NOx deposition
     # The notebook formula: (N_total * A * EF_NOx) / (46/14) * EF_N2O * (44/28)
     # This means (N-NOx lost) * EF_N2O_for_deposited_N * (44/28)
-    n_lost_as_nox_kg = n_total_on_areal_kg * EF_NOX
     # Convert N-NOx to N that redeposits and forms N2O (assuming NOx is primarily NO2 for this factor)
     # The formula divides by (46/14) which is M_NO2/M_N. This seems to convert N in fertilizer to N in NOx emission.
     # However, the EF_NOX should represent fraction of N lost as N-NOx.

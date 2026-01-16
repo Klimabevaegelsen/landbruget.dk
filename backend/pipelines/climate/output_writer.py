@@ -19,9 +19,7 @@ Supabase Tables (optional):
 - climate_emission_categories (categories breakdown)
 """
 
-import os
 import sys
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -33,10 +31,10 @@ unified_pipeline_path = Path(__file__).parent.parent / "unified_pipeline" / "src
 if str(unified_pipeline_path) not in sys.path:
     sys.path.insert(0, str(unified_pipeline_path))
 
-from unified_pipeline.util.gcs_access import GCSDataAccess
-from unified_pipeline.util.log_util import Logger
+from unified_pipeline.util.gcs_access import GCSDataAccess  # noqa: E402
+from unified_pipeline.util.log_util import Logger  # noqa: E402
 
-from climate_calculator import EmissionReport, EmissionCategory
+from climate_calculator import EmissionReport, EmissionCategory  # noqa: E402
 
 logger = Logger.get_logger()
 
