@@ -1,9 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { Menu } from 'lucide-react';
+import { Menu, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger } from './sheet';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from './collapsible';
 
 interface MobileMenuProps {
   children: React.ReactNode;
@@ -71,23 +76,51 @@ MobileMenu.displayName = 'MobileMenu';
 
 interface MobileMenuSectionProps extends React.HTMLAttributes<HTMLDivElement> {
   title?: string;
+  defaultOpen?: boolean;
+  collapsible?: boolean;
 }
 
 const MobileMenuSection = React.forwardRef<
   HTMLDivElement,
   MobileMenuSectionProps
->(({ className, title, children, ...props }, ref) => {
-  return (
-    <div ref={ref} className={cn('space-y-4', className)} {...props}>
-      {title && (
-        <h3 className="text-muted-foreground text-sm font-medium tracking-wider uppercase">
-          {title}
-        </h3>
-      )}
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-});
+>(
+  (
+    { className, title, children, defaultOpen = true, collapsible = true, ...props },
+    ref
+  ) => {
+    if (!collapsible) {
+      // Non-collapsible section (backwards compatible)
+      return (
+        <div ref={ref} className={cn('space-y-4', className)} {...props}>
+          {title && (
+            <h3 className="text-muted-foreground text-sm font-medium tracking-wider uppercase">
+              {title}
+            </h3>
+          )}
+          <div className="space-y-2">{children}</div>
+        </div>
+      );
+    }
+
+    return (
+      <Collapsible defaultOpen={defaultOpen} className={cn('space-y-2', className)}>
+        <div ref={ref} {...props}>
+          {title && (
+            <CollapsibleTrigger className="flex w-full items-center justify-between py-2 text-left">
+              <h3 className="text-muted-foreground text-sm font-medium tracking-wider uppercase">
+                {title}
+              </h3>
+              <ChevronDown className="text-muted-foreground h-4 w-4 transition-transform duration-200 [[data-state=open]_&]:rotate-180" />
+            </CollapsibleTrigger>
+          )}
+          <CollapsibleContent className="space-y-2">
+            {children}
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+    );
+  }
+);
 MobileMenuSection.displayName = 'MobileMenuSection';
 
 interface MobileMenuItemProps

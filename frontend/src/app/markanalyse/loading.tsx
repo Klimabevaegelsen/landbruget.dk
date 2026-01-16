@@ -2,7 +2,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export default function MarkanalyseLoading() {
   return (
-    <div className="flex h-screen">
+    <div className="flex h-dvh">
       {/* Desktop Sidebar Skeleton */}
       <div className="bg-card hidden w-80 border-r lg:block">
         <div className="border-b p-4">
@@ -36,11 +36,11 @@ export default function MarkanalyseLoading() {
           <Skeleton className="h-12 w-full lg:w-64" />
         </div>
 
-        {/* Map Loading */}
+        {/* Map Loading - using skeleton instead of spinner */}
         <div className="flex h-full items-center justify-center">
           <div className="space-y-4 text-center">
-            <div className="border-primary mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-t-transparent"></div>
-            <p className="text-muted-foreground">Indlæser kort...</p>
+            <Skeleton className="mx-auto h-16 w-16 rounded-lg" />
+            <Skeleton className="mx-auto h-4 w-32" />
           </div>
         </div>
       </div>

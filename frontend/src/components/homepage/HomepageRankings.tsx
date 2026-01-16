@@ -3,7 +3,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Filter, RefreshCw, Clock, Database } from 'lucide-react';
+import {
+  Loader2,
+  Filter,
+  RefreshCw,
+  Clock,
+  Database,
+} from 'lucide-react';
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@/components/ui/carousel';
 import RankingTable from './RankingTable';
 import { useRankingsCache } from '@/hooks/useRankingsCache';
 import { useCompanyCache } from '@/hooks/useCompanyCache';
@@ -228,23 +241,63 @@ export default function HomepageRankings() {
         </div>
       )}
 
-      {/* Rankings Grid */}
+      {/* Rankings - Carousel on Mobile, Grid on Desktop */}
       {!loading && !error && filteredRankings.length > 0 && (
-        <div className="grid grid-cols-1 gap-6">
-          {filteredRankings.map((ranking) => (
-            <RankingTable
-              key={ranking.id}
-              id={ranking.id}
-              title={ranking.title}
-              category={ranking.category}
-              description={ranking.description}
-              unit={ranking.unit}
-              items={ranking.items}
-              last_updated={ranking.last_updated}
-              showTop={10} // Show top 10 on homepage
-            />
-          ))}
-        </div>
+        <>
+          {/* Mobile Carousel View */}
+          <div className="md:hidden">
+            <Carousel
+              opts={{
+                align: 'start',
+                loop: filteredRankings.length > 1,
+              }}
+              className="w-full"
+            >
+              <CarouselContent className="-ml-2 md:-ml-4">
+                {filteredRankings.map((ranking) => (
+                  <CarouselItem key={ranking.id} className="pl-2 md:pl-4">
+                    <RankingTable
+                      id={ranking.id}
+                      title={ranking.title}
+                      category={ranking.category}
+                      description={ranking.description}
+                      unit={ranking.unit}
+                      items={ranking.items}
+                      last_updated={ranking.last_updated}
+                      showTop={10}
+                    />
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              {filteredRankings.length > 1 && (
+                <div className="mt-4 flex items-center justify-center gap-4">
+                  <CarouselPrevious className="static translate-y-0" />
+                  <span className="text-muted-foreground text-sm">
+                    Swipe eller brug pile for at navigere
+                  </span>
+                  <CarouselNext className="static translate-y-0" />
+                </div>
+              )}
+            </Carousel>
+          </div>
+
+          {/* Desktop Grid View */}
+          <div className="hidden grid-cols-1 gap-6 md:grid">
+            {filteredRankings.map((ranking) => (
+              <RankingTable
+                key={ranking.id}
+                id={ranking.id}
+                title={ranking.title}
+                category={ranking.category}
+                description={ranking.description}
+                unit={ranking.unit}
+                items={ranking.items}
+                last_updated={ranking.last_updated}
+                showTop={10}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {/* No Results */}

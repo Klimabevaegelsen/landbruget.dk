@@ -283,6 +283,7 @@ supabase status
 - Component file structure: `ComponentName.tsx`
 - Test file structure: `ComponentName.test.tsx`
 - Keep components small and focused
+- **Follow UI guidelines**: See `AGENTS.md` and `.claude/rules/ui-development.md`
 
 ### Python
 - Follow PEP 8 style guide
@@ -507,8 +508,11 @@ Capabilities:
 - **Testing Rules**: `.claude/rules/testing.md`
 - **Data Quality Rules**: `.claude/rules/data-quality.md`
 - **Security Rules**: `.claude/rules/security.md`
+- **UI Development Rules**: `.claude/rules/ui-development.md`
+- **Web Interface Guidelines**: `.claude/rules/web-interface.md`
 - **Skills**: `.claude/skills/` (data-pipeline, playwright-testing, supabase-migration, code-review)
 - **Commands**: `.claude/commands/`
+- **Agent UI Guidelines**: `AGENTS.md` (comprehensive UI building guide for AI agents)
 
 ### Documentation
 - **Pipeline Documentation**: `docs/PIPELINE_INDEX.md`

@@ -12,12 +12,21 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
+import {
   Building2,
   MapPin,
   ExternalLink,
   Database,
   ChevronDown,
   ArrowUpDown,
+  Copy,
+  ExternalLinkIcon,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useCompanyNavigation } from '@/hooks/useCompanyNavigation';
@@ -209,60 +218,93 @@ export default function RankingTableEnhanced({
                   const isCached =
                     getCompanyForDisplay(item.company_id) !== null;
 
+                  const handleCopyCVR = () => {
+                    navigator.clipboard.writeText(item.cvr_number);
+                  };
+
+                  const handleOpenInCVR = () => {
+                    window.open(
+                      `https://datacvr.virk.dk/enhed/virksomhed/${item.cvr_number}`,
+                      '_blank'
+                    );
+                  };
+
                   return (
-                    <TableRow
-                      key={`${item.company_id}-${item.rank}`}
-                      className="hover:bg-muted/50 cursor-pointer"
-                      onClick={() =>
-                        navigateToCompany(item.company_id, item.company_name)
-                      }
-                    >
-                      <TableCell className="font-medium">
-                        <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">
-                          {item.rank}
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center space-x-2">
-                            <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
-                            <span className="truncate font-medium">
-                              {item.company_name}
-                            </span>
-                            <ExternalLink className="text-muted-foreground h-3 w-3" />
-                            {isCached && (
-                              <Database className="text-primary h-3 w-3" />
-                            )}
-                          </div>
-                          <div className="text-muted-foreground font-mono text-xs">
-                            CVR: {item.cvr_number}
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      <TableCell className="hidden md:table-cell">
-                        {item.municipality && (
-                          <div className="text-muted-foreground flex items-center space-x-1 text-sm">
-                            <MapPin className="h-3 w-3" />
-                            <span>{item.municipality}</span>
-                          </div>
-                        )}
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="space-y-1">
-                          <div className="font-semibold">
-                            {item.formatted_value}
-                          </div>
-                          {item.year && (
-                            <div className="text-muted-foreground text-xs">
-                              {item.year}
+                    <ContextMenu key={`${item.company_id}-${item.rank}`}>
+                      <ContextMenuTrigger asChild>
+                        <TableRow
+                          className="hover:bg-muted/50 cursor-pointer"
+                          onClick={() =>
+                            navigateToCompany(item.company_id, item.company_name)
+                          }
+                        >
+                          <TableCell className="font-medium">
+                            <div className="bg-muted flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold">
+                              {item.rank}
                             </div>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                          </TableCell>
+
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-2">
+                                <Building2 className="text-muted-foreground h-4 w-4 flex-shrink-0" />
+                                <span className="truncate font-medium">
+                                  {item.company_name}
+                                </span>
+                                <ExternalLink className="text-muted-foreground h-3 w-3" />
+                                {isCached && (
+                                  <Database className="text-primary h-3 w-3" />
+                                )}
+                              </div>
+                              <div className="text-muted-foreground font-mono text-xs">
+                                CVR: {item.cvr_number}
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="hidden md:table-cell">
+                            {item.municipality && (
+                              <div className="text-muted-foreground flex items-center space-x-1 text-sm">
+                                <MapPin className="h-3 w-3" />
+                                <span>{item.municipality}</span>
+                              </div>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            <div className="space-y-1">
+                              <div className="font-semibold">
+                                {item.formatted_value}
+                              </div>
+                              {item.year && (
+                                <div className="text-muted-foreground text-xs">
+                                  {item.year}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem
+                          onClick={() =>
+                            navigateToCompany(item.company_id, item.company_name)
+                          }
+                        >
+                          <Building2 className="mr-2 h-4 w-4" />
+                          Se virksomhed
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onClick={handleCopyCVR}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          Kopiér CVR-nummer
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={handleOpenInCVR}>
+                          <ExternalLinkIcon className="mr-2 h-4 w-4" />
+                          Åbn i CVR-registeret
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
                   );
                 })}
               </TableBody>
