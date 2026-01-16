@@ -773,13 +773,21 @@ def run_bronze_step(step: str, context: Dict[str, Any]) -> Dict[str, Any]:
         if "chr_to_species" not in context:
             raise ValueError("Cannot run 'ejendom' step without first running 'herd_details'")
 
+        # Filter CHRs by group if CHR group is specified
+        chr_to_species_filtered = context["chr_to_species"]
+        if context["args"]["chr_group"] is not None:
+            chr_to_species_filtered = filter_chr_by_group(context["chr_to_species"], context["args"]["chr_group"])
+            if not chr_to_species_filtered:
+                logging.warning(f"No CHRs found for group {context['args']['chr_group']}")
+                return context
+
         ejendom_tasks = [
-            (get_client(context, "ejendom"), context["username"], chr_num)
-            for chr_num in context["chr_to_species"].keys()
+            (get_client(context, "ejendom"), context["username"], chr_num) for chr_num in chr_to_species_filtered.keys()
         ]
 
         if context["args"]["progress"]:
-            logging.info(f"Processing {len(ejendom_tasks)} ejendom tasks")
+            group_info = f" (CHR group {context['args']['chr_group']})" if context["args"]["chr_group"] else ""
+            logging.info(f"Processing {len(ejendom_tasks)} ejendom tasks{group_info}")
 
         # Run both ejendom operations
         oplysninger_results = process_parallel(
