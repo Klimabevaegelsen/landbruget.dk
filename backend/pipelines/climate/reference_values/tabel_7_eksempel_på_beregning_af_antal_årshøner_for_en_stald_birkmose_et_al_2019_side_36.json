@@ -1,0 +1,84 @@
+{
+  "table_name": "Tabel 7: Eksempel på beregning af antal årshøner for en stald (Birkmose et al., 2019) (Side 36)",
+  "data": [
+    {
+      "Beskrivelse": "1. Hold = Årets første hold i huset",
+      "Antal_høner": null,
+      "Dato_dage": null
+    },
+    {
+      "Beskrivelse": "Dato for udrugning af holdet",
+      "Antal_høner": null,
+      "Dato_dage": "11-06-2019"
+    },
+    {
+      "Beskrivelse": "Dato for indsættelse i huset",
+      "Antal_høner": 9000,
+      "Dato_dage": "01-10-2019"
+    },
+    {
+      "Beskrivelse": "Dato for 20 ugers alder",
+      "Antal_høner": null,
+      "Dato_dage": "29-10-2019"
+    },
+    {
+      "Beskrivelse": "Status primo per 1. januar",
+      "Antal_høner": 8865,
+      "Dato_dage": "01-01-2020"
+    },
+    {
+      "Beskrivelse": "Dato for udsættelse af høner",
+      "Antal_høner": 8732,
+      "Dato_dage": "30-11-2020"
+    },
+    {
+      "Beskrivelse": "Dage i perioden",
+      "Antal_høner": null,
+      "Dato_dage": 334
+    },
+    {
+      "Beskrivelse": "2. Hold = Årets andet hold i huset",
+      "Antal_høner": null,
+      "Dato_dage": null
+    },
+    {
+      "Beskrivelse": "Dato for udrugning af holdet",
+      "Antal_høner": null,
+      "Dato_dage": "25-08-2020"
+    },
+    {
+      "Beskrivelse": "Dato for indsættelse i huset",
+      "Antal_høner": 9000,
+      "Dato_dage": "15-12-2020"
+    },
+    {
+      "Beskrivelse": "Dato for 20 ugers alder",
+      "Antal_høner": null,
+      "Dato_dage": "12-01-2021"
+    },
+    {
+      "Beskrivelse": "Status ultimo per 31. december",
+      "Antal_høner": 8865,
+      "Dato_dage": "31-12-2020"
+    },
+    {
+      "Beskrivelse": "Dage i perioden",
+      "Antal_høner": null,
+      "Dato_dage": 16
+    }
+  ],
+  "beregning_af_antal_årshøner": [
+    {
+      "Beskrivelse": "1. Hold: (Antal v. status + antal ved udsættelse) * 0,5 * (dage i perioden/365)",
+      "Værdi": 8051
+    },
+    {
+      "Beskrivelse": "2. Hold: (Antal v. status + antal ved udsættelse) * 0,5 * (dage i perioden/365)",
+      "Værdi": 392
+    },
+    {
+      "Beskrivelse": "Hus 1: Årshøner, i alt = antal årshøner i 1. Hold + antal årshøner i 2. Hold",
+      "Værdi": 8443
+    }
+  ]
+}

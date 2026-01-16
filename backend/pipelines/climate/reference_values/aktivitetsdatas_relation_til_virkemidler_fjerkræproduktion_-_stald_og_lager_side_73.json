@@ -1,0 +1,25 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Fjerkræproduktion - Stald og lager, Side 73)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 4,
+      "Aktivitetsdata_Beskrivelse": "Staldtype og teknologier",
+      "Virkemiddel": "Varmeveksler"
+    },
+    {
+      "Aktivitetsdata_Nummer": 5,
+      "Aktivitetsdata_Beskrivelse": "Opholdstid af gylle i stald",
+      "Virkemiddel": "Gødningsbånd"
+    },
+    {
+      "Aktivitetsdata_Nummer": 6,
+      "Aktivitetsdata_Beskrivelse": "Mængde strøelse",
+      "Virkemiddel": null
+    },
+    {
+      "Aktivitetsdata_Nummer": 7,
+      "Aktivitetsdata_Beskrivelse": "Gyllehåndtering",
+      "Virkemiddel": "Biogas"
+    }
+  ]
+}

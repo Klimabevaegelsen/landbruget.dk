@@ -1,0 +1,55 @@
+{
+  "table_name": "Tabel 5: Yderligere input til beregning af udledningen af metan fra svins fordøjelse (Side 28)",
+  "data": [
+    {
+      "Input_faktor": "Sofoder",
+      "Standardværdi": 17.5,
+      "Enhed_kilde": "MJ per foderenhed"
+    },
+    {
+      "Input_faktor": "Smågrisefoder",
+      "Standardværdi": 16.5,
+      "Enhed_kilde": "MJ per foderenhed"
+    },
+    {
+      "Input_faktor": "Slagtesvinefoder",
+      "Standardværdi": 17.3,
+      "Enhed_kilde": "MJ per foderenhed"
+    },
+    {
+      "Input_faktor": "Ym-faktor",
+      "Standardværdi": 0.006,
+      "Enhed_kilde": "NI 2020"
+    },
+    {
+      "Input_faktor": "Omregningsfaktor MJ til CH4",
+      "Standardværdi": 55.56,
+      "Enhed_kilde": "NI 2020"
+    },
+    {
+      "Input_faktor": "Tilvækst pr smågris konventionel",
+      "Standardværdi": 24.3,
+      "Enhed_kilde": "kg"
+    },
+    {
+      "Input_faktor": "Tilvækst pr smågris økologisk",
+      "Standardværdi": 16.0,
+      "Enhed_kilde": "kg"
+    },
+    {
+      "Input_faktor": "Tilvækst pr slagtesvin konventionel",
+      "Standardværdi": 82.0,
+      "Enhed_kilde": "kg"
+    },
+    {
+      "Input_faktor": "Tilvækst pr slagtesvin økologisk",
+      "Standardværdi": 82.0,
+      "Enhed_kilde": "kg"
+    },
+    {
+      "Input_faktor": "Tilvækst pr. FRATS grise",
+      "Standardværdi": 106.3,
+      "Enhed_kilde": "kg"
+    }
+  ]
+}
