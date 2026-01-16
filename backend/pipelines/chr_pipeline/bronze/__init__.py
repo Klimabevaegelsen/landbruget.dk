@@ -30,6 +30,11 @@ from .auth import (
     get_legacy_fvm_credentials,
 )
 from .data_processing import aggregate_cattle_movements
+from .herd_discovery import (
+    classify_herd_volume,
+    discover_herd_volumes_for_year,
+    load_previous_discovery_results,
+)
 from .load_chr_dyr import (
     finalize_consolidated_processing,
     initialize_consolidated_processing,
@@ -52,7 +57,7 @@ __all__ = [
     # Authentication
     "create_chr_dyr_client",
     "create_stamdata_client",
-    "create_diko_client", 
+    "create_diko_client",
     "create_ejendom_client",
     "create_besaetning_client",
     "create_robust_soap_client",
@@ -69,6 +74,10 @@ __all__ = [
     "detect_herd_volume",
     "get_optimal_date_range",
     "is_high_volume_herd",
+    # Herd discovery
+    "discover_herd_volumes_for_year",
+    "load_previous_discovery_results",
+    "classify_herd_volume",
     # Utilities
     "create_base_request",
     "parse_date",

@@ -2,37 +2,51 @@ name: Svineflytning Pipeline
 
 on:
   schedule:
-    # Run weekly at 6 AM UTC on Mondays (corresponds to Monday morning Danish time)
-    - cron: '0 6 * * 1'
+    # Run weekly at 2 AM UTC on Wednesdays (spread load across week per CHR plan)
+    - cron: "0 2 * * 3"
   workflow_dispatch:
     inputs:
       stage:
-        description: 'Pipeline stage to run'
+        description: "Pipeline stage to run"
         type: choice
         required: true
         options:
           - all
           - bronze
           - silver
-        default: 'all'
+        default: "all"
       start_date:
-        description: 'Start date (YYYY-MM-DD)'
+        description: "Start date (YYYY-MM-DD)"
         required: false
         type: string
       end_date:
-        description: 'End date (YYYY-MM-DD)'
+        description: "End date (YYYY-MM-DD)"
         required: false
         type: string
       bronze_timestamp:
-        description: 'Specific bronze timestamp to process for silver stage (YYYYMMDD_HHMMSS)'
+        description: "Specific bronze timestamp to process for silver stage (YYYYMMDD_HHMMSS)"
         required: false
         type: string
       test_mode:
-        description: 'Run in test mode'
+        description: "Run in test mode"
         type: boolean
         default: false
+      processing_mode:
+        description: "Processing mode for incremental updates"
+        type: choice
+        required: false
+        options:
+          - incremental
+          - full
+          - backfill
+        default: "incremental"
+      force_backfill_timestamp:
+        description: "Force specific bronze timestamp for backfill (YYYYMMDD_HHMMSS)"
+        type: string
+        required: false
+        default: ""
       log_level:
-        description: 'Logging level'
+        description: "Logging level"
         type: choice
         required: true
         options:
@@ -40,160 +54,160 @@ on:
           - INFO
           - DEBUG
           - ERROR
-        default: 'WARNING'
+        default: "WARNING"
       show_progress:
-        description: 'Show progress information'
+        description: "Show progress information"
         type: boolean
         default: true
       max_concurrent_fetches:
-        description: 'Maximum number of concurrent API calls (5-10 recommended)'
+        description: "Maximum number of concurrent API calls (5-10 recommended)"
         type: number
         required: false
         default: 10
-      buffer_size:
-        description: 'Number of responses to buffer before writing (50-100 recommended)'
-        type: number
-        required: false
-        default: 50
 
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    
+
     # Add resource limits to ensure we stay well within GitHub runner capacity
     env:
-      NODE_OPTIONS: "--max-old-space-size=4096"  # Limit Node.js memory to 4GB
-    
+      NODE_OPTIONS: "--max-old-space-size=4096" # Limit Node.js memory to 4GB
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-    - name: Install dependencies
-      run: |
-        # Install unified pipeline dependencies FIRST (needed for GCS access)
-        cd backend/pipelines/unified_pipeline
-        uv pip install --system -e .
-        
-        # Install svineflytning pipeline dependencies
-        cd ../svineflytning_pipeline
-        uv pip install --system -e .
+      - name: Install dependencies
+        run: |
+          # Install unified pipeline dependencies FIRST (needed for GCS access)
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
 
-    - id: 'auth'
-      name: 'Authenticate to Google Cloud'
-      uses: 'google-github-actions/auth@v2'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+          # Install svineflytning pipeline dependencies
+          cd ../svineflytning_pipeline
+          uv pip install --system -e .
 
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v2'
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
-    - name: 'Set up environment variables'
-      env:
-        GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
-        FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
-        FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
-        GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-      run: |
-        cd backend/pipelines/svineflytning_pipeline
-        echo "GCS_BUCKET=$GCS_BUCKET" >> .env
-        echo "FVM_USERNAME=$FVM_USERNAME" >> .env
-        echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
-        echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
-        echo "SVINEFLYTNING_OUTPUT_DIR=/tmp/data/raw/svineflytning" >> .env
-        echo "SVINEFLYTNING_SILVER_OUTPUT_DIR=/tmp/data/silver/svineflytning" >> .env
-        
-        # Create data directories (using /tmp/data like other pipelines)
-        mkdir -p /tmp/data/raw/svineflytning
-        mkdir -p /tmp/data/silver/svineflytning
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
 
-    - name: Run Pipeline
-      working-directory: backend/pipelines/svineflytning_pipeline
-      run: |
-        # Determine log level: use input if available (workflow_dispatch), otherwise default to WARNING (schedule)
-        LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
-        
-        # Determine stage: use input if available (workflow_dispatch), otherwise default to all (schedule)
-        STAGE=${{ inputs.stage || 'all' }}
-        
-        # Build base command with common arguments
-        CMD="python main.py --log-level $LOG_LEVEL --stage $STAGE"
-        
-        # Add bronze timestamp if provided (for silver-only runs)
-        if [ -n "${{ inputs.bronze_timestamp }}" ]; then
-          CMD="$CMD --bronze-timestamp ${{ inputs.bronze_timestamp }}"
-        fi
-        
-        # Add date range arguments based on event type (only needed for bronze stage)
-        if [ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]; then
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            # For manual triggers, use provided dates if available
-            if [ -n "${{ inputs.start_date }}" ] && [ -n "${{ inputs.end_date }}" ]; then
-              CMD="$CMD --start-date ${{ inputs.start_date }} --end-date ${{ inputs.end_date }}"
+      - name: "Set up environment variables"
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+          FVM_USERNAME: ${{ secrets.FVM_USERNAME }}
+          FVM_PASSWORD: ${{ secrets.FVM_PASSWORD }}
+          GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
+        run: | # pragma: allowlist secret
+          # Set processing mode for incremental processing
+           echo "SVINEFLYTNING_PROCESSING_MODE=${{ inputs.processing_mode || 'incremental' }}" >> $GITHUB_ENV  # pragma: allowlist secret
+          if [[ -n "${{ inputs.force_backfill_timestamp }}" ]]; then  # pragma: allowlist secret
+            echo "SVINEFLYTNING_FORCE_BACKFILL_TIMESTAMP=${{ inputs.force_backfill_timestamp }}" >> $GITHUB_ENV  # pragma: allowlist secret
+          fi
+          cd backend/pipelines/svineflytning_pipeline
+          echo "GCS_BUCKET=$GCS_BUCKET" >> .env
+          echo "FVM_USERNAME=$FVM_USERNAME" >> .env
+          echo "FVM_PASSWORD=$FVM_PASSWORD" >> .env
+          echo "GOOGLE_CLOUD_PROJECT=$GOOGLE_CLOUD_PROJECT" >> .env
+          echo "SVINEFLYTNING_OUTPUT_DIR=/tmp/data/raw/svineflytning" >> .env
+          echo "SVINEFLYTNING_SILVER_OUTPUT_DIR=/tmp/data/silver/svineflytning" >> .env
+
+          # Create data directories (using /tmp/data like other pipelines)
+          mkdir -p /tmp/data/raw/svineflytning
+          mkdir -p /tmp/data/silver/svineflytning
+
+      - name: Run Pipeline
+        working-directory: backend/pipelines/svineflytning_pipeline
+        run: |
+          # Determine log level: use input if available (workflow_dispatch), otherwise default to WARNING (schedule)
+          LOG_LEVEL=${{ inputs.log_level || 'WARNING' }}
+
+          # Determine stage: use input if available (workflow_dispatch), otherwise default to all (schedule)
+          STAGE=${{ inputs.stage || 'all' }}
+
+          # Build base command with common arguments
+          CMD="python main.py --log-level $LOG_LEVEL --stage $STAGE"
+
+          # Add bronze timestamp if provided (for silver-only runs)
+          if [ -n "${{ inputs.bronze_timestamp }}" ]; then
+            CMD="$CMD --bronze-timestamp ${{ inputs.bronze_timestamp }}"
+          fi
+
+          # Add date range arguments based on event type (only needed for bronze stage)
+          if [ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              # For manual triggers, use provided dates if available
+              if [ -n "${{ inputs.start_date }}" ] && [ -n "${{ inputs.end_date }}" ]; then
+                CMD="$CMD --start-date ${{ inputs.start_date }} --end-date ${{ inputs.end_date }}"
+              else
+                # Default to 1 week for manual runs without dates
+                END_DATE=$(date +%Y-%m-%d)
+                START_DATE=$(date -d "$END_DATE -1 week" +%Y-%m-%d)
+                CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
+              fi
             else
-              # Default to 1 week for manual runs without dates
+              # For scheduled runs, use 3-year range
               END_DATE=$(date +%Y-%m-%d)
-              START_DATE=$(date -d "$END_DATE -1 week" +%Y-%m-%d)
+              START_DATE=$(date -d "$END_DATE -3 years" +%Y-%m-%d)
               CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
             fi
-          else
-            # For scheduled runs, use 3-year range
-            END_DATE=$(date +%Y-%m-%d)
-            START_DATE=$(date -d "$END_DATE -3 years" +%Y-%m-%d)
-            CMD="$CMD --start-date $START_DATE --end-date $END_DATE"
           fi
-        fi
-        
-        # Add progress flag if enabled
-        if [ "${{ inputs.show_progress }}" = "true" ]; then
-          CMD="$CMD --progress"
-        fi
-        
-        # Add test mode flag if enabled (only for bronze stage)
-        if [ "${{ inputs.test_mode }}" = "true" ] && ([ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]); then
-          CMD="$CMD --test"
-        fi
-        
-        # Add resource control parameters (only for bronze stage)
-        if [ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]; then
-          if [ -n "${{ inputs.max_concurrent_fetches }}" ]; then
-            CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
-          fi
-          
-          if [ -n "${{ inputs.buffer_size }}" ]; then
-            CMD="$CMD --buffer-size ${{ inputs.buffer_size }}"
-          fi
-        fi
-        
-        echo "Running command: $CMD"
-        $CMD
 
-    - name: Handle pipeline failure
-      if: failure()
-      run: |
-        echo "Pipeline failed. Please check the logs above for details."
-        exit 1
+          # Add progress flag if enabled
+          if [ "${{ inputs.show_progress }}" = "true" ]; then
+            CMD="$CMD --progress"
+          fi
 
-    - name: Upload bronze artifacts
-      uses: actions/upload-artifact@v4
-      if: always()  # Upload even if the pipeline fails
-      with:
-        name: bronze-output
-        path: /tmp/data/raw/svineflytning
-        retention-days: 7
-        
-    - name: Upload silver artifacts
-      uses: actions/upload-artifact@v4
-      if: always()  # Upload even if the pipeline fails
-      with:
-        name: silver-output
-        path: /tmp/data/silver/svineflytning
-        retention-days: 7 
+          # Add test mode flag if enabled (only for bronze stage)
+          if [ "${{ inputs.test_mode }}" = "true" ] && ([ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]); then
+            CMD="$CMD --test"
+          fi
+
+          # Add resource control parameters (only for bronze stage)
+          if [ "$STAGE" = "bronze" ] || [ "$STAGE" = "all" ]; then
+            if [ -n "${{ inputs.max_concurrent_fetches }}" ]; then
+              CMD="$CMD --max-concurrent-fetches ${{ inputs.max_concurrent_fetches }}"
+            fi
+
+            CMD="$CMD --buffer-size 50"
+          fi
+
+          echo "Running command: $CMD"
+          $CMD
+
+      - name: Handle pipeline failure
+        if: failure()
+        run: |
+          echo "Pipeline failed. Please check the logs above for details."
+          exit 1
+
+      - name: Upload bronze artifacts
+        uses: actions/upload-artifact@v4
+        if: always() # Upload even if the pipeline fails
+        with:
+          name: bronze-output
+          path: /tmp/data/raw/svineflytning
+          retention-days: 7
+
+      - name: Upload silver artifacts
+        uses: actions/upload-artifact@v4
+        if: always() # Upload even if the pipeline fails
+        with:
+          name: silver-output
+          path: /tmp/data/silver/svineflytning
+          retention-days: 7

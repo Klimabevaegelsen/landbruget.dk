@@ -14,7 +14,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger() -> logging.Logger:
+        return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
     from silver.transformers.base import BaseTransformer, FileMetadata, TransformResult
 
@@ -24,7 +26,7 @@ logger = get_logger()
 class ExcelTransformer(BaseTransformer, DuckDBProcessor):
     """Transform Excel files using pandas for reading, then DuckDB for processing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         BaseTransformer.__init__(self)
         DuckDBProcessor.__init__(self)
         logger.info("Initialized ExcelTransformer with DuckDB")
@@ -222,7 +224,6 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                         # Try to create table manually with explicit column types
                         try:
                             # Create table manually using DuckDB's CREATE TABLE AS
-                            temp_table = f"temp_{table_name}"
 
                             # Convert DataFrame to a format DuckDB can handle
                             df_clean = df.copy()
@@ -243,7 +244,8 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
 
                     sheets_data.append((clean_sheet_name, table_name))
                     logger.debug(
-                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' with {len(df)} rows"
+                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' "
+                        f"with {len(df)} rows"
                     )
 
                 except Exception as e:
@@ -281,7 +283,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             for i, col_info in enumerate(columns_info):
                 # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
                 col_name = col_info[0]
-                col_type = col_info[1]
+                col_info[1]
 
                 # Apply domain-specific column name mappings first
                 mapped_name = self._apply_domain_specific_mappings(col_name)
@@ -290,7 +292,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     # Use domain-specific mapping
                     standardized_name = mapped_name
                 else:
-                    # Standardize column name: lowercase, replace spaces/special chars with underscores
+                    # Standardize column name: lowercase, replace spaces/special chars
                     # Handle Danish characters properly
                     standardized_name = str(col_name).lower()
                     # Replace Danish characters
@@ -412,7 +414,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
         return None
 
     def _add_backward_compatibility_columns(self, table_name: str) -> None:
-        """Add backward compatibility columns for pesticide data to maintain downstream compatibility.
+        """Add backward compatibility columns for pesticide data to maintain compatibility.
 
         Args:
             table_name: Name of the table to add compatibility columns to
@@ -438,8 +440,12 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             alter_statements = []
             for new_col, old_col in backward_compatibility_mappings.items():
                 if new_col in column_names and old_col not in column_names:
+                    escaped_table = table_name.replace('"', '""')
+                    escaped_new = new_col.replace('"', '""')
+                    escaped_old = old_col.replace('"', '""')
                     alter_statements.append(
-                        f"ALTER TABLE {table_name} ADD COLUMN {old_col} AS {new_col}"
+                        f'ALTER TABLE "{escaped_table}" ADD COLUMN "{escaped_old}" '
+                        f'AS "{escaped_new}"'
                     )
 
             # Execute all alter statements
@@ -479,7 +485,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             for col_info in columns_info:
                 # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
                 col_name = col_info[0]
-                col_type = col_info[1]
+                col_info[1]
 
                 # Properly quote column name for DuckDB and escape quotes
                 escaped_col_name = str(col_name).replace('"', '""')
@@ -514,7 +520,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Simplified query without complex row filtering to avoid parsing issues
             self.conn.execute(f"""
                 CREATE TABLE {result_table} AS
-                SELECT 
+                SELECT
                     {transformations_sql}
                 FROM {table_name}
                 WHERE 1=1

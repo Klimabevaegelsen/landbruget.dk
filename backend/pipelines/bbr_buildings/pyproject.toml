@@ -50,10 +50,12 @@ exclude = ["tests*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "B", "I", "N", "UP", "ANN", "A"]
 ignore = ["ANN101", "ANN401"]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 
 [tool.mypy]
 python_version = "3.11"
@@ -71,4 +73,4 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
 python_classes = "Test*"
-addopts = "--cov=. --cov-report=term-missing -v --ignore=tests" 
+addopts = "--cov=. --cov-report=term-missing -v --ignore=tests"

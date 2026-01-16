@@ -53,7 +53,7 @@ This pipeline processes agricultural data to create H3-based PFAS exposure analy
 - **5-stage spatial join pipeline** for maximum performance
 - **Chunked processing** to handle large datasets efficiently
 - **Geometric union operations** for accurate area calculations
-- **Coordinate system optimization** with ST_FlipCoordinates
+- **Coordinate system optimization** with proper EPSG:4326 (LAT, LON) handling
 
 ### 📊 Comprehensive Analysis
 - **PFAS-containing active ingredient tracking** in grams per hectare

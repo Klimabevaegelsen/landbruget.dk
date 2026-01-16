@@ -64,6 +64,7 @@ class DMIBronzeConfig(BaseJobConfig):
 
     model_config = ConfigDict(frozen=True)
 
+
 class DMIApiClient:
     """Client for interacting with DMI's climate data API"""
 
@@ -107,7 +108,7 @@ class DMIApiClient:
                 return await response.json()
 
         except Exception as e:
-            raise aiohttp.ClientError(f"Error making request to DMI API: {str(e)}")
+            raise aiohttp.ClientError(f"Error making request to DMI API: {str(e)}") from e
 
     async def fetch_grid_data(
         self,
@@ -126,7 +127,10 @@ class DMIApiClient:
         params = {
             "parameterId": parameter_id,
             "limit": 10000,  # Increased limit for monthly data spanning many years
-            "datetime": f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            "datetime": (
+                f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/"
+                f"{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            ),
         }
 
         try:
@@ -152,6 +156,7 @@ class DMIApiClient:
                 "end_time": end_time.isoformat(),
             }
 
+
 class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for DMI climate data.
@@ -173,7 +178,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         Initialize the DMIBronze source.
 
         Args:
-            config (DMIBronzeConfig): Configuration for the data source        """
+            config (DMIBronzeConfig): Configuration for the data source"""
         super().__init__(config)
         self.api_client = DMIApiClient(config)
 
@@ -206,7 +211,8 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         """
         try:
             self.log.info(
-                f"📡 Fetching DMI monthly grid data for {parameter_id} from {start_time:%Y-%m} to {end_time:%Y-%m}"
+                f"📡 Fetching DMI monthly grid data for {parameter_id} "
+                f"from {start_time:%Y-%m} to {end_time:%Y-%m}"
             )
 
             # Helper to advance one month without pandas
@@ -218,10 +224,23 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
             all_features: list = []
             cur_start = datetime(start_time.year, start_time.month, 1)
+
+            # Calculate total months for progress tracking
+            total_months = (
+                (end_time.year - start_time.year) * 12 + (end_time.month - start_time.month) + 1
+            )
+            month_counter = 0
+
             while cur_start < end_time:
                 cur_end = _add_one_month(cur_start) - timedelta(seconds=1)
                 if cur_end > end_time:
                     cur_end = end_time
+
+                month_counter += 1
+                self.log.info(
+                    f"  [{parameter_id}] Fetching {cur_start:%Y-%m} "
+                    f"({month_counter}/{total_months}, {month_counter * 100 // total_months}%)"
+                )
 
                 monthly_data = await self.api_client.fetch_grid_data(
                     session, parameter_id, cur_start, cur_end
@@ -229,6 +248,14 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
                 if monthly_data.get("features"):
                     all_features.extend(monthly_data["features"])
+                    self.log.info(
+                        f"  [{parameter_id}] ✓ {cur_start:%Y-%m}: {len(monthly_data['features'])} features "
+                        f"(total: {len(all_features)})"
+                    )
+                else:
+                    self.log.warning(
+                        f"  [{parameter_id}] ⚠ {cur_start:%Y-%m}: No features returned"
+                    )
 
                 cur_start = _add_one_month(cur_start)
 
@@ -312,13 +339,17 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         """
         try:
             self.log.info(
-                f"Starting DMI bronze processing for monthly data - parameters: {self.config.parameters}"
+                f"Starting DMI bronze processing for monthly data - "
+                f"parameters: {self.config.parameters}"
             )
 
             # Calculate time range
             start_time, end_time = self._calculate_time_range()
             years_span = end_time.year - start_time.year + 1
-            self.log.info(f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} to {end_time.strftime('%Y-%m')} ({years_span} years)")
+            self.log.info(
+                f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} to "
+                f"{end_time.strftime('%Y-%m')} ({years_span} years)"
+            )
 
             # Create semaphore to limit concurrent requests
             semaphore = asyncio.Semaphore(self.config.max_concurrent_fetches)
@@ -331,7 +362,9 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
             # Fetch data for all parameters concurrently
             async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=600, connect=60, sock_read=300)  # Increased timeout for larger monthly datasets
+                timeout=aiohttp.ClientTimeout(
+                    total=600, connect=60, sock_read=300
+                )  # Increased timeout for larger monthly datasets
             ) as session:
                 tasks = [
                     fetch_with_semaphore(session, parameter_id)

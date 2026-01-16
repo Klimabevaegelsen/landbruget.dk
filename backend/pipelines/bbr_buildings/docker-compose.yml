@@ -24,4 +24,4 @@ services:
       - ./:/app
     environment:
       - ENVIRONMENT=test
-    command: ["python", "-m", "pytest", "tests/", "-v"] 
+    command: ["python", "-m", "pytest", "tests/", "-v"]

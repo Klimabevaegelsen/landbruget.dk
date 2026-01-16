@@ -1,20 +1,25 @@
-import { TooltipProps } from "recharts";
+import { TooltipProps } from 'recharts';
 import {
   NameType,
   ValueType,
-} from "recharts/types/component/DefaultTooltipContent";
+} from 'recharts/types/component/DefaultTooltipContent';
+
+interface CustomTooltipProps extends TooltipProps<ValueType, NameType> {
+  unit?: string;
+}
 
 export default function CustomTooltip({
   active,
   payload,
   label,
-}: TooltipProps<ValueType, NameType>) {
+  unit,
+}: CustomTooltipProps) {
   if (!active || !payload || !payload.length) {
     return null;
   }
 
   return (
-    <div className="p-4 bg-white rounded-lg shadow-md border border-gray-200">
+    <div className="bg-background rounded-lg border border-gray-200 p-4 shadow-md">
       <p className="text-base font-semibold">{label}</p>
       {payload.map((entry, index) => (
         <p
@@ -22,9 +27,16 @@ export default function CustomTooltip({
           style={{
             color: entry.color,
           }}
-          className="text-sm font-medium mt-1"
+          className="mt-1 text-sm font-medium"
         >
-          {`${entry.name}: ${entry.value?.toLocaleString("da-DK")}`}
+          <span>
+            {entry.name}: {entry.value?.toLocaleString('da-DK')}
+            {unit && (
+              <span className="text-muted-foreground bg-muted ml-2 rounded px-1 py-0.5 text-xs font-medium">
+                {unit}
+              </span>
+            )}
+          </span>
         </p>
       ))}
     </div>

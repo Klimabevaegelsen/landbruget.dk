@@ -97,4 +97,4 @@ export interface H3DataQuality {
   };
   dataCompleteness: number; // Percentage
   lastUpdated: string; // ISO date string
-} 
+}

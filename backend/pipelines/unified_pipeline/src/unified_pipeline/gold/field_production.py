@@ -12,12 +12,14 @@ import gc
 import os
 import shutil
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import psutil
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, GoldJobInterface
+from unified_pipeline.gold.dst_field_crop_mapping import get_dst_category
 from unified_pipeline.util.log_util import Logger
 
 # DST functionality is now integrated into the unified pipeline
@@ -33,14 +35,18 @@ class FieldProductionGoldConfig(BaseJobConfig):
     frequency: str = "weekly"
     bucket: str = os.getenv("GCS_BUCKET", "landbrugsdata-raw-data")
 
+    # NEW: Single year processing for matrix jobs
+    target_year: Optional[int] = None  # If set, process only this year
+
     # Input silver datasets
     agricultural_fields_dataset: str = "fvm_marker"
     dst_zone_mapping_dataset: str = "dst_zone_mapping"
+    # NOTE: Municipality boundaries no longer needed - handled by FVM silver pipeline
     dst_yield_datasets: List[str] = [
-        "dst_hst77",
-        "dst_gartn1",
-        "dst_fro",
-        "dst_halm1",
+        "hst77_processed",
+        "gartn1_processed",
+        "fro_processed",
+        "halm1_processed",
     ]
 
     # Processing configuration
@@ -51,18 +57,18 @@ class FieldProductionGoldConfig(BaseJobConfig):
     # OPTIMIZED: Conservative memory configuration for GitHub Actions (16GB RAM, 4 CPU, 14GB SSD)
     # Leave 4GB buffer for OS and other processes (25% safety margin)
     memory_limit: str = "8GB"  # REDUCED: Use 50% of available 16GB for safer operation
-    max_temp_directory_size: str = (
-        "6GB"  # REDUCED: Use 43% of available 14GB SSD for safer operation
-    )
+    max_temp_directory_size: str = "10GB"  # REDUCED: Use 71% of 14GB SSD, leaving buffer for OS
     thread_count: int = 2  # REDUCED: Use 50% of available cores to reduce memory pressure
 
     # CRITICAL: Aggressive memory management for resource-constrained environment
     enable_memory_optimizations: bool = True
     enable_spatial_join_verification: bool = True
-    enable_aggressive_cleanup: bool = True  # NEW: Enable aggressive resource cleanup
+    enable_aggressive_cleanup: bool = False  # Temporarily disabled to test spatial join
     checkpoint_threshold_mb: int = 256  # REDUCED: More frequent checkpoints (was 512MB)
     emergency_memory_threshold: float = (
-        0.75  # REDUCED: Trigger emergency cleanup at 75% memory usage
+        0.85  # INCREASED: 75% was too aggressive for SPATIAL_JOIN operator efficiency
+        # According to DuckDB Spatial PR #545, SPATIAL_JOIN creates efficient spatial index
+        # on build side (DST zones ~10MB) which should easily fit in memory
     )
 
     # NEW: Resource monitoring and fallback configuration
@@ -71,13 +77,21 @@ class FieldProductionGoldConfig(BaseJobConfig):
     fallback_batch_reduction_factor: float = 0.5  # Reduce batch size by 50% on memory issues
 
     # NEW: Spatial join batching configuration for GitHub Actions
-    spatial_join_batch_size: int = 100000  # Process spatial joins in batches of 100k records
+    spatial_join_batch_size: int = (
+        100000  # INCREASED: SPATIAL_JOIN operator (PR #545) is much more efficient
+        # With spatial indexing, can handle larger batches without memory explosion
+    )
     enable_batched_spatial_joins: bool = True  # Enable batched spatial processing
 
     # Quality thresholds
     min_yield_coverage: float = 0.3  # Minimum acceptable yield coverage rate
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
+    def apply_cli_filters(self, cli_config) -> None:
+        """Apply CLI filters for matrix job processing."""
+        if cli_config.target_year:
+            object.__setattr__(self, "target_year", cli_config.target_year)
 
 
 class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterface):
@@ -99,13 +113,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info("✅ Spatial extension is working (loaded by BaseSource)")
         except Exception as e:
             self.log.error(f"❌ Spatial extension not available from BaseSource: {e}")
-            raise RuntimeError("Spatial extension is required but not available from BaseSource")
+            raise RuntimeError(
+                "Spatial extension is required but not available from BaseSource"
+            ) from e
 
         # Apply memory optimizations
         self._configure_memory_optimizations()
 
     def _configure_memory_optimizations(self):
-        """Configure DuckDB memory optimizations for GitHub Actions environment with aggressive resource management."""
+        """Configure DuckDB memory optimizations for GitHub Actions environment with
+        aggressive resource management."""
         if not self.config.enable_memory_optimizations:
             return
 
@@ -120,6 +137,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.conn.execute(
                 f"SET max_temp_directory_size = '{self.config.max_temp_directory_size}'"
             )
+            # Ensure correct GCS region is set (may be reset by local config)
+            self.conn.execute("SET s3_region = 'europe-west1'")
 
             # CPU optimization - use all available cores
             self.conn.execute(f"SET threads = {self.config.thread_count}")
@@ -137,7 +156,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             # AGGRESSIVE: Spatial-specific optimizations for resource constraints
             self.conn.execute("SET enable_progress_bar = false")  # Reduce overhead
-            self.conn.execute("SET enable_checkpoint_on_shutdown = true")  # Ensure cleanup on exit
+            # Note: enable_checkpoint_on_shutdown is not available in this DuckDB version
             self.conn.execute("SET wal_autocheckpoint = 100")  # More frequent WAL checkpoints
 
             # Create optimized temp directory with cleanup
@@ -153,13 +172,14 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             self.log.info("✅ Conservative GitHub Actions optimizations applied:")
             self.log.info(f"   Memory: {self.config.memory_limit} (50% of 16GB, 8GB OS buffer)")
             self.log.info(
-                f"   Temp storage: {self.config.max_temp_directory_size} (43% of 14GB SSD)"
+                f"   Temp storage: {self.config.max_temp_directory_size} (71% of 14GB SSD)"
             )
             self.log.info(f"   Threads: {self.config.thread_count} (50% of 4 cores)")
             self.log.info(f"   Checkpoint threshold: {checkpoint_threshold} (aggressive cleanup)")
             self.log.info(f"   Emergency threshold: {self.config.emergency_memory_threshold:.0%}")
             self.log.info(
-                f"   Spatial join batching: {self.config.enable_batched_spatial_joins} (batch size: {self.config.spatial_join_batch_size:,})"
+                f"   Spatial join batching: {self.config.enable_batched_spatial_joins} "
+                f"(batch size: {self.config.spatial_join_batch_size:,})"
             )
 
         except Exception as e:
@@ -200,15 +220,24 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         try:
             # 1. Drop all temporary tables aggressively
             all_tables = self.conn.execute("SHOW TABLES").fetchall()
-            temp_patterns = ["temp_", "intermediate_", "_raw", "_chunk", "batch_", "year_"]
+            temp_patterns = ["temp_", "intermediate_", "_raw", "_chunk", "batch_"]
+            # Exclude critical tables that are needed for processing
+            exclude_patterns = [
+                "current_year_fields",
+                "year_fields_with_zones",
+                "year_production_estimates",
+            ]
 
             for table_row in all_tables:
                 table_name = table_row[0]
+                # Skip critical tables that are needed for processing
+                if any(exclude in table_name.lower() for exclude in exclude_patterns):
+                    continue
                 if any(pattern in table_name.lower() for pattern in temp_patterns):
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                         self.log.debug(f"Dropped temp table: {table_name}")
-                    except:
+                    except Exception:
                         pass
 
             # 2. Force immediate checkpoint and vacuum
@@ -225,7 +254,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             try:
                 memory = psutil.virtual_memory()
                 self.log.info(
-                    f"   Memory after cleanup: {memory.used / (1024**3):.1f}GB ({memory.percent:.1f}%)"
+                    f"   Memory after cleanup: {memory.used / (1024**3):.1f}GB "
+                    f"({memory.percent:.1f}%)"
                 )
                 self.log.info(f"   Python objects collected: {collected}")
             except ImportError:
@@ -261,10 +291,14 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             essential_tables = [
                 "final_production_estimates",
                 "dst_zones",
-                "dst_dst_hst77",
-                "dst_dst_gartn1",
-                "dst_dst_fro",
-                "dst_dst_halm1",
+                "dst_hst77_processed",
+                "dst_gartn1_processed",
+                "dst_fro_processed",
+                "dst_halm1_processed",
+                # Critical tables needed during processing
+                "current_year_fields",
+                "year_fields_with_zones",
+                "year_production_estimates",
             ]
 
             for table_row in all_tables:
@@ -273,7 +307,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
                         self.log.debug(f"Emergency dropped: {table_name}")
-                    except:
+                    except Exception:
                         pass
 
             # 2. Force immediate memory release
@@ -291,7 +325,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     shutil.rmtree(temp_dir)
                     os.makedirs(temp_dir, exist_ok=True)
                     self.log.info("   Emergency: Cleared all temp files")
-                except:
+                except Exception:
                     pass
 
             self.log.warning("🚨 Emergency cleanup completed")
@@ -326,13 +360,15 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                             )
                             self.log.warning(f"Reducing batch size: {original_batch} → {new_batch}")
                             # Note: This requires modifying the config object, which is frozen
-                            # In practice, we'd pass the reduced batch size to the processing function
+                            # In practice, we'd pass the reduced batch size to the
+                            # processing function
 
                         self._emergency_resource_cleanup()
                         continue
                     else:
                         self.log.error(
-                            f"Memory fallback failed after {self.config.max_memory_retries} attempts"
+                            f"Memory fallback failed after {self.config.max_memory_retries} "
+                            f"attempts"
                         )
                         raise
                 else:
@@ -346,7 +382,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
         try:
             test_query = """
-                EXPLAIN SELECT COUNT(*) 
+                EXPLAIN SELECT COUNT(*)
                 FROM current_year_fields f
                 JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
                 LIMIT 1
@@ -360,7 +396,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 return True
             else:
                 self.log.warning(
-                    f"❌ SPATIAL_JOIN operator NOT detected for {query_description} - check join conditions"
+                    f"❌ SPATIAL_JOIN operator NOT detected for {query_description} - "
+                    f"check join conditions"
                 )
                 self.log.debug(f"Query plan: {plan_text}")
                 return False
@@ -403,12 +440,12 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     matching_tables = [t[0] for t in all_tables if t[0].startswith(pattern_prefix)]
                     for table in matching_tables:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except:
+                except Exception:
                     pass
             else:
                 try:
                     self.conn.execute(f"DROP TABLE IF EXISTS {table_pattern}")
-                except:
+                except Exception:
                     pass
 
     def _force_memory_cleanup(self):
@@ -432,7 +469,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"🧹 Memory cleanup: freed {memory_freed:.1f}GB, collected {collected} objects"
             )
             self.log.info(
-                f"   Memory now: {memory_after.used / (1024**3):.1f}GB ({memory_after.percent:.1f}%)"
+                f"   Memory now: {memory_after.used / (1024**3):.1f}GB "
+                f"({memory_after.percent:.1f}%)"
             )
 
         except Exception as e:
@@ -477,7 +515,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             if estimated_memory_gb > available_memory_gb:
                 self.log.warning(f"⚠️ Insufficient memory for {years_count} years batch processing")
                 self.log.warning(
-                    f"   Estimated need: {estimated_memory_gb:.1f}GB, Available: {available_memory_gb:.1f}GB"
+                    f"   Estimated need: {estimated_memory_gb:.1f}GB, "
+                    f"Available: {available_memory_gb:.1f}GB"
                 )
                 return False
 
@@ -494,7 +533,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         raise NotImplementedError("This method has been replaced by year-by-year processing")
 
     def _get_latest_silver_path(self, dataset: str) -> str:
-        """Override base method to handle both data.parquet and {dataset}.parquet naming patterns."""
+        """Override base method to handle both data.parquet and {dataset}.parquet
+        naming patterns."""
         try:
             all_files = []
 
@@ -517,7 +557,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return latest_file
 
         except Exception as e:
-            raise FileNotFoundError(f"No silver data found for {dataset}: {e}")
+            raise FileNotFoundError(f"No silver data found for {dataset}: {e}") from e
 
     def _load_silver_data_to_table(
         self, dataset: str, table_name: str, silver_data: Optional[Dict[str, Any]]
@@ -550,7 +590,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             return False
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
-        """Run field production estimation gold processing with aggressive resource management for GitHub Actions."""
+        """Run field production estimation gold processing with aggressive resource
+        management for GitHub Actions."""
 
         self.log.info(
             "🚀 Starting field production gold layer processing (GitHub Actions optimized)"
@@ -558,7 +599,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         self.log.info("📊 Resource-constrained optimizations applied:")
         self.log.info(f"   • Memory: {self.config.memory_limit} (50% of 16GB, 8GB OS buffer)")
         self.log.info(f"   • CPU: {self.config.thread_count} threads (50% of 4 cores)")
-        self.log.info(f"   • Temp storage: {self.config.max_temp_directory_size} (43% of 14GB SSD)")
+        self.log.info(f"   • Temp storage: {self.config.max_temp_directory_size} (71% of 14GB SSD)")
         self.log.info(
             f"   • Batch processing: {self.config.years_per_batch} year at a time (memory control)"
         )
@@ -580,15 +621,21 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # Check initial memory state
             self._check_emergency_memory_threshold()
 
-            # Get all available years
+            # Get all available years (or single target year for matrix jobs)
             available_years = self._get_available_fvm_marker_years()
             if not available_years:
                 self.log.error("No fvm_marker years found")
                 return
 
-            self.log.info(
-                f"Found fvm_marker data for years: {available_years} ({len(available_years)} years)"
-            )
+            # For matrix jobs, log the single year being processed
+            if self.config.target_year:
+                self.log.info(f"🎯 Matrix job: Processing single year {self.config.target_year}")
+                self.log.info(f"   (Found {len(available_years)} total years available)")
+            else:
+                self.log.info(
+                    f"Found fvm_marker data for years: {available_years} "
+                    f"({len(available_years)} years)"
+                )
 
             # Load DST zone mapping into DuckDB table (small dataset, can stay in memory)
             if not self._load_silver_data_to_table(
@@ -597,7 +644,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.error("DST zone mapping is required for production estimation")
                 return
 
-            # Setup spatial processing with DST zones
+            # Setup spatial processing with DST zones only
+            # NOTE: Municipality assignment now handled by FVM silver pipeline
             self._setup_spatial_processing_with_dst_zones()
 
             # Load DST yield data into DuckDB tables (relatively small, can stay in memory)
@@ -607,18 +655,30 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     "No DST yield data available - production estimates will be limited"
                 )
 
-            # Create final results table
+            # Create final results table with explicit data types to prevent DECIMAL(2,1) inference
             self.conn.execute("DROP TABLE IF EXISTS final_production_estimates")
             self.conn.execute("""
-                CREATE TABLE final_production_estimates AS
-                SELECT * FROM (VALUES 
-                    ('dummy', 'dummy', 'dummy', 0, 0.0, 'dummy', false, 'dummy', 'dummy', 'dummy', 
-                     0.0, 'dummy', 0.0, 'dummy', 'dummy', current_timestamp, 'dummy', 'dummy')
-                ) AS t(field_id, block_id, cvr_number, year, area_ha, crop_type, organic_farming, 
-                       landsdel_code, landsdel_name, dst_regions, yield_estimate_hkg_ha, 
-                       yield_estimation_method, production_estimate_hkg, production_unit, geometry_wkt, created_at,
-                       field_uuid, primary_field_id)
-                WHERE false
+                CREATE TABLE final_production_estimates (
+                    field_id VARCHAR,
+                    block_id VARCHAR,
+                    cvr_number VARCHAR,
+                    year INTEGER,
+                    area_ha DOUBLE,  -- Explicitly DOUBLE to prevent DECIMAL(2,1) constraint
+                    crop_type VARCHAR,
+                    organic_farming BOOLEAN,
+                    landsdel_code VARCHAR,
+                    landsdel_name VARCHAR,
+                    dst_regions VARCHAR,
+                    kommune_name VARCHAR,  -- NEW: Municipality name from spatial join
+                    yield_estimate_hkg_ha DOUBLE,
+                    yield_estimation_method VARCHAR,
+                    production_estimate_hkg DOUBLE,
+                    production_unit VARCHAR,
+                    -- geometry VARCHAR removed to save storage space
+                    created_at TIMESTAMP WITH TIME ZONE,
+                    field_uuid VARCHAR,
+                    primary_field_id VARCHAR
+                )
             """)
 
             self._log_performance_metrics("phase_1_setup", phase_start)
@@ -651,7 +711,17 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
                 except Exception as year_e:
                     self.log.error(f"Error processing year {year}: {year_e}")
-                    # Continue with next year rather than failing entire pipeline
+                    # Check if this is a memory-related error that should fail the pipeline
+                    error_str = str(year_e).lower()
+                    if any(
+                        keyword in error_str
+                        for keyword in ["out of memory", "memory", "temp_directory_size"]
+                    ):
+                        self.log.error(f"Memory error detected for year {year} - failing pipeline")
+                        raise RuntimeError(
+                            f"Pipeline failed due to memory error in year {year}: {year_e}"
+                        ) from year_e
+                    # Continue with next year for non-memory errors
                     continue
 
                 # AGGRESSIVE: Clean up after each year
@@ -664,13 +734,14 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 elapsed_hours = (time.time() - total_start) / 3600
                 if elapsed_hours > 5.5:
                     self.log.warning(
-                        f"Approaching GitHub Actions time limit ({elapsed_hours:.1f}h) - stopping processing"
+                        f"Approaching GitHub Actions time limit ({elapsed_hours:.1f}h) - "
+                        f"stopping processing"
                     )
                     break
 
             if total_fields_processed == 0:
                 self.log.error("No fields were processed across all years")
-                return
+                raise RuntimeError("Pipeline failed: No fields were processed across all years")
 
             self.log.info(
                 f"Processed {total_fields_processed:,} fields across {len(available_years)} years"
@@ -789,24 +860,217 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             if self.config.enable_batched_spatial_joins:
                 self._perform_batched_spatial_join(year)
             else:
+                # First, perform spatial join with DST zones
                 self.conn.execute("""
-                    CREATE OR REPLACE TABLE year_fields_with_zones AS
-                    SELECT 
-                        f.field_id,
-                        f.block_id,
-                        f.cvr_number,
-                        f.area_ha,
-                        f.crop_type,
-                        f.organic_farming,
-                        f.year,
+                CREATE OR REPLACE TABLE year_fields_with_zones AS
+                SELECT
+                    f.field_id,
+                    f.block_id,
+                    f.cvr_number,
+                    f.area_ha,
+                    f.crop_type,
+                    f.organic_farming,
+                    f.year,
+                    COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
+                    COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
+                    COALESCE(z.dst_regions, 'unknown') as dst_regions,
+                    f.field_uuid,
+                    f.primary_field_id,
+                    f.geometry
+                FROM current_year_fields f
+                LEFT JOIN dst_zones z ON ST_Intersects(
+                    f.geometry,
+                    z.geometry
+                )
+                """)
+
+                # Check if municipality is pre-assigned in FVM marker data
+                municipality_preassigned = False
+                try:
+                    # Check if municipality column exists and has data
+                    columns_info = self.conn.execute("DESCRIBE current_year_fields").fetchall()
+                    column_names = [col[0] for col in columns_info]
+
+                    if "municipality" in column_names:
+                        assigned_count = self.conn.execute("""
+                            SELECT COUNT(*) FROM current_year_fields
+                            WHERE municipality IS NOT NULL
+                        """).fetchone()[0]
+                        total_count = self.conn.execute(
+                            "SELECT COUNT(*) FROM current_year_fields"
+                        ).fetchone()[0]
+
+                        if assigned_count > 0:
+                            municipality_preassigned = True
+                            percentage = assigned_count / total_count * 100
+                            self.log.info(
+                                f"  ✅ Municipality pre-assigned in FVM data: "
+                                f"{assigned_count}/{total_count} fields ({percentage:.1f}%)"
+                            )
+                        else:
+                            self.log.warning(
+                                "  ⚠️ Municipality column exists but no assignments found - "
+                                "FVM silver pipeline may need to be rerun"
+                            )
+                    else:
+                        self.log.warning(
+                            "  ⚠️ No municipality column in FVM data - "
+                            "FVM silver pipeline needs to be updated"
+                        )
+                except Exception as e:
+                    self.log.warning(f"Error checking municipality pre-assignment: {e}")
+                    municipality_preassigned = False
+
+                if municipality_preassigned:
+                    # Use pre-assigned municipality data from FVM silver pipeline
+                    self.conn.execute("""
+                    CREATE OR REPLACE TABLE year_fields_with_zones_and_kommune AS
+                    SELECT
+                        f.*,
+                        f.municipality as kommune_name
+                    FROM year_fields_with_zones f
+                    """)
+
+                    self.log.info(
+                        "  🏛️ Using pre-assigned municipality data from FVM silver pipeline"
+                    )
+                else:
+                    # No fallback - municipality assignment should be handled by FVM silver pipeline
+                    self.log.error("  ❌ Municipality data not available from FVM silver pipeline")
+                    self.log.error(
+                        "  💡 Please ensure FVM silver pipeline includes municipality assignment"
+                    )
+
+                    # Create table without municipality for now (will have NULL values)
+                    self.conn.execute("""
+                    CREATE OR REPLACE TABLE year_fields_with_zones_and_kommune AS
+                    SELECT
+                        f.*,
+                        CAST(NULL AS VARCHAR) as kommune_name
+                    FROM year_fields_with_zones f
+                    """)
+
+                # Step 3: Handle unassigned landsdel/dst_regions (similar approach)
+                self.log.info("  🗺️ Checking for unassigned landsdel/dst_regions...")
+                unassigned_regions = self.conn.execute("""
+                    SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
+                    WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
+                """).fetchone()[0]
+
+                if unassigned_regions > 0:
+                    self.log.info(
+                        f"  🎯 Assigning {unassigned_regions} fields to closest DST zones..."
+                    )
+
+                    # Create temporary table for unassigned region fields
+                    self.conn.execute("""
+                    CREATE OR REPLACE TABLE unassigned_region_fields AS
+                    SELECT *, ST_Centroid(ST_GeomFromText(geometry)) as centroid
+                    FROM year_fields_with_zones_and_kommune
+                    WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
+                    """)
+
+                    # Assign to closest DST zone using cross join
+                    # (like recreate_original_csv_structure.py)
+                    # This ensures EVERY unassigned field gets landsdel/dst_regions assignment
+                    self.conn.execute("""
+                    CREATE OR REPLACE TABLE closest_dst_assignments AS
+                    SELECT DISTINCT ON (f.field_uuid)
+                        f.field_uuid,
                         z.landsdel_code,
                         z.landsdel_name,
-                        z.dst_regions,
-                        ST_AsText(f.geometry) as geometry_wkt,
-                        f.field_uuid,
-                        f.primary_field_id
-                    FROM current_year_fields f
-                    LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
+                        z.dst_regions
+                    FROM unassigned_region_fields f
+                    CROSS JOIN dst_zones z
+                    ORDER BY f.field_uuid, ST_Distance(f.centroid, ST_Centroid(z.geometry))
+                    """)
+
+                    # Update the main table with closest DST assignments
+                    self.conn.execute("""
+                    UPDATE year_fields_with_zones_and_kommune
+                    SET
+                        landsdel_code = c.landsdel_code,
+                        landsdel_name = c.landsdel_name,
+                        dst_regions = c.dst_regions
+                    FROM closest_dst_assignments c
+                    WHERE year_fields_with_zones_and_kommune.field_uuid = c.field_uuid
+                    AND (year_fields_with_zones_and_kommune.landsdel_code = 'unknown'
+                         OR year_fields_with_zones_and_kommune.dst_regions = 'unknown')
+                    """)
+
+                    # Clean up temporary tables
+                    self.conn.execute("DROP TABLE IF EXISTS unassigned_region_fields")
+                    self.conn.execute("DROP TABLE IF EXISTS closest_dst_assignments")
+
+                    final_unassigned = self.conn.execute("""
+                        SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
+                        WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
+                    """).fetchone()[0]
+                    self.log.info(
+                        f"  ✅ Final region assignment: {total_count - final_unassigned}/"
+                        f"{total_count} fields assigned"
+                    )
+
+                    # Final safety check for landsdel/dst_regions:
+                    # ensure NO fields remain with 'unknown'
+                    if final_unassigned > 0:
+                        self.log.warning(
+                            f"  🚨 {final_unassigned} fields still have unknown regions - "
+                            f"applying emergency closest assignment"
+                        )
+
+                        # Emergency assignment for remaining unknown regions
+                        self.conn.execute("""
+                        CREATE OR REPLACE TABLE emergency_region_unassigned AS
+                        SELECT *, ST_Centroid(ST_GeomFromText(geometry)) as centroid
+                        FROM year_fields_with_zones_and_kommune
+                        WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
+                        """)
+
+                        self.conn.execute("""
+                        CREATE OR REPLACE TABLE emergency_region_assignments AS
+                        SELECT DISTINCT ON (f.field_uuid)
+                            f.field_uuid,
+                            z.landsdel_code,
+                            z.landsdel_name,
+                            z.dst_regions
+                        FROM emergency_region_unassigned f
+                        CROSS JOIN dst_zones z
+                        ORDER BY f.field_uuid, ST_Distance(f.centroid, ST_Centroid(z.geometry))
+                        """)
+
+                        self.conn.execute("""
+                        UPDATE year_fields_with_zones_and_kommune
+                        SET
+                            landsdel_code = e.landsdel_code,
+                            landsdel_name = e.landsdel_name,
+                            dst_regions = e.dst_regions
+                        FROM emergency_region_assignments e
+                        WHERE year_fields_with_zones_and_kommune.field_uuid = e.field_uuid
+                        AND (year_fields_with_zones_and_kommune.landsdel_code = 'unknown'
+                             OR year_fields_with_zones_and_kommune.dst_regions = 'unknown')
+                        """)
+
+                        # Clean up emergency tables
+                        self.conn.execute("DROP TABLE IF EXISTS emergency_region_unassigned")
+                        self.conn.execute("DROP TABLE IF EXISTS emergency_region_assignments")
+
+                        final_check = self.conn.execute("""
+                            SELECT COUNT(*) FROM year_fields_with_zones_and_kommune
+                            WHERE landsdel_code = 'unknown' OR dst_regions = 'unknown'
+                        """).fetchone()[0]
+                        self.log.info(
+                            f"  ✅ Emergency region assignment complete: {final_check} "
+                            f"fields still unknown"
+                        )
+                    else:
+                        self.log.info("  ✅ All fields successfully assigned to regions")
+
+                # Rename table for downstream processing
+                self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
+                self.conn.execute("""
+                    ALTER TABLE year_fields_with_zones_and_kommune
+                    RENAME TO year_fields_with_zones
                 """)
 
             # Verify SPATIAL_JOIN operator usage
@@ -816,16 +1080,28 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             # AGGRESSIVE: Clean up source table immediately after spatial join
             self.conn.execute("DROP TABLE IF EXISTS current_year_fields")
 
-            # Check memory after spatial join
+            # CRITICAL: Force checkpoint and vacuum to free up temp space before estimates
+            self.log.info("  🧹 Intermediate cleanup before production estimates...")
+            self.conn.execute("CHECKPOINT")
+            self.conn.execute("VACUUM")
+
+            # Force garbage collection
+            import gc
+
+            collected = gc.collect()
+            self.log.info(f"  🧹 Intermediate cleanup: collected {collected} objects")
+
+            # Check memory after spatial join and cleanup
             self._check_emergency_memory_threshold()
 
-            # OPTIMIZED: Create production estimates using single-phase joins
+            # MEMORY-OPTIMIZED: Create production estimates using step-by-step approach
             yield_start = time.time()
-            self.log.info("  📊 Creating production estimates...")
+            self.log.info("  📊 Creating production estimates (memory-optimized approach)...")
 
+            # Step 1: Start with base fields data
             self.conn.execute("""
                 CREATE OR REPLACE TABLE year_production_estimates AS
-                SELECT 
+                SELECT
                     -- JOIN KEYS
                     f.field_id,
                     f.block_id,
@@ -839,63 +1115,59 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                     f.landsdel_code,
                     f.landsdel_name,
                     f.dst_regions,
-                    -- YIELD DATA (optimized single lookup per field)
-                    COALESCE(
-                        hst77.harvest_value,
-                        gartn1.horticulture_value,
-                        fro.seed_value,
-                        halm1.straw_value,
-                        hst77_national.harvest_value
-                    ) as yield_estimate_hkg_ha,
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
-                        THEN 'dst_region_match'
-                        ELSE 'no_yield_data'
-                    END as yield_estimation_method,
-                    -- PRODUCTION ESTIMATE
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
-                        THEN f.area_ha * COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value)
-                        ELSE NULL
-                    END as production_estimate_hkg,
-                    CASE 
-                        WHEN COALESCE(hst77.harvest_value, gartn1.horticulture_value, fro.seed_value, halm1.straw_value, hst77_national.harvest_value) IS NOT NULL 
-                        THEN 'hkg'
-                        ELSE NULL
-                    END as production_unit,
-                    -- SPATIAL INFO
-                    f.geometry_wkt,
+                    -- MUNICIPALITY INFO (NEW)
+                    f.kommune_name,
+                    -- Initialize yield columns
+                    NULL::DOUBLE as yield_estimate_hkg_ha,
+                    'no_yield_data' as yield_estimation_method,
+                    NULL::DOUBLE as production_estimate_hkg,
+                    NULL::VARCHAR as production_unit,
+                    -- GEOMETRY excluded from final results to save storage space
+                    -- f.geometry,  -- commented out
                     -- METADATA
                     current_timestamp as created_at,
                     -- FIELD UUID SUPPORT
                     f.field_uuid,
                     f.primary_field_id
                 FROM year_fields_with_zones f
-                LEFT JOIN dst_dst_hst77 hst77 ON hst77.area_name = f.dst_regions 
-                    AND hst77.time_period = CAST(f.year AS VARCHAR) 
-                    AND hst77.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_gartn1 gartn1 ON gartn1.area_name = f.dst_regions 
-                    AND gartn1.time_period = CAST(f.year AS VARCHAR) 
-                    AND gartn1.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_fro fro ON fro.time_period = CAST(f.year AS VARCHAR) 
-                    AND fro.measure_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_halm1 halm1 ON halm1.area_name = f.dst_regions 
-                    AND halm1.time_period = CAST(f.year AS VARCHAR) 
-                    AND halm1.unit_name ILIKE '%udbytte%'
-                LEFT JOIN dst_dst_hst77 hst77_national ON hst77_national.area_name ILIKE '%Hele landet%' 
-                    AND hst77_national.time_period = CAST(f.year AS VARCHAR) 
-                    AND hst77_national.measure_name ILIKE '%udbytte%'
             """)
+
+            # Apply DST yields using comprehensive crop mapping
+            self._apply_dst_yields_with_mapping(year)
+            self.conn.execute("CHECKPOINT")  # Free temp space after each step
+
+            # Final checkpoint to ensure all data is persisted
+            self.conn.execute("CHECKPOINT")
 
             self._log_performance_metrics(f"yield_estimation_year_{year}", yield_start)
 
             # AGGRESSIVE: Clean up intermediate table immediately
             self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
 
-            # Insert year results into final table
+            # Insert year results into final table (excluding geometry to save storage)
             self.conn.execute("""
                 INSERT INTO final_production_estimates
-                SELECT * FROM year_production_estimates
+                SELECT
+                    field_id,
+                    block_id,
+                    cvr_number,
+                    year,
+                    area_ha,
+                    crop_type,
+                    organic_farming,
+                    landsdel_code,
+                    landsdel_name,
+                    dst_regions,
+                    kommune_name,
+                    yield_estimate_hkg_ha,
+                    yield_estimation_method,
+                    production_estimate_hkg,
+                    production_unit,
+                    -- geometry excluded to save storage space
+                    created_at,
+                    field_uuid,
+                    primary_field_id
+                FROM year_production_estimates
             """)
 
             # Get count of processed fields for this year
@@ -911,7 +1183,8 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             year_duration = time.time() - year_start
             self.log.info(
-                f"  ✅ Year {year} processing completed in {year_duration:.1f}s: {processed_count:,} fields"
+                f"  ✅ Year {year} processing completed in {year_duration:.1f}s: "
+                f"{processed_count:,} fields"
             )
 
             return processed_count
@@ -927,8 +1200,18 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             for table in cleanup_tables:
                 try:
                     self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except:
+                except Exception:
                     pass
+
+            # Check if this is a memory-related error that should be re-raised
+            error_str = str(e).lower()
+            if any(
+                keyword in error_str
+                for keyword in ["out of memory", "memory", "temp_directory_size"]
+            ):
+                self.log.error(f"Memory error in year {year} processing - re-raising")
+                raise  # Re-raise the original memory error
+
             return 0
 
     def _perform_batched_spatial_join(self, year: int):
@@ -940,14 +1223,15 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Get total count of fields to process
         total_fields = self.conn.execute("SELECT COUNT(*) FROM current_year_fields").fetchone()[0]
         self.log.info(
-            f"  📊 Processing {total_fields:,} fields in batches of {self.config.spatial_join_batch_size:,}"
+            f"  📊 Processing {total_fields:,} fields in batches of "
+            f"{self.config.spatial_join_batch_size:,}"
         )
 
-        # Create result table
+        # Create result table (including kommune_name column)
         self.conn.execute("DROP TABLE IF EXISTS year_fields_with_zones")
         self.conn.execute("""
             CREATE TABLE year_fields_with_zones AS
-            SELECT 
+            SELECT
                 NULL::VARCHAR as field_id,
                 NULL::VARCHAR as block_id,
                 NULL::VARCHAR as cvr_number,
@@ -958,7 +1242,10 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 NULL::VARCHAR as landsdel_code,
                 NULL::VARCHAR as landsdel_name,
                 NULL::VARCHAR as dst_regions,
-                NULL::VARCHAR as geometry_wkt
+                NULL::VARCHAR as kommune_name,
+                NULL::VARCHAR as field_uuid,
+                NULL::VARCHAR as primary_field_id,
+                NULL::VARCHAR as geometry
             WHERE FALSE
         """)
 
@@ -983,26 +1270,110 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
             if batch_count == 0:
                 break
 
-            # Perform spatial join for this batch
-            self.conn.execute("""
-                INSERT INTO year_fields_with_zones
-                SELECT 
-                    f.field_id,
-                    f.block_id,
-                    f.cvr_number,
-                    f.area_ha,
-                    f.crop_type,
-                    f.organic_farming,
-                    f.year,
-                    z.landsdel_code,
-                    z.landsdel_name,
-                    z.dst_regions,
-                    ST_AsText(f.geometry) as geometry_wkt,
-                    f.field_uuid,
-                    f.primary_field_id
-                FROM current_batch f
-                LEFT JOIN dst_zones z ON ST_Within(f.geometry, z.geometry)
-            """)
+            # Perform spatial join for this batch - SPATIAL_JOIN operator compliant
+            # Clean table-to-table join structure as per PR #545 requirements
+            # Include municipality assignment in the same join for efficiency
+
+            # NEW: Check if municipality is pre-assigned in current batch
+            municipality_preassigned = False
+            try:
+                columns_info = self.conn.execute("DESCRIBE current_batch").fetchall()
+                column_names = [col[0] for col in columns_info]
+
+                if "municipality" in column_names:
+                    assigned_count = self.conn.execute("""
+                        SELECT COUNT(*) FROM current_batch
+                        WHERE municipality IS NOT NULL
+                    """).fetchone()[0]
+
+                    if assigned_count > 0:
+                        municipality_preassigned = True
+                        self.log.info(
+                            f"  ✅ Municipality pre-assigned in batch: {assigned_count} fields"
+                        )
+            except Exception:
+                municipality_preassigned = False
+
+            if municipality_preassigned:
+                # Use pre-assigned municipality data
+                self.conn.execute("""
+                    INSERT INTO year_fields_with_zones
+                    SELECT
+                        f.field_id,
+                        f.block_id,
+                        f.cvr_number,
+                        f.area_ha,
+                        f.crop_type,
+                        f.organic_farming,
+                        f.year,
+                        COALESCE(z.landsdel_code, 'unknown') as landsdel_code,
+                        COALESCE(z.landsdel_name, 'unknown') as landsdel_name,
+                        COALESCE(z.dst_regions, 'unknown') as dst_regions,
+                        f.municipality as kommune_name,
+                        f.field_uuid,
+                        f.primary_field_id,
+                        f.geometry
+                    FROM current_batch f
+                    LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+                """)
+            else:
+                # Fallback to original municipality assignment logic
+                kommune_available = False
+                try:
+                    kommune_count = self.conn.execute(
+                        "SELECT COUNT(*) FROM kommune_boundaries"
+                    ).fetchone()[0]
+                    kommune_available = kommune_count > 0
+                except Exception:
+                    kommune_available = False
+
+                if kommune_available:
+                    # Perform dual spatial join: DST zones + municipality in one operation
+                    # Leave NULL values for unassigned fields so emergency assignment
+                    # can handle them
+                    self.conn.execute("""
+                        INSERT INTO year_fields_with_zones
+                        SELECT
+                            f.field_id,
+                            f.block_id,
+                            f.cvr_number,
+                            f.area_ha,
+                            f.crop_type,
+                            f.organic_farming,
+                            f.year,
+                            z.landsdel_code,
+                            z.landsdel_name,
+                            z.dst_regions,
+                            k.kommune_name,
+                            f.field_uuid,
+                            f.primary_field_id,
+                            f.geometry
+                        FROM current_batch f
+                        LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+                        LEFT JOIN kommune_boundaries k ON ST_Intersects(f.geometry, k.geometry)
+                    """)
+                else:
+                    # DST zones only (leave NULL values for emergency assignment)
+                    self.conn.execute("""
+                        INSERT INTO year_fields_with_zones
+                        SELECT
+                            f.field_id,
+                            f.block_id,
+                            f.cvr_number,
+                            f.area_ha,
+                            f.crop_type,
+                            f.organic_farming,
+                            f.year,
+                            z.landsdel_code,
+                            z.landsdel_name,
+                            z.dst_regions,
+                            NULL as kommune_name,
+                            f.field_uuid,
+                            f.primary_field_id,
+                            f.geometry
+                        FROM current_batch f
+                        LEFT JOIN dst_zones z ON ST_Intersects(f.geometry, z.geometry)
+                    """)
 
             # Clean up batch table immediately
             self.conn.execute("DROP TABLE IF EXISTS current_batch")
@@ -1021,6 +1392,9 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         final_count = self.conn.execute("SELECT COUNT(*) FROM year_fields_with_zones").fetchone()[0]
         self.log.info(f"  🎯 Batched spatial join completed: {final_count:,} fields processed")
 
+        # Apply emergency assignment for unassigned fields (like recreate_original_csv_structure.py)
+        self._apply_emergency_assignments_batched(year)
+
     def _create_year_table_optimized(self, source_table: str, year: int, column_names: List[str]):
         """Create optimized year table with minimal memory footprint."""
         # Build SELECT clause with proper column mapping
@@ -1029,16 +1403,36 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         cvr_number_select = "cvr_number" if "cvr_number" in column_names else "NULL as cvr_number"
         field_uuid_select = "field_uuid" if "field_uuid" in column_names else "NULL as field_uuid"
 
-        if "crop_type" in column_names:
+        if "crop_name" in column_names:
+            crop_type_select = "crop_name as crop_type"
+        elif "crop_type" in column_names:
             crop_type_select = "crop_type"
-        elif "layer_type" in column_names:
-            crop_type_select = "layer_type as crop_type"
         else:
             crop_type_select = "'unknown' as crop_type"
 
+        # Handle organic farming column - check if is_organic exists in FVM data
+        if "is_organic" in column_names:
+            organic_farming_select = "COALESCE(is_organic, false) as organic_farming"
+            self.log.info(
+                f"✅ Found is_organic column in FVM data for year {year} - "
+                f"organic fields will be used"
+            )
+        else:
+            organic_farming_select = "false as organic_farming"
+            self.log.warning(
+                f"⚠️ No is_organic column found in FVM data for year {year} - "
+                f"assuming all fields are non-organic"
+            )
+
         # Handle geometry column
         if "geometry" in column_names:
-            geometry_select = "geometry"
+            # CRITICAL FIX: Field geometries have X=latitude, Y=longitude (swapped)
+            # DST zones expect X=longitude, Y=latitude (correct WGS84 order)
+            # Use ST_FlipCoordinates to swap X/Y without expensive centroid calculations
+            geometry_select = "ST_FlipCoordinates(geometry) as geometry"
+            self.log.info(
+                f"🔄 Applying coordinate swap fix for year {year} - using ST_FlipCoordinates"
+            )
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
@@ -1047,13 +1441,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Create table based on year (block_id available from 2008+)
         create_query = f"""
             CREATE OR REPLACE TABLE current_year_fields AS
-            SELECT 
+            SELECT
                 {field_id_select},
                 {block_id_select},
                 {cvr_number_select},
                 area_ha,
                 {crop_type_select},
-                false as organic_farming,
+                {organic_farming_select},
                 {year} as year,
                 {geometry_select},
                 {field_uuid_select},
@@ -1078,16 +1472,36 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         cvr_number_select = "cvr_number" if "cvr_number" in column_names else "NULL as cvr_number"
         field_uuid_select = "field_uuid" if "field_uuid" in column_names else "NULL as field_uuid"
 
-        if "crop_type" in column_names:
+        if "crop_name" in column_names:
+            crop_type_select = "crop_name as crop_type"
+        elif "crop_type" in column_names:
             crop_type_select = "crop_type"
-        elif "layer_type" in column_names:
-            crop_type_select = "layer_type as crop_type"
         else:
             crop_type_select = "'unknown' as crop_type"
 
+        # Handle organic farming column - check if is_organic exists in FVM data
+        if "is_organic" in column_names:
+            organic_farming_select = "COALESCE(is_organic, false) as organic_farming"
+            self.log.info(
+                f"✅ Found is_organic column in FVM data for year {year} - "
+                f"organic fields will be used"
+            )
+        else:
+            organic_farming_select = "false as organic_farming"
+            self.log.warning(
+                f"⚠️ No is_organic column found in FVM data for year {year} - "
+                f"assuming all fields are non-organic"
+            )
+
         # Handle geometry column
         if "geometry" in column_names:
-            geometry_select = "geometry"
+            # CRITICAL FIX: Field geometries have X=latitude, Y=longitude (swapped)
+            # DST zones expect X=longitude, Y=latitude (correct WGS84 order)
+            # Use ST_FlipCoordinates to swap X/Y without expensive centroid calculations
+            geometry_select = "ST_FlipCoordinates(geometry) as geometry"
+            self.log.info(
+                f"🔄 Applying coordinate swap fix for year {year} - using ST_FlipCoordinates"
+            )
             geometry_where = "geometry IS NOT NULL"
         else:
             self.log.warning(f"No geometry column found for year {year}")
@@ -1096,13 +1510,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         # Create table based on year (block_id available from 2008+)
         create_query = f"""
             CREATE OR REPLACE TABLE current_year_fields AS
-            SELECT 
+            SELECT
                 {field_id_select},
                 {block_id_select},
                 {cvr_number_select},
                 area_ha,
                 {crop_type_select},
-                false as organic_farming,
+                {organic_farming_select},
                 {year} as year,
                 {geometry_select},
                 {field_uuid_select},
@@ -1128,7 +1542,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.error(f"❌ Spatial extension not available: {spatial_e}")
                 raise RuntimeError(
                     "Spatial extension is required but not available from BaseSource"
-                )
+                ) from spatial_e
 
             # Debug: Check the structure and sample data of dst_zones_raw table
             try:
@@ -1151,16 +1565,17 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 self.log.warning(f"Debug info failed: {debug_e}")
 
             # Create optimized DST zones table with spatial geometry
-            # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText for spatial indexing
+            # Convert WKT geometry strings to GEOMETRY type using ST_GeomFromText
+            # Note: Skip CRS transformation for now - assume consistent CRS
             self.conn.execute("""
                 CREATE OR REPLACE TABLE dst_zones AS
-                SELECT 
+                SELECT
                     landsdel_code,
                     landsdel_name,
                     dst_regions,
                     ST_GeomFromText(geometry) as geometry
                 FROM dst_zones_raw
-                WHERE geometry IS NOT NULL 
+                WHERE geometry IS NOT NULL
                 AND geometry != ''
                 AND geometry != 'NULL'
             """)
@@ -1172,6 +1587,182 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         except Exception as e:
             self.log.error(f"Error setting up DST zones: {e}")
             raise
+
+    def _apply_emergency_assignments_batched(self, year: int) -> None:
+        """Apply emergency closest-distance assignments for unassigned fields (batched version)."""
+        try:
+            # Check for unassigned municipalities
+            unassigned_municipality = self.conn.execute("""
+                SELECT COUNT(*) FROM year_fields_with_zones WHERE kommune_name IS NULL
+            """).fetchone()[0]
+
+            if unassigned_municipality > 0:
+                self.log.info(
+                    f"  🚨 Emergency municipality assignment for {unassigned_municipality} "
+                    f"unassigned fields..."
+                )
+
+                # Check if kommune boundaries are available
+                try:
+                    kommune_count = self.conn.execute(
+                        "SELECT COUNT(*) FROM kommune_boundaries"
+                    ).fetchone()[0]
+                    if kommune_count > 0:
+                        # Apply closest distance assignment
+                        # (like recreate_original_csv_structure.py)
+                        self.conn.execute("""
+                        CREATE OR REPLACE TABLE emergency_municipality_assignments AS
+                        SELECT DISTINCT ON (f.field_uuid)
+                            f.field_uuid,
+                            k.kommune_name
+                        FROM (
+                            SELECT field_uuid, ST_Centroid(ST_GeomFromText(geometry)) as centroid
+                            FROM year_fields_with_zones
+                            WHERE kommune_name IS NULL
+                        ) f
+                        CROSS JOIN kommune_boundaries k
+                        ORDER BY f.field_uuid, ST_Distance(f.centroid, ST_Centroid(k.geometry))
+                        """)
+
+                        # Update main table
+                        self.conn.execute("""
+                        UPDATE year_fields_with_zones
+                        SET kommune_name = e.kommune_name
+                        FROM emergency_municipality_assignments e
+                        WHERE year_fields_with_zones.field_uuid = e.field_uuid
+                        AND year_fields_with_zones.kommune_name IS NULL
+                        """)
+
+                        # Clean up
+                        self.conn.execute("DROP TABLE IF EXISTS emergency_municipality_assignments")
+
+                        final_unassigned = self.conn.execute("""
+                            SELECT COUNT(*) FROM year_fields_with_zones WHERE kommune_name IS NULL
+                        """).fetchone()[0]
+                        self.log.info(
+                            f"  ✅ Emergency municipality assignment: {final_unassigned} "
+                            f"fields still unassigned"
+                        )
+                    else:
+                        # No kommune boundaries available, set to 'Unknown'
+                        self.conn.execute("""
+                        UPDATE year_fields_with_zones SET kommune_name = 'Unknown'
+                        WHERE kommune_name IS NULL
+                        """)
+                        self.log.warning(
+                            "  ⚠️ No kommune boundaries - set unassigned fields to 'Unknown'"
+                        )
+                except Exception as e:
+                    self.log.warning(f"Emergency municipality assignment failed: {e}")
+                    self.conn.execute("""
+                    UPDATE year_fields_with_zones SET kommune_name = 'Unknown'
+                    WHERE kommune_name IS NULL
+                    """)
+
+            # Check for unassigned landsdel/dst_regions
+            unassigned_regions = self.conn.execute("""
+                SELECT COUNT(*) FROM year_fields_with_zones
+                WHERE landsdel_code IS NULL OR dst_regions IS NULL
+            """).fetchone()[0]
+
+            if unassigned_regions > 0:
+                self.log.info(
+                    f"  🚨 Emergency region assignment for {unassigned_regions} "
+                    f"unassigned fields..."
+                )
+
+                # Check if dst_zones are available
+                try:
+                    dst_count = self.conn.execute("SELECT COUNT(*) FROM dst_zones").fetchone()[0]
+                    if dst_count > 0:
+                        # Apply closest distance assignment for regions
+                        self.conn.execute("""
+                        CREATE OR REPLACE TABLE emergency_region_assignments AS
+                        SELECT DISTINCT ON (f.field_uuid)
+                            f.field_uuid,
+                            z.landsdel_code,
+                            z.landsdel_name,
+                            z.dst_regions
+                        FROM (
+                            SELECT field_uuid, ST_Centroid(ST_GeomFromText(geometry)) as centroid
+                            FROM year_fields_with_zones
+                            WHERE landsdel_code IS NULL OR dst_regions IS NULL
+                        ) f
+                        CROSS JOIN dst_zones z
+                        ORDER BY f.field_uuid, ST_Distance(f.centroid, ST_Centroid(z.geometry))
+                        """)
+
+                        # Update main table
+                        self.conn.execute("""
+                        UPDATE year_fields_with_zones
+                        SET
+                            landsdel_code = e.landsdel_code,
+                            landsdel_name = e.landsdel_name,
+                            dst_regions = e.dst_regions
+                        FROM emergency_region_assignments e
+                        WHERE year_fields_with_zones.field_uuid = e.field_uuid
+                        AND (year_fields_with_zones.landsdel_code IS NULL
+                             OR year_fields_with_zones.dst_regions IS NULL)
+                        """)
+
+                        # Clean up
+                        self.conn.execute("DROP TABLE IF EXISTS emergency_region_assignments")
+
+                        final_unassigned = self.conn.execute("""
+                            SELECT COUNT(*) FROM year_fields_with_zones
+                            WHERE landsdel_code IS NULL OR dst_regions IS NULL
+                        """).fetchone()[0]
+                        self.log.info(
+                            f"  ✅ Emergency region assignment: {final_unassigned} "
+                            f"fields still unassigned"
+                        )
+                    else:
+                        # No dst_zones available, set to 'unknown'
+                        self.conn.execute("""
+                        UPDATE year_fields_with_zones
+                        SET landsdel_code = 'unknown', landsdel_name = 'unknown',
+                            dst_regions = 'unknown'
+                        WHERE landsdel_code IS NULL OR dst_regions IS NULL
+                        """)
+                        self.log.warning("  ⚠️ No DST zones - set unassigned fields to 'unknown'")
+                except Exception as e:
+                    self.log.warning(f"Emergency region assignment failed: {e}")
+                    self.conn.execute("""
+                    UPDATE year_fields_with_zones
+                    SET landsdel_code = 'unknown', landsdel_name = 'unknown',
+                        dst_regions = 'unknown'
+                    WHERE landsdel_code IS NULL OR dst_regions IS NULL
+                    """)
+
+        except Exception as e:
+            self.log.error(f"Emergency assignment failed: {e}")
+            # Fallback: set all NULL values to default
+            self.conn.execute("""
+            UPDATE year_fields_with_zones
+            SET
+                kommune_name = COALESCE(kommune_name, 'Unknown'),
+                landsdel_code = COALESCE(landsdel_code, 'unknown'),
+                landsdel_name = COALESCE(landsdel_name, 'unknown'),
+                dst_regions = COALESCE(dst_regions, 'unknown')
+            """)
+            self.log.warning("Applied fallback assignments for all NULL values")
+
+    def _get_available_fvm_marker_years(self) -> List[int]:
+        """Override base method to respect target_year for matrix jobs."""
+        if self.config.target_year:
+            # For matrix jobs, only return the target year if it exists
+            all_years = super()._get_available_fvm_marker_years()
+            if self.config.target_year in all_years:
+                return [self.config.target_year]
+            else:
+                self.log.error(
+                    f"Target year {self.config.target_year} not found in available years: "
+                    f"{all_years}"
+                )
+                return []
+        else:
+            # For normal processing, return all years
+            return super()._get_available_fvm_marker_years()
 
     def _load_dst_yield_data(self, silver_data: Optional[Dict[str, Any]] = None) -> List[str]:
         """Load DST yield data into DuckDB tables."""
@@ -1198,7 +1789,7 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         try:
             # Get summary statistics
             summary = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as total_fields,
                     COUNT(DISTINCT year) as years_covered,
                     COUNT(DISTINCT crop_type) as crops_covered,
@@ -1230,12 +1821,13 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
                 f"  Fields with yield estimates: {fields_with_yields:,} ({yield_coverage:.1%})"
             )
             self.log.info(
-                f"  Fields with production estimates: {fields_with_production:,} ({production_coverage:.1%})"
+                f"  Fields with production estimates: {fields_with_production:,} "
+                f"({production_coverage:.1%})"
             )
 
             # Summary by year
             year_summary = self.conn.execute("""
-                SELECT 
+                SELECT
                     year,
                     COUNT(*) as year_count,
                     COUNT(production_estimate_hkg) as year_with_production,
@@ -1247,13 +1839,16 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
 
             for year, year_count, year_with_production, year_coverage in year_summary:
                 self.log.info(
-                    f"    Year {year}: {year_count:,} fields, {year_with_production:,} with production ({year_coverage:.1f}%)"
+                    f"    Year {year}: {year_count:,} fields, {year_with_production:,} "
+                    f"with production "
+                    f"({year_coverage:.1f}%)"
                 )
 
             # Check quality thresholds
             if yield_coverage < self.config.min_yield_coverage:
                 self.log.warning(
-                    f"Yield coverage {yield_coverage:.1%} below minimum threshold {self.config.min_yield_coverage:.1%}"
+                    f"Yield coverage {yield_coverage:.1%} below minimum threshold "
+                    f"{self.config.min_yield_coverage:.1%}"
                 )
 
         except Exception as e:
@@ -1263,14 +1858,25 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
     def _save_results_to_gold(self) -> None:
         """Save results to gold layer using optimized DuckDB export."""
         try:
-            # Use optimized save method from base class
-            output_path = (
-                f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
-            )
+            # For matrix jobs, use year-specific paths; for normal jobs, use latest
+            if self.config.target_year:
+                # Matrix job: save to year-specific directory
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_path = (
+                    f"gs://{self.config.bucket}/gold/{self.config.dataset}_{self.config.target_year}/"
+                    f"{timestamp}/data.parquet"
+                )
+                self.log.info(
+                    f"🎯 Matrix job: Saving year {self.config.target_year} to year-specific path"
+                )
+            else:
+                # Normal job: save to latest directory
+                output_path = (
+                    f"gs://{self.config.bucket}/gold/{self.config.dataset}/latest/data.parquet"
+                )
 
             # Export directly from DuckDB table to GCS
             self.gcs_access.upload_from_duckdb_table(
-                self.conn,
                 "final_production_estimates",
                 output_path,
                 compression="zstd",
@@ -1282,3 +1888,220 @@ class FieldProductionGold(BaseSource[FieldProductionGoldConfig], GoldJobInterfac
         except Exception as e:
             self.log.error(f"Error saving results: {e}")
             raise
+
+    def _apply_dst_yields_with_mapping(self, year: int) -> None:
+        """
+        Apply DST yields using the comprehensive crop mapping table.
+        This replaces the old hard-coded matching with intelligent crop mapping.
+        Also updates crop_type to show the mapped DST category.
+        """
+        self.log.info(f"  🎯 Applying DST yields with crop mapping for {year}...")
+
+        # Get unique crop types that need yield estimates
+        crop_types = self.conn.execute("""
+            SELECT DISTINCT crop_type
+            FROM year_production_estimates
+            WHERE yield_estimate_hkg_ha IS NULL
+        """).fetchall()
+
+        total_crops = len(crop_types)
+        matched_crops = 0
+        updated_fields = 0
+
+        self.log.info(f"  📊 Processing {total_crops} unique crop types...")
+
+        # Process each crop type through the mapping
+        for (crop_type,) in crop_types:
+            mapping_info = get_dst_category(crop_type)
+
+            if not mapping_info:
+                self.log.debug(f"  ❌ No mapping found for crop: {crop_type}")
+                continue
+
+            dst_table = mapping_info["dst_table"]
+            dst_category = mapping_info["dst_category"]
+            match_quality = mapping_info["match_quality"]
+
+            # First, count fields that will be updated
+            fields_to_update = self.conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM year_production_estimates
+                WHERE crop_type = ?
+            """,
+                [crop_type],
+            ).fetchone()[0]
+
+            # Then update the crop_type field to show the mapped DST category
+            # This ensures the output shows proper DST categories instead of raw FVM crop names
+            self.conn.execute(
+                """
+                UPDATE year_production_estimates
+                SET crop_type = ?
+                WHERE crop_type = ?
+            """,
+                [dst_category, crop_type],
+            )
+
+            fields_updated = fields_to_update
+            updated_fields += fields_updated
+
+            self.log.debug(f"  ✅ Mapped {crop_type} → {dst_category} ({fields_updated:,} fields)")
+
+            # Apply yields based on DST table (now using the updated dst_category as crop_type)
+            if dst_table == "HST77":
+                self._apply_hst77_yields(year, dst_category, dst_category, match_quality)
+            elif dst_table == "GARTN1":
+                self._apply_gartn1_yields(year, dst_category, dst_category, match_quality)
+            elif dst_table == "FRO":
+                self._apply_fro_yields(year, dst_category, dst_category, match_quality)
+            elif dst_table == "HALM1":
+                self._apply_halm1_yields(year, dst_category, dst_category, match_quality)
+
+            matched_crops += 1
+
+        self.log.info(
+            f"  ✅ Successfully mapped {matched_crops}/{total_crops} crop types to DST data"
+        )
+        self.log.info(f"  🌾 Updated crop_type for {updated_fields:,} fields with DST categories")
+
+        # Apply fallback for unmapped crops
+        self._apply_fallback_yields(year)
+
+    def _apply_hst77_yields(
+        self, year: int, crop_type: str, dst_category: str, match_quality: str
+    ) -> None:
+        """Apply HST77 yields for a specific crop type and DST category."""
+        # Regional first
+        self.conn.execute(
+            """
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = hst77.harvest_value,
+                yield_estimation_method = 'dst_hst77_regional_' || ?,
+                production_estimate_hkg = area_ha * hst77.harvest_value,
+                production_unit = 'hkg'
+            FROM dst_hst77_processed hst77
+            WHERE hst77.area_name = year_production_estimates.dst_regions
+                AND hst77.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND hst77.measure_name = 'Gennemsnitsudbytte, hkg pr. hektar'
+                AND LOWER(hst77.crop_name) = LOWER(?)
+                AND hst77.harvest_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """,
+            [match_quality, dst_category, crop_type],
+        )
+
+        # National fallback
+        self.conn.execute(
+            """
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = hst77.harvest_value,
+                yield_estimation_method = 'dst_hst77_national_' || ?,
+                production_estimate_hkg = area_ha * hst77.harvest_value,
+                production_unit = 'hkg'
+            FROM dst_hst77_processed hst77
+            WHERE hst77.area_name = 'Hele landet'
+                AND hst77.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND hst77.measure_name = 'Gennemsnitsudbytte, hkg pr. hektar'
+                AND LOWER(hst77.crop_name) = LOWER(?)
+                AND hst77.harvest_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """,
+            [match_quality, dst_category, crop_type],
+        )
+
+    def _apply_gartn1_yields(
+        self, year: int, crop_type: str, dst_category: str, match_quality: str
+    ) -> None:
+        """Apply GARTN1 yields for a specific crop type and DST category."""
+        self.conn.execute(
+            """
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = gartn1.horticulture_value,
+                yield_estimation_method = 'dst_gartn1_regional_' || ?,
+                production_estimate_hkg = area_ha * gartn1.horticulture_value,
+                production_unit = 'hkg'
+            FROM dst_gartn1_processed gartn1
+            WHERE gartn1.area_name = year_production_estimates.dst_regions
+                AND gartn1.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND gartn1.measure_name = 'Produktion, tons'
+                AND LOWER(gartn1.crop_name) = LOWER(?)
+                AND gartn1.horticulture_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """,
+            [match_quality, dst_category, crop_type],
+        )
+
+    def _apply_fro_yields(
+        self, year: int, crop_type: str, dst_category: str, match_quality: str
+    ) -> None:
+        """Apply FRO yields for a specific crop type and DST category."""
+        self.conn.execute(
+            """
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = fro.seed_value,
+                yield_estimation_method = 'dst_fro_national_' || ?,
+                production_estimate_hkg = area_ha * fro.seed_value,
+                production_unit = 'hkg'
+            FROM dst_fro_processed fro
+            WHERE fro.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND fro.measure_name = 'Gennemsnitsudbytte, hkg pr. hektar'
+                AND LOWER(fro.crop_name) = LOWER(?)
+                AND fro.seed_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """,
+            [match_quality, dst_category, crop_type],
+        )
+
+    def _apply_halm1_yields(
+        self, year: int, crop_type: str, dst_category: str, match_quality: str
+    ) -> None:
+        """Apply HALM1 yields for a specific crop type and DST category."""
+        self.conn.execute(
+            """
+            UPDATE year_production_estimates
+            SET
+                yield_estimate_hkg_ha = halm1.straw_value,
+                yield_estimation_method = 'dst_halm1_regional_' || ?,
+                production_estimate_hkg = area_ha * halm1.straw_value,
+                production_unit = 'hkg'
+            FROM dst_halm1_processed halm1
+            WHERE halm1.area_name = year_production_estimates.dst_regions
+                AND halm1.time_period = CAST(year_production_estimates.year AS VARCHAR)
+                AND halm1.unit_name = 'Mængde (mio. kilo)'
+                AND LOWER(halm1.crop_name) = LOWER(?)
+                AND halm1.straw_value IS NOT NULL
+                AND year_production_estimates.crop_type = ?
+                AND year_production_estimates.yield_estimate_hkg_ha IS NULL
+        """,
+            [match_quality, dst_category, crop_type],
+        )
+
+    def _apply_fallback_yields(self, year: int) -> None:
+        """Apply fallback yields for unmapped crops."""
+        unmapped_count = self.conn.execute("""
+            SELECT COUNT(*) FROM year_production_estimates
+            WHERE yield_estimate_hkg_ha IS NULL
+        """).fetchone()[0]
+
+        if unmapped_count > 0:
+            self.log.info(f"  ⚠️  Applying fallback yields for {unmapped_count} unmapped fields...")
+
+            # Use a conservative national average as fallback
+            self.conn.execute("""
+                UPDATE year_production_estimates
+                SET
+                    yield_estimate_hkg_ha = 2.6,
+                    yield_estimation_method = 'fallback_national_average',
+                    production_estimate_hkg = area_ha * 2.6,
+                    production_unit = 'hkg'
+                WHERE yield_estimate_hkg_ha IS NULL
+            """)

@@ -1,59 +1,74 @@
-# Unified Pipeline
+# Unified Pipeline - Manual Execution
+# For manual testing and running specific pipelines on-demand
+# Scheduled pipelines now use dedicated weekly/monthly workflows
 
-name: Unified Pipeline
+name: Unified Pipeline - Manual
 
 on:
-  schedule:
-    - cron: '0 0 * * 0'  # every Sunday at midnight UTC (Note: agricultural_fields processes multi-year data 2020-2025)
   workflow_dispatch:
     # Allow manual triggering
     inputs:
       source:
-        description: 'Source to run the pipeline for'
+        description: "Source to run the pipeline for"
         required: true
-        default: 'cadastral'
+        default: "cadastral"
         type: choice
         options:
           - all
+          # Manual-only pipelines (not scheduled)
+          - soil_types
+          - wetlands
+          - water_typology
+          - grukos
+          - pesticide_disaggregation
+          - pesticide_compliance
+          - worker_safety
+          - work_permits
+          - dmi
+          # All other pipelines (for manual testing)
           - cadastral
           - agricultural_fields
           - bnbo
           - dagi
           - jordbrugsanalyser
           - fvm_wfs
-          - soil_types
-          - wetlands
           - water_projects
-          - water_typology
           - property_cadastral_merge
           - field_production
           - field_area_analysis
-          - pesticide_disaggregation
+          - nles5_nitrogen_estimation
           - pesticide_compliance
           - arbejdstilsynet_inspections
-          - worker_safety
-          - work_permits
           - dst
-          - dmi
           - cvr_enrichment
+      stage:
+        description: "Pipeline stage to run"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - bronze
+          - silver
+          - gold
       agricultural_fields_year:
-        description: 'Agricultural fields year (for field_area_analysis only)'
+        description: "Agricultural fields year (for field_area_analysis only)"
         required: false
         type: choice
         options:
-          - '2024'
-          - '2025'
-          - 'both'
-        default: 'both'
+          - "2024"
+          - "2025"
+          - "both"
+        default: "both"
 
 jobs:
   run-unified-pipeline:
     name: Run Unified Pipeline
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      id-token: 'write'
-      actions: 'write'  # Required to trigger other workflows via API
+      contents: "read"
+      id-token: "write"
+      actions: "write" # Required to trigger other workflows via API
     strategy:
       matrix:
         include: >-
@@ -65,20 +80,23 @@ jobs:
                {"source":"fvm_wfs","layer_type":"smaabiotoper","year":2023},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2024},{"source":"fvm_wfs","layer_type":"smaabiotoper","year":2025},
                {"source":"fvm_wfs","layer_type":"organic_areas","year":2012},{"source":"fvm_wfs","layer_type":"organic_areas","year":2013},{"source":"fvm_wfs","layer_type":"organic_areas","year":2014},{"source":"fvm_wfs","layer_type":"organic_areas","year":2015},{"source":"fvm_wfs","layer_type":"organic_areas","year":2016},{"source":"fvm_wfs","layer_type":"organic_areas","year":2017},{"source":"fvm_wfs","layer_type":"organic_areas","year":2018},{"source":"fvm_wfs","layer_type":"organic_areas","year":2019},{"source":"fvm_wfs","layer_type":"organic_areas","year":2020},{"source":"fvm_wfs","layer_type":"organic_areas","year":2021},{"source":"fvm_wfs","layer_type":"organic_areas","year":2022},{"source":"fvm_wfs","layer_type":"organic_areas","year":2023},{"source":"fvm_wfs","layer_type":"organic_areas","year":2024}
              ]')) ||
-            (github.event_name == 'schedule' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_compliance"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
             (github.event.inputs.source == 'all' &&
-             fromJson('[{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"soil_types"},{"source":"wetlands"},{"source":"water_projects"},{"source":"water_typology"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"pesticide_compliance"},{"source":"arbejdstilsynet_inspections"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"fvm_wfs"},{"source":"dst"},{"source":"dmi"}]')) ||
+             fromJson('[{"source":"soil_types"},{"source":"wetlands"},{"source":"water_typology"},{"source":"grukos"},{"source":"pesticide_disaggregation"},{"source":"pesticide_compliance"},{"source":"worker_safety"},{"source":"work_permits"},{"source":"dmi"},{"source":"cadastral"},{"source":"agricultural_fields"},{"source":"bnbo"},{"source":"dagi"},{"source":"jordbrugsanalyser"},{"source":"fvm_wfs"},{"source":"water_projects"},{"source":"property_cadastral_merge"},{"source":"field_production"},{"source":"field_area_analysis"},{"source":"arbejdstilsynet_inspections"},{"source":"dst"},{"source":"cvr_enrichment"},{"source":"nles5_nitrogen_estimation"}]')) ||
             fromJson(format('[{{"source":"{0}"}}]', github.event.inputs.source))
           }}
       fail-fast: false
-      max-parallel: 10  # GitHub will auto-queue within 20 job limit, this helps with server load
+      max-parallel: 10 # GitHub will auto-queue within 20 job limit, this helps with server load
     env:
       ENVIRONMENT: production
       DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
       DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
       DMI_GOV_CLOUD_API_KEY: ${{ secrets.DMI_GOV_CLOUD_API_KEY }}
+      PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
+      PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -119,8 +137,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -164,16 +182,25 @@ jobs:
           if [ -n "${{ matrix.layer_type }}" ]; then
             # FVM WFS matrix job with specific layer and year
             echo "Running FVM WFS matrix job: ${{ matrix.layer_type }} ${{ matrix.year }}"
-            python -m unified_pipeline -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
+            python -m unified_pipeline run -s fvm_wfs -j all --fvm-layer-type ${{ matrix.layer_type }} --fvm-year ${{ matrix.year }}
           elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
             # FVM WFS from "all" - trigger the dedicated matrix workflow with all stages
-            echo "FVM WFS detected in 'all' mode - triggering dedicated FVM WFS matrix workflow"
-            curl -X POST \
+            echo "🚜 FVM WFS detected in 'all' mode - triggering dedicated FVM WFS matrix workflow"
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
-              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}'
-            echo "FVM WFS matrix workflow triggered successfully with stage=all"
+              -d '{"ref":"${{ github.ref }}","inputs":{"stage":"all","layer_types":"all","years":"all"}}')
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ FVM WFS matrix workflow triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger FVM WFS workflow (HTTP $HTTP_CODE)"
+              echo "Response body:"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
           elif [ "${{ matrix.source }}" = "field_area_analysis" ]; then
             # Field Area Analysis - trigger the dedicated matrix workflow
             SELECTED_YEAR="${{ github.event.inputs.agricultural_fields_year || 'both' }}"
@@ -188,10 +215,14 @@ jobs:
             # Pesticide disaggregation uses dedicated matrix jobs - skip main pipeline
             echo "Pesticide disaggregation detected - using dedicated matrix jobs instead"
             echo "Main pipeline job skipped for pesticide_disaggregation (matrix jobs handle this)"
+          elif [ "${{ matrix.source }}" = "pesticide_compliance" ]; then
+            # Pesticide compliance uses dedicated matrix jobs - skip main pipeline
+            echo "Pesticide compliance detected - using dedicated matrix jobs instead"
+            echo "Main pipeline job skipped for pesticide_compliance (matrix jobs handle this)"
           else
             # Regular source job
-            echo "Running regular pipeline job: ${{ matrix.source }}"
-            python -m unified_pipeline -s ${{ matrix.source }} -j all
+            echo "Running regular pipeline job: ${{ matrix.source }} with stage: ${{ github.event.inputs.stage || 'all' }}"
+            python -m unified_pipeline run -s ${{ matrix.source }} -j ${{ github.event.inputs.stage || 'all' }}
           fi
 
           # Stop resource monitoring
@@ -224,19 +255,39 @@ jobs:
 
   # Pesticide Processing Matrix Jobs - Combined disaggregation + proximity per year
   pesticide-processing:
-    if: ${{ contains(fromJson('["all", "pesticide_disaggregation"]'), github.event.inputs.source) || (github.event_name == 'schedule') }}
+    if: ${{ contains(fromJson('["all", "pesticide_disaggregation"]'), github.event.inputs.source) }}
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
     strategy:
       fail-fast: false
       matrix:
-        year: [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+        year:
+          [
+            2010,
+            2011,
+            2012,
+            2013,
+            2014,
+            2015,
+            2016,
+            2017,
+            2018,
+            2019,
+            2020,
+            2021,
+            2022,
+            2023,
+          ]
     name: Pesticide Processing Year ${{ matrix.year }}
     env:
       ENVIRONMENT: production
       GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      PLANTE_IT_USERNAME: ${{ secrets.PLANTE_IT_USERNAME }}
+      PLANTE_IT_PASSWORD: ${{ secrets.PLANTE_IT_PASSWORD }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
       SAVE_LOCAL: false
     steps:
       - name: Checkout code
@@ -276,8 +327,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
+          python-version: "3.12"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -295,31 +346,31 @@ jobs:
           cd backend/pipelines/unified_pipeline
           echo "🧪 Processing pesticide disaggregation + proximity for year: ${{ matrix.year }}"
           echo "📅 Pesticide year ${{ matrix.year }} uses field data from year $((${{ matrix.year }} + 1))"
-          
+
           # Start resource monitoring
           (while true; do
             sleep 60
             echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
             echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
-            
+
             MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
             DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
-            
+
             if [ $MEMORY_USED_PCT -gt 90 ]; then
               echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
             fi
-            
+
             if [ $DISK_USED_PCT -gt 85 ]; then
               echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
             fi
           done) &
           MONITOR_PID=$!
-          
+
           # Step 1: Run disaggregation
           echo "🧪 Step 1: Running pesticide disaggregation for year ${{ matrix.year }}"
           echo "🚨 WORKFLOW: About to execute Python command for disaggregation"
-          echo "🚨 WORKFLOW: Command: python -m unified_pipeline --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}"
-          if python -m unified_pipeline --source pesticide_disaggregation --stage gold --pesticide-year ${{ matrix.year }}; then
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline run -s pesticide_disaggregation -j gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline run -s pesticide_disaggregation -j gold --pesticide-year ${{ matrix.year }}; then
             echo "✅ Disaggregation completed for year ${{ matrix.year }}"
           else
             DISAGG_EXIT_CODE=$?
@@ -327,14 +378,14 @@ jobs:
             echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
             exit 1
           fi
-          
+
           # Step 2: Run proximity analysis (uses fresh disaggregation data)
           echo "🌍 Step 2: Running proximity analysis for year ${{ matrix.year }}"
           echo "🏠 Analyzing building proximity (100m radius)"
           echo "🌊 Analyzing water feature proximity (100m radius)"
           echo "🚨 WORKFLOW: About to execute Python command for proximity"
-          echo "🚨 WORKFLOW: Command: python -m unified_pipeline --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}"
-          if python -m unified_pipeline --source pesticide_proximity --stage gold --pesticide-year ${{ matrix.year }}; then
+          echo "🚨 WORKFLOW: Command: python -m unified_pipeline run -s pesticide_proximity -j gold --pesticide-year ${{ matrix.year }}"
+          if python -m unified_pipeline run -s pesticide_proximity -j gold --pesticide-year ${{ matrix.year }}; then
             echo "✅ Proximity analysis completed for year ${{ matrix.year }}"
           else
             PROX_EXIT_CODE=$?
@@ -342,7 +393,7 @@ jobs:
             echo "🚨 WORKFLOW: Python command failed - this explains why no app debug output appears"
             exit 1
           fi
-          
+
           # Stop monitoring
           kill $MONITOR_PID 2>/dev/null || true
           echo "✅ Complete pesticide processing finished for year ${{ matrix.year }}"
@@ -357,5 +408,3 @@ jobs:
           find /tmp -type f -size +100M -delete 2>/dev/null || true
           find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
           find . -type f -name "*.pyc" -delete 2>/dev/null || true
-
-

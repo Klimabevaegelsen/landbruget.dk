@@ -11,7 +11,7 @@ logger = get_logger()
 
 
 # Try to import optimized GCS access with fallback
-def _get_gcs_access():
+def _get_gcs_access() -> type | None:
     """
     Get GCSDataAccess with robust import handling for different environments.
 
@@ -25,28 +25,32 @@ def _get_gcs_access():
         return GCSDataAccess
     except ImportError as e:
         logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
-        
+
         # Try alternative import paths that might work in different environments
         try:
-            import sys
             import os
-            
+            import sys
+
             # Add unified pipeline to path if it exists
-            current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            current_dir = os.path.dirname(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
             unified_pipeline_path = os.path.join(current_dir, "unified_pipeline", "src")
             if os.path.exists(unified_pipeline_path) and unified_pipeline_path not in sys.path:
                 sys.path.insert(0, unified_pipeline_path)
                 logger.info(f"Added unified pipeline path: {unified_pipeline_path}")
-            
+
             from unified_pipeline.util.gcs_access import GCSDataAccess
+
             logger.info("✅ Successfully imported GCSDataAccess via alternative path")
             return GCSDataAccess
-            
+
         except ImportError as e2:
             logger.warning(f"⚠️ Alternative import also failed: {e2}")
-        
+
         logger.warning(
-            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed "
+            "for optimal performance"
         )
         return None
 
@@ -58,7 +62,9 @@ GCSDataAccess = _get_gcs_access()
 class DriveStorageManager:
     """Storage manager wrapper that uses optimized GCS access for drive pipeline needs."""
 
-    def __init__(self, storage_type: str, bucket_name: str | None = None, base_dir: str = ""):
+    def __init__(
+        self, storage_type: str, bucket_name: str | None = None, base_dir: str = ""
+    ) -> None:
         """Initialize with storage configuration.
 
         Args:
@@ -80,7 +86,8 @@ class DriveStorageManager:
                     self.gcs_access = GCSDataAccess()
                     self.use_optimized = True
                     logger.info(
-                        f"✅ DriveStorageManager: Initialized with optimized GCS access for bucket: {bucket_name}"
+                        f"✅ DriveStorageManager: Initialized with optimized GCS access "
+                        f"for bucket: {bucket_name}"
                     )
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to initialize optimized GCS access: {e}")
@@ -100,7 +107,7 @@ class DriveStorageManager:
                 f"✅ DriveStorageManager: Initialized with local storage at: {self.base_dir}"
             )
 
-    def _init_fallback_gcs(self, bucket_name: str):
+    def _init_fallback_gcs(self, bucket_name: str) -> None:
         """Initialize fallback GCS storage using google-cloud-storage directly."""
         try:
             from google.cloud import storage
@@ -110,10 +117,12 @@ class DriveStorageManager:
             logger.info(
                 f"✅ DriveStorageManager: Initialized with fallback GCS for bucket: {bucket_name}"
             )
-        except ImportError:
-            raise ImportError("google-cloud-storage is required for GCS storage but not available")
+        except ImportError as e:
+            raise ImportError(
+                "google-cloud-storage is required for GCS storage but not available"
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
     def save_file(self, data: bytes | BinaryIO, path: str | Path) -> None:
         """Save file data to the given path.
@@ -139,8 +148,8 @@ class DriveStorageManager:
                 gcs_relative_path = str(path)
                 if str(self.base_dir) != "." and gcs_relative_path.startswith(str(self.base_dir)):
                     # Remove base_dir prefix to get relative path
-                    gcs_relative_path = gcs_relative_path[len(str(self.base_dir)):].lstrip("/\\")
-                
+                    gcs_relative_path = gcs_relative_path[len(str(self.base_dir)) :].lstrip("/\\")
+
                 # Ensure we have the correct layer prefix based on the path
                 if not gcs_relative_path.startswith(("bronze/", "silver/")):
                     # Determine the correct prefix based on the path content
@@ -149,7 +158,7 @@ class DriveStorageManager:
                     else:
                         # Default to silver for drive data pipeline output
                         gcs_relative_path = f"silver/{gcs_relative_path}"
-                
+
                 if self.use_optimized and self.gcs_access:
                     # Use optimized GCS access
                     gcs_path = f"gs://{self.bucket_name}/{gcs_relative_path}"
@@ -166,7 +175,8 @@ class DriveStorageManager:
                     blob = self.gcs_bucket.blob(gcs_relative_path)
                     blob.upload_from_string(file_bytes)
                     logger.info(
-                        f"✅ Saved file to GCS (fallback): gs://{self.bucket_name}/{gcs_relative_path} ({len(file_bytes)} bytes)"
+                        f"✅ Saved file to GCS (fallback): "
+                        f"gs://{self.bucket_name}/{gcs_relative_path} ({len(file_bytes)} bytes)"
                     )
             else:
                 # Local storage

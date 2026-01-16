@@ -195,7 +195,7 @@ class SpatialJoiner:
             f.geometry,
             -- Add field UUID support
             f.field_uuid,
-            COALESCE(f.field_uuid, 
+            COALESCE(f.field_uuid,
                      'legacy_' || CAST(f.cvr_number AS VARCHAR) || '_' || CAST(f.block_id AS VARCHAR) || '_' || CAST(f.field_id AS VARCHAR)
             ) as primary_field_id
         FROM {h3_table} h
@@ -367,7 +367,7 @@ class SpatialJoiner:
                 ELSE 0
             END as weighted_glyphosate_pesticide_belastning
         FROM {aggregated_table} i
-        LEFT JOIN {pesticide_table} p ON i.field_uuid = p.field_uuid 
+        LEFT JOIN {pesticide_table} p ON i.field_uuid = p.field_uuid
             AND i.cvr_number = p.cvr
         """
 

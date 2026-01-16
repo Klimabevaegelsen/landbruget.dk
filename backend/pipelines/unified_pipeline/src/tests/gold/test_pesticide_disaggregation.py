@@ -203,8 +203,8 @@ class TestPesticideDisaggregationGold:
         processor._create_results_table()
         processor._create_pending_pesticide_rows()
 
-        processed_count = processor._disaggregate_by_marker_match()
-        results = processor._get_results()
+        processor._disaggregate_by_marker_match()
+        processor._get_results()
 
         # Check spatial disaggregation accuracy
         # This test is more complex and might require additional implementation
@@ -223,8 +223,8 @@ class TestPesticideDisaggregationGold:
         processor._create_results_table()
         processor._create_pending_pesticide_rows()
 
-        processed_count = processor._disaggregate_by_marker_match()
-        results = processor._get_results()
+        processor._disaggregate_by_marker_match()
+        processor._get_results()
 
         # Check temporal disaggregation accuracy
         # This test is more complex and might require additional implementation
@@ -243,7 +243,7 @@ class TestPesticideDisaggregationGold:
         processor._create_results_table()
         processor._create_pending_pesticide_rows()
 
-        processed_count = processor._disaggregate_by_marker_match()
+        processor._disaggregate_by_marker_match()
         results = processor._get_results()
 
         # Check confidence scores
@@ -314,8 +314,8 @@ class TestPesticideDisaggregationGold:
         processor._create_results_table()
         processor._create_pending_pesticide_rows()
 
-        processed_count = processor._disaggregate_by_marker_match()
-        results = processor._get_results()
+        processor._disaggregate_by_marker_match()
+        processor._get_results()
 
         # Check pesticide application aggregation
         # This test is more complex and might require additional implementation
@@ -326,7 +326,8 @@ class TestPesticideDisaggregationGold:
         )
 
     def test_organic_field_identification(self, config, mock_gcs_access):
-        """Test that organic fields are properly identified and excluded from pesticide applications."""
+        """Test that organic fields are properly identified and excluded from pesticide
+        applications."""
         # Create fields with organic farming indicators
         fields_df = gGeo(
             {
@@ -377,7 +378,7 @@ class TestPesticideDisaggregationGold:
         processor._create_results_table()
         processor._create_pending_pesticide_rows()
 
-        processed_count = processor._disaggregate_by_marker_match()
+        processor._disaggregate_by_marker_match()
         results = processor._get_results()
 
         # Check that zero-area field is correctly handled

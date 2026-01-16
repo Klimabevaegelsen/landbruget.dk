@@ -136,7 +136,9 @@ def is_high_volume_herd(herd_number: int) -> bool:
     return str(herd_number) in _HIGH_VOLUME_HERDS
 
 
-def get_optimal_date_range(herd_number: int, requested_start: date, requested_end: date) -> List[Tuple[date, date]]:
+def get_optimal_date_range(
+    herd_number: int, requested_start: date, requested_end: date, discovery_results: Optional[Dict] = None
+) -> List[Tuple[date, date]]:
     """
     Get optimal date ranges for a herd, splitting into smaller chunks if it's high-volume.
 
@@ -146,6 +148,9 @@ def get_optimal_date_range(herd_number: int, requested_start: date, requested_en
     _load_high_volume_herds()
 
     herd_str = str(herd_number)
+
+    # Simple approach: herds are auto-detected as high-volume when they cause issues
+    # The detection happens in the animal_movements module when timeouts/failures occur
 
     # Pre-configure known problematic herds with reasonable chunking
     if herd_number in [112389, 104641] and herd_str not in _HIGH_VOLUME_HERDS:
@@ -210,11 +215,11 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
         start_time = time.time()
 
         # Create request structure
-        GLRCHRWSInfoInboundFactory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
-        common_header = GLRCHRWSInfoInboundFactory(**create_base_request(username))
+        glr_chr_ws_info_inbound_factory = chr_dyr_client.get_type("ns0:GLRCHRWSInfoInboundType")
+        common_header = glr_chr_ws_info_inbound_factory(**create_base_request(username))
 
-        CHR_dyrChrBesListeRequestTypeFactory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
-        request_params = CHR_dyrChrBesListeRequestTypeFactory(
+        chr_dyr_chr_bes_liste_request_type_factory = chr_dyr_client.get_type("ns0:CHR_dyrChrBesListeRequestType")
+        request_params = chr_dyr_chr_bes_liste_request_type_factory(
             **{"BesaetningsNummer": herd_number, "PeriodeFra": start_date, "PeriodeTil": end_date}
         )
 
@@ -270,7 +275,8 @@ def detect_herd_volume(chr_dyr_client: Client, username: str, herd_number: int, 
             }
 
             logger.info(
-                f"Herd {herd_number} volume detection: {volume_category} ({estimated_5_year:,.0f} estimated 5-year animals)"
+                f"Herd {herd_number} volume detection: {volume_category} "
+                f"({estimated_5_year:,.0f} estimated 5-year animals)"
             )
 
             # Auto-configure high-risk herds

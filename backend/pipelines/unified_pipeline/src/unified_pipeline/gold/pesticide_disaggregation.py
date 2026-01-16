@@ -82,7 +82,10 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     # DON'T CHANGE THIS - it's the magic number that makes the whole system work
     area_tolerance_pct: float = Field(
         default=2.0,
-        description="Area tolerance percentage - PRESERVE ORIGINAL VALUE (2% = the sweet spot for 92% coverage)",
+        description=(
+            "Area tolerance percentage - PRESERVE ORIGINAL VALUE "
+            "(2% = the sweet spot for 92% coverage)"
+        ),
     )
 
     # Memory management settings for processing large datasets
@@ -123,10 +126,10 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
     def apply_cli_filters(self, cli_config) -> None:
         """
         Apply CLI filtering for matrix job processing.
-        
+
         This method sets the pesticide_year from CLI parameters to enable
         processing of specific years for parallel matrix jobs.
-        
+
         Args:
             cli_config: CLI configuration containing pesticide_year filter
         """
@@ -202,7 +205,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             "strategy_totals": {},
             "final_total_dosage": 0.0,
             "final_total_acreage": 0.0,
-            "final_record_count": 0
+            "final_record_count": 0,
         }
 
         print("DEBUG: PesticideDisaggregationGold.__init__ completed!")
@@ -218,13 +221,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             with self.gcs_access.fs.open(gcs_path, "wb") as dst:
                 shutil.copyfileobj(src, dst)
 
-
-
     def _validate_strategy_results(self, strategy_name: str, processed_count: int) -> None:
         """
         Validate results after each disaggregation strategy runs.
         Tracks cumulative progress and ensures no data corruption.
-        
+
         Args:
             strategy_name: Name of the strategy that just completed
             processed_count: Number of records processed by this strategy
@@ -236,12 +237,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Check if database connection is still valid
             if not self.duckdb_conn:
-                self.log.warning(f"⚠️ VALIDATION WARNING: No database connection for {strategy_name} validation")
+                self.log.warning(
+                    f"⚠️ VALIDATION WARNING: No database connection for {strategy_name} validation"
+                )
                 return
 
             # Get current disaggregated totals
             current_stats = self.duckdb_conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as disaggregated_count,
                     SUM(COALESCE(DosageQuantity, 0)) as disaggregated_dosage,
                     SUM(COALESCE(AllocatedArea, 0)) as disaggregated_acreage,
@@ -251,7 +254,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Get strategy-specific totals
             strategy_stats = self.duckdb_conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as strategy_count,
                     SUM(COALESCE(DosageQuantity, 0)) as strategy_dosage,
                     SUM(COALESCE(AllocatedArea, 0)) as strategy_acreage,
@@ -266,16 +269,22 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     "record_count": strategy_stats[0] or 0,
                     "dosage": strategy_stats[1] or 0.0,
                     "acreage": strategy_stats[2] or 0.0,
-                    "original_records": strategy_stats[3] or 0
+                    "original_records": strategy_stats[3] or 0,
                 }
 
                 self.log.info(f"📊 VALIDATION: {strategy_name} completed")
-                self.log.info(f"   ✅ Strategy processed: {strategy_stats[0]:,} records from {strategy_stats[3]:,} original applications")
+                self.log.info(
+                    f"   ✅ Strategy processed: {strategy_stats[0]:,} records from "
+                    f"{strategy_stats[3]:,} original applications"
+                )
                 self.log.info(f"   📈 Cumulative progress: {current_stats[0]:,} records")
 
                 # Simple check for major discrepancies
                 if strategy_stats[0] != processed_count:
-                    self.log.warning(f"⚠️ VALIDATION WARNING: Expected {processed_count:,} records but found {strategy_stats[0]:,} in database")
+                    self.log.warning(
+                        f"⚠️ VALIDATION WARNING: Expected {processed_count:,} records but "
+                        f"found {strategy_stats[0]:,} in database"
+                    )
 
         except Exception as e:
             self.log.error(f"❌ VALIDATION ERROR: Failed to validate {strategy_name} results: {e}")
@@ -284,10 +293,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Map strategy names to their AllocationMethod patterns for querying."""
         strategy_patterns = {
             "Main Area Match": "Marker_ApplicationAreaToTotalFieldArea_FieldProportional",
-            "Non-Organic Match": "Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional", 
+            "Non-Organic Match": (
+                "Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional"
+            ),
             "Partial Field Coverage": "Partial_Field_Coverage_SingleField",
             "Spatial Clustering": "Adjacent_Fields_Spatial_Cluster_AreaMatched",
-            "Ethical Best-Match": "Ethical_Best_Match_"
+            "Ethical Best-Match": "Ethical_Best_Match_",
         }
         return strategy_patterns.get(strategy_name, strategy_name)
 
@@ -301,13 +312,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Check if database connection is still valid
             if not self.duckdb_conn:
-                self.log.warning("⚠️ VALIDATION WARNING: No database connection for final integrity check")
+                self.log.warning(
+                    "⚠️ VALIDATION WARNING: No database connection for final integrity check"
+                )
                 return
 
             # Get remaining pending records (handle case where table might not exist)
             try:
                 pending_stats = self.duckdb_conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as pending_count,
                         SUM(COALESCE(DosageQuantity, 0)) as pending_dosage,
                         SUM(COALESCE(AcreageSize, 0)) as pending_acreage
@@ -320,7 +333,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Get final disaggregated totals (handle case where table might be empty)
             try:
                 final_stats = self.duckdb_conn.execute("""
-                    SELECT 
+                    SELECT
                         COUNT(*) as final_count,
                         SUM(COALESCE(DosageQuantity, 0)) as final_dosage,
                         SUM(COALESCE(AllocatedArea, 0)) as final_acreage,
@@ -328,7 +341,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     FROM disaggregated_pesticide_applications
                 """).fetchone()
             except Exception as e:
-                self.log.warning(f"⚠️ VALIDATION WARNING: Could not query disaggregated results: {e}")
+                self.log.warning(
+                    f"⚠️ VALIDATION WARNING: Could not query disaggregated results: {e}"
+                )
                 final_stats = (0, 0.0, 0.0, 0)
 
             if pending_stats and final_stats:
@@ -347,33 +362,42 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 # Log simplified validation results
                 self.log.info("🎯 VALIDATION: Final Disaggregation Results")
                 self.log.info("=" * 60)
-                
-                self.log.info(f"📈 DISAGGREGATION RESULTS:")
-                self.log.info(f"   Successfully disaggregated: {unique_originals:,} original applications")
-                self.log.info(f"   Total disaggregated records: {final_count:,} (multi-field expansions)")
+
+                self.log.info("📈 DISAGGREGATION RESULTS:")
+                self.log.info(
+                    f"   Successfully disaggregated: {unique_originals:,} original applications"
+                )
+                self.log.info(
+                    f"   Total disaggregated records: {final_count:,} (multi-field expansions)"
+                )
                 self.log.info(f"   Disaggregated dosage: {final_dosage:,.2f} units")
                 self.log.info(f"   Disaggregated acreage: {final_acreage:,.2f} ha")
-                
-                self.log.info(f"📉 REMAINING UNPROCESSED:")
+
+                self.log.info("📉 REMAINING UNPROCESSED:")
                 self.log.info(f"   Pending records: {pending_count:,}")
                 self.log.info(f"   Pending dosage: {pending_dosage:,.2f} units")
                 self.log.info(f"   Pending acreage: {pending_acreage:,.2f} ha")
 
                 # Strategy breakdown
-                self.log.info(f"📋 STRATEGY BREAKDOWN:")
+                self.log.info("📋 STRATEGY BREAKDOWN:")
                 for strategy, stats in self._validation_data.get("strategy_totals", {}).items():
-                    self.log.info(f"   {strategy}: {stats['original_records']:,} applications → {stats['record_count']:,} records")
+                    self.log.info(
+                        f"   {strategy}: {stats['original_records']:,} applications → "
+                        f"{stats['record_count']:,} records"
+                    )
 
-                # Simple validation: if we have pending records but no results, that's likely a processing failure
+                # Simple validation: if we have pending records but no results,
+                # that's likely a processing failure
                 if pending_count > 0 and final_count == 0:
-                    self.log.warning(f"⚠️ VALIDATION WARNING: {pending_count:,} pending records but 0 disaggregated results - this may indicate processing issues")
+                    self.log.warning(
+                        f"⚠️ VALIDATION WARNING: {pending_count:,} pending records but "
+                        f"0 disaggregated results - this may indicate processing issues"
+                    )
 
                 self.log.info("✅ Validation completed")
 
         except Exception as e:
             self.log.error(f"❌ VALIDATION ERROR: Failed final integrity check: {e}")
-
-
 
     async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
         print("🚨 PESTICIDE DISAGGREGATION RUN METHOD: Starting execution")
@@ -402,7 +426,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         self.log.info("🚀 Starting pesticide disaggregation processing with original strategy")
         print("DEBUG: Logger info message sent")
         self.log.info(
-            f"🔧 Configuration: area_tolerance={self.config.area_tolerance_pct}%, field_year_offset={self.config.field_year_offset}"
+            f"🔧 Configuration: area_tolerance={self.config.area_tolerance_pct}%, "
+            f"field_year_offset={self.config.field_year_offset}"
         )
         self.log.info(f"☁️ GCS Bucket: {self.config.bucket}")
 
@@ -447,7 +472,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         for i, (pesticide_year, field_year) in enumerate(pesticide_field_pairs, 1):
             self.log.info("=" * 80)
             self.log.info(
-                f"🔄 Processing year pair {i}/{len(pesticide_field_pairs)}: pesticide {pesticide_year} with field {field_year}"
+                f"🔄 Processing year pair {i}/{len(pesticide_field_pairs)}: "
+                f"pesticide {pesticide_year} with field {field_year}"
             )
             self.log.info("=" * 80)
 
@@ -455,7 +481,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # =====================================
             # Load both pesticide applications and field boundaries for this year combination
             self.log.info(
-                f"📥 Loading silver data for pesticide year {pesticide_year} and field year {field_year}"
+                f"📥 Loading silver data for pesticide year {pesticide_year} "
+                f"and field year {field_year}"
             )
             try:
                 datasets = self._load_silver_data_for_years(pesticide_year, field_year, silver_data)
@@ -497,7 +524,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # The _process_year_pair method runs all 4 strategies and returns the count of results
             self.log.info(f"⚙️ Starting disaggregation processing for year {pesticide_year}")
             try:
-                year_results = self._process_year_pair(
+                year_results = await self._process_year_pair(
                     pesticide_year,
                     field_year,
                     agricultural_fields_path,
@@ -517,7 +544,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Update our running totals based on how this year went
             if year_results is not None and year_results > 0:
                 self.log.info(
-                    f"✅ Year {pesticide_year}: Successfully processed and saved {year_results:,} disaggregated records"
+                    f"✅ Year {pesticide_year}: Successfully processed and saved "
+                    f"{year_results:,} disaggregated records"
                 )
 
                 # Count total pesticide records for this year to calculate coverage percentage
@@ -531,7 +559,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     temp_conn.close()
                     total_pesticide_records += pesticide_count
                     self.log.info(
-                        f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, {year_results} disaggregated"
+                        f"📈 Year {pesticide_year}: {pesticide_count} total pesticide records, "
+                        f"{year_results} disaggregated"
                     )
                     total_disaggregated_records += year_results
                     successful_years += 1
@@ -558,7 +587,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         if successful_years == 0:
             self.log.error("❌ No years were successfully processed - terminating")
-            error_msg = f"Pesticide disaggregation failed completely: 0/{len(pesticide_field_pairs)} years processed successfully, {failed_years} years failed"
+            error_msg = (
+                f"Pesticide disaggregation failed completely: 0/{len(pesticide_field_pairs)} "
+                f"years processed successfully, {failed_years} years failed"
+            )
             self.log.error(f"💥 CRITICAL FAILURE: {error_msg}")
             raise RuntimeError(error_msg)
 
@@ -573,8 +605,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         if failed_years > 0 and successful_years == 0 and len(pesticide_field_pairs) > 0:
             # This indicates a systematic processing failure, not just missing data
             if total_disaggregated_records == 0:
-                self.log.warning(f"⚠️ WARNING: All {failed_years} years failed to process - this may indicate systematic issues with column mapping, data schema, or processing logic")
-                # Note: We don't fail here because this might be due to data quality issues rather than code bugs
+                self.log.warning(
+                    f"⚠️ WARNING: All {failed_years} years failed to process - this may "
+                    f"indicate systematic issues with column mapping, data schema, or "
+                    f"processing logic"
+                )
+                # Note: We don't fail here because this might be due to data quality issues
+                # rather than code bugs
 
         self.log.info("🎉 Pesticide disaggregation completed successfully!")
         self.log.info("📊 Final Statistics:")
@@ -582,7 +619,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             f"   📈 Total pesticide records across all years: {total_pesticide_records:,}"
         )
         self.log.info(
-            f"   ✅ Successfully disaggregated: {total_disaggregated_records:,} ({coverage_pct:.1f}%)"
+            f"   ✅ Successfully disaggregated: {total_disaggregated_records:,} "
+            f"({coverage_pct:.1f}%)"
         )
         self.log.info(f"   📅 Processed years: {successful_years}")
         self.log.info("   💾 Results saved as separate files for each year (much more efficient!)")
@@ -617,7 +655,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 # Create a copy of the results table with the year-specific name
                 self.log.info(f"🏗️ Creating final table {table_name}")
                 self.duckdb_conn.execute(f"""
-                    CREATE TABLE {table_name} AS 
+                    CREATE TABLE {table_name} AS
                     SELECT * FROM disaggregated_pesticide_applications
                 """)
 
@@ -665,7 +703,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Export table to temporary file using DuckDB COPY
             self.duckdb_conn.execute(f"""
-                COPY {table_name} TO '{temp_path}' 
+                COPY {table_name} TO '{temp_path}'
                 (FORMAT PARQUET, COMPRESSION zstd, ROW_GROUP_SIZE 100000)
             """)
 
@@ -699,7 +737,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         Use _save_year_results_direct() instead for better performance.
         """
         self.log.warning(
-            "⚠️ Using deprecated _save_year_results method - consider using _save_year_results_direct"
+            "⚠️ Using deprecated _save_year_results method - "
+            "consider using _save_year_results_direct"
         )
         return self._save_year_results_direct(year)
 
@@ -709,7 +748,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         THE Y+1 TEMPORAL PATTERN:
         =========================
-        We use a Y+1 pattern where pesticide data from year X is matched with field data from year X+1.
+        We use a Y+1 pattern where pesticide data from year X is matched with field data
+        from year X+1.
 
         Why? Because field boundaries are often updated/finalized after the growing season ends.
         So 2021 pesticide applications use 2022 field boundaries, which reflect the actual field
@@ -737,10 +777,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             List of (pesticide_year, field_year) tuples ready for processing
         """
         print("DEBUG: _get_pesticide_field_year_pairs called")
-        
+
         # Check if we should process only a specific year (for matrix jobs)
         if self.config.pesticide_year:
-            self.log.info(f"🎯 Matrix job mode: Processing only pesticide year {self.config.pesticide_year}")
+            self.log.info(
+                f"🎯 Matrix job mode: Processing only pesticide year {self.config.pesticide_year}"
+            )
             print(f"🎯 MATRIX JOB: Processing only pesticide year {self.config.pesticide_year}")
             pesticide_years = {self.config.pesticide_year}
         else:
@@ -771,7 +813,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.log.info(f"   ✅ Pair created: pesticide {pest_year} → field {field_year}")
             else:
                 self.log.warning(
-                    f"   ❌ No field data found for pesticide year {pest_year} (expected field year {field_year})"
+                    f"   ❌ No field data found for pesticide year {pest_year} "
+                    f"(expected field year {field_year})"
                 )
 
         self.log.info(f"🎯 Created {len(pairs)} valid pesticide-field year pairs")
@@ -870,89 +913,200 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         fields_status = "✅" if datasets["agricultural_fields"] else "❌"
         self.log.info(f"📋 Data loading summary for {pesticide_year}-{field_year}:")
         self.log.info(
-            f"   {pesticide_status} Pesticide data: {'Found' if datasets['pesticides'] else 'Missing'}"
+            f"   {pesticide_status} Pesticide data: "
+            f"{'Found' if datasets['pesticides'] else 'Missing'}"
         )
         self.log.info(
-            f"   {fields_status} Agricultural fields data: {'Found' if datasets['agricultural_fields'] else 'Missing'}"
+            f"   {fields_status} Agricultural fields data: "
+            f"{'Found' if datasets['agricultural_fields'] else 'Missing'}"
         )
 
         return datasets
 
     def _read_pesticide_data_for_year(self, year: int) -> Optional[str]:
-        """Read pesticide data for a specific year."""
+        """Read pesticide data for a specific year.
+
+        Uses GCS file modification timestamps for deterministic file selection,
+        avoiding issues with non-deterministic glob() ordering.
+        """
         try:
             # Look for the specific pesticide file for this year
-            # Based on actual codebase: filename pattern is pesticiddata_YYYY_YYYY.parquet in timestamped subdirs
+            # Filename pattern is pesticiddata_YYYY_YYYY.parquet in timestamped subdirs
             filename = f"pesticiddata_{year}_{year + 1}.parquet"
 
-            # Use list_files with recursive pattern to find all parquet files
-            pattern = f"gs://{self.config.bucket}/silver/pesticides/*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            # Use specific pattern to find only matching files
+            pattern = f"gs://{self.config.bucket}/silver/pesticides/*/{filename}"
 
-            # Find the file that matches our year in the latest timestamped directory
-            target_file = None
-            latest_timestamp = None
-            for file_path in files:
-                if filename in file_path:
-                    # Extract timestamp from path like "gs://bucket/silver/pesticides/20250629_102742/pesticiddata_2021_2022.parquet"
-                    path_parts = file_path.split("/")
-                    if len(path_parts) >= 6:  # gs://bucket/silver/pesticides/timestamp/filename
-                        timestamp_dir = path_parts[5]  # "20250629_102742"
-                        if latest_timestamp is None or timestamp_dir > latest_timestamp:
-                            latest_timestamp = timestamp_dir
-                            target_file = file_path
+            # Use list_files_with_timestamps for deterministic file selection
+            files_with_ts = self.gcs_access.list_files_with_timestamps(pattern)
 
-            if target_file:
-                self.log.info(f"Found pesticide data at {target_file}")
-                return target_file
-            else:
+            if not files_with_ts:
                 self.log.warning(
                     f"No pesticide file found for year {year} (looking for {filename})"
                 )
                 return None
+
+            # Sort by actual GCS modification time (deterministic) - newest first
+            files_sorted = sorted(files_with_ts, key=lambda x: x[1], reverse=True)
+            latest_path = files_sorted[0][0]
+
+            self.log.info(f"Found pesticide data at {latest_path}")
+            return latest_path
 
         except Exception as e:
             self.log.error(f"Error reading pesticide data for year {year}: {e}")
             return None
 
     def _read_fields_data_for_year(self, year: int) -> Optional[str]:
-        """Read agricultural fields data for a specific year."""
+        """Read agricultural fields data for a specific year.
+
+        Uses GCS file modification timestamps for deterministic file selection,
+        avoiding issues with non-deterministic glob() ordering.
+        """
         try:
             # Look for FVM marker data for this year
             self.log.info(f"Reading FVM marker data for year {year}")
 
-            # Use list_files with recursive pattern to find all parquet files
-            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{year}/*/*.parquet"
-            files = self.gcs_access.list_files(pattern)
+            # Use specific pattern to find only data.parquet files (standard silver layer format)
+            pattern = f"gs://{self.config.bucket}/silver/fvm_marker_{year}/*/data.parquet"
 
-            # Find the parquet file in timestamped subdirectories
-            target_file = None
-            latest_timestamp = None
-            for file_path in files:
-                # Look for files like "data.parquet" (standard silver layer format)
-                if file_path.endswith("data.parquet"):
-                    # Extract timestamp from path like "gs://bucket/silver/fvm_marker_2021/20241201_123456/data.parquet"
-                    path_parts = file_path.split("/")
-                    if (
-                        len(path_parts) >= 7
-                    ):  # gs://bucket/silver/fvm_marker_year/timestamp/filename
-                        timestamp_dir = path_parts[5]  # "20241201_123456" (corrected index)
-                        if latest_timestamp is None or timestamp_dir > latest_timestamp:
-                            latest_timestamp = timestamp_dir
-                            target_file = file_path
+            # Use list_files_with_timestamps for deterministic file selection
+            files_with_ts = self.gcs_access.list_files_with_timestamps(pattern)
 
-            if target_file:
-                self.log.info(f"Found FVM marker data at {target_file}")
-                return target_file
-            else:
+            if not files_with_ts:
                 self.log.warning(f"No FVM marker file found for year {year}")
                 return None
+
+            # Sort by actual GCS modification time (deterministic) - newest first
+            files_sorted = sorted(files_with_ts, key=lambda x: x[1], reverse=True)
+            latest_path = files_sorted[0][0]
+
+            self.log.info(f"Found FVM marker data at {latest_path}")
+            return latest_path
 
         except Exception as e:
             self.log.error(f"Error reading fields data for year {year}: {e}")
             return None
 
-    def _process_year_pair(
+    async def _apply_agricultural_pattern_matching_to_fertilizer(self) -> None:
+        """
+        Apply agricultural pattern matching to enhance GKEA-FVM field matching for better fertilizer allocation.
+        
+        This method integrates the agricultural pattern matcher into the fertilizer disaggregation pipeline
+        to improve field-level matching accuracy. It creates enhanced mappings that can be used to better
+        allocate fertilizer applications to specific fields.
+        """
+        try:
+            # Check if we have any GKEA field plan data available
+            # The agricultural pattern matcher needs GKEA data to work
+            gkea_available = False
+            try:
+                # Look for any GKEA or field plan data that might be loaded
+                gkea_tables = self.duckdb_conn.execute("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_name LIKE '%field_plan%' OR table_name LIKE '%gkea%'
+                """).fetchall()
+                
+                gkea_available = len(gkea_tables) > 0
+                if gkea_available:
+                    gkea_table = gkea_tables[0][0]
+                    self.log.info(f"   Found GKEA table: {gkea_table}")
+                else:
+                    self.log.info("   No GKEA field plan data found - pattern matching requires GKEA data")
+                    
+            except Exception as e:
+                self.log.warning(f"   Could not check for GKEA data: {e}")
+                gkea_available = False
+            
+            if not gkea_available:
+                self.log.info("   Skipping agricultural pattern matching - no GKEA data available")
+                return
+            
+            # Import the agricultural pattern matcher
+            from unified_pipeline.gold.agricultural_pattern_matcher import (
+                AgriculturalPatternMatcherConfig,
+                run_agricultural_pattern_matching,
+            )
+            
+            # Configure for fertilizer disaggregation use (conservative settings for production)
+            config = AgriculturalPatternMatcherConfig(
+                min_pattern_score=0.85,  # Higher threshold for fertilizer allocation
+                min_field_score=0.75,    # Conservative field matching
+                max_operations_to_process=1000  # Reasonable limit for performance
+            )
+            
+            self.log.info("   Running agricultural pattern matching with marker table")
+            self.log.info(f"   Pattern score threshold: {config.min_pattern_score}")
+            self.log.info(f"   Field score threshold: {config.min_field_score}")
+            
+            # Run the pattern matching using the marker table we just created
+            results = await run_agricultural_pattern_matching(
+                config=config, 
+                db_connection=self.duckdb_conn,
+                fvm_table_name="marker"  # Use the marker table we created
+            )
+            
+            if results.get('matches_found', 0) > 0:
+                matches_found = results['matches_found']
+                self.log.info(f"✅ Agricultural pattern matching found {matches_found:,} additional field matches")
+                
+                # Create enhanced field mappings for fertilizer disaggregation use
+                try:
+                    self.duckdb_conn.execute("""
+                        CREATE OR REPLACE TABLE fertilizer_enhanced_field_mappings AS
+                        SELECT 
+                            gkea_field_id,
+                            fvm_field_id,
+                            'agricultural_pattern' as match_method,
+                            field_similarity_score as confidence_score,
+                            gkea_cvr,
+                            fvm_cvr,
+                            gkea_crop_code,
+                            fvm_crop_code,
+                            gkea_area_ha,
+                            fvm_area_ha
+                        FROM enhanced_gkea_fvm_matches
+                        WHERE field_similarity_score >= 0.75
+                    """)
+                    
+                    enhanced_count = self.duckdb_conn.execute(
+                        "SELECT COUNT(*) FROM fertilizer_enhanced_field_mappings"
+                    ).fetchone()[0]
+                    
+                    self.log.info(f"   Created {enhanced_count:,} enhanced field mappings for fertilizer allocation")
+                    
+                    # Log some sample mappings for verification
+                    sample_mappings = self.duckdb_conn.execute("""
+                        SELECT gkea_field_id, fvm_field_id, confidence_score, match_method
+                        FROM fertilizer_enhanced_field_mappings 
+                        ORDER BY confidence_score DESC 
+                        LIMIT 5
+                    """).fetchall()
+                    
+                    self.log.info("   Sample enhanced mappings:")
+                    for mapping in sample_mappings:
+                        self.log.info(f"     GKEA {mapping[0]} → FVM {mapping[1]} (confidence: {mapping[2]:.3f})")
+                    
+                    # Create company-to-field bridge table to leverage enhanced mappings
+                    self._create_company_field_bridge()
+                        
+                except Exception as mapping_error:
+                    self.log.warning(f"   Could not create enhanced mappings table: {mapping_error}")
+                    
+            else:
+                self.log.info("   No additional field matches found via agricultural pattern matching")
+                
+        except ImportError as e:
+            self.log.warning(f"   Could not import agricultural pattern matcher: {e}")
+            self.log.warning("   Make sure the unified pipeline backend is accessible")
+            
+        except Exception as e:
+            self.log.warning(f"   Agricultural pattern matching failed: {str(e)}")
+            # Don't raise - this is an enhancement, not a requirement
+            pass
+
+    async def _process_year_pair(
         self,
         pesticide_year: int,
         field_year: int,
@@ -1004,7 +1158,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 "strategy_totals": {},
                 "final_total_dosage": 0.0,
                 "final_total_acreage": 0.0,
-                "final_record_count": 0
+                "final_record_count": 0,
             }
 
             # STEP 1: SET UP THE DATABASE
@@ -1012,7 +1166,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # Load both pesticide and field data into a fast in-memory database
             # This makes the complex matching queries run much faster
             self.log.info(f"🔧 Setting up DuckDB for year {pesticide_year}")
-            setup_success = self._setup_duckdb(
+            setup_success = await self._setup_duckdb(
                 agricultural_fields_path, pesticide_applications_path
             )
             if not setup_success:
@@ -1062,7 +1216,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # ENHANCED WITH ETHICAL BEST-MATCH STRATEGY!
             # For mixed farming operations, we calculate both strategies and use whichever
             # gives the better area match - every farmer deserves the most accurate disaggregation
-            self.log.info(f"🌟 Starting ETHICAL disaggregation strategies for year {pesticide_year}")
+            self.log.info(
+                f"🌟 Starting ETHICAL disaggregation strategies for year {pesticide_year}"
+            )
             total_processed = 0
 
             # ETHICAL STRATEGY 1: MIXED FARMING BEST-MATCH (FAIRNESS FIRST!)
@@ -1070,12 +1226,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # For CVR+crop combinations with organic fields, calculate both main and non-organic
             # strategies and use whichever gives the better area match within 2% tolerance
             # This ensures every farmer gets the most accurate disaggregation possible
-            self.log.info(f"🌟 Ethical Strategy 1: Best-match for mixed farming operations")
+            self.log.info("🌟 Ethical Strategy 1: Best-match for mixed farming operations")
             mixed_combinations = self._get_mixed_farming_combinations()
             processed_ethical = self._process_mixed_farming_best_match(mixed_combinations)
             total_processed += processed_ethical
             self.log.info(
-                f"✅ Year {pesticide_year}: Ethical Best-Match: {processed_ethical} mixed farming records processed"
+                f"✅ Year {pesticide_year}: Ethical Best-Match: {processed_ethical} "
+                f"mixed farming records processed"
             )
             # VALIDATION: Check ethical best-match strategy results
             self._validate_strategy_results("Ethical Best-Match", processed_ethical)
@@ -1084,11 +1241,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # =========================================================
             # Process remaining conventional-only applications with the proven main strategy
             # These are CVR+crop combinations that don't have organic fields
-            self.log.info(f"🎯 Strategy 2: Main area matching for conventional-only operations")
+            self.log.info("🎯 Strategy 2: Main area matching for conventional-only operations")
             processed_main_remaining = self._disaggregate_by_marker_match()
             total_processed += processed_main_remaining
             self.log.info(
-                f"✅ Year {pesticide_year}: Main Area Match (remaining): {processed_main_remaining} records processed"
+                f"✅ Year {pesticide_year}: Main Area Match (remaining): "
+                f"{processed_main_remaining} records processed"
             )
             # VALIDATION: Check main area matching strategy results
             self._validate_strategy_results("Main Area Match", processed_main_remaining)
@@ -1097,11 +1255,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # ==============================================
             # Handle any remaining applications that main strategy couldn't process
             # This catches edge cases and provides final cleanup
-            self.log.info(f"🎯 Strategy 3: Non-organic cleanup for remaining applications")
+            self.log.info("🎯 Strategy 3: Non-organic cleanup for remaining applications")
             processed_nonorg_cleanup = self._disaggregate_by_marker_non_organic_match()
             total_processed += processed_nonorg_cleanup
             self.log.info(
-                f"✅ Year {pesticide_year}: Non-Organic Cleanup: {processed_nonorg_cleanup} records processed"
+                f"✅ Year {pesticide_year}: Non-Organic Cleanup: {processed_nonorg_cleanup} "
+                f"records processed"
             )
             # VALIDATION: Check non-organic matching strategy results
             self._validate_strategy_results("Non-Organic Match", processed_nonorg_cleanup)
@@ -1126,9 +1285,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # =======================================================
             # This strategy tried to group nearby fields and match against pesticide applications
             # Removed because it was complex and didn't provide sufficient additional coverage
-            processed_5 = 0
             self.log.info(
-                "ℹ️ Strategy 5: Spatial clustering removed for simplification - strategies 1-4 provide sufficient coverage"
+                "ℹ️ Strategy 5: Spatial clustering removed for simplification - "
+                "strategies 1-4 provide sufficient coverage"
             )
 
             # STEP 5: COLLECT RESULTS AND CALCULATE STATISTICS
@@ -1181,7 +1340,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self.duckdb_conn.close()
                 self.duckdb_conn = None
 
-    def _setup_duckdb(
+    async def _setup_duckdb(
         self, agricultural_fields_path: str, pesticide_applications_path: str
     ) -> bool:
         """
@@ -1333,7 +1492,19 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.info("✅ Found is_organic column in FVM data - organic fields will be used")
         else:
             organic_farming_column = "false as organic_farming"
-            self.log.warning("⚠️ No is_organic column found in FVM data - assuming all fields are non-organic")
+            self.log.warning(
+                "⚠️ No is_organic column found in FVM data - assuming all fields are non-organic"
+            )
+
+        # Handle municipality column - check if municipality exists in FVM data
+        if "municipality" in temp_column_names:
+            municipality_column = "municipality"
+            self.log.info("✅ Found municipality column in FVM data - municipality will be included")
+        else:
+            municipality_column = "NULL as municipality"
+            self.log.warning(
+                "⚠️ No municipality column found in FVM data - using NULL for municipality"
+            )
 
         # Check if field_uuid exists in the source data
         has_field_uuid = "field_uuid" in temp_column_names
@@ -1349,15 +1520,17 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             )
         else:
             self.log.error(
-                "❌ No field_uuid column found in FVM data - this should not happen with current FVM data"
+                "❌ No field_uuid column found in FVM data - this should not happen "
+                "with current FVM data"
             )
             raise ValueError(
-                "field_uuid column is required but not found in FVM data. Please check data pipeline configuration."
+                "field_uuid column is required but not found in FVM data. "
+                "Please check data pipeline configuration."
             )
 
         self.duckdb_conn.execute(f"""
-            CREATE TABLE marker AS 
-            SELECT 
+            CREATE TABLE marker AS
+            SELECT
                 field_id,
                 CAST(area_ha AS DOUBLE) as area_ha,
                 CAST({cvr_column} AS VARCHAR) as cvr_number,
@@ -1368,7 +1541,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 year{geometry_select},
                 -- Add field UUID support with fallback to composite key
                 {primary_field_id_select},
-                {field_uuid_select}
+                {field_uuid_select},
+                -- Add municipality support from FVM data
+                {municipality_column}
             FROM marker_temp
         """)
 
@@ -1380,6 +1555,16 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         # Drop the temporary table
         self.duckdb_conn.execute("DROP TABLE marker_temp")
         self.log.info("✅ Marker table created successfully")
+        
+        # ENHANCEMENT: Apply agricultural pattern matching to improve field coverage
+        # ========================================================================
+        # This enhances GKEA-FVM field matching which can improve fertilizer allocation accuracy
+        try:
+            self.log.info("🌾 Attempting to enhance field matching with agricultural pattern matching...")
+            await self._apply_agricultural_pattern_matching_to_fertilizer()
+        except Exception as e:
+            self.log.warning(f"⚠️ Agricultural pattern matching failed: {str(e)}")
+            self.log.warning("   Continuing with standard field matching...")
 
         self.log.info(f"🏗️ Creating pesticide table from {pesticide_applications_path}")
 
@@ -1447,8 +1632,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         )
 
         self.duckdb_conn.execute(f"""
-            CREATE TABLE pesticide AS 
-            SELECT 
+            CREATE TABLE pesticide AS
+            SELECT
                 row_number() OVER () as OriginalPesticideRowID,
                 CAST({pest_cvr_column} AS VARCHAR) as cvr_number,
                 {pesticide_name_column} as PesticideName,
@@ -1474,7 +1659,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         self.log.info("✅ DuckDB setup completed successfully!")
         self.log.info(
-            f"📈 Loaded {marker_count:,} agricultural fields and {pesticide_count:,} pesticide records"
+            f"📈 Loaded {marker_count:,} agricultural fields and "
+            f"{pesticide_count:,} pesticide records"
         )
 
         # SUCCESS! We now have both datasets loaded and ready for disaggregation
@@ -1485,7 +1671,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         return True
 
     def _create_results_table(self):
-        """Create the disaggregated results table with original schema."""
+        """Create the disaggregated results table with original schema plus municipality support."""
         create_table_sql = """
         CREATE TABLE disaggregated_pesticide_applications (
             DisaggregatedID VARCHAR,
@@ -1504,7 +1690,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             DisaggregationDate TIMESTAMP,
             -- Add field UUID support for better field identification
             field_uuid VARCHAR,
-            primary_field_id VARCHAR
+            primary_field_id VARCHAR,
+            -- Add municipality support from FVM marker data
+            municipality VARCHAR
         )
         """
         self.duckdb_conn.execute(create_table_sql)
@@ -1513,8 +1701,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """Create pending pesticide rows table with nopesticides=1 records filtered out."""
         self.duckdb_conn.execute("""
             CREATE TABLE pending_pesticide_rows AS
-            SELECT * FROM pesticide 
-            WHERE nopesticides IS NULL 
+            SELECT * FROM pesticide
+            WHERE nopesticides IS NULL
                OR (CAST(nopesticides AS VARCHAR) NOT IN ('1', 'True', 'true', 'TRUE'))
         """)
 
@@ -1536,19 +1724,19 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             cvr_match_count = self.duckdb_conn.execute("""
                 WITH PesticideCVRs AS (
                     SELECT DISTINCT TRIM(CAST(cvr_number AS VARCHAR)) as CVR
-                    FROM pending_pesticide_rows 
+                    FROM pending_pesticide_rows
                     WHERE cvr_number IS NOT NULL
                       AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
                 ),
                 MarkerCVRs AS (
                     SELECT DISTINCT TRIM(CAST(cvr_number AS VARCHAR)) as CVR
-                    FROM marker 
+                    FROM marker
                     WHERE cvr_number IS NOT NULL
                       AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
                 )
-                SELECT COUNT(*) 
+                SELECT COUNT(*)
                 FROM PesticideCVRs p
                 JOIN MarkerCVRs m ON p.CVR = m.CVR
             """).fetchone()[0]
@@ -1565,14 +1753,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
                 # Log some diagnostic information
                 pesticide_cvr_count = self.duckdb_conn.execute("""
-                    SELECT COUNT(DISTINCT cvr_number) 
-                    FROM pending_pesticide_rows 
+                    SELECT COUNT(DISTINCT cvr_number)
+                    FROM pending_pesticide_rows
                     WHERE cvr_number IS NOT NULL
                 """).fetchone()[0]
 
                 marker_cvr_count = self.duckdb_conn.execute("""
-                    SELECT COUNT(DISTINCT cvr_number) 
-                    FROM marker 
+                    SELECT COUNT(DISTINCT cvr_number)
+                    FROM marker
                     WHERE cvr_number IS NOT NULL
                 """).fetchone()[0]
 
@@ -1592,8 +1780,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         """
         Identifies marker field UUIDs that are considered organic.
 
-        Now that FVM marker data contains organic farming information via the is_organic column,
-        this method queries the marker table to find all organic fields using field_uuid for uniqueness.
+        Now that FVM marker data contains organic farming information via the is_organic
+        column,
+        this method queries the marker table to find all organic fields using field_uuid
+        for uniqueness.
 
         Results are cached.
         Returns a set of marker.field_uuid strings for unique identification.
@@ -1605,20 +1795,23 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         try:
             # Query organic fields from the marker table using field_uuid for uniqueness
             result = self.duckdb_conn.execute("""
-                SELECT DISTINCT field_uuid 
-                FROM marker 
+                SELECT DISTINCT field_uuid
+                FROM marker
                 WHERE organic_farming = TRUE
                   AND field_uuid IS NOT NULL
             """).fetchall()
-            
+
             organic_field_uuids = {str(row[0]) for row in result}
-            self.log.info(f"Found {len(organic_field_uuids)} unique organic field UUIDs out of total marker fields")
-            
+            self.log.info(
+                f"Found {len(organic_field_uuids)} unique organic field UUIDs "
+                "out of total marker fields"
+            )
+
             # Cache the result
             self._organic_marker_field_ids = organic_field_uuids
-            
+
             return self._organic_marker_field_ids
-            
+
         except Exception as e:
             self.log.error(f"Error querying organic fields: {e}")
             self.log.warning("Falling back to no organic fields due to query error")
@@ -1629,30 +1822,33 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _get_mixed_farming_combinations(self) -> Set[tuple]:
         """
         🌟 ETHICAL ENHANCEMENT: Identify CVR+crop combinations with organic fields
-        
+
         These are mixed farming operations that could benefit from dual calculation
         to determine which strategy gives the most accurate area match.
-        
+
         Returns a set of (CVR, CropCode) tuples for combinations that have organic fields.
         """
         try:
             result = self.duckdb_conn.execute("""
-                SELECT DISTINCT 
+                SELECT DISTINCT
                     TRIM(CAST(cvr_number AS VARCHAR)) as CVR,
                     TRY_CAST(crop_code AS BIGINT) as CropCode
-                FROM marker 
+                FROM marker
                 WHERE organic_farming = TRUE
-                  AND cvr_number IS NOT NULL 
-                  AND TRIM(CAST(cvr_number AS VARCHAR)) != '' 
+                  AND cvr_number IS NOT NULL
+                  AND TRIM(CAST(cvr_number AS VARCHAR)) != ''
                   AND REGEXP_MATCHES(TRIM(CAST(cvr_number AS VARCHAR)), '^[0-9]+$')
-                  AND crop_code IS NOT NULL 
+                  AND crop_code IS NOT NULL
                   AND area_ha > 0.0
             """).fetchall()
-            
+
             mixed_combinations = {(str(row[0]), int(row[1])) for row in result if row[0] and row[1]}
-            self.log.info(f"🌱 Found {len(mixed_combinations)} CVR+crop combinations with organic fields (mixed farming)")
+            self.log.info(
+                f"🌱 Found {len(mixed_combinations)} CVR+crop combinations with "
+                "organic fields (mixed farming)"
+            )
             return mixed_combinations
-            
+
         except Exception as e:
             self.log.error(f"Error identifying mixed farming combinations: {e}")
             self.log.warning("Falling back to empty set - will use sequential processing")
@@ -1661,29 +1857,33 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
     def _process_mixed_farming_best_match(self, mixed_combinations: Set[tuple]) -> int:
         """
         🌟 ETHICAL ENHANCEMENT: Process mixed farming applications with best-match logic
-        
+
         For applications from CVR+crop combinations that have organic fields,
         calculate both main and non-organic strategies and use whichever gives
         the better (lower error) area match within 2% tolerance.
-        
+
         This ensures each farmer gets the most accurate disaggregation possible.
-        
+
         Args:
             mixed_combinations: Set of (CVR, CropCode) tuples with organic fields
-            
+
         Returns:
             Number of applications processed
         """
         if not mixed_combinations:
             self.log.info("🤔 No mixed farming combinations found - skipping ethical best-match")
             return 0
-            
-        self.log.info(f"🎯 Starting ethical best-match processing for {len(mixed_combinations)} combinations")
-        
+
+        self.log.info(
+            f"🎯 Starting ethical best-match processing for {len(mixed_combinations)} combinations"
+        )
+
         try:
             # Create a temporary table with mixed farming applications
-            mixed_combinations_sql = ", ".join([f"('{cvr}', {crop})" for cvr, crop in mixed_combinations])
-            
+            mixed_combinations_sql = ", ".join(
+                [f"('{cvr}', {crop})" for cvr, crop in mixed_combinations]
+            )
+
             processed_count = self.duckdb_conn.execute(f"""
                 WITH MixedFarmingCombinations AS (
                     SELECT * FROM VALUES {mixed_combinations_sql} AS t(CVR, CropCode)
@@ -1694,8 +1894,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalNonOrganicMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                           AND m.organic_farming = FALSE
@@ -1707,49 +1907,69 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                     GROUP BY CVR, CropCode
                 ),
                 BestMatchEvaluation AS (
-                    SELECT 
+                    SELECT
                         p.*,
                         main_totals.TotalMarkerAreaForCVRCrop,
                         non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop,
                         -- Calculate errors for both strategies
-                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 as main_error_pct,
-                        ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 as nonorg_error_pct,
+                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100 as main_error_pct,
+                        ABS(p.AcreageSize -
+                            non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100 as nonorg_error_pct,
                         -- Check tolerance for both
-                        CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                        CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
                              THEN TRUE ELSE FALSE END as main_passes,
-                        CASE WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                        CASE WHEN ABS(p.AcreageSize -
+                            non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
                              THEN TRUE ELSE FALSE END as nonorg_passes,
                         -- Determine best strategy
-                        CASE 
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
-                                 AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} THEN
-                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) <= ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
+                        CASE
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
+                                 AND ABS(p.AcreageSize -
+                                     non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100
+                                     <= {self.config.area_tolerance_pct} THEN
+                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop)
+                                          <= ABS(p.AcreageSize -
+                                              non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop)
                                      THEN 'main' ELSE 'nonorg' END
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
                                  THEN 'main'
-                            WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                            WHEN ABS(p.AcreageSize -
+                                     non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                                 p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                                  THEN 'nonorg'
                             ELSE 'neither'
                         END as best_strategy
                     FROM pending_pesticide_rows p
-                    JOIN MixedFarmingCombinations mfc 
+                    JOIN MixedFarmingCombinations mfc
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = mfc.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = mfc.CropCode
                     LEFT JOIN MarkerFieldCVRCropTotals main_totals
-                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
+                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
                     LEFT JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
+                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
                     WHERE p.AcreageSize > 0
-                      AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0)
+                      AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR
+                           non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0)
                 )
                 -- Process using main strategy (best_strategy = 'main')
                 INSERT INTO disaggregated_pesticide_applications (
@@ -1777,32 +1997,36 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
                     -- Proportional dosage based on field area
-                    (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) * p.DosageQuantity as DosageQuantity,
+                    (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) * p.DosageQuantity
+                        as DosageQuantity,
                     p.DosageUnit,
                     'ethical_main_' || CAST(m_fields.field_uuid AS VARCHAR) as MatchedFieldID,
                     'block_' || CAST(m_fields.field_id AS VARCHAR) as MatchedBlockID,
-                    p.AcreageSize * (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop) as AllocatedArea,
+                    p.AcreageSize * (m_fields.area_ha / main_totals.TotalMarkerAreaForCVRCrop)
+                        as AllocatedArea,
                     'Ethical_Best_Match_Main_Strategy' as AllocationMethod,
                     -- High confidence since we chose this as the best match
                     0.95 as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     m_fields.field_uuid,
-                    m_fields.field_uuid as primary_field_id
+                    m_fields.field_uuid as primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM BestMatchEvaluation p
                 JOIN MarkerFieldCVRCropTotals main_totals
-                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR
                     AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
-                JOIN marker m_fields 
+                JOIN marker m_fields
                     ON main_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND main_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
                 WHERE p.best_strategy = 'main'
-                  AND m_fields.cvr_number IS NOT NULL 
-                  AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                  AND m_fields.cvr_number IS NOT NULL
+                  AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
                   AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                   AND m_fields.area_ha > 0.0
             """).fetchone()[0]
-            
+
             # Process using non-organic strategy (best_strategy = 'nonorg')
             nonorg_processed = self.duckdb_conn.execute(f"""
                 WITH MixedFarmingCombinations AS (
@@ -1814,8 +2038,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalNonOrganicMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                           AND m.organic_farming = FALSE
@@ -1827,44 +2051,59 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                       AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                     GROUP BY CVR, CropCode
                 ),
                 BestMatchEvaluation AS (
-                    SELECT 
+                    SELECT
                         p.*,
                         main_totals.TotalMarkerAreaForCVRCrop,
                         non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop,
                         -- Calculate errors for both strategies
-                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 as main_error_pct,
-                        ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 as nonorg_error_pct,
+                        ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100 as main_error_pct,
+                        ABS(p.AcreageSize -
+                            non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                            p.AcreageSize * 100 as nonorg_error_pct,
                         -- Determine best strategy
-                        CASE 
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
-                                 AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} THEN
-                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) <= ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) 
+                        CASE
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
+                                 AND ABS(p.AcreageSize -
+                                     non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100
+                                     <= {self.config.area_tolerance_pct} THEN
+                                CASE WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop)
+                                          <= ABS(p.AcreageSize -
+                                              non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop)
                                      THEN 'main' ELSE 'nonorg' END
-                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                            WHEN ABS(p.AcreageSize - main_totals.TotalMarkerAreaForCVRCrop) /
+                                p.AcreageSize * 100
+                                 <= {self.config.area_tolerance_pct}
                                  THEN 'main'
-                            WHEN ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct} 
+                            WHEN ABS(p.AcreageSize -
+                                     non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                                 p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
                                  THEN 'nonorg'
                             ELSE 'neither'
                         END as best_strategy
                     FROM pending_pesticide_rows p
-                    JOIN MixedFarmingCombinations mfc 
+                    JOIN MixedFarmingCombinations mfc
                         ON TRIM(CAST(p.cvr_number AS VARCHAR)) = mfc.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = mfc.CropCode
                     LEFT JOIN MarkerFieldCVRCropTotals main_totals
-                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR 
+                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = main_totals.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = main_totals.CropCode
                     LEFT JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
+                        ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
                         AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
                     WHERE p.AcreageSize > 0
-                      AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0)
+                      AND (main_totals.TotalMarkerAreaForCVRCrop > 0 OR
+                           non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0)
                 )
                 INSERT INTO disaggregated_pesticide_applications (
                     DisaggregatedID,
@@ -1891,62 +2130,76 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     p.PesticideName,
                     p.PesticideRegistrationNumber,
                     -- Proportional dosage based on field area
-                    (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) * p.DosageQuantity as DosageQuantity,
+                    (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) *
+                        p.DosageQuantity as DosageQuantity,
                     p.DosageUnit,
                     'ethical_nonorg_' || CAST(m_fields.field_uuid AS VARCHAR) as MatchedFieldID,
                     'block_' || CAST(m_fields.field_id AS VARCHAR) as MatchedBlockID,
-                    p.AcreageSize * (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as AllocatedArea,
+                    p.AcreageSize * (m_fields.area_ha /
+                        non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as AllocatedArea,
                     'Ethical_Best_Match_Non_Organic_Strategy' as AllocationMethod,
                     -- High confidence since we chose this as the best match
                     0.95 as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     m_fields.field_uuid,
-                    m_fields.field_uuid as primary_field_id
+                    m_fields.field_uuid as primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM BestMatchEvaluation p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
-                                            AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
-                JOIN marker m_fields 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
+                        AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
+                JOIN marker m_fields
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND non_organic_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
                 WHERE p.best_strategy = 'nonorg'
-                  AND m_fields.cvr_number IS NOT NULL 
-                  AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                  AND m_fields.cvr_number IS NOT NULL
+                  AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
                   AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                   AND m_fields.area_ha > 0.0
                   AND m_fields.organic_farming = FALSE
             """).fetchone()[0]
-            
+
             total_processed = processed_count + nonorg_processed
-            
-                        # Remove processed applications from pending queue
-            self.duckdb_conn.execute(f"""
-                DELETE FROM pending_pesticide_rows 
+
+            # Remove processed applications from pending queue
+            self.duckdb_conn.execute("""
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
                     SELECT DISTINCT da.OriginalPesticideRowID
                     FROM disaggregated_pesticide_applications da
                     WHERE da.AllocationMethod LIKE 'Ethical_Best_Match_%'
                 )
             """)
-            
+
             # Log the ethical impact
             best_match_stats = self.duckdb_conn.execute("""
-                SELECT 
-                    COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Main_Strategy' THEN 1 END) as main_wins,
-                    COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Non_Organic_Strategy' THEN 1 END) as nonorg_wins
+                SELECT
+                    COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Main_Strategy'
+                              THEN 1 END) as main_wins,
+                    COUNT(CASE WHEN AllocationMethod = 'Ethical_Best_Match_Non_Organic_Strategy'
+                               THEN 1 END) as nonorg_wins
                 FROM disaggregated_pesticide_applications
                 WHERE AllocationMethod LIKE 'Ethical_Best_Match_%'
             """).fetchone()
-            
+
             if best_match_stats:
                 main_wins, nonorg_wins = best_match_stats
-                self.log.info(f"🌟 Ethical best-match results: Main={main_wins:,}, Non-organic={nonorg_wins:,}")
-                self.log.info(f"✅ {nonorg_wins:,} farmers benefited from more accurate non-organic matching!")
-            
-            self.log.info(f"🎯 Ethical best-match processing completed: {total_processed:,} applications processed")
+                self.log.info(
+                    f"🌟 Ethical best-match results: Main={main_wins:,}, "
+                    f"Non-organic={nonorg_wins:,}"
+                )
+                self.log.info(
+                    f"✅ {nonorg_wins:,} farmers benefited from more accurate non-organic matching!"
+                )
+
+            self.log.info(
+                f"🎯 Ethical best-match processing completed: "
+                f"{total_processed:,} applications processed"
+            )
             return total_processed
-            
+
         except Exception as e:
             self.log.error(f"Error in ethical best-match processing: {e}")
             self.log.warning("Falling back to sequential processing")
@@ -1958,7 +2211,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
         WHAT THIS STRATEGY DOES:
         =======================
-        This is the core strategy that solves most pesticide disaggregation cases. Here's how it works:
+        This is the core strategy that solves most pesticide disaggregation cases.
+        Here's how it works:
 
         1. GROUP BY COMPANY + CROP: For each company, group all their fields by crop type
            Example: Company ABC has 3 wheat fields (10ha, 8ha, 7ha) = 25ha total wheat
@@ -2004,8 +2258,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
                     GROUP BY CVR, CropCode
@@ -2015,39 +2269,48 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     uuid() as DisaggregatedID,
                     CAST(p.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
                     CAST(p.cvr_number AS VARCHAR) as cvr_number,
-                    p.PesticideName, 
-                    p.PesticideRegistrationNumber, 
-                    p.DosageQuantity * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop) as DosageQuantity,
+                    p.PesticideName,
+                    p.PesticideRegistrationNumber,
+                    p.DosageQuantity * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop)
+                        as DosageQuantity,
                     p.DosageUnit,
                     'marker_' || CAST(m_fields.field_id AS VARCHAR) as MatchedFieldID,
                     'block_' || CAST(m_fields.block_id AS VARCHAR) as MatchedBlockID,
                     -- THE MAGIC FORMULA: Proportional distribution based on field size
                     -- pesticide_amount * (this_field_area / total_company_crop_area)
-                    p.AcreageSize * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop) as AllocatedArea,
+                    p.AcreageSize * (m_fields.area_ha / marker_totals.TotalMarkerAreaForCVRCrop)
+                        as AllocatedArea,
                     'Marker_ApplicationAreaToTotalFieldArea_FieldProportional' as AllocationMethod,
                     -- Confidence score: higher when areas match more closely
-                    GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize / ({self.config.area_tolerance_pct}/100.0))) as MatchConfidence,
+                    GREATEST(0.0, 1.0 - (ABS(p.AcreageSize -
+                        marker_totals.TotalMarkerAreaForCVRCrop) /
+                        p.AcreageSize / ({self.config.area_tolerance_pct}/100.0)))
+                        as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     -- Add field UUID support
                     m_fields.field_uuid,
-                    m_fields.field_uuid
+                    m_fields.field_uuid,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM pending_pesticide_rows p
                 -- STEP 2: Match pesticide applications to company+crop totals
                 JOIN MarkerFieldCVRCropTotals marker_totals
-                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = marker_totals.CVR 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = marker_totals.CVR
                                          AND TRY_CAST(p.Code AS BIGINT) = marker_totals.CropCode
                 -- STEP 3: Join with individual fields to create one record per field
-                JOIN marker m_fields 
+                JOIN marker m_fields
                     ON marker_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND marker_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
-                WHERE 
+                WHERE
                     p.AcreageSize > 0 AND marker_totals.TotalMarkerAreaForCVRCrop > 0
                     -- THE CRITICAL FILTER: Only match if areas are within 2% tolerance
                     -- This 2% is the magic number that achieved 92% coverage!
-                    AND ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
-                    AND m_fields.cvr_number IS NOT NULL 
-                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                    AND ABS(p.AcreageSize - marker_totals.TotalMarkerAreaForCVRCrop) /
+                        p.AcreageSize * 100
+                        <= {self.config.area_tolerance_pct}
+                    AND m_fields.cvr_number IS NOT NULL
+                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
                     AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                     AND m_fields.area_ha > 0.0
             """
@@ -2057,17 +2320,20 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # CLEAN UP: Remove processed records from the pending queue
             # This prevents double-processing in subsequent strategies
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
-                    WHERE AllocationMethod = 'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'
+                    SELECT DISTINCT OriginalPesticideRowID
+                    FROM disaggregated_pesticide_applications
+                    WHERE AllocationMethod =
+                          'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'
                 )
             """)
 
             # Count how many records we successfully processed
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications "
+                + "WHERE AllocationMethod = "
+                + "'Marker_ApplicationAreaToTotalFieldArea_FieldProportional'"
             ).fetchone()
             processed_count = count_result[0] if count_result else 0
 
@@ -2095,7 +2361,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 # Use a condition that excludes nothing
                 organic_exclusion_condition = "TRUE"
             else:
-                self.log.info(f"Excluding {len(organic_field_uuids)} organic field UUIDs from Strategy 2")
+                self.log.info(
+                    f"Excluding {len(organic_field_uuids)} organic field UUIDs from Strategy 2"
+                )
                 # Use direct column check for efficiency
                 organic_exclusion_condition = "m.organic_farming = FALSE"
 
@@ -2107,11 +2375,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         TRY_CAST(m.crop_code AS BIGINT) as CropCode,
                         SUM(m.area_ha) as TotalNonOrganicMarkerAreaForCVRCrop
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                          AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                           AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
                           AND m.crop_code IS NOT NULL AND m.area_ha > 0.0
-                                                     AND {organic_exclusion_condition} 
+                                                     AND {organic_exclusion_condition}
                     GROUP BY CVR, CropCode
                 )
                 INSERT INTO disaggregated_pesticide_applications
@@ -2119,32 +2387,44 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     uuid() as DisaggregatedID,
                     CAST(p.OriginalPesticideRowID AS VARCHAR) as OriginalPesticideRowID,
                     CAST(p.cvr_number AS VARCHAR) as cvr_number,
-                    p.PesticideName, 
-                    p.PesticideRegistrationNumber, 
-                    p.DosageQuantity * (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as DosageQuantity,
+                    p.PesticideName,
+                    p.PesticideRegistrationNumber,
+                    p.DosageQuantity * (m_fields.area_ha /
+                        non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as DosageQuantity,
                     p.DosageUnit,
                     'marker_non_organic_' || CAST(m_fields.field_id AS VARCHAR) as MatchedFieldID,
                     'block_' || CAST(m_fields.block_id AS VARCHAR) as MatchedBlockID,
-                    p.AcreageSize * (m_fields.area_ha / non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) as AllocatedArea,
-                    'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional' as AllocationMethod,
-                    GREATEST(0.0, 1.0 - (ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize / ({self.config.area_tolerance_pct}/100.0))) as MatchConfidence,
+                    p.AcreageSize * (m_fields.area_ha /
+                        non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop)
+                        as AllocatedArea,
+                    ('Marker_NonOrganic_ApplicationAreaToTotalFieldArea_'
+                     'FieldProportional') as AllocationMethod,
+                    GREATEST(0.0, 1.0 - (ABS(p.AcreageSize -
+                        non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) /
+                        p.AcreageSize / ({self.config.area_tolerance_pct}/100.0)))
+                        as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     -- Add field UUID support
                     m_fields.field_uuid,
-                    m_fields.field_uuid
+                    m_fields.field_uuid,
+                    -- Add municipality from FVM marker data
+                    m_fields.municipality
                 FROM pending_pesticide_rows p
                 JOIN NonOrganicMarkerFieldCVRCropTotals non_organic_totals
-                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR 
-                                         AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
-                JOIN marker m_fields 
+                    ON TRIM(CAST(p.cvr_number AS VARCHAR)) = non_organic_totals.CVR
+                    AND TRY_CAST(p.Code AS BIGINT) = non_organic_totals.CropCode
+                JOIN marker m_fields
                     ON non_organic_totals.CVR = TRIM(CAST(m_fields.cvr_number AS VARCHAR))
                     AND non_organic_totals.CropCode = TRY_CAST(m_fields.crop_code AS BIGINT)
-                WHERE 
+                WHERE
                     p.AcreageSize > 0 AND non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop > 0
-                    AND ABS(p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
-                    AND m_fields.cvr_number IS NOT NULL 
-                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != '' 
+                    AND ABS(
+                        p.AcreageSize - non_organic_totals.TotalNonOrganicMarkerAreaForCVRCrop
+                    ) /
+                            p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
+                    AND m_fields.cvr_number IS NOT NULL
+                    AND TRIM(CAST(m_fields.cvr_number AS VARCHAR)) != ''
                     AND REGEXP_MATCHES(TRIM(CAST(m_fields.cvr_number AS VARCHAR)), '^[0-9]+$')
                     AND m_fields.area_ha > 0.0
                                          AND m_fields.organic_farming = FALSE
@@ -2154,17 +2434,21 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Remove processed records from pending table
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
-                    WHERE AllocationMethod = 'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'
+                    SELECT DISTINCT OriginalPesticideRowID
+                    FROM disaggregated_pesticide_applications
+                    WHERE AllocationMethod = (
+                        'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'
+                    )
                 )
             """)
 
             # Get count of processed records
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications "
+                "WHERE AllocationMethod = "
+                "'Marker_NonOrganic_ApplicationAreaToTotalFieldArea_FieldProportional'"
             ).fetchone()
             processed_count = count_result[0] if count_result else 0
 
@@ -2188,7 +2472,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             # This replaces the inefficient Python loop with pure DuckDB operations
             insert_query = """
                 WITH MarkerSingleFieldCVRCrop AS (
-                    SELECT 
+                    SELECT
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
                         CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
                         COUNT(*) as FieldCount,
@@ -2196,18 +2480,19 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         m.area_ha as FieldArea,
                         m.field_id as FieldIdentifier,
                                                  ANY_VALUE(m.field_uuid) as field_uuid,
-                         ANY_VALUE(m.field_uuid) as primary_field_id
+                         ANY_VALUE(m.field_uuid) as primary_field_id,
+                        ANY_VALUE(m.municipality) as municipality
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
+                      AND m.crop_code IS NOT NULL
                       AND m.area_ha > 0.0
                     GROUP BY 1, 2, 4, 5, 6
                     HAVING COUNT(*) = 1  -- Only single field per CVR/Crop
                 ),
                 PendingForSingleFields AS (
-                    SELECT 
+                    SELECT
                         p.OriginalPesticideRowID,
                         TRIM(CAST(p.cvr_number AS VARCHAR)) as CVR_Str,
                         CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
@@ -2217,12 +2502,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         p.DosageQuantity,
                         p.DosageUnit
                     FROM pending_pesticide_rows p
-                    WHERE p.cvr_number IS NOT NULL 
+                    WHERE p.cvr_number IS NOT NULL
                       AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0
                 ),
                 CandidatesWithFields AS (
-                    SELECT 
+                    SELECT
                         pf.OriginalPesticideRowID,
                         pf.CVR_Str,
                         pf.Crop_Str,
@@ -2236,10 +2521,11 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         sf.FieldIdentifier,
                         sf.field_uuid,
                         sf.primary_field_id,
+                        sf.municipality,
                         (pf.AcreageSize / sf.FieldArea) * 100 as CoveragePercent
                     FROM MarkerSingleFieldCVRCrop sf
-                    JOIN PendingForSingleFields pf 
-                        ON sf.CVR_Str = pf.CVR_Str 
+                    JOIN PendingForSingleFields pf
+                        ON sf.CVR_Str = pf.CVR_Str
                         AND sf.Crop_Str = pf.Crop_Str
                     WHERE pf.AcreageSize < sf.FieldArea  -- Pesticide area smaller than field area
                 )
@@ -2261,7 +2547,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     NOW() as DisaggregationDate,
                     -- Add field UUID support
                     c.field_uuid,
-                    c.primary_field_id
+                    c.primary_field_id,
+                    -- Add municipality from FVM marker data
+                    c.municipality
                 FROM CandidatesWithFields c
             """
 
@@ -2270,22 +2558,24 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Remove processed records from pending table in a single operation
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
+                    SELECT DISTINCT OriginalPesticideRowID
+                    FROM disaggregated_pesticide_applications
                     WHERE AllocationMethod = 'Partial_Field_Coverage_SingleField'
                 )
             """)
 
             # Get count of processed records
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Partial_Field_Coverage_SingleField'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications "
+                "WHERE AllocationMethod = 'Partial_Field_Coverage_SingleField'"
             ).fetchone()
             processed_count = count_result[0] if count_result else 0
 
             self.log.info(
-                f"Partial Field Coverage: Processed {processed_count} pesticide applications with partial field coverage using optimized batch operations."
+                f"Partial Field Coverage: Processed {processed_count} pesticide applications "
+                f"with partial field coverage using optimized batch operations."
             )
             return processed_count
 
@@ -2293,7 +2583,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             self.log.error(f"Error in partial field coverage strategy: {str(e)}")
             return 0
 
-    def _disaggregate_by_adjacent_fields_single_cluster_REMOVED(self) -> int:
+    def _disaggregate_by_adjacent_fields_single_cluster_removed(self) -> int:
         """
         Strategy 4: Adjacent Fields Single Cluster using DuckDB spatial operations.
         CORRECTED VERSION: Only allocates when BOTH spatial coherence AND area match exist.
@@ -2308,7 +2598,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         try:
             # Check if geometry data is available for spatial clustering
             geometry_columns = self.duckdb_conn.execute("""
-                SELECT column_name FROM information_schema.columns 
+                SELECT column_name FROM information_schema.columns
                 WHERE table_name = 'marker' AND column_name = 'geometry'
             """).fetchall()
 
@@ -2328,12 +2618,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             if pending_count == 0:
                 self.log.info(
-                    "✅ All records already processed by strategies 1-3 - spatial clustering not needed"
+                    "✅ All records already processed by strategies 1-3 - "
+                    "spatial clustering not needed"
                 )
                 return 0
 
             # Get pending CVR+crop combinations to process in chunks
-            # OPTIMIZATION: Only get combinations that actually have pending records AND multiple fields with geometry
+            # OPTIMIZATION: Only get combinations that actually have pending records
+            # AND multiple fields with geometry
             self.log.info(
                 "🔍 Getting CVR+crop combinations with pending records and multiple fields..."
             )
@@ -2344,50 +2636,59 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         CAST(CAST(p.Code AS BIGINT) AS VARCHAR) as Crop_Str,
                         COUNT(*) as pending_count
                     FROM pending_pesticide_rows p
-                    WHERE p.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(p.cvr_number AS VARCHAR)) != '' 
+                    WHERE p.cvr_number IS NOT NULL
+                      AND TRIM(CAST(p.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(p.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND p.Code IS NOT NULL 
+                      AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0.0
                     GROUP BY CVR_Str, Crop_Str
                     HAVING COUNT(*) > 0
                 ),
                 FieldCounts AS (
-                    SELECT 
+                    SELECT
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
                         CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str,
                         COUNT(*) as field_count
                     FROM marker m
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
+                      AND m.crop_code IS NOT NULL
                       AND m.area_ha > 0.0
                       AND m.geometry IS NOT NULL
                     GROUP BY CVR_Str, Crop_Str
                     HAVING COUNT(*) >= 2  -- Only combinations with 2+ fields
                 )
-                SELECT 
+                SELECT
                     p.CVR_Str,
                     p.Crop_Str,
                     p.pending_count,
                     f.field_count
                 FROM PendingCombinations p
                 INNER JOIN FieldCounts f ON p.CVR_Str = f.CVR_Str AND p.Crop_Str = f.Crop_Str
-                ORDER BY p.pending_count DESC  -- Process combinations with most pending records first
+                ORDER BY p.pending_count DESC
+                -- Process combinations with most pending records first
             """).fetchall()
 
             if not pending_cvr_crops:
                 self.log.info(
-                    "✅ No CVR+crop combinations found with both pending records and multiple fields"
+                    "✅ No CVR+crop combinations found with both pending records "
+                    "and multiple fields"
                 )
                 return 0
 
             self.log.info(
-                f"📊 Found {len(pending_cvr_crops):,} CVR+crop combinations with pending records and 2+ fields"
+                f"📊 Found {len(pending_cvr_crops):,} CVR+crop combinations "
+                f"with pending records and 2+ fields"
             )
             self.log.info(
-                f"🔍 Top combinations: {[(cvr, crop, pending, fields) for cvr, crop, pending, fields in pending_cvr_crops[:5]]}"
+                "🔍 Top combinations: "
+                + str(
+                    [
+                        (cvr, crop, pending, fields)
+                        for cvr, crop, pending, fields in pending_cvr_crops[:5]
+                    ]
+                )
             )
 
             # Convert to list of tuples for processing
@@ -2401,7 +2702,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             max_chunks = 500  # Increased limit since processing is now much more efficient
 
             self.log.info(
-                f"✅ Processing {len(cvr_crop_combinations)} CVR+crop combinations in chunks of {chunk_size} (max {max_chunks} chunks)"
+                f"✅ Processing {len(cvr_crop_combinations)} CVR+crop combinations in chunks of "
+                + f"{chunk_size} (max {max_chunks} chunks)"
             )
 
             # Process in very small chunks with aggressive memory management
@@ -2409,7 +2711,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             for i in range(0, len(cvr_crop_combinations), chunk_size):
                 if chunks_processed >= max_chunks:
                     self.log.warning(
-                        f"⚠️ Reached maximum chunk limit ({max_chunks}) - stopping spatial clustering"
+                        f"⚠️ Reached maximum chunk limit ({max_chunks}) - "
+                        f"stopping spatial clustering"
                     )
                     break
 
@@ -2446,7 +2749,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 self._finalize_spatial_clustering()
 
             self.log.info(
-                f"Adjacent Fields Spatial Cluster: Processed {total_processed} pesticide applications across {chunks_processed} chunks."
+                f"Adjacent Fields Spatial Cluster: Processed {total_processed} "
+                f"pesticide applications " + f"across {chunks_processed} chunks."
             )
             return total_processed
 
@@ -2467,7 +2771,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             for table in temp_tables:
                 try:
                     self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table}")
-                except:
+                except Exception:
                     pass
 
         except Exception:
@@ -2499,7 +2803,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Log current chunk for debugging
             self.log.info(
-                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} CVR+crop combinations (total: {total_combinations}) [1 thread, no insertion order]"
+                f"🔧 Processing chunk {chunk_num} with {len(cvr_crop_chunk)} "
+                f"CVR+crop combinations "
+                + f"(total: {total_combinations}) [1 thread, no insertion order]"
             )
 
             # Apply DuckDB memory optimization settings
@@ -2512,13 +2818,14 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             pending_for_chunk = self.duckdb_conn.execute(f"""
                 SELECT COUNT(*) as total_pending
                 FROM pending_pesticide_rows p
-                WHERE (TRIM(CAST(p.cvr_number AS VARCHAR)), CAST(CAST(p.Code AS BIGINT) AS VARCHAR)) 
+                WHERE (TRIM(CAST(p.cvr_number AS VARCHAR)), CAST(CAST(p.Code AS BIGINT) AS VARCHAR))
                       IN ({cvr_crop_in_clause})
             """).fetchone()[0]
 
             if pending_for_chunk == 0:
                 self.log.info(
-                    f"⚠️ Chunk {chunk_num}: No pending records found - skipping (this shouldn't happen with optimized filtering)"
+                    f"⚠️ Chunk {chunk_num}: No pending records found - skipping "
+                    + "(this shouldn't happen with optimized filtering)"
                 )
                 return 0
             else:
@@ -2530,11 +2837,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
             insert_query = f"""
                 WITH PendingCVRCrops AS (
                     -- Process only this specific chunk of CVR+crop combinations
-                    SELECT CVR_Str, Crop_Str FROM (VALUES {cvr_crop_in_clause}) AS t(CVR_Str, Crop_Str)
+                    SELECT CVR_Str, Crop_Str
+                    FROM (VALUES {cvr_crop_in_clause}) AS t(CVR_Str, Crop_Str)
                 ),
                 FilteredFields AS (
                     -- CRITICAL FIX: Filter fields by CVR+crop BEFORE spatial operations
-                    SELECT 
+                    SELECT
                         m.field_id,
                         m.field_uuid,
                         m.geometry,
@@ -2542,13 +2850,13 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) as CVR_Str,
                         CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) as Crop_Str
                     FROM marker m
-                    JOIN PendingCVRCrops pcc ON 
+                    JOIN PendingCVRCrops pcc ON
                         CAST(CAST(m.cvr_number AS BIGINT) AS VARCHAR) = pcc.CVR_Str
                         AND CAST(CAST(m.crop_code AS BIGINT) AS VARCHAR) = pcc.Crop_Str
-                    WHERE m.cvr_number IS NOT NULL 
-                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != '' 
+                    WHERE m.cvr_number IS NOT NULL
+                      AND TRIM(CAST(m.cvr_number AS VARCHAR)) != ''
                       AND REGEXP_MATCHES(TRIM(CAST(m.cvr_number AS VARCHAR)), '^[0-9]+$')
-                      AND m.crop_code IS NOT NULL 
+                      AND m.crop_code IS NOT NULL
                       AND m.area_ha > 0.0
                       AND m.geometry IS NOT NULL
                 ),
@@ -2562,11 +2870,12 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         f1.CVR_Str,
                         f1.Crop_Str
                     FROM FilteredFields f1
-                    JOIN FilteredFields f2 ON 
-                        f1.CVR_Str = f2.CVR_Str 
+                    JOIN FilteredFields f2 ON
+                        f1.CVR_Str = f2.CVR_Str
                         AND f1.Crop_Str = f2.Crop_Str
                         AND f1.field_uuid != f2.field_uuid
-                        AND ST_DWithin(f1.geometry, f2.geometry, 10.0)  -- Spatial join on filtered data only
+                        AND ST_DWithin(f1.geometry, f2.geometry, 10.0)
+                        -- Spatial join on filtered data only
                 ),
                 -- Build connected components using recursive CTE (Union-Find algorithm)
                 ConnectedComponents AS (
@@ -2577,9 +2886,9 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         Crop_Str,
                         field1_id as cluster_root  -- Initially, each field is its own cluster
                     FROM SpatialAdjacency
-                    
+
                     UNION
-                    
+
                     SELECT DISTINCT
                         field2_id as field_id,
                         CVR_Str,
@@ -2589,36 +2898,37 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 ),
                 -- Simplified clustering: group fields that are directly connected
                 FieldClusters AS (
-                    SELECT 
+                    SELECT
                         field_id,
                         field_uuid,
                         CVR_Str,
                         Crop_Str,
                         -- Use minimum field_id in adjacency as cluster identifier
-                        MIN(LEAST(field_id, connected_field)) OVER (PARTITION BY CVR_Str, Crop_Str, field_id) as cluster_id
+                        MIN(LEAST(field_id, connected_field))
+                            OVER (PARTITION BY CVR_Str, Crop_Str, field_id) as cluster_id
                     FROM (
-                        SELECT 
+                        SELECT
                             sa.field1_id as field_id,
                             sa.field1_uuid as field_uuid,
                             sa.CVR_Str,
                             sa.Crop_Str,
                             sa.field2_id as connected_field
                         FROM SpatialAdjacency sa
-                        
+
                         UNION ALL
-                        
-                        SELECT 
+
+                        SELECT
                             sa.field2_id as field_id,
                             sa.field2_uuid as field_uuid,
                             sa.CVR_Str,
                             sa.Crop_Str,
                             sa.field1_id as connected_field
                         FROM SpatialAdjacency sa
-                        
+
                         UNION ALL
-                        
+
                         -- Include isolated fields (not in any adjacency) from our filtered set
-                        SELECT 
+                        SELECT
                             f.field_id,
                             f.field_uuid,
                             f.CVR_Str,
@@ -2626,15 +2936,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                             f.field_id as connected_field
                         FROM FilteredFields f
                         WHERE f.field_id NOT IN (
-                            SELECT field1_id FROM SpatialAdjacency 
-                            UNION 
+                            SELECT field1_id FROM SpatialAdjacency
+                            UNION
                             SELECT field2_id FROM SpatialAdjacency
                         )
                     ) clustered_fields
                 ),
                 -- Calculate cluster areas and match against pesticide applications
                 ClusterAreas AS (
-                    SELECT 
+                    SELECT
                         fc.CVR_Str,
                         fc.Crop_Str,
                         fc.cluster_id,
@@ -2650,7 +2960,7 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                 ),
                 -- Match clusters against pesticide applications with area tolerance
                 MatchedClusters AS (
-                    SELECT 
+                    SELECT
                         p.OriginalPesticideRowID,
                         p.cvr_number,
                         p.PesticideName,
@@ -2665,20 +2975,22 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                         ca.cluster_field_areas,
                         ca.cluster_field_count,
                         -- Calculate area match quality
-                        ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 as area_diff_pct
+                        ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100
+                            as area_diff_pct
                     FROM pending_pesticide_rows p
-                    JOIN ClusterAreas ca ON 
+                    JOIN ClusterAreas ca ON
                         TRIM(CAST(p.cvr_number AS VARCHAR)) = ca.CVR_Str
                         AND CAST(CAST(p.Code AS BIGINT) AS VARCHAR) = ca.Crop_Str
-                    WHERE p.cvr_number IS NOT NULL 
+                    WHERE p.cvr_number IS NOT NULL
                       AND p.Code IS NOT NULL
                       AND p.AcreageSize > 0
                       -- CRITICAL: Area must match within tolerance (2%)
-                      AND ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100 <= {self.config.area_tolerance_pct}
+                      AND ABS(p.AcreageSize - ca.cluster_total_area) / p.AcreageSize * 100
+                          <= {self.config.area_tolerance_pct}
                 ),
                 -- Expand matched clusters to individual field allocations
                 FieldAllocations AS (
-                    SELECT 
+                    SELECT
                         mc.OriginalPesticideRowID,
                         mc.cvr_number,
                         mc.PesticideName,
@@ -2709,12 +3021,15 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
                     fa.AcreageSize * (fa.field_area / fa.cluster_total_area) as AllocatedArea,
                     'Adjacent_Fields_Spatial_Cluster_AreaMatched' as AllocationMethod,
                     -- Confidence based on area match quality and cluster size
-                    GREATEST(0.5, 1.0 - (fa.area_diff_pct / {self.config.area_tolerance_pct})) as MatchConfidence,
+                    GREATEST(0.5, 1.0 - (fa.area_diff_pct / {self.config.area_tolerance_pct}))
+                        as MatchConfidence,
                     FALSE as IsPartialFieldCoverage,
                     NOW() as DisaggregationDate,
                     -- Add field UUID support - need to join back to marker table
                     m.field_uuid,
-                    m.primary_field_id
+                    m.primary_field_id,
+                    -- Add municipality from FVM marker data
+                    m.municipality
                 FROM FieldAllocations fa
                 JOIN marker m ON fa.field_uuid = m.field_uuid
             """
@@ -2724,7 +3039,8 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
 
             # Get count of processed records for this chunk
             count_result = self.duckdb_conn.execute(
-                "SELECT COUNT(*) FROM disaggregated_pesticide_applications WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'"
+                "SELECT COUNT(*) FROM disaggregated_pesticide_applications "
+                + "WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'"
             ).fetchone()
             total_processed_so_far = count_result[0] if count_result else 0
 
@@ -2751,10 +3067,10 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         try:
             # Remove all processed records from pending table
             self.duckdb_conn.execute("""
-                DELETE FROM pending_pesticide_rows 
+                DELETE FROM pending_pesticide_rows
                 WHERE CAST(OriginalPesticideRowID AS VARCHAR) IN (
-                    SELECT DISTINCT OriginalPesticideRowID 
-                    FROM disaggregated_pesticide_applications 
+                    SELECT DISTINCT OriginalPesticideRowID
+                    FROM disaggregated_pesticide_applications
                     WHERE AllocationMethod = 'Adjacent_Fields_Spatial_Cluster_AreaMatched'
                 )
             """)
@@ -2774,6 +3090,99 @@ class PesticideDisaggregationGold(BaseSource[PesticideDisaggregationGoldConfig],
         except Exception as e:
             self.log.error(f"Error getting results: {str(e)}")
             return []
+    
+    def _create_company_field_bridge(self) -> None:
+        """Create bridge table to connect company-level fertilizer data with field-level enhanced mappings."""
+        self.log.info("🌉 Creating company-to-field bridge for enhanced matching...")
+        
+        try:
+            # Create a bridge table that connects CVR+crop combinations to enhanced field mappings
+            self.duckdb_conn.execute("""
+                CREATE OR REPLACE TABLE company_field_bridge AS
+                WITH enhanced_field_company_mapping AS (
+                    -- Get company info for enhanced field mappings
+                    SELECT 
+                        efm.gkea_field_id,
+                        efm.fvm_field_id,
+                        efm.confidence_score,
+                        efm.match_method,
+                        m.cvr_number,
+                        m.crop_code,
+                        m.area_ha as field_area,
+                        efm.gkea_area_ha,
+                        efm.fvm_area_ha
+                    FROM fertilizer_enhanced_field_mappings efm
+                    JOIN marker m ON efm.fvm_field_id = m.field_id
+                    WHERE efm.confidence_score >= 0.75  -- High-confidence matches only
+                ),
+                company_crop_enhanced_summary AS (
+                    -- Aggregate enhanced mappings by company and crop
+                    SELECT 
+                        cvr_number,
+                        crop_code,
+                        COUNT(*) as enhanced_field_count,
+                        SUM(field_area) as total_enhanced_area,
+                        AVG(confidence_score) as avg_confidence,
+                        COUNT(CASE WHEN match_method = 'agricultural_pattern' THEN 1 END) as pattern_matched_fields,
+                        STRING_AGG(fvm_field_id, ',' ORDER BY confidence_score DESC) as field_list
+                    FROM enhanced_field_company_mapping
+                    GROUP BY cvr_number, crop_code
+                ),
+                standard_company_crop_summary AS (
+                    -- Get standard company-crop summaries for comparison
+                    SELECT 
+                        cvr_number,
+                        crop_code,
+                        COUNT(*) as total_field_count,
+                        SUM(area_ha) as total_area
+                    FROM marker
+                    WHERE cvr_number IS NOT NULL AND crop_code IS NOT NULL
+                    GROUP BY cvr_number, crop_code
+                )
+                SELECT 
+                    s.cvr_number,
+                    s.crop_code,
+                    s.total_field_count,
+                    s.total_area,
+                    COALESCE(e.enhanced_field_count, 0) as enhanced_field_count,
+                    COALESCE(e.total_enhanced_area, 0.0) as enhanced_area,
+                    COALESCE(e.avg_confidence, 0.0) as avg_mapping_confidence,
+                    COALESCE(e.pattern_matched_fields, 0) as pattern_matched_fields,
+                    COALESCE(e.field_list, '') as enhanced_field_list,
+                    -- Calculate enhancement coverage
+                    CASE 
+                        WHEN e.enhanced_field_count > 0 THEN 
+                            ROUND(e.total_enhanced_area / s.total_area * 100, 2)
+                        ELSE 0.0 
+                    END as enhancement_coverage_pct,
+                    -- Determine if company-crop should use enhanced matching
+                    CASE 
+                        WHEN e.enhanced_field_count > 0 AND e.avg_confidence >= 0.8 THEN TRUE
+                        ELSE FALSE 
+                    END as use_enhanced_matching
+                FROM standard_company_crop_summary s
+                LEFT JOIN company_crop_enhanced_summary e ON s.cvr_number = e.cvr_number AND s.crop_code = e.crop_code
+            """)
+            
+            # Log bridge statistics
+            bridge_stats = self.duckdb_conn.execute("""
+                SELECT 
+                    COUNT(*) as total_company_crops,
+                    COUNT(CASE WHEN use_enhanced_matching THEN 1 END) as enhanced_company_crops,
+                    SUM(enhanced_field_count) as total_enhanced_fields,
+                    AVG(enhancement_coverage_pct) as avg_coverage_pct
+                FROM company_field_bridge
+            """).fetchone()
+            
+            if bridge_stats:
+                total_combinations, enhanced_combinations, enhanced_fields, avg_coverage = bridge_stats
+                self.log.info(f"   Bridge created: {enhanced_combinations:,}/{total_combinations:,} company-crop combinations can use enhanced matching")
+                self.log.info(f"   Enhanced fields: {enhanced_fields:,} fields with improved matching")
+                self.log.info(f"   Average coverage: {avg_coverage:.1f}% of area covered by enhanced mappings")
+            
+        except Exception as e:
+            self.log.warning(f"   Failed to create company-field bridge: {e}")
+            self.log.warning("   Enhanced matching will not be available for disaggregation")
 
     def __del__(self):
         """Clean up DuckDB connection."""

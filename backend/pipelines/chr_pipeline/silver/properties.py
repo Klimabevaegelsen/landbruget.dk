@@ -90,10 +90,33 @@ def create_properties_table(
         con.create_table("properties_temp", properties, overwrite=True)
 
         # Create geometry from coordinates using DuckDB-spatial SQL
+        # Transform UTM coordinates to WGS84 standard format
         properties_with_geom = con.sql("""
-            SELECT 
+            SELECT
                 *,
-                CASE 
+                -- Transform UTM coordinates to WGS84 latitude and longitude (standard WGS84 order)
+                CASE
+                    WHEN geo_coord_x_source IS NOT NULL AND geo_coord_y_source IS NOT NULL THEN
+                        ST_X(ST_Transform(ST_Point(geo_coord_x_source, geo_coord_y_source), 'EPSG:25832', 'EPSG:4326'))
+                    WHEN geo_coord_x_measured IS NOT NULL AND geo_coord_y_measured IS NOT NULL THEN
+                        ST_X(ST_Transform(
+                            ST_Point(geo_coord_x_measured, geo_coord_y_measured),
+                            'EPSG:25832', 'EPSG:4326'
+                        ))
+                    ELSE NULL
+                END as latitude,
+                CASE
+                    WHEN geo_coord_x_source IS NOT NULL AND geo_coord_y_source IS NOT NULL THEN
+                        ST_Y(ST_Transform(ST_Point(geo_coord_x_source, geo_coord_y_source), 'EPSG:25832', 'EPSG:4326'))
+                    WHEN geo_coord_x_measured IS NOT NULL AND geo_coord_y_measured IS NOT NULL THEN
+                        ST_Y(ST_Transform(
+                            ST_Point(geo_coord_x_measured, geo_coord_y_measured),
+                            'EPSG:25832', 'EPSG:4326'
+                        ))
+                    ELSE NULL
+                END as longitude,
+                -- Create WGS84 geometry in standard format POINT(latitude, longitude)
+                CASE
                     WHEN geo_coord_x_source IS NOT NULL AND geo_coord_y_source IS NOT NULL THEN
                         ST_Transform(ST_Point(geo_coord_x_source, geo_coord_y_source), 'EPSG:25832', 'EPSG:4326')
                     WHEN geo_coord_x_measured IS NOT NULL AND geo_coord_y_measured IS NOT NULL THEN
@@ -103,7 +126,7 @@ def create_properties_table(
             FROM properties_temp
         """)
 
-        # Select final columns
+        # Select final columns - standardized WGS84 format
         final_cols = [
             "property_id",
             "chr_number",
@@ -117,11 +140,9 @@ def create_properties_table(
             "phone",
             "mobile",
             "email",
-            "geo_coord_x_source",
-            "geo_coord_y_source",
-            "geo_coord_x_measured",
-            "geo_coord_y_measured",
-            "geometry",
+            "latitude",  # WGS84 latitude (standard)
+            "longitude",  # WGS84 longitude (standard)
+            "geometry",  # WGS84 geometry POINT(lat, lon)
         ]
         properties_final = properties_with_geom.select(*final_cols)
 
@@ -176,7 +197,7 @@ def create_property_owners_table(
         # Extract property owner information using SQL
         property_owners_base = con.sql("""
             WITH unnested_besaetninger AS (
-                SELECT 
+                SELECT
                     Response.EjendomsOplysninger.ChrNummer AS chr_number,
                     UNNEST(Response.EjendomsOplysninger.Besaetninger.Besaetning) AS besaetning
                 FROM ejendom_oplys_raw
@@ -309,7 +330,7 @@ def create_property_users_table(
         # Extract property user information using SQL
         property_users_base = con.sql("""
             WITH unnested_besaetninger AS (
-                SELECT 
+                SELECT
                     Response.EjendomsOplysninger.ChrNummer AS chr_number,
                     UNNEST(Response.EjendomsOplysninger.Besaetninger.Besaetning) AS besaetning
                 FROM ejendom_oplys_raw

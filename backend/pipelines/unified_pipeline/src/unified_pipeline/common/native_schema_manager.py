@@ -51,14 +51,14 @@ class NativeSchemaManager:
     def _get_basic_table_info(self, table_name: str) -> Dict[str, Any]:
         """Get basic table information using duckdb_tables()."""
         query = """
-        SELECT 
+        SELECT
             table_name,
             estimated_size,
             column_count,
             has_primary_key,
             temporary,
             sql
-        FROM duckdb_tables() 
+        FROM duckdb_tables()
         WHERE table_name = ?
         """
 
@@ -78,7 +78,7 @@ class NativeSchemaManager:
     def _get_column_details(self, table_name: str) -> List[Dict[str, Any]]:
         """Get detailed column information using duckdb_columns()."""
         query = """
-        SELECT 
+        SELECT
             column_name,
             column_index,
             data_type,
@@ -88,7 +88,7 @@ class NativeSchemaManager:
             numeric_scale,
             character_maximum_length,
             comment
-        FROM duckdb_columns() 
+        FROM duckdb_columns()
         WHERE table_name = ?
         ORDER BY column_index
         """
@@ -116,11 +116,11 @@ class NativeSchemaManager:
     def _get_constraints(self, table_name: str) -> List[Dict[str, Any]]:
         """Get constraint information using duckdb_constraints()."""
         query = """
-        SELECT 
+        SELECT
             constraint_type,
             constraint_text,
             constraint_column_names
-        FROM duckdb_constraints() 
+        FROM duckdb_constraints()
         WHERE table_name = ?
         """
 
@@ -220,9 +220,9 @@ class NativeSchemaManager:
         """Get schemas for all user tables in the database."""
         # Get all non-internal tables
         query = """
-        SELECT table_name 
-        FROM duckdb_tables() 
-        WHERE NOT internal 
+        SELECT table_name
+        FROM duckdb_tables()
+        WHERE NOT internal
         AND NOT temporary
         """
 

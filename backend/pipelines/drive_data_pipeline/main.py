@@ -1,11 +1,13 @@
 """Main entry point for Google Drive Data Pipeline."""
 
+import logging
 import os
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
+import duckdb
 from dotenv import load_dotenv
 
 # Add the parent directory to sys.path to enable imports
@@ -14,13 +16,14 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # Use absolute imports
-from drive_data_pipeline.bronze import BronzeProcessor
-from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service
-from drive_data_pipeline.bronze.metadata import MetadataManager
-from drive_data_pipeline.config import get_settings, parse_args
-from drive_data_pipeline.silver import SilverProcessor
-from drive_data_pipeline.utils.logging import get_logger, setup_logging
-from drive_data_pipeline.utils.storage import get_storage_manager
+from drive_data_pipeline.bronze import BronzeProcessor  # noqa: E402
+from drive_data_pipeline.bronze.drive import GoogleDriveFetcher, get_drive_service  # noqa: E402
+from drive_data_pipeline.bronze.drive.models import DriveFolder  # noqa: E402
+from drive_data_pipeline.bronze.metadata import MetadataManager  # noqa: E402
+from drive_data_pipeline.config import get_settings, parse_args  # noqa: E402
+from drive_data_pipeline.silver import SilverProcessor  # noqa: E402
+from drive_data_pipeline.utils.logging import get_logger, setup_logging  # noqa: E402
+from drive_data_pipeline.utils.storage import get_storage_manager  # noqa: E402
 
 # Try to import CVR collection utilities
 try:
@@ -47,7 +50,82 @@ if not os.path.exists(env_path):
 load_dotenv(env_path)
 
 
-def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetime, logger) -> None:
+def _extract_cvr_numbers_flexible(
+    table_name: str, connection: duckdb.DuckDBPyConnection, logger: logging.Logger
+) -> list[str]:
+    """
+    Extract CVR numbers from a table using flexible column detection.
+
+    Tries multiple possible column names that might contain CVR numbers.
+    """
+    # Common column names that might contain CVR numbers
+    possible_cvr_columns = [
+        "cvr_number",
+        "cvr",
+        "cvr_nr",
+        "company_cvr",
+        "virksomhed_cvr",
+        "cvr_nummer",
+        "cvrnummer",
+        "cvr_no",
+        "company_registration",
+        "virksomhedsregistrering",
+        "company_id",
+        "virksomhed_id",
+    ]
+
+    try:
+        # Get table columns
+        columns_info = connection.execute(f"DESCRIBE {table_name}").fetchall()
+        available_columns = [col[0].lower() for col in columns_info]
+
+        logger.debug(f"Table {table_name} has columns: {available_columns}")
+
+        # Try to find a CVR column
+        cvr_column = None
+        for possible_col in possible_cvr_columns:
+            if possible_col.lower() in available_columns:
+                cvr_column = possible_col
+                break
+
+        if not cvr_column:
+            # Try to find columns that might contain CVR-like data (8-digit numbers)
+            for col_name in available_columns:
+                if any(keyword in col_name for keyword in ["cvr", "company", "virksomhed", "reg"]):
+                    cvr_column = col_name
+                    break
+
+        if not cvr_column:
+            logger.debug(f"No CVR column found in table {table_name}")
+            return []
+
+        # Extract CVR numbers using the found column
+        query = f"""
+        SELECT DISTINCT {cvr_column}
+        FROM {table_name}
+        WHERE {cvr_column} IS NOT NULL
+        AND {cvr_column} != ''
+        AND LENGTH(TRIM(CAST({cvr_column} AS VARCHAR))) = 8
+        AND TRIM(CAST({cvr_column} AS VARCHAR)) ~ '^[1-9][0-9]{{7}}$'
+        ORDER BY {cvr_column}
+        """
+
+        result = connection.execute(query).fetchall()
+        cvr_numbers = [str(row[0]).strip() for row in result]
+
+        if cvr_numbers:
+            logger.info(f"Extracted {len(cvr_numbers)} CVR numbers from column '{cvr_column}'")
+
+        return cvr_numbers
+
+    except Exception as e:
+        logger.debug(f"Error extracting CVR numbers from {table_name}: {e}")
+        return []
+
+
+def _save_discovered_cvr_numbers(
+    silver_path: Path, pipeline_start_time: datetime, logger: logging.Logger
+) -> None:
     """
     Extract and save CVR numbers discovered in the drive data pipeline silver data.
 
@@ -66,10 +144,10 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
         else:
             logger.info(f"⚠️ Silver directory does not exist: {silver_path}")
             local_parquet_files = []
-        
+
         files_to_process = []
         source_description = ""
-        
+
         if local_parquet_files:
             logger.info(f"✅ Found {len(local_parquet_files)} local parquet files from current run")
             files_to_process = [(str(f), "local") for f in local_parquet_files]
@@ -77,27 +155,31 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
         else:
             # Strategy 2: Fallback to downloading recent files from GCS
             logger.info("🔍 No local parquet files found, searching GCS for recent files")
-            
+
             try:
                 gcs_access = GCSDataAccess()
                 bucket = "landbrugsdata-raw-data"
-                
+
                 # Find parquet files in GCS silver directory with pattern matching
                 silver_pattern = f"gs://{bucket}/silver/*/*/*.parquet"
                 parquet_files = gcs_access.list_files(silver_pattern)
-                
+
                 # Filter to only recent files (within reasonable timeframe of pipeline run)
                 pipeline_date = pipeline_start_time.strftime("%Y%m%d")
                 recent_files = [f for f in parquet_files if pipeline_date in f]
-                
+
                 if not recent_files:
                     # Fallback to most recent files if no files from today
-                    logger.warning(f"⚠️ No files found for date {pipeline_date}, using most recent files")
+                    logger.warning(
+                        f"⚠️ No files found for date {pipeline_date}, using most recent files"
+                    )
                     recent_files = sorted(parquet_files, reverse=True)[:20]  # Most recent 20 files
-                    
-                files_to_process = [(f, "gcs") for f in recent_files[:20]]  # Limit to avoid excessive processing
+
+                files_to_process = [
+                    (f, "gcs") for f in recent_files[:20]
+                ]  # Limit to avoid excessive processing
                 source_description = f"GCS files (filtered for {pipeline_date})"
-                
+
             except Exception as e:
                 logger.error(f"❌ Could not access GCS files: {e}")
                 return
@@ -109,6 +191,7 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
         logger.info(f"📂 Processing {len(files_to_process)} files from {source_description}")
 
         import duckdb
+
         conn = duckdb.connect()
         all_cvr_numbers = []
 
@@ -121,30 +204,52 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
         for i, (file_path, source) in enumerate(files_to_process):
             try:
                 table_name = f"drive_table_{i + 1}"
-                file_display_name = Path(file_path).name if source == "local" else file_path.split("/")[-1]
-                
+                file_display_name = (
+                    Path(file_path).name if source == "local" else file_path.split("/")[-1]
+                )
+
                 if source == "gcs":
-                    # Download from GCS and load into DuckDB
-                    with gcs_access._temp_download(file_path) as temp_file:
-                        conn.execute(
-                            f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{temp_file}')"
+                    # 🚀 ENHANCED: Use native HMAC acceleration for faster Drive data loading
+                    try:
+                        # Use GCS access connection for table creation and CVR extraction
+                        gcs_access.query_parquet_native(file_path, "SELECT *", table_name)
+                        # Extract CVR numbers using flexible column detection
+                        cvr_numbers = _extract_cvr_numbers_flexible(
+                            table_name=table_name,
+                            connection=gcs_access.duckdb_conn,
+                            logger=logger,
+                        )
+                    except Exception as e:
+                        logger.warning(f"Native loading failed, using fallback: {e}")
+                        # Fallback to existing temp file method
+                        with gcs_access._temp_download(file_path) as temp_file:
+                            conn.execute(
+                                f"CREATE TABLE {table_name} AS "
+                                f"SELECT * FROM read_parquet('{temp_file}')"
+                            )
+                        # Extract CVR numbers using flexible column detection
+                        cvr_numbers = _extract_cvr_numbers_flexible(
+                            table_name=table_name,
+                            connection=conn,
+                            logger=logger,
                         )
                 else:
                     # Local file - use directly
                     conn.execute(
                         f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
                     )
-
-                # Extract CVR numbers from this table
-                cvr_numbers = extract_cvr_numbers_from_table(
-                    table_name=table_name,
-                    connection=conn,
-                    cvr_column="cvr_number",  # Standardized column name from Excel transformer
-                )
+                    # Extract CVR numbers using flexible column detection
+                    cvr_numbers = _extract_cvr_numbers_flexible(
+                        table_name=table_name,
+                        connection=conn,
+                        logger=logger,
+                    )
 
                 if cvr_numbers:
                     all_cvr_numbers.extend(cvr_numbers)
-                    logger.info(f"   • {file_display_name}: {len(cvr_numbers)} CVR numbers ({source})")
+                    logger.info(
+                        f"   • {file_display_name}: {len(cvr_numbers)} CVR numbers ({source})"
+                    )
                 else:
                     logger.debug(f"   • {file_display_name}: No CVR numbers found ({source})")
 
@@ -158,7 +263,7 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
             # Initialize GCS access for saving if not already done
             if gcs_access is None:
                 gcs_access = GCSDataAccess()
-                
+
             timestamp = pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
             gcs_path = save_pipeline_cvr_numbers(
@@ -180,7 +285,7 @@ def _save_discovered_cvr_numbers(silver_path: Path, pipeline_start_time: datetim
 class ProgressTracker:
     """Tracks progress of pipeline operations and provides reporting capabilities."""
 
-    def __init__(self, quiet: bool = False, verbose: bool = False):
+    def __init__(self, quiet: bool = False, verbose: bool = False) -> None:
         """Initialize the progress tracker.
 
         Args:
@@ -203,7 +308,7 @@ class ProgressTracker:
         }
         self.logger = get_logger()
 
-    def start_bronze_operation(self, total_files: int):
+    def start_bronze_operation(self, total_files: int) -> None:
         """Start tracking a bronze layer operation.
 
         Args:
@@ -214,7 +319,7 @@ class ProgressTracker:
             print(f"Starting Bronze layer processing: {total_files} files identified")
         self.logger.info(f"Bronze layer processing started: {total_files} files")
 
-    def update_bronze_progress(self, file_count: int, success: bool, file_size: int = 0):
+    def update_bronze_progress(self, file_count: int, success: bool, file_size: int = 0) -> None:
         """Update bronze layer progress.
 
         Args:
@@ -235,14 +340,16 @@ class ProgressTracker:
                     self.bronze_stats["downloaded_files"] / self.bronze_stats["total_files"]
                 ) * 100
                 print(
-                    f"Bronze progress: {self.bronze_stats['downloaded_files']}/{self.bronze_stats['total_files']} files ({pct:.1f}%)"
+                    f"Bronze progress: {self.bronze_stats['downloaded_files']}/"
+                    f"{self.bronze_stats['total_files']} files ({pct:.1f}%)"
                 )
             else:
                 print(
-                    f"Bronze progress: {self.bronze_stats['downloaded_files']} files processed (total unknown)"
+                    f"Bronze progress: {self.bronze_stats['downloaded_files']} "
+                    f"files processed (total unknown)"
                 )
 
-    def start_silver_operation(self, total_files: int):
+    def start_silver_operation(self, total_files: int) -> None:
         """Start tracking a silver layer operation.
 
         Args:
@@ -253,7 +360,7 @@ class ProgressTracker:
             print(f"Starting Silver layer processing: {total_files} files to transform")
         self.logger.info(f"Silver layer processing started: {total_files} files")
 
-    def update_silver_progress(self, file_count: int, success: bool):
+    def update_silver_progress(self, file_count: int, success: bool) -> None:
         """Update silver layer progress.
 
         Args:
@@ -272,14 +379,16 @@ class ProgressTracker:
                     self.silver_stats["processed_files"] / self.silver_stats["total_files"]
                 ) * 100
                 print(
-                    f"Silver progress: {self.silver_stats['processed_files']}/{self.silver_stats['total_files']} files ({pct:.1f}%)"
+                    f"Silver progress: {self.silver_stats['processed_files']}/"
+                    f"{self.silver_stats['total_files']} files ({pct:.1f}%)"
                 )
             else:
                 print(
-                    f"Silver progress: {self.silver_stats['processed_files']} files processed (total unknown)"
+                    f"Silver progress: {self.silver_stats['processed_files']} "
+                    f"files processed (total unknown)"
                 )
 
-    def print_summary(self):
+    def print_summary(self) -> None:
         """Print a summary of the pipeline run."""
         if self.quiet:
             return
@@ -300,7 +409,8 @@ class ProgressTracker:
         if self.silver_stats["total_files"] > 0:
             print("\nSilver Layer:")
             print(
-                f"  Files processed: {self.silver_stats['processed_files']}/{self.silver_stats['total_files']}"
+                f"  Files processed: {self.silver_stats['processed_files']}/"
+                f"{self.silver_stats['total_files']}"
             )
             if self.silver_stats["processing_errors"] > 0:
                 print(f"  Processing errors: {self.silver_stats['processing_errors']}")
@@ -415,7 +525,7 @@ def main() -> int:
             # Extract all files recursively from the folder structure for progress tracking
             all_files = []
 
-            def collect_files(folder):
+            def collect_files(folder: DriveFolder) -> None:
                 all_files.extend(folder.files)
                 for subfolder in folder.subfolders:
                     collect_files(subfolder)
@@ -450,18 +560,62 @@ def main() -> int:
             logger.info("Starting Silver layer processing")
 
             # Initialize Silver processor with progress tracking
+            schema_dir = Path(__file__).parent / "schemas"
             silver_processor = SilverProcessor(
                 settings=settings,
                 storage_manager=storage_manager,
                 metadata_manager=metadata_manager,
+                schema_dir=schema_dir if schema_dir.exists() else None,
                 progress_callback=progress.update_silver_progress,
             )
 
             # If no bronze_run_path (silver_only mode), find the latest bronze run
             if args.silver_only and not bronze_run_path:
-                # Find the latest bronze run directory
+                # Find the latest bronze run directory across all dataset directories
+                # After migration, bronze data is organized as: bronze/{dataset}/{timestamp}/
+                bronze_runs = []
+
+                # Look for dataset directories in bronze path
+                # Handle both local and GCS storage
+                if settings.storage_type.value == "gcs":
+                    # For GCS, use the storage manager to list directories
+                    try:
+                        # List dataset directories (fertiliser, work_permits, etc.)
+                        dataset_dirs = storage_manager.list_directories(settings.bronze_path)
+                        for dataset_dir in dataset_dirs:
+                            # List timestamp directories within each dataset
+                            timestamp_dirs = storage_manager.list_directories(dataset_dir)
+                            bronze_runs.extend(timestamp_dirs)
+                    except Exception as e:
+                        logger.warning(f"Failed to list GCS bronze directories: {e}")
+                        # Fallback: try to list specific known datasets
+                        dataset_names = [
+                            "fertiliser",
+                            "work_permits",
+                            "efterafgroeder",
+                            "goedning_data",
+                        ]
+                        for dataset_name in dataset_names:
+                            try:
+                                dataset_path = Path(settings.bronze_path) / dataset_name
+                                timestamp_dirs = storage_manager.list_directories(dataset_path)
+                                bronze_runs.extend(timestamp_dirs)
+                            except Exception:
+                                continue
+                else:
+                    # For local storage, use filesystem operations
+                    bronze_base_path = Path(settings.bronze_path)
+                    if bronze_base_path.exists():
+                        for dataset_dir in bronze_base_path.iterdir():
+                            if dataset_dir.is_dir():
+                                # Look for timestamp directories within each dataset
+                                for timestamp_dir in dataset_dir.iterdir():
+                                    if timestamp_dir.is_dir():
+                                        bronze_runs.append(timestamp_dir)
+
+                # Sort by modification time and get the latest
                 bronze_runs = sorted(
-                    Path(settings.bronze_path).glob("*"),
+                    bronze_runs,
                     key=lambda p: p.stat().st_mtime if p.is_dir() else 0,
                     reverse=True,
                 )
@@ -472,6 +626,11 @@ def main() -> int:
                     if not args.quiet:
                         print(f"Error: {error_msg}")
                     return 1
+
+                # Log all available bronze runs for debugging
+                logger.info(f"Found {len(bronze_runs)} bronze runs:")
+                for i, run_path in enumerate(bronze_runs[:5]):  # Show top 5
+                    logger.info(f"  {i + 1}. {run_path}")
 
                 bronze_run_path = bronze_runs[0]
                 logger.info(f"Using latest Bronze run for Silver processing: {bronze_run_path}")
@@ -490,7 +649,7 @@ def main() -> int:
                 # Apply filtering if specified
                 if file_types or subfolders:
                     filtered_count = 0
-                    for file_key, file_info in file_data.items():
+                    for _file_key, file_info in file_data.items():
                         # Filter by file type if specified
                         if file_types:
                             file_extension = Path(file_info["original_filename"]).suffix.lstrip(".")
@@ -498,8 +657,24 @@ def main() -> int:
                                 continue
 
                         # Filter by subfolder if specified
-                        if subfolders and file_info.get("folder_name") not in subfolders:
-                            continue
+                        if subfolders:
+                            folder_name = file_info.get("folder_name", "")
+                            file_path = file_info.get("file_path", "")
+
+                            # Check if any of the specified subfolders match
+                            # Either exact match or if the file path contains the subfolder
+                            matches_subfolder = False
+                            for subfolder in subfolders:
+                                if (
+                                    folder_name == subfolder
+                                    or subfolder.lower() in file_path.lower()
+                                    or folder_name.lower().startswith(subfolder.lower())
+                                ):
+                                    matches_subfolder = True
+                                    break
+
+                            if not matches_subfolder:
+                                continue
 
                         filtered_count += 1
                     files_to_process_count = filtered_count
@@ -523,7 +698,8 @@ def main() -> int:
                 # Count files to process for progress tracking using storage manager
                 # This ensures compatibility with both local and GCS storage
                 try:
-                    # Use storage manager to list metadata files (which correspond to processable files)
+                    # Use storage manager to list metadata files
+                    # (which correspond to processable files)
                     metadata_files = storage_manager.list_files(
                         bronze_run_path, pattern="*.metadata.json"
                     )
@@ -625,11 +801,13 @@ def main() -> int:
 
                 try:
                     from backend.common.schema_documentation import SchemaDocumentationManager
+
+                    schema_doc_manager_class = SchemaDocumentationManager
                 except ImportError as e:
                     import warnings
 
-                    warnings.warn(f"Schema documentation not available: {e}")
-                    SchemaDocumentationManager = None
+                    warnings.warn(f"Schema documentation not available: {e}", stacklevel=2)
+                    schema_doc_manager_class = None
 
                 conn = duckdb.connect()
 
@@ -645,7 +823,8 @@ def main() -> int:
                         try:
                             table_name = f"drive_data_{i + 1}"
                             conn.execute(
-                                f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{file_path}')"
+                                f"CREATE TABLE {table_name} AS "
+                                f"SELECT * FROM read_parquet('{file_path}')"
                             )
                             table_names.append(table_name)
                         except Exception as e:
@@ -653,9 +832,9 @@ def main() -> int:
                                 f"Could not load {file_path} for schema documentation: {e}"
                             )
 
-                    if table_names and SchemaDocumentationManager is not None:
+                    if table_names and schema_doc_manager_class is not None:
                         # Initialize schema documentation manager
-                        schema_manager = SchemaDocumentationManager(
+                        schema_manager = schema_doc_manager_class(
                             connection=conn,
                             pipeline_name="drive_data_pipeline",
                             pipeline_start_time=pipeline_start_time,
@@ -671,7 +850,7 @@ def main() -> int:
                         # Commit to GitHub
                         schema_manager.commit_to_github()
                         logger.info("Drive data schema documentation committed to GitHub")
-                    elif SchemaDocumentationManager is None:
+                    elif schema_doc_manager_class is None:
                         logger.warning("Schema documentation disabled due to import error")
                     else:
                         logger.info("No processable parquet files found for schema documentation")
@@ -688,12 +867,18 @@ def main() -> int:
         if not args.bronze_only and CVR_COLLECTION_AVAILABLE:
             # Use the actual silver run path from the processor if available
             actual_silver_path = Path(settings.silver_path)
-            if 'silver_processor' in locals() and hasattr(silver_processor, 'silver_run_path') and silver_processor.silver_run_path:
+            if (
+                "silver_processor" in locals()
+                and hasattr(silver_processor, "silver_run_path")
+                and silver_processor.silver_run_path
+            ):
                 actual_silver_path = storage_manager.base_dir / silver_processor.silver_run_path
-                logger.info(f"Using actual silver run path for CVR extraction: {actual_silver_path}")
+                logger.info(
+                    f"Using actual silver run path for CVR extraction: {actual_silver_path}"
+                )
             else:
                 logger.info(f"Using base silver path for CVR extraction: {actual_silver_path}")
-            
+
             _save_discovered_cvr_numbers(
                 silver_path=actual_silver_path,
                 pipeline_start_time=pipeline_start_time,

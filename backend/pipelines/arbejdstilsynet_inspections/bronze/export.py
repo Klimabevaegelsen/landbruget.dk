@@ -5,9 +5,23 @@ import logging
 import os
 import tempfile
 from pathlib import Path
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from google.cloud import storage
+
+# Import the unified metadata system
+try:
+    import sys
+
+    sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+    from common.pipeline_metadata import MetadataManager
+
+    METADATA_AVAILABLE = True
+except ImportError:
+    logging.warning("⚠️  Pipeline metadata system not available - continuing without metadata")
+    MetadataManager = None
+    METADATA_AVAILABLE = False
 from playwright.async_api import async_playwright
 
 # Load environment variables from .env file
@@ -15,7 +29,7 @@ load_dotenv()
 
 
 # Try to import optimized GCS access with fallback
-def _get_optimized_gcs_access():
+def _get_optimized_gcs_access() -> Optional[Any]:
     """
     Get optimized GCS access with robust import handling.
 
@@ -42,7 +56,7 @@ OptimizedGCSDataAccess = _get_optimized_gcs_access()
 class GCSStorage:
     """Google Cloud Storage backend for arbejdstilsynet_inspections files - OPTIMIZED VERSION."""
 
-    def __init__(self, bucket_name, prefix="bronze/arbejdstilsynet_inspections"):
+    def __init__(self, bucket_name, prefix="bronze/arbejdstilsynet_inspections") -> None:
         self.bucket_name = bucket_name
         self.prefix = prefix
         self.is_available = self._check_gcs_available()
@@ -61,7 +75,7 @@ class GCSStorage:
                 self.gcs_access = None
                 self.use_optimized = False
 
-    def _check_gcs_available(self):
+    def _check_gcs_available(self) -> bool:
         """Check if GCS is available (Google Cloud Storage library is installed)."""
         try:
             _ = storage
@@ -70,7 +84,7 @@ class GCSStorage:
             logging.warning("Google Cloud Storage library not available. Using local storage only.")
             return False
 
-    def upload_file(self, local_path, gcs_path=None):
+    def upload_file(self, local_path, gcs_path=None) -> bool:
         """Upload a file to GCS bucket using optimized streaming."""
         if not self.is_available:
             logging.warning("GCS not available, skipping upload")
@@ -95,6 +109,40 @@ class GCSStorage:
                         shutil.copyfileobj(file_obj, gcs_file)
 
                 logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
+
+                # Create and upload metadata using existing methods
+                if METADATA_AVAILABLE:
+                    try:
+                        metadata_manager = MetadataManager()
+
+                        # Get file info
+                        record_count = None
+                        file_size = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+
+                        if local_path.endswith(".csv"):
+                            try:
+                                with open(local_path, "r") as f:
+                                    record_count = max(0, len(f.readlines()) - 1)  # Subtract header
+                            except Exception:
+                                pass
+
+                        metadata = metadata_manager.create_metadata(
+                            source_key="arbejdstilsynet_inspections",
+                            record_count=record_count,
+                            file_size_bytes=file_size,
+                        )
+
+                        # Upload metadata using existing method
+                        metadata_content = json.dumps(metadata.model_dump(mode="json"), indent=2, default=str)
+                        metadata_gcs_path = full_gcs_path.replace(".csv", "_metadata.json")
+
+                        with self.gcs_access.fs.open(metadata_gcs_path, "w") as f:
+                            f.write(metadata_content)
+
+                        logging.info(f"✅ Uploaded metadata to {metadata_gcs_path}")
+                    except Exception as e:
+                        logging.warning(f"⚠️  Failed to create metadata: {e}")
+
                 return True
             else:
                 # Fallback to old method if optimized access failed
@@ -103,6 +151,39 @@ class GCSStorage:
                 blob = bucket.blob(gcs_path)
                 blob.upload_from_filename(local_path)
                 logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+
+                # Create and upload metadata using fallback method
+                if METADATA_AVAILABLE:
+                    try:
+                        metadata_manager = MetadataManager()
+
+                        # Get file info
+                        record_count = None
+                        file_size = os.path.getsize(local_path) if os.path.exists(local_path) else 0
+
+                        if local_path.endswith(".csv"):
+                            try:
+                                with open(local_path, "r") as f:
+                                    record_count = max(0, len(f.readlines()) - 1)  # Subtract header
+                            except Exception:
+                                pass
+
+                        metadata = metadata_manager.create_metadata(
+                            source_key="arbejdstilsynet_inspections",
+                            record_count=record_count,
+                            file_size_bytes=file_size,
+                        )
+
+                        # Upload metadata using fallback method
+                        metadata_content = json.dumps(metadata.model_dump(mode="json"), indent=2, default=str)
+                        metadata_gcs_path = gcs_path.replace(".csv", "_metadata.json")
+                        metadata_blob = bucket.blob(metadata_gcs_path)
+                        metadata_blob.upload_from_string(metadata_content, content_type="application/json")
+
+                        logging.info(f"✅ Uploaded metadata to gs://{self.bucket_name}/{metadata_gcs_path} (fallback)")
+                    except Exception as e:
+                        logging.warning(f"⚠️  Failed to create metadata (fallback): {e}")
+
                 return True
 
         except Exception as e:
@@ -117,7 +198,7 @@ class BronzePipeline:
         source_url: str | None,
         gcs_bucket: str | None = None,
         log_level: str = "INFO",
-    ):
+    ) -> None:
         self.pipeline_name = pipeline_name
         self.source_url = source_url
         self.pipeline_root_dir = Path(__file__).resolve().parent.parent
@@ -184,18 +265,45 @@ class BronzePipeline:
                 )
                 powerbi_frame = page.frame_locator('iframe[title="Power BI Report Viewer"]')
                 await page.wait_for_timeout(5000)
-                await powerbi_frame.locator(
-                    '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas/div/div[2]/div/div[2]/div[2]/visual-container-repeat/visual-container[2]/transform/div/div[2]/div/div/visual-modern/div/div'
-                ).click(timeout=120000)
+                # Click on PowerBI container element
+                powerbi_container_selector = (
+                    '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container[2]/transform/div/div[2]/div/div/visual-modern"
+                    "/div/div"
+                )
+                await powerbi_frame.locator(powerbi_container_selector).click(timeout=120000)
                 await page.wait_for_timeout(3000)
-                await powerbi_frame.locator(
-                    '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas/div/div[2]/div/div[2]/div[2]/visual-container-repeat/visual-container-group[2]/transform/div/div[2]/visual-container[1]/transform/div/div[2]/div/div/visual-modern/div'
-                ).click(timeout=10000)
+                # Click on PowerBI visualization element
+                powerbi_visualization_selector = (
+                    '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container-group[2]/transform/div/div[2]/visual-container[1]"
+                    "/transform/div/div[2]/div/div/visual-modern/div"
+                )
+                await powerbi_frame.locator(powerbi_visualization_selector).click(timeout=10000)
                 await page.wait_for_timeout(3000)
 
-                filter_selector_xpath = '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas/div/div[2]/div/div[2]/div[2]/visual-container-repeat/visual-container-group[1]/transform/div/div[2]/visual-container[3]/transform/div/div[2]/div/div/visual-modern/div/div/div[2]/div'
-                hover_target_xpath = '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas/div/div[2]/div/div[2]/div[2]/visual-container-repeat/visual-container[3]/transform/div/div[2]/div/div/visual-modern/div/div/div[2]/div[1]/div[1]/div/div/div/div[8]'
-                options_button_xpath = '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas/div/div[2]/div/div[2]/div[2]/visual-container-repeat/visual-container[3]/transform/div/visual-container-header/div/div/div/visual-container-options-menu/visual-header-item-container/div/button'
+                # PowerBI filter and interaction selectors
+                filter_selector_xpath = (
+                    '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container-group[1]/transform/div/div[2]/visual-container[3]"
+                    "/transform/div/div[2]/div/div/visual-modern/div/div/div[2]/div"
+                )
+                hover_target_xpath = (
+                    '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container[3]/transform/div/div[2]/div/div/visual-modern"
+                    "/div/div/div[2]/div[1]/div[1]/div/div/div/div[8]"
+                )
+                options_button_xpath = (
+                    '//*[@id="pvExplorationHost"]/div/div/exploration/div/explore-canvas'
+                    "/div/div[2]/div/div[2]/div[2]/visual-container-repeat"
+                    "/visual-container[3]/transform/div/visual-container-header"
+                    "/div/div/div/visual-container-options-menu"
+                    "/visual-header-item-container/div/button"
+                )
 
                 for filter_info in filters_to_apply:
                     filter_name = filter_info["name"]
@@ -225,10 +333,10 @@ class BronzePipeline:
                         await powerbi_frame.locator(options_button_xpath).click()
                         try:
                             await powerbi_frame.locator('//*[@id="0"]').click(timeout=3000)
-                        except:
+                        except Exception:
                             try:
                                 await powerbi_frame.locator("span:text-is('Export data')").click(timeout=3000)
-                            except:
+                            except Exception:
                                 await powerbi_frame.locator("span:text-matches('Export', 'i')").first.click(
                                     timeout=3000
                                 )
@@ -237,15 +345,17 @@ class BronzePipeline:
 
                         try:
                             await powerbi_frame.locator(
-                                '//div[contains(@class, "export-data-dialog")]//*[contains(text(), "File format") or contains(@aria-label, "format")]//button'
+                                '//div[contains(@class, "export-data-dialog")]'
+                                '//*[contains(text(), "File format") or contains(@aria-label, "format")]'
+                                "//button"
                             ).click(timeout=5000)
-                        except:
+                        except Exception:
                             await powerbi_frame.locator("mat-dialog-content pbi-dropdown button").click(timeout=5000)
 
                         await page.wait_for_timeout(500)
                         try:
                             await powerbi_frame.locator("div.pbi-dropdown-item:has-text('CSV')").click(timeout=5000)
-                        except:
+                        except Exception:
                             await powerbi_frame.locator("pbi-dropdown-item").nth(1).click(timeout=5000)
 
                         async with page.expect_download(timeout=30000) as download_info:
@@ -253,7 +363,7 @@ class BronzePipeline:
                                 await powerbi_frame.locator("mat-dialog-actions button:has-text('Export')").click(
                                     timeout=5000
                                 )
-                            except:
+                            except Exception:
                                 await powerbi_frame.locator("mat-dialog-actions button").first.click(timeout=5000)
 
                         download = await download_info.value

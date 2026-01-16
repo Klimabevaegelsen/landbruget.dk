@@ -126,7 +126,8 @@ def test_chr_pipeline():
                                 print("This should be handled by the safety checks, but apparently it's not")
                             elif hasattr(animals, "__iter__"):
                                 print(
-                                    f"Enkeltdyrsoplysninger is iterable, length: {len(animals) if hasattr(animals, '__len__') else 'unknown'}"
+                                    f"Enkeltdyrsoplysninger is iterable, length: "
+                                    f"{len(animals) if hasattr(animals, '__len__') else 'unknown'}"
                                 )
                             else:
                                 print(f"Enkeltdyrsoplysninger is not iterable: {type(animals)}")

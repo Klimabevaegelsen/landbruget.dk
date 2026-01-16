@@ -8,6 +8,7 @@ https://datacvr.virk.dk/artikel/system-til-system-adgang-til-cvr-data
 The API uses Elasticsearch-style queries with HTTP Basic Authentication.
 """
 
+import hashlib
 import json
 import os
 import time
@@ -23,7 +24,6 @@ from tqdm import tqdm
 from unified_pipeline.util.cvr_pii_filter import (
     filter_cvr_pii,
 )
-from unified_pipeline.util.dawa_api_client import DAWAAPIClient
 from unified_pipeline.util.log_util import Logger
 
 
@@ -37,12 +37,40 @@ class CVRAPIClient:
     - Handle authentication and rate limiting
     """
 
+    @staticmethod
+    def _format_municipality_name(municipality_name: str) -> str:
+        """
+        Format municipality name from ALL CAPITALS to proper Title Case.
+
+        Args:
+            municipality_name: Municipality name (often in ALL CAPITALS from CVR API)
+
+        Returns:
+            Properly formatted municipality name in Title Case
+        """
+        if not municipality_name:
+            return municipality_name
+
+        # Convert to title case, but handle special cases for Danish municipalities
+        formatted = municipality_name.title()
+
+        # Handle special Danish characters and compound names
+        # Fix common Danish municipality name patterns
+        formatted = formatted.replace("Ø", "ø").replace("Å", "å").replace("Æ", "æ")
+
+        # Fix compound municipality names with hyphens
+        if "-" in formatted:
+            parts = formatted.split("-")
+            formatted = "-".join(part.capitalize() for part in parts)
+
+        return formatted
+
     def __init__(
-        self, 
-        username: Optional[str] = None, 
-        password: Optional[str] = None, 
-        enable_geocoding: bool = True, 
-        geocode_current_only: bool = True
+        self,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        enable_geocoding: bool = True,
+        geocode_current_only: bool = True,
     ):
         """
         Initialize CVR API client.
@@ -51,7 +79,7 @@ class CVRAPIClient:
             username: CVR API username (defaults to environment variable)
             password: CVR API password (defaults to environment variable)
             enable_geocoding: Whether to enable address geocoding via DAWA API
-            geocode_current_only: Whether to geocode only current addresses (not 
+            geocode_current_only: Whether to geocode only current addresses (not
                 historical)
         """
         self.log = Logger.get_logger()
@@ -84,10 +112,16 @@ class CVRAPIClient:
         self.last_request_time = 0
         self.min_request_interval = 0.1  # 100ms between requests
 
-        # Initialize DAWA client for address geocoding
+        # Initialize cached DAWA client for address geocoding
         self.enable_geocoding = enable_geocoding
         self.geocode_current_only = geocode_current_only
-        self.dawa_client = DAWAAPIClient() if enable_geocoding else None
+
+        if enable_geocoding:
+            from unified_pipeline.util.cached_dawa_api_client import CachedDAWAAPIClient
+
+            self.dawa_client = CachedDAWAAPIClient()
+        else:
+            self.dawa_client = None
 
         self.log.info("CVR API client initialized")
 
@@ -218,7 +252,6 @@ class CVRAPIClient:
             List of financial document data
         """
 
-
         # Validate CVR number format
         if not cvr_number or len(cvr_number) != 8 or not cvr_number.isdigit():
             self.log.warning(f"Invalid CVR number format: {cvr_number}")
@@ -254,6 +287,27 @@ class CVRAPIClient:
             self.log.error(f"Error fetching financial documents for CVR {cvr_number}: {e}")
             return []
 
+    def _safe_nested_get(self, data: Dict[str, Any], *keys: str, default=None):
+        """
+        Safely access nested dictionary values with null checks.
+
+        Args:
+            data: Dictionary to access
+            *keys: Sequence of keys to access nested values
+            default: Default value if any key is missing or None
+
+        Returns:
+            Value at the nested path or default
+        """
+        current = data
+        for key in keys:
+            if not isinstance(current, dict) or current is None:
+                return default
+            current = current.get(key)
+            if current is None:
+                return default
+        return current
+
     def _parse_company_data(self, raw_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Parse raw company data from CVR API response with comprehensive field extraction.
@@ -264,16 +318,46 @@ class CVRAPIClient:
         Returns:
             Parsed and structured company data
         """
-        if not raw_data or "hits" not in raw_data or not raw_data["hits"]["hits"]:
+        # Handle None or invalid input
+        if raw_data is None:
+            self.log.warning("Received None as raw_data in _parse_company_data")
+            return {}
+
+        if not isinstance(raw_data, dict):
+            self.log.warning(f"Expected dict but got {type(raw_data)} in _parse_company_data")
+            return {}
+
+        # Enhanced null safety checks for API response structure
+        if not raw_data or "hits" not in raw_data:
+            return {}
+
+        # Check if hits is None or not a dict
+        hits_data = raw_data["hits"]
+        if hits_data is None or not isinstance(hits_data, dict):
+            return {}
+
+        # Check if hits array exists and has content
+        if "hits" not in hits_data or not hits_data["hits"]:
             return {}
 
         # Extract the nested Vrvirksomhed structure (universal for all CVR records)
-        hit_source = raw_data["hits"]["hits"][0]["_source"]
-        if "Vrvirksomhed" not in hit_source:
+        first_hit = hits_data["hits"][0]
+        if first_hit is None or not isinstance(first_hit, dict) or "_source" not in first_hit:
+            return {}
+
+        hit_source = first_hit["_source"]
+        if (
+            hit_source is None
+            or not isinstance(hit_source, dict)
+            or "Vrvirksomhed" not in hit_source
+        ):
             self.log.error("No Vrvirksomhed structure found in response")
             return {}
 
         company = hit_source["Vrvirksomhed"]
+        if company is None or not isinstance(company, dict):
+            self.log.error("Vrvirksomhed is not a valid dict structure")
+            return {}
 
         # Initialize comprehensive parsed data structure
         parsed_data = {
@@ -303,12 +387,18 @@ class CVRAPIClient:
         # Extract all company names (current and historical)
         names = []
         for name_entry in company.get("navne", []):
+            if name_entry is None or not isinstance(name_entry, dict):
+                continue
+
+            periode = name_entry.get("periode", {}) or {}
             names.append(
                 {
                     "name": name_entry.get("navn"),
-                    "period_start": name_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": name_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": name_entry.get("periode", {}).get("gyldigTil") is None,
+                    "period_start": periode.get("gyldigFra") if isinstance(periode, dict) else None,
+                    "period_end": periode.get("gyldigTil") if isinstance(periode, dict) else None,
+                    "is_current": periode.get("gyldigTil") is None
+                    if isinstance(periode, dict)
+                    else False,
                 }
             )
         parsed_data["all_names"] = names
@@ -316,6 +406,9 @@ class CVRAPIClient:
         # Extract comprehensive address information
         addresses = []
         for address_entry in company.get("beliggenhedsadresse", []):
+            if address_entry is None or not isinstance(address_entry, dict):
+                continue
+
             address_parts = []
 
             # Build address string safely
@@ -327,6 +420,9 @@ class CVRAPIClient:
                 address_parts.append(f"{address_entry['etage']}.")
             if address_entry.get("sidedoer"):
                 address_parts.append(address_entry["sidedoer"])
+
+            # Safe access to nested kommune data
+            kommune = address_entry.get("kommune", {}) or {}
 
             addresses.append(
                 {
@@ -338,18 +434,25 @@ class CVRAPIClient:
                     "door": address_entry.get("sidedoer"),
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
-                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
-                    "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                    "municipality_code": kommune.get("kommuneKode")
+                    if isinstance(kommune, dict)
+                    else None,
+                    "municipality_name": self._format_municipality_name(
+                        kommune.get("kommuneNavn") if isinstance(kommune, dict) else None
+                    ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
-                    "period_start": address_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": address_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": address_entry.get("periode", {}).get("gyldigTil") is None,
+                    "period_start": (address_entry.get("periode", {}) or {}).get("gyldigFra"),
+                    "period_end": (address_entry.get("periode", {}) or {}).get("gyldigTil"),
+                    "is_current": (address_entry.get("periode", {}) or {}).get("gyldigTil") is None,
                 }
             )
 
         # Extract postal addresses (postadresse) if different from location addresses
         for address_entry in company.get("postadresse", []):
+            if address_entry is None or not isinstance(address_entry, dict):
+                continue
+
             address_parts = []
 
             # Build address string safely
@@ -362,6 +465,9 @@ class CVRAPIClient:
             if address_entry.get("sidedoer"):
                 address_parts.append(address_entry["sidedoer"])
 
+            # Safe access to nested kommune data
+            kommune = address_entry.get("kommune", {}) or {}
+
             addresses.append(
                 {
                     "address_type": "postadresse",
@@ -372,13 +478,17 @@ class CVRAPIClient:
                     "door": address_entry.get("sidedoer"),
                     "postal_code": address_entry.get("postnummer"),
                     "city": address_entry.get("postdistrikt"),
-                    "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
-                    "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
+                    "municipality_code": kommune.get("kommuneKode")
+                    if isinstance(kommune, dict)
+                    else None,
+                    "municipality_name": self._format_municipality_name(
+                        kommune.get("kommuneNavn") if isinstance(kommune, dict) else None
+                    ),
                     "country_code": address_entry.get("landekode"),
                     "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
-                    "period_start": address_entry.get("periode", {}).get("gyldigFra"),
-                    "period_end": address_entry.get("periode", {}).get("gyldigTil"),
-                    "is_current": address_entry.get("periode", {}).get("gyldigTil") is None,
+                    "period_start": (address_entry.get("periode", {}) or {}).get("gyldigFra"),
+                    "period_end": (address_entry.get("periode", {}) or {}).get("gyldigTil"),
+                    "is_current": (address_entry.get("periode", {}) or {}).get("gyldigTil") is None,
                 }
             )
 
@@ -387,17 +497,27 @@ class CVRAPIClient:
         # Extract contact information
         contact_info = {}
         for contact_entry in company.get("elektroniskPost", []):
-            if contact_entry.get("periode", {}).get("gyldigTil") is None:  # Current email
+            if contact_entry is None or not isinstance(contact_entry, dict):
+                continue
+            if (
+                self._safe_nested_get(contact_entry, "periode", "gyldigTil") is None
+            ):  # Current email
                 contact_info["email"] = contact_entry.get("kontaktoplysning")
                 break
 
         for contact_entry in company.get("telefonNummer", []):
-            if contact_entry.get("periode", {}).get("gyldigTil") is None:  # Current phone
+            if contact_entry is None or not isinstance(contact_entry, dict):
+                continue
+            if (
+                self._safe_nested_get(contact_entry, "periode", "gyldigTil") is None
+            ):  # Current phone
                 contact_info["phone"] = contact_entry.get("kontaktoplysning")
                 break
 
         for contact_entry in company.get("telefaxNummer", []):
-            if contact_entry.get("periode", {}).get("gyldigTil") is None:  # Current fax
+            if contact_entry is None or not isinstance(contact_entry, dict):
+                continue
+            if self._safe_nested_get(contact_entry, "periode", "gyldigTil") is None:  # Current fax
                 contact_info["fax"] = contact_entry.get("kontaktoplysning")
                 break
 
@@ -498,16 +618,16 @@ class CVRAPIClient:
                             {
                                 "postal_code": addr_entry.get("postnummer"),
                                 "city": addr_entry.get("postdistrikt"),
-                                "municipality_code": addr_entry.get("kommune", {}).get(
+                                "municipality_code": (addr_entry.get("kommune") or {}).get(
                                     "kommuneKode"
                                 ),
-                                "municipality_name": addr_entry.get("kommune", {}).get(
-                                    "kommuneNavn"
+                                "municipality_name": self._format_municipality_name(
+                                    (addr_entry.get("kommune") or {}).get("kommuneNavn")
                                 ),
                                 "country_code": addr_entry.get("landekode"),
-                                "period_start": addr_entry.get("periode", {}).get("gyldigFra"),
-                                "period_end": addr_entry.get("periode", {}).get("gyldigTil"),
-                                "is_current": addr_entry.get("periode", {}).get("gyldigTil")
+                                "period_start": (addr_entry.get("periode") or {}).get("gyldigFra"),
+                                "period_end": (addr_entry.get("periode") or {}).get("gyldigTil"),
+                                "is_current": (addr_entry.get("periode") or {}).get("gyldigTil")
                                 is None,
                             }
                         )
@@ -539,6 +659,65 @@ class CVRAPIClient:
         # Apply PII filtering to leadership data
         filtered_leadership = filter_cvr_pii(leadership)
         parsed_data["leadership"] = filtered_leadership
+
+        # Extract ownership data (ownership percentages)
+        ownership = []
+        for relation in company.get("deltagerRelation", []):
+            deltager = relation.get("deltager", {})
+
+            # Get owner unique identifier (unit_number)
+            unit_number = deltager.get("enhedsNummer")
+            if not unit_number:
+                continue
+
+            # Get owner name
+            owner_name = None
+            for name_entry in deltager.get("navne", []):
+                owner_name = name_entry.get("navn")
+                break
+
+            if not owner_name:
+                continue
+
+            # Check for ownership (EJERREGISTER)
+            for org in relation.get("organisationer", []):
+                org_name = None
+                for org_name_entry in org.get("organisationsNavn", []):
+                    org_name = org_name_entry.get("navn")
+                    break
+
+                if org_name == "EJERREGISTER":
+                    # Get all ownership percentages with their periods from medlemsData
+                    for member in org.get("medlemsData", []):
+                        for attr in member.get("attributter", []):
+                            if attr.get("type") == "EJERANDEL_PROCENT":
+                                for value_entry in attr.get("vaerdier", []):
+                                    periode = value_entry.get("periode", {})
+                                    ownership_pct = value_entry.get("vaerdi")
+
+                                    # Convert decimal to percentage (1.0 = 100%)
+                                    ownership_percentage = (
+                                        float(ownership_pct) * 100 if ownership_pct else None
+                                    )
+
+                                    # Generate person UUID for consistency with persons table
+                                    # Using same method as cvr_persons table: md5(unit_number)
+                                    person_uuid = hashlib.md5(str(unit_number).encode()).hexdigest()
+
+                                    ownership.append(
+                                        {
+                                            "person_uuid": person_uuid,
+                                            "unit_number": unit_number,
+                                            "owner_name": owner_name,
+                                            "owner_type": deltager.get("enhedstype", "UNKNOWN"),
+                                            "ownership_percentage": ownership_percentage,
+                                            "period_start": periode.get("gyldigFra"),
+                                            "period_end": periode.get("gyldigTil"),
+                                            "is_current": periode.get("gyldigTil") is None,
+                                        }
+                                    )
+
+        parsed_data["ownership"] = ownership
 
         # Extract company status history
         status_history = []
@@ -595,58 +774,66 @@ class CVRAPIClient:
             "annual_employment": [],
             "quarterly_employment": [],
             "monthly_employment": [],
-            "replacement_monthly_employment": []
+            "replacement_monthly_employment": [],
         }
-        
+
         # Annual employment (aarsbeskaeftigelse)
         for entry in company.get("aarsbeskaeftigelse", []):
-            employment_data["annual_employment"].append({
-                "year": entry.get("aar"),
-                "full_time_equivalent": entry.get("antalAarsvaerk"),
-                "total_employees": entry.get("antalAnsatte"),
-                "employees_including_owners": entry.get("antalInklusivEjere"),
-                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
-                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
-                "owners_interval_code": entry.get("intervalKodeAntalInklusivEjere"),
-                "last_updated": entry.get("sidstOpdateret")
-            })
-        
-        # Quarterly employment (kvartalsbeskaeftigelse)  
+            employment_data["annual_employment"].append(
+                {
+                    "year": entry.get("aar"),
+                    "full_time_equivalent": entry.get("antalAarsvaerk"),
+                    "total_employees": entry.get("antalAnsatte"),
+                    "employees_including_owners": entry.get("antalInklusivEjere"),
+                    "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                    "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                    "owners_interval_code": entry.get("intervalKodeAntalInklusivEjere"),
+                    "last_updated": entry.get("sidstOpdateret"),
+                }
+            )
+
+        # Quarterly employment (kvartalsbeskaeftigelse)
         for entry in company.get("kvartalsbeskaeftigelse", []):
-            employment_data["quarterly_employment"].append({
-                "year": entry.get("aar"),
-                "quarter": entry.get("kvartal"),
-                "full_time_equivalent": entry.get("antalAarsvaerk"),
-                "total_employees": entry.get("antalAnsatte"),
-                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
-                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
-                "last_updated": entry.get("sidstOpdateret")
-            })
-            
+            employment_data["quarterly_employment"].append(
+                {
+                    "year": entry.get("aar"),
+                    "quarter": entry.get("kvartal"),
+                    "full_time_equivalent": entry.get("antalAarsvaerk"),
+                    "total_employees": entry.get("antalAnsatte"),
+                    "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                    "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                    "last_updated": entry.get("sidstOpdateret"),
+                }
+            )
+
         # Monthly employment (maanedsbeskaeftigelse)
         for entry in company.get("maanedsbeskaeftigelse", []):
-            employment_data["monthly_employment"].append({
-                "year": entry.get("aar"),
-                "month": entry.get("maaned"),
-                "full_time_equivalent": entry.get("antalAarsvaerk"),
-                "total_employees": entry.get("antalAnsatte"),
-                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
-                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
-                "last_updated": entry.get("sidstOpdateret")
-            })
-            
+            employment_data["monthly_employment"].append(
+                {
+                    "year": entry.get("aar"),
+                    "month": entry.get("maaned"),
+                    "full_time_equivalent": entry.get("antalAarsvaerk"),
+                    "total_employees": entry.get("antalAnsatte"),
+                    "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                    "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                    "last_updated": entry.get("sidstOpdateret"),
+                }
+            )
+
         # Replacement monthly employment (erstMaanedsbeskaeftigelse)
         for entry in company.get("erstMaanedsbeskaeftigelse", []):
-            employment_data["replacement_monthly_employment"].append({
-                "year": entry.get("aar"),
-                "month": entry.get("maaned"),
-                "full_time_equivalent": entry.get("antalAarsvaerk"),
-                "total_employees": entry.get("antalAnsatte"),
-                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
-                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
-                "last_updated": entry.get("sidstOpdateret")
-            })
-        
+            employment_data["replacement_monthly_employment"].append(
+                {
+                    "year": entry.get("aar"),
+                    "month": entry.get("maaned"),
+                    "full_time_equivalent": entry.get("antalAarsvaerk"),
+                    "total_employees": entry.get("antalAnsatte"),
+                    "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                    "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                    "last_updated": entry.get("sidstOpdateret"),
+                }
+            )
+
         parsed_data["employment_data"] = employment_data
 
         # Extract lifecycle information (founding/dissolution dates)
@@ -690,81 +877,84 @@ class CVRAPIClient:
     def enrich_company_with_geometry(self, company_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Enrich company data with address geometry using DAWA API.
-        
+
         Args:
             company_data: Parsed company data from CVR API
-            
+
         Returns:
             Company data enriched with geometry information
         """
         if not self.enable_geocoding or not self.dawa_client:
             self.log.debug("Address geocoding disabled, skipping geometry enrichment")
             return company_data
-        
+
         try:
             addresses = company_data.get("addresses", [])
             if not addresses:
                 self.log.debug("No addresses found for geocoding")
                 return company_data
-            
+
             # Find current addresses with adresse_id
             geocodable_addresses = [
-                addr for addr in addresses 
-                if addr.get("is_current") and addr.get("adresse_id")
+                addr for addr in addresses if addr.get("is_current") and addr.get("adresse_id")
             ]
-            
+
             if not geocodable_addresses:
                 self.log.debug("No current addresses with adresse_id found for geocoding")
                 return company_data
-            
+
             # Geocode addresses
             enriched_addresses = []
             for address in addresses:
                 enriched_address = address.copy()
                 geocoded = None
-                
+
                 # Determine if we should geocode this address based on configuration
                 should_geocode = not self.geocode_current_only or address.get("is_current")
-                
+
                 # Try DAWA geocoding first if address has adresse_id
                 if should_geocode and address.get("adresse_id"):
                     geocoded = self.dawa_client.geocode_address_by_id(address["adresse_id"])
                     if geocoded:
                         self.log.debug(f"DAWA geocoded address: {address.get('full_address')}")
-                
+
                 # Fallback to Datavask API if DAWA failed and we have address text
                 if not geocoded and should_geocode and address.get("full_address"):
                     # Reconstruct complete address with postal code and city for better geocoding
                     complete_address = address["full_address"]
                     if address.get("postal_code") and address.get("city"):
-                        complete_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
-                    
+                        complete_address = (
+                            f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                        )
+
                     self.log.debug(f"Trying Datavask with complete address: {complete_address}")
                     geocoded = self.dawa_client.geocode_with_datavask(complete_address)
                     if geocoded:
                         self.log.debug(f"Datavask geocoded address: {complete_address}")
                     else:
                         self.log.warning(f"Datavask failed for address: {complete_address}")
-                
+
                 # Add geometry data if geocoding succeeded
                 if geocoded:
-                    enriched_address.update({
-                        "latitude": geocoded["latitude"],  # WGS84 latitude
-                        "longitude": geocoded["longitude"],  # WGS84 longitude
-                        "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
-                        "srid": geocoded.get("srid", 4326),
-                        "geometry_wkt": self.dawa_client.create_geometry_wkt(
-                            geocoded["latitude"], geocoded["longitude"]
-                        ),
-                        "geometry_geojson": self.dawa_client.create_geometry_geojson(
-                            geocoded["latitude"], geocoded["longitude"]
-                        ),
-                        "coordinate_quality": geocoded.get("coordinate_quality"),
-                        "coordinate_source": geocoded.get("coordinate_source"),
-                        "dawa_enriched": geocoded.get("dawa_enriched", True),
-                        "datavask_enriched": geocoded.get("datavask_enriched", False),
-                        "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp")
-                    })
+                    enriched_address.update(
+                        {
+                            "latitude": geocoded["latitude"],  # WGS84 latitude
+                            "longitude": geocoded["longitude"],  # WGS84 longitude
+                            "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
+                            "srid": geocoded.get("srid", 4326),
+                            "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                                geocoded["latitude"], geocoded["longitude"]
+                            ),
+                            "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                                geocoded["latitude"], geocoded["longitude"]
+                            ),
+                            "coordinate_quality": geocoded.get("coordinate_quality"),
+                            "coordinate_source": geocoded.get("coordinate_source"),
+                            "dawa_enriched": geocoded.get("dawa_enriched", True),
+                            "datavask_enriched": geocoded.get("datavask_enriched", False),
+                            "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp"),
+                        }
+                    )
                     # Update BFE fields if available from Datavask
                     if geocoded.get("floor") is not None:
                         enriched_address["floor"] = geocoded["floor"]
@@ -776,25 +966,31 @@ class CVRAPIClient:
                     # Only warn if we actually tried to geocode this address
                     if should_geocode:
                         # Show the complete address that was attempted for geocoding
-                        failed_address = address.get('full_address', '')
+                        failed_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                            failed_address = (
+                                f"{address['full_address']}, "
+                                f"{address['postal_code']} {address['city']}"
+                            )
                         self.log.warning(f"Failed to geocode address: {failed_address}")
-                
+
                 enriched_addresses.append(enriched_address)
-            
+
             # Update company data with enriched addresses
             company_data = company_data.copy()
             company_data["addresses"] = enriched_addresses
-            
-            # Add primary address geometry to top level for easy access
-            current_geocoded = [
-                addr for addr in enriched_addresses 
-                if addr.get("is_current") and addr.get("dawa_enriched")
-            ]
-            
-            if current_geocoded:
-                primary_address = current_geocoded[0]  # Use first current geocoded address
+
+            # Add primary address using intelligent selection
+            # (both geometry and full address details)
+            from .primary_address_selector import select_primary_address_for_company_table
+
+            primary_address = select_primary_address_for_company_table(enriched_addresses)
+
+            if primary_address:
+                # Save full primary address details
+                company_data["primary_address"] = primary_address
+
+                # Also save geometry in legacy format for backward compatibility
                 company_data["primary_address_geometry"] = {
                     "latitude": primary_address.get("latitude"),  # WGS84 latitude
                     "longitude": primary_address.get("longitude"),  # WGS84 longitude
@@ -803,11 +999,11 @@ class CVRAPIClient:
                     "geometry_wkt": primary_address.get("geometry_wkt"),
                     "geometry_geojson": primary_address.get("geometry_geojson"),
                     "coordinate_quality": primary_address.get("coordinate_quality"),
-                    "coordinate_source": primary_address.get("coordinate_source")
+                    "coordinate_source": primary_address.get("coordinate_source"),
                 }
-            
+
             return company_data
-            
+
         except Exception as e:
             self.log.error(f"Error enriching company data with geometry: {e}")
             return company_data
@@ -908,15 +1104,15 @@ class CVRAPIClient:
             return None
 
     def fetch_multiple_companies(
-        self, 
-        cvr_numbers: List[str], 
-        fetch_all_fields: bool = True, 
+        self,
+        cvr_numbers: List[str],
+        fetch_all_fields: bool = True,
         enrich_with_geometry: bool = True,
-        batch_size: int = 50
+        batch_size: int = 50,
     ) -> Dict[str, Any]:
         """
         Fetch company data for multiple CVR numbers efficiently using batch API calls.
-        
+
         Uses Elasticsearch 'terms' query to fetch multiple companies in single requests,
         dramatically reducing API calls and improving performance.
 
@@ -931,14 +1127,14 @@ class CVRAPIClient:
         """
         if not cvr_numbers:
             return {"results": {}, "summary": {"total": 0, "successful": 0, "failed": 0}}
-        
+
         # Validate CVR numbers
         valid_cvrs = [cvr for cvr in cvr_numbers if self._validate_cvr_number(cvr)]
         invalid_count = len(cvr_numbers) - len(valid_cvrs)
-        
+
         if invalid_count > 0:
             self.log.warning(f"Skipping {invalid_count} invalid CVR numbers")
-        
+
         self.log.info(
             f"Fetching data for {len(valid_cvrs)} companies in batches of {batch_size} "
             f"(geocoding: {'enabled' if enrich_with_geometry else 'disabled'})"
@@ -950,106 +1146,114 @@ class CVRAPIClient:
         api_calls = 0
 
         # Process in batches
-        for i in tqdm(range(0, len(valid_cvrs), batch_size), desc="Batch fetching companies", unit="batch"):
-            batch_cvrs = valid_cvrs[i:i + batch_size]
+        for i in tqdm(
+            range(0, len(valid_cvrs), batch_size), desc="Batch fetching companies", unit="batch"
+        ):
+            batch_cvrs = valid_cvrs[i : i + batch_size]
             api_calls += 1
-            
+
             try:
                 batch_results = self._fetch_companies_batch(batch_cvrs, fetch_all_fields)
-                
+
                 # Process each company in the batch
                 for cvr in batch_cvrs:
                     if cvr in batch_results:
                         company_data = batch_results[cvr]
-                        
+
                         # Enrich with geometry if requested
                         if enrich_with_geometry and company_data:
                             try:
                                 company_data = self.enrich_company_with_geometry(company_data)
                             except Exception as e:
                                 self.log.warning(f"Failed to geocode addresses for CVR {cvr}: {e}")
-                        
+
                         results[cvr] = company_data
                         successful += 1
                     else:
                         failed += 1
                         self.log.debug(f"No data found for CVR: {cvr}")
-                        
+
             except Exception as e:
                 failed += len(batch_cvrs)
-                self.log.error(f"Error fetching batch {i//batch_size + 1}: {e}")
+                self.log.error(f"Error fetching batch {i // batch_size + 1}: {e}")
 
         self.log.info(
             f"Batch fetch completed: {successful} successful, {failed} failed "
             f"({api_calls} API calls vs {len(valid_cvrs)} individual calls - "
-            f"{len(valid_cvrs)/api_calls:.1f}x more efficient)"
+            f"{len(valid_cvrs) / api_calls:.1f}x more efficient)"
         )
 
         return {
             "results": results,
             "summary": {
-                "total": len(cvr_numbers), 
-                "successful": successful, 
+                "total": len(cvr_numbers),
+                "successful": successful,
                 "failed": failed,
                 "invalid_cvrs": invalid_count,
                 "api_calls": api_calls,
-                "efficiency_gain": f"{len(valid_cvrs)/api_calls:.1f}x"
+                "efficiency_gain": f"{len(valid_cvrs) / api_calls:.1f}x",
             },
             "fetch_timestamp": datetime.now().isoformat(),
         }
-    
-    def _fetch_companies_batch(self, cvr_numbers: List[str], fetch_all_fields: bool = True) -> Dict[str, Dict[str, Any]]:
+
+    def _fetch_companies_batch(
+        self, cvr_numbers: List[str], fetch_all_fields: bool = True
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Fetch multiple companies in a single API call using terms query.
-        
+
         Args:
             cvr_numbers: List of CVR numbers to fetch
             fetch_all_fields: Whether to fetch all fields or basic subset
-            
+
         Returns:
             Dictionary mapping CVR numbers to parsed company data
         """
         try:
             # Build batch query using 'terms' for multiple values
             query = {
-                "query": {
-                    "terms": {
-                        "Vrvirksomhed.cvrNummer": cvr_numbers
-                    }
-                },
-                "size": len(cvr_numbers)
+                "query": {"terms": {"Vrvirksomhed.cvrNummer": cvr_numbers}},
+                "size": len(cvr_numbers),
             }
-            
+
             # Add source filtering for performance if not fetching all fields
             if not fetch_all_fields:
                 query["_source"] = [
                     "Vrvirksomhed.cvrNummer",
                     "Vrvirksomhed.navne",
-                    "Vrvirksomhed.virksomhedsform", 
+                    "Vrvirksomhed.virksomhedsform",
                     "Vrvirksomhed.virksomhedsstatus",
                     "Vrvirksomhed.beliggenhedsadresse",
                     "Vrvirksomhed.postadresse",
                     "Vrvirksomhed.hovedbranche",
                     "Vrvirksomhed.bibranche1",
-                    "Vrvirksomhed.bibranche2", 
+                    "Vrvirksomhed.bibranche2",
                     "Vrvirksomhed.bibranche3",
                     "Vrvirksomhed.attributter",
                     "Vrvirksomhed.reklamebeskyttet",
-                    "Vrvirksomhed.subsidiaries"  # For P-number extraction
+                    "Vrvirksomhed.subsidiaries",  # For P-number extraction
                 ]
-            
+
             raw_data = self._make_request(self.company_endpoint, query)
-            
+
             if not raw_data or "hits" not in raw_data:
                 self.log.warning("Batch query returned no results")
                 return {}
-            
+
             # Parse results and map by CVR number
             results = {}
             hits = raw_data["hits"]["hits"]
-            
+
             for hit in hits:
                 try:
+                    # Skip null hits or hits without proper structure
+                    if hit is None or not isinstance(hit, dict) or "_source" not in hit:
+                        continue
+
+                    # Additional safety check for _source content
+                    if hit["_source"] is None or not isinstance(hit["_source"], dict):
+                        continue
+
                     # Parse each company's data using the same format as individual calls
                     fake_response = {"hits": {"hits": [hit]}}
                     parsed_data = self._parse_company_data(fake_response)
@@ -1061,9 +1265,9 @@ class CVRAPIClient:
                 except Exception as e:
                     self.log.error(f"Error parsing company data from batch: {e}")
                     continue
-            
+
             return results
-            
+
         except Exception as e:
             self.log.error(f"Error in batch company fetch: {e}")
             return {}
@@ -1189,7 +1393,6 @@ class CVRAPIClient:
         Returns:
             Enriched company data with financial information
         """
-
 
         # Get basic company data
         company_data = self.get_company_data(cvr_number)
@@ -1326,15 +1529,15 @@ class CVRAPIClient:
             return None
 
     def fetch_multiple_pnumbers(
-        self, 
-        pnumbers: List[str], 
-        fetch_all_fields: bool = True, 
+        self,
+        pnumbers: List[str],
+        fetch_all_fields: bool = True,
         enrich_with_geometry: bool = True,
-        batch_size: int = 50
+        batch_size: int = 50,
     ) -> Dict[str, Any]:
         """
         Fetch P-number data for multiple P-numbers efficiently using batch API calls.
-        
+
         Uses Elasticsearch 'terms' query to fetch multiple P-numbers in single requests,
         dramatically reducing API calls and improving performance.
 
@@ -1349,14 +1552,14 @@ class CVRAPIClient:
         """
         if not pnumbers:
             return {"results": {}, "summary": {"total": 0, "successful": 0, "failed": 0}}
-        
+
         # Validate P-numbers
         valid_pnumbers = [p for p in pnumbers if self._validate_pnumber_format(p)]
         invalid_count = len(pnumbers) - len(valid_pnumbers)
-        
+
         if invalid_count > 0:
             self.log.warning(f"Skipping {invalid_count} invalid P-numbers")
-        
+
         self.log.info(
             f"Fetching data for {len(valid_pnumbers)} P-numbers in batches of {batch_size} "
             f"(geocoding: {'enabled' if enrich_with_geometry else 'disabled'})"
@@ -1368,62 +1571,68 @@ class CVRAPIClient:
         api_calls = 0
 
         # Process in batches
-        for i in tqdm(range(0, len(valid_pnumbers), batch_size), desc="Batch fetching P-numbers", unit="batch"):
-            batch_pnumbers = valid_pnumbers[i:i + batch_size]
+        for i in tqdm(
+            range(0, len(valid_pnumbers), batch_size), desc="Batch fetching P-numbers", unit="batch"
+        ):
+            batch_pnumbers = valid_pnumbers[i : i + batch_size]
             api_calls += 1
-            
+
             try:
                 batch_results = self._fetch_pnumbers_batch(batch_pnumbers, fetch_all_fields)
-                
+
                 # Process each P-number in the batch
                 for pnumber in batch_pnumbers:
                     if pnumber in batch_results:
                         pnumber_data = batch_results[pnumber]
-                        
+
                         # Enrich with geometry if requested
                         if enrich_with_geometry and pnumber_data:
                             try:
                                 pnumber_data = self.enrich_pnumber_with_geometry(pnumber_data)
                             except Exception as e:
-                                self.log.warning(f"Failed to geocode addresses for P-number {pnumber}: {e}")
-                        
+                                self.log.warning(
+                                    f"Failed to geocode addresses for P-number {pnumber}: {e}"
+                                )
+
                         results[pnumber] = pnumber_data
                         successful += 1
                     else:
                         failed += 1
                         self.log.debug(f"No data found for P-number: {pnumber}")
-                        
+
             except Exception as e:
                 failed += len(batch_pnumbers)
-                self.log.error(f"Error fetching P-number batch {i//batch_size + 1}: {e}")
+                self.log.error(f"Error fetching P-number batch {i // batch_size + 1}: {e}")
 
         self.log.info(
             f"P-number batch fetch completed: {successful} successful, {failed} failed "
             f"({api_calls} API calls vs {len(valid_pnumbers)} individual calls - "
-            f"{len(valid_pnumbers)/api_calls:.1f}x more efficient)"
+            f"{len(valid_pnumbers) / api_calls:.1f}x more efficient)"
         )
 
         return {
             "results": results,
             "summary": {
-                "total": len(pnumbers), 
-                "successful": successful, 
+                "total": len(pnumbers),
+                "successful": successful,
                 "failed": failed,
                 "invalid_pnumbers": invalid_count,
                 "api_calls": api_calls,
-                "efficiency_gain": f"{len(valid_pnumbers)/api_calls:.1f}x"
+                "efficiency_gain": f"{len(valid_pnumbers) / api_calls:.1f}x",
             },
             "fetch_timestamp": datetime.now().isoformat(),
         }
-    
-    def _fetch_pnumbers_batch(self, pnumbers: List[str], fetch_all_fields: bool = True) -> Dict[str, Dict[str, Any]]:
+
+    def _fetch_pnumbers_batch(
+        self, pnumbers: List[str], fetch_all_fields: bool = True
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Fetch multiple P-numbers in a single API call using terms query.
-        
+
         Args:
             pnumbers: List of P-numbers to fetch
             fetch_all_fields: Whether to fetch all fields or basic subset
-            
+
         Returns:
             Dictionary mapping P-numbers to parsed P-number data
         """
@@ -1431,23 +1640,19 @@ class CVRAPIClient:
             # Build batch query using 'terms' for multiple values
             # P-numbers need to be integers for the API
             pnumber_ints = [int(p) for p in pnumbers]
-            
+
             query = {
-                "query": {
-                    "terms": {
-                        "VrproduktionsEnhed.pNummer": pnumber_ints
-                    }
-                },
-                "size": len(pnumbers)
+                "query": {"terms": {"VrproduktionsEnhed.pNummer": pnumber_ints}},
+                "size": len(pnumbers),
             }
-            
+
             # Add source filtering for performance if not fetching all fields
             if not fetch_all_fields:
                 query["_source"] = [
                     "VrproduktionsEnhed.pNummer",
                     "VrproduktionsEnhed.navne",
                     "VrproduktionsEnhed.beliggenhedsadresse",
-                    "VrproduktionsEnhed.postadresse", 
+                    "VrproduktionsEnhed.postadresse",
                     "VrproduktionsEnhed.hovedbranche",
                     "VrproduktionsEnhed.bibranche1",
                     "VrproduktionsEnhed.bibranche2",
@@ -1455,44 +1660,50 @@ class CVRAPIClient:
                     "VrproduktionsEnhed.attributter",
                     "VrproduktionsEnhed.elektroniskPost",
                     "VrproduktionsEnhed.telefonnummer",
-                    "VrproduktionsEnhed.aarsbeskaeftigelse"
+                    "VrproduktionsEnhed.aarsbeskaeftigelse",
+                    "VrproduktionsEnhed.virksomhedsrelation",  # Essential for CVR mapping
                 ]
-            
+
             # DEBUG: Log the query being sent
             self.log.debug(f"P-number batch query: {json.dumps(query, indent=2)}")
             self.log.debug(f"P-number endpoint: {self.pnumber_endpoint}")
-            self.log.debug(f"P-numbers being fetched: {pnumbers[:5]}{'...' if len(pnumbers) > 5 else ''}")
-            
+            self.log.debug(
+                f"P-numbers being fetched: {pnumbers[:5]}{'...' if len(pnumbers) > 5 else ''}"
+            )
+
             raw_data = self._make_request(self.pnumber_endpoint, query)
-            
+
             # DEBUG: Log raw response structure
             if raw_data:
                 self.log.debug(f"P-number API response structure: {list(raw_data.keys())}")
                 if "hits" in raw_data:
                     hits_info = raw_data["hits"]
-                    self.log.debug(f"Hits info: total={hits_info.get('total', 'unknown')}, max_score={hits_info.get('max_score', 'unknown')}")
+                    self.log.debug(
+                        f"Hits info: total={hits_info.get('total', 'unknown')}, "
+                        f"max_score={hits_info.get('max_score', 'unknown')}"
+                    )
                     self.log.debug(f"Number of hits returned: {len(hits_info.get('hits', []))}")
-                    
+
                     # Log sample hit structure if any
-                    if hits_info.get('hits'):
-                        sample_hit = hits_info['hits'][0]
+                    if hits_info.get("hits"):
+                        sample_hit = hits_info["hits"][0]
                         self.log.debug(f"Sample hit structure: {list(sample_hit.keys())}")
-                        if '_source' in sample_hit:
-                            source_keys = list(sample_hit['_source'].keys())
+                        if "_source" in sample_hit:
+                            source_keys = list(sample_hit["_source"].keys())
                             self.log.debug(f"Sample _source keys: {source_keys}")
                 else:
                     self.log.warning("No 'hits' key in P-number API response")
             else:
                 self.log.error("P-number API returned empty response")
-            
+
             if not raw_data or "hits" not in raw_data:
                 self.log.warning("P-number batch query returned no results")
                 return {}
-            
+
             # Parse results and map by P-number
             results = {}
             hits = raw_data["hits"]["hits"]
-            
+
             for hit in hits:
                 try:
                     # FIX: Pass the full response structure that _parse_pnumber_data expects
@@ -1505,20 +1716,29 @@ class CVRAPIClient:
                             results[pnumber] = parsed_data
                             self.log.debug(f"Successfully parsed P-number: {pnumber}")
                         else:
-                            self.log.warning(f"Parsed P-number data has no p_number field: {list(parsed_data.keys())}")
+                            self.log.warning(
+                                f"Parsed P-number data has no p_number field: "
+                                f"{list(parsed_data.keys())}"
+                            )
                     else:
-                        self.log.warning(f"Failed to parse P-number data from hit: {hit.get('_id', 'unknown')}")
+                        self.log.warning(
+                            f"Failed to parse P-number data from hit: {hit.get('_id', 'unknown')}"
+                        )
                 except Exception as e:
                     self.log.error(f"Error parsing P-number data from batch: {e}")
                     self.log.debug(f"Problematic hit structure: {hit}")
                     continue
-            
-            self.log.debug(f"P-number batch parsing completed: {len(results)} successful out of {len(hits)} hits")
+
+            self.log.debug(
+                f"P-number batch parsing completed: {len(results)} successful "
+                f"out of {len(hits)} hits"
+            )
             return results
-            
+
         except Exception as e:
             self.log.error(f"Error in batch P-number fetch: {e}")
             import traceback
+
             self.log.error(f"P-number batch fetch traceback: {traceback.format_exc()}")
             return {}
 
@@ -1533,13 +1753,13 @@ class CVRAPIClient:
             List of P-numbers associated with the company
         """
         pnumbers = []
-        
+
         # Extract P-numbers from subsidiaries field
         for subsidiary in company_data.get("subsidiaries", []):
             pnumber = subsidiary.get("p_number")
             if pnumber and self._validate_pnumber_format(str(pnumber)):
                 pnumbers.append(str(pnumber))
-        
+
         return list(set(pnumbers))  # Remove duplicates
 
     def _validate_pnumber_format(self, pnumber: str) -> bool:
@@ -1601,24 +1821,30 @@ class CVRAPIClient:
         company_relations = []
         for relation in pnumber_unit.get("virksomhedsrelation", []):
             if relation.get("periode", {}).get("gyldigTil") is None:  # Current relations only
-                company_relations.append({
-                    "cvr_number": relation.get("virksomhed", {}).get("cvrNummer"),
-                    "relation_type": relation.get("virksomhedsrelation"),
-                    "period_start": relation.get("periode", {}).get("gyldigFra"),
-                    "period_end": relation.get("periode", {}).get("gyldigTil"),
-                    "is_current": relation.get("periode", {}).get("gyldigTil") is None,
-                })
+                company_relations.append(
+                    {
+                        "cvr_number": relation.get(
+                            "cvrNummer"
+                        ),  # CVR number is directly in the relation
+                        "relation_type": relation.get("virksomhedsrelation"),
+                        "period_start": relation.get("periode", {}).get("gyldigFra"),
+                        "period_end": relation.get("periode", {}).get("gyldigTil"),
+                        "is_current": relation.get("periode", {}).get("gyldigTil") is None,
+                    }
+                )
         parsed_data["company_relations"] = company_relations
 
         # Extract P-number names (current and historical)
         names = []
         for name_entry in pnumber_unit.get("navne", []):
-            names.append({
-                "name": name_entry.get("navn"),
-                "period_start": name_entry.get("periode", {}).get("gyldigFra"),
-                "period_end": name_entry.get("periode", {}).get("gyldigTil"),
-                "is_current": name_entry.get("periode", {}).get("gyldigTil") is None,
-            })
+            names.append(
+                {
+                    "name": name_entry.get("navn"),
+                    "period_start": name_entry.get("periode", {}).get("gyldigFra"),
+                    "period_end": name_entry.get("periode", {}).get("gyldigTil"),
+                    "is_current": name_entry.get("periode", {}).get("gyldigTil") is None,
+                }
+            )
         parsed_data["all_names"] = names
 
         # Extract comprehensive address information (beliggenhedsadresse) - CURRENT ONLY
@@ -1628,7 +1854,7 @@ class CVRAPIClient:
             is_current = address_entry.get("periode", {}).get("gyldigTil") is None
             if not is_current:
                 continue
-                
+
             address_parts = []
 
             # Build address string safely
@@ -1641,23 +1867,27 @@ class CVRAPIClient:
             if address_entry.get("sidedoer"):
                 address_parts.append(address_entry["sidedoer"])
 
-            addresses.append({
-                "address_type": "beliggenhedsadresse",
-                "full_address": " ".join(address_parts) if address_parts else None,
-                "street_name": address_entry.get("vejnavn"),
-                "house_number": address_entry.get("husnummerFra"),
-                "floor": address_entry.get("etage"),
-                "door": address_entry.get("sidedoer"),
-                "postal_code": address_entry.get("postnummer"),
-                "city": address_entry.get("postdistrikt"),
-                "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
-                "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
-                "country_code": address_entry.get("landekode"),
-                "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
-                "period_start": address_entry.get("periode", {}).get("gyldigFra"),
-                "period_end": address_entry.get("periode", {}).get("gyldigTil"),
-                "is_current": True,  # All addresses here are current
-            })
+            addresses.append(
+                {
+                    "address_type": "beliggenhedsadresse",
+                    "full_address": " ".join(address_parts) if address_parts else None,
+                    "street_name": address_entry.get("vejnavn"),
+                    "house_number": address_entry.get("husnummerFra"),
+                    "floor": address_entry.get("etage"),
+                    "door": address_entry.get("sidedoer"),
+                    "postal_code": address_entry.get("postnummer"),
+                    "city": address_entry.get("postdistrikt"),
+                    "municipality_code": (address_entry.get("kommune") or {}).get("kommuneKode"),
+                    "municipality_name": self._format_municipality_name(
+                        (address_entry.get("kommune") or {}).get("kommuneNavn")
+                    ),
+                    "country_code": address_entry.get("landekode"),
+                    "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                    "period_start": address_entry.get("periode", {}).get("gyldigFra"),
+                    "period_end": address_entry.get("periode", {}).get("gyldigTil"),
+                    "is_current": True,  # All addresses here are current
+                }
+            )
 
         # Extract postal addresses (postadresse) if different from location addresses - CURRENT ONLY
         for address_entry in pnumber_unit.get("postadresse", []):
@@ -1665,7 +1895,7 @@ class CVRAPIClient:
             is_current = address_entry.get("periode", {}).get("gyldigTil") is None
             if not is_current:
                 continue
-                
+
             address_parts = []
 
             # Build address string safely
@@ -1678,23 +1908,27 @@ class CVRAPIClient:
             if address_entry.get("sidedoer"):
                 address_parts.append(address_entry["sidedoer"])
 
-            addresses.append({
-                "address_type": "postadresse",
-                "full_address": " ".join(address_parts) if address_parts else None,
-                "street_name": address_entry.get("vejnavn"),
-                "house_number": address_entry.get("husnummerFra"),
-                "floor": address_entry.get("etage"),
-                "door": address_entry.get("sidedoer"),
-                "postal_code": address_entry.get("postnummer"),
-                "city": address_entry.get("postdistrikt"),
-                "municipality_code": address_entry.get("kommune", {}).get("kommuneKode"),
-                "municipality_name": address_entry.get("kommune", {}).get("kommuneNavn"),
-                "country_code": address_entry.get("landekode"),
-                "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
-                "period_start": address_entry.get("periode", {}).get("gyldigFra"),
-                "period_end": address_entry.get("periode", {}).get("gyldigTil"),
-                "is_current": True,  # All addresses here are current
-            })
+            addresses.append(
+                {
+                    "address_type": "postadresse",
+                    "full_address": " ".join(address_parts) if address_parts else None,
+                    "street_name": address_entry.get("vejnavn"),
+                    "house_number": address_entry.get("husnummerFra"),
+                    "floor": address_entry.get("etage"),
+                    "door": address_entry.get("sidedoer"),
+                    "postal_code": address_entry.get("postnummer"),
+                    "city": address_entry.get("postdistrikt"),
+                    "municipality_code": (address_entry.get("kommune") or {}).get("kommuneKode"),
+                    "municipality_name": self._format_municipality_name(
+                        (address_entry.get("kommune") or {}).get("kommuneNavn")
+                    ),
+                    "country_code": address_entry.get("landekode"),
+                    "adresse_id": address_entry.get("adresseId"),  # For DAWA geocoding
+                    "period_start": address_entry.get("periode", {}).get("gyldigFra"),
+                    "period_end": address_entry.get("periode", {}).get("gyldigTil"),
+                    "is_current": True,  # All addresses here are current
+                }
+            )
 
         parsed_data["addresses"] = addresses
 
@@ -1715,14 +1949,16 @@ class CVRAPIClient:
         # Extract industry information (hovedbranche)
         industries = []
         for industry_entry in pnumber_unit.get("hovedbranche", []):
-            industries.append({
-                "industry_code": industry_entry.get("branchekode"),
-                "industry_description": industry_entry.get("branchetekst"),
-                "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
-                "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
-                "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
-                "is_main": True,
-            })
+            industries.append(
+                {
+                    "industry_code": industry_entry.get("branchekode"),
+                    "industry_description": industry_entry.get("branchetekst"),
+                    "period_start": industry_entry.get("periode", {}).get("gyldigFra"),
+                    "period_end": industry_entry.get("periode", {}).get("gyldigTil"),
+                    "is_current": industry_entry.get("periode", {}).get("gyldigTil") is None,
+                    "is_main": True,
+                }
+            )
         parsed_data["industries"] = industries
 
         # Extract P-number attributes
@@ -1739,44 +1975,50 @@ class CVRAPIClient:
             "quarterly_employment": [],
             "monthly_employment": [],
         }
-        
+
         # Annual employment (aarsbeskaeftigelse)
         for entry in pnumber_unit.get("aarsbeskaeftigelse", []):
-            employment_data["annual_employment"].append({
-                "year": entry.get("aar"),
-                "full_time_equivalent": entry.get("antalAarsvaerk"),
-                "total_employees": entry.get("antalAnsatte"),
-                "employees_including_owners": entry.get("antalInklusivEjere"),
-                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
-                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
-                "owners_interval_code": entry.get("intervalKodeAntalInklusivEjere"),
-                "last_updated": entry.get("sidstOpdateret")
-            })
-        
-        # Quarterly employment (kvartalsbeskaeftigelse)  
+            employment_data["annual_employment"].append(
+                {
+                    "year": entry.get("aar"),
+                    "full_time_equivalent": entry.get("antalAarsvaerk"),
+                    "total_employees": entry.get("antalAnsatte"),
+                    "employees_including_owners": entry.get("antalInklusivEjere"),
+                    "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                    "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                    "owners_interval_code": entry.get("intervalKodeAntalInklusivEjere"),
+                    "last_updated": entry.get("sidstOpdateret"),
+                }
+            )
+
+        # Quarterly employment (kvartalsbeskaeftigelse)
         for entry in pnumber_unit.get("kvartalsbeskaeftigelse", []):
-            employment_data["quarterly_employment"].append({
-                "year": entry.get("aar"),
-                "quarter": entry.get("kvartal"),
-                "full_time_equivalent": entry.get("antalAarsvaerk"),
-                "total_employees": entry.get("antalAnsatte"),
-                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
-                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
-                "last_updated": entry.get("sidstOpdateret")
-            })
-            
+            employment_data["quarterly_employment"].append(
+                {
+                    "year": entry.get("aar"),
+                    "quarter": entry.get("kvartal"),
+                    "full_time_equivalent": entry.get("antalAarsvaerk"),
+                    "total_employees": entry.get("antalAnsatte"),
+                    "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                    "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                    "last_updated": entry.get("sidstOpdateret"),
+                }
+            )
+
         # Monthly employment (maanedsbeskaeftigelse)
         for entry in pnumber_unit.get("maanedsbeskaeftigelse", []):
-            employment_data["monthly_employment"].append({
-                "year": entry.get("aar"),
-                "month": entry.get("maaned"),
-                "full_time_equivalent": entry.get("antalAarsvaerk"),
-                "total_employees": entry.get("antalAnsatte"),
-                "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
-                "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
-                "last_updated": entry.get("sidstOpdateret")
-            })
-        
+            employment_data["monthly_employment"].append(
+                {
+                    "year": entry.get("aar"),
+                    "month": entry.get("maaned"),
+                    "full_time_equivalent": entry.get("antalAarsvaerk"),
+                    "total_employees": entry.get("antalAnsatte"),
+                    "fte_interval_code": entry.get("intervalKodeAntalAarsvaerk"),
+                    "employees_interval_code": entry.get("intervalKodeAntalAnsatte"),
+                    "last_updated": entry.get("sidstOpdateret"),
+                }
+            )
+
         parsed_data["employment_data"] = employment_data
 
         # Extract metadata
@@ -1799,69 +2041,77 @@ class CVRAPIClient:
     def enrich_pnumber_with_geometry(self, pnumber_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Enrich P-number data with address geometry using DAWA API.
-        
+
         Args:
             pnumber_data: Parsed P-number data from CVR API
-            
+
         Returns:
             P-number data enriched with geometry information
         """
         if not self.enable_geocoding or not self.dawa_client:
             self.log.debug("Address geocoding disabled, skipping P-number geometry enrichment")
             return pnumber_data
-        
+
         try:
             addresses = pnumber_data.get("addresses", [])
             if not addresses:
                 self.log.debug("No addresses found for P-number geocoding")
                 return pnumber_data
-            
+
             # Geocode addresses (same logic as company addresses)
             enriched_addresses = []
             for address in addresses:
                 enriched_address = address.copy()
                 geocoded = None
-                
+
                 # Determine if we should geocode this address based on configuration
                 should_geocode = not self.geocode_current_only or address.get("is_current")
-                
+
                 # Try DAWA geocoding first if address has adresse_id
                 if should_geocode and address.get("adresse_id"):
                     geocoded = self.dawa_client.geocode_address_by_id(address["adresse_id"])
                     if geocoded:
-                        self.log.debug(f"DAWA geocoded P-number address: {address.get('full_address')}")
-                
+                        self.log.debug(
+                            f"DAWA geocoded P-number address: {address.get('full_address')}"
+                        )
+
                 # Fallback to Datavask API if DAWA failed and we have address text
                 if not geocoded and should_geocode and address.get("full_address"):
                     # Reconstruct complete address with postal code and city for better geocoding
                     complete_address = address["full_address"]
                     if address.get("postal_code") and address.get("city"):
-                        complete_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
-                    
-                    self.log.debug(f"Trying Datavask with complete P-number address: {complete_address}")
+                        complete_address = (
+                            f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                        )
+
+                    self.log.debug(
+                        f"Trying Datavask with complete P-number address: {complete_address}"
+                    )
                     geocoded = self.dawa_client.geocode_with_datavask(complete_address)
                     if geocoded:
                         self.log.debug(f"Datavask geocoded P-number address: {complete_address}")
-                
+
                 # Add geometry data if geocoding succeeded
                 if geocoded:
-                    enriched_address.update({
-                        "latitude": geocoded["latitude"],  # WGS84 latitude
-                        "longitude": geocoded["longitude"],  # WGS84 longitude
-                        "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
-                        "srid": geocoded.get("srid", 4326),
-                        "geometry_wkt": self.dawa_client.create_geometry_wkt(
-                            geocoded["latitude"], geocoded["longitude"]
-                        ),
-                        "geometry_geojson": self.dawa_client.create_geometry_geojson(
-                            geocoded["latitude"], geocoded["longitude"]
-                        ),
-                        "coordinate_quality": geocoded.get("coordinate_quality"),
-                        "coordinate_source": geocoded.get("coordinate_source"),
-                        "dawa_enriched": geocoded.get("dawa_enriched", True),
-                        "datavask_enriched": geocoded.get("datavask_enriched", False),
-                        "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp")
-                    })
+                    enriched_address.update(
+                        {
+                            "latitude": geocoded["latitude"],  # WGS84 latitude
+                            "longitude": geocoded["longitude"],  # WGS84 longitude
+                            "coordinate_system": geocoded.get("coordinate_system", "WGS84"),
+                            "srid": geocoded.get("srid", 4326),
+                            "geometry_wkt": self.dawa_client.create_geometry_wkt(
+                                geocoded["latitude"], geocoded["longitude"]
+                            ),
+                            "geometry_geojson": self.dawa_client.create_geometry_geojson(
+                                geocoded["latitude"], geocoded["longitude"]
+                            ),
+                            "coordinate_quality": geocoded.get("coordinate_quality"),
+                            "coordinate_source": geocoded.get("coordinate_source"),
+                            "dawa_enriched": geocoded.get("dawa_enriched", True),
+                            "datavask_enriched": geocoded.get("datavask_enriched", False),
+                            "dawa_fetch_timestamp": geocoded.get("dawa_fetch_timestamp"),
+                        }
+                    )
                     # Update BFE fields if available from Datavask
                     if geocoded.get("floor") is not None:
                         enriched_address["floor"] = geocoded["floor"]
@@ -1871,25 +2121,31 @@ class CVRAPIClient:
                     enriched_address["dawa_enriched"] = False
                     enriched_address["datavask_enriched"] = False
                     if should_geocode:
-                        failed_address = address.get('full_address', '')
+                        failed_address = address.get("full_address", "")
                         if address.get("postal_code") and address.get("city"):
-                            failed_address = f"{address['full_address']}, {address['postal_code']} {address['city']}"
+                            failed_address = (
+                                f"{address['full_address']}, "
+                                f"{address['postal_code']} {address['city']}"
+                            )
                         self.log.warning(f"Failed to geocode P-number address: {failed_address}")
-                
+
                 enriched_addresses.append(enriched_address)
-            
+
             # Update P-number data with enriched addresses
             pnumber_data = pnumber_data.copy()
             pnumber_data["addresses"] = enriched_addresses
-            
-            # Add primary address geometry to top level for easy access
-            current_geocoded = [
-                addr for addr in enriched_addresses 
-                if addr.get("is_current") and addr.get("dawa_enriched")
-            ]
-            
-            if current_geocoded:
-                primary_address = current_geocoded[0]  # Use first current geocoded address
+
+            # Add primary address using intelligent selection
+            # (both geometry and full address details)
+            from .primary_address_selector import select_primary_address_for_company_table
+
+            primary_address = select_primary_address_for_company_table(enriched_addresses)
+
+            if primary_address:
+                # Save full primary address details
+                pnumber_data["primary_address"] = primary_address
+
+                # Also save geometry in legacy format for backward compatibility
                 pnumber_data["primary_address_geometry"] = {
                     "latitude": primary_address.get("latitude"),  # WGS84 latitude
                     "longitude": primary_address.get("longitude"),  # WGS84 longitude
@@ -1898,11 +2154,11 @@ class CVRAPIClient:
                     "geometry_wkt": primary_address.get("geometry_wkt"),
                     "geometry_geojson": primary_address.get("geometry_geojson"),
                     "coordinate_quality": primary_address.get("coordinate_quality"),
-                    "coordinate_source": primary_address.get("coordinate_source")
+                    "coordinate_source": primary_address.get("coordinate_source"),
                 }
-            
+
             return pnumber_data
-            
+
         except Exception as e:
             self.log.error(f"Error enriching P-number data with geometry: {e}")
             return pnumber_data

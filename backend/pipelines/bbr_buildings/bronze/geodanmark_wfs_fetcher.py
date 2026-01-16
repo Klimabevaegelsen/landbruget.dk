@@ -24,7 +24,7 @@ from config import Settings
 class GeoDanmarkWFSFetcher:
     """Fetches sample data from GeoDanmark WFS for building cross-reference."""
 
-    def __init__(self, settings: Settings, logger: logging.Logger):
+    def __init__(self, settings: Settings, logger: logging.Logger) -> None:
         """
         Initialize the GeoDanmark WFS fetcher.
 
@@ -70,7 +70,9 @@ class GeoDanmarkWFSFetcher:
 
         self.logger.info("Using authenticated access to GeoDanmark WFS")
 
-    def fetch_samples(self, output_dir: Path, max_features: int = 1000, return_data: bool = False):
+    def fetch_samples(
+        self, output_dir: Path, max_features: int = 1000, return_data: bool = False
+    ) -> None:
         """
         Fetch sample data from GeoDanmark WFS.
 
@@ -85,9 +87,10 @@ class GeoDanmarkWFSFetcher:
         building_ids: list,
         return_data: bool = False,
         pipeline_start_time: datetime = None,
-    ):
+    ) -> None:
         """
-        Fetch building geometries from GeoDanmark WFS for specific building IDs using adaptive batching and parallel processing.
+        Fetch building geometries from GeoDanmark WFS for specific building IDs using
+        adaptive batching and parallel processing.
 
         Args:
             output_dir: Directory to save the geometry data
@@ -101,7 +104,8 @@ class GeoDanmarkWFSFetcher:
         run_dir.mkdir(parents=True, exist_ok=True)
 
         self.logger.info(
-            f"Starting GeoDanmark WFS geometry fetch for {len(building_ids):,} building IDs to {run_dir}"
+            f"Starting GeoDanmark WFS geometry fetch for {len(building_ids):,} "
+            f"building IDs to {run_dir}"
         )
 
         try:
@@ -116,7 +120,8 @@ class GeoDanmarkWFSFetcher:
             if self.settings.max_geometries_to_fetch is not None:
                 building_ids = building_ids[: self.settings.max_geometries_to_fetch]
                 self.logger.info(
-                    f"Limiting geometry fetch to {len(building_ids):,} buildings (max_geometries_to_fetch={self.settings.max_geometries_to_fetch})"
+                    f"Limiting geometry fetch to {len(building_ids):,} buildings "
+                    f"(max_geometries_to_fetch={self.settings.max_geometries_to_fetch})"
                 )
 
             # Test with a small batch first to determine optimal batch size
@@ -151,7 +156,8 @@ class GeoDanmarkWFSFetcher:
 
             total_batches = len(batches) + 1  # +1 for test batch
             self.logger.info(
-                f"Processing {len(building_ids):,} building IDs in {total_batches} batches of ~{optimal_batch_size} using {max_workers} workers"
+                f"Processing {len(building_ids):,} building IDs in {total_batches} batches "
+                f"of ~{optimal_batch_size} using {max_workers} workers"
             )
 
             # Add test results to all_geometries
@@ -188,7 +194,8 @@ class GeoDanmarkWFSFetcher:
                                 all_geometries.extend(batch_geometries)
                             successful_batches += 1
                             self.logger.info(
-                                f"Batch {batch_num}/{total_batches}: Retrieved {len(batch_geometries)} geometries"
+                                f"Batch {batch_num}/{total_batches}: "
+                                f"Retrieved {len(batch_geometries)} geometries"
                             )
                         else:
                             failed_batches += 1
@@ -219,10 +226,12 @@ class GeoDanmarkWFSFetcher:
 
             success_rate = (len(all_geometries) / len(building_ids)) * 100
             self.logger.info(
-                f"Successfully retrieved {len(all_geometries):,} building geometries out of {len(building_ids):,} requested"
+                f"Successfully retrieved {len(all_geometries):,} building geometries "
+                f"out of {len(building_ids):,} requested"
             )
             self.logger.info(
-                f"Success rate: {success_rate:.1f}% ({successful_batches + 1}/{total_batches} batches successful)"
+                f"Success rate: {success_rate:.1f}% "
+                f"({successful_batches + 1}/{total_batches} batches successful)"
             )
 
             # Save metadata
@@ -362,7 +371,10 @@ class GeoDanmarkWFSFetcher:
 
                 url = self.settings.geodanmark_wfs_url
                 if self.settings.has_datafordeler_credentials:
-                    url += f"?username={self.settings.datafordeler_username}&password={self.settings.datafordeler_password}"
+                    url += (
+                        f"?username={self.settings.datafordeler_username}"
+                        f"&password={self.settings.datafordeler_password}"
+                    )
 
                 response = self.session.post(
                     url,
@@ -380,7 +392,8 @@ class GeoDanmarkWFSFetcher:
             # Handle redirects manually to maintain POST method
             if response.status_code in (301, 302, 303, 307, 308):
                 self.logger.warning(
-                    f"Received redirect {response.status_code} - this might cause POST to GET conversion"
+                    f"Received redirect {response.status_code} - "
+                    "this might cause POST to GET conversion"
                 )
                 return None
 
@@ -440,7 +453,7 @@ class GeoDanmarkWFSFetcher:
                 if feature_count > 0:
                     # Create placeholder features to indicate successful geometry fetch
                     features = []
-                    for i in range(feature_count):
+                    for _i in range(feature_count):
                         features.append(
                             {
                                 "type": "Feature",
@@ -513,7 +526,8 @@ class GeoDanmarkWFSFetcher:
 
         self.logger.info(f"Saved geometry fetch metadata to {metadata_path}")
         self.logger.info(
-            f"Success rate: {metadata['success_rate']:.1%} ({len(retrieved_geometries)}/{len(requested_ids)})"
+            f"Success rate: {metadata['success_rate']:.1%} "
+            f"({len(retrieved_geometries)}/{len(requested_ids)})"
         )
 
     def _get_capabilities(self) -> dict:

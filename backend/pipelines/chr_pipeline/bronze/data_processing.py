@@ -84,22 +84,12 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
 
         logger.info(f"Herd {reporting_herd}: Processing {animals_count} individual animals...")
 
-        # Skip extremely large datasets
+        # Auto-detect and configure high-volume herds for chunking (but don't skip them!)
         if animals_count > 100000:
             logger.warning(
-                f"Herd {reporting_herd}: Dataset too large ({animals_count} animals) - skipping to prevent performance issues"
+                f"Herd {reporting_herd}: Very large dataset ({animals_count} animals) - "
+                f"will process using volume management chunking"
             )
-            return {
-                "reporting_herd_number": reporting_herd,
-                "movements": [],
-                "skipped_reason": "dataset_too_large",
-                "summary_stats": {
-                    "total_animals_processed": 0,
-                    "unique_movement_dates": 0,
-                    "counterparty_herds": 0,
-                    "dataset_size": animals_count,
-                },
-            }
 
         # Auto-detect high-volume herds
         if animals_count > 50000:
@@ -113,26 +103,17 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 suggested_days = 90
 
             logger.warning(
-                f"Herd {reporting_herd}: Large dataset ({animals_count} animals) detected - suggesting {suggested_days}-day chunks"
+                f"Herd {reporting_herd}: Large dataset ({animals_count} animals) detected - "
+                f"suggesting {suggested_days}-day chunks"
             )
 
             if not is_high_volume_herd(reporting_herd):
                 add_high_volume_herd(reporting_herd, suggested_days, volume_estimate=animals_count)
 
-            # Skip processing if extremely large
-            if animals_count > 100000:
-                return {
-                    "reporting_herd_number": reporting_herd,
-                    "movements": [],
-                    "skipped_reason": "auto_chunking_required",
-                    "suggested_chunk_days": suggested_days,
-                    "summary_stats": {
-                        "total_animals_processed": 0,
-                        "unique_movement_dates": 0,
-                        "counterparty_herds": 0,
-                        "dataset_size": animals_count,
-                    },
-                }
+            # Configure chunking but continue processing (don't skip!)
+            logger.info(
+                f"Herd {reporting_herd}: Auto-configured for {suggested_days}-day chunking - processing will continue"
+            )
 
         # Group movements by date and counterparty
         movement_groups = defaultdict(
@@ -144,7 +125,7 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "movement_reasons": [],
                 "cattle_type_breakdown": defaultdict(int),
                 "nation_codes_from": set(),  # Track source countries
-                "nation_codes_to": set(),    # Track destination countries
+                "nation_codes_to": set(),  # Track destination countries
             }
         )
 
@@ -167,18 +148,19 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                     if i > 0 and i % 5000 == 0:
                         elapsed_time = time.time() - aggregation_start_time
                         logger.info(
-                            f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals ({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
+                            f"Herd {reporting_herd}: Processed {i}/{len(animals)} animals "
+                            f"({i / len(animals) * 100:.1f}%) in {elapsed_time:.1f}s"
                         )
 
                     # Extract key movement information
-                    ckr_nr = getattr(animal, "CkrNr", None)
+                    getattr(animal, "CkrNr", None)
                     entry_date = getattr(animal, "DatoIndgaaet", None)
                     exit_date = getattr(animal, "DatoAfgaaet", None)
                     source_herd = getattr(animal, "BesaetningsNummerFra", None)
                     dest_herd = getattr(animal, "BesaetningsNummerTil", None)
                     exit_reason = getattr(animal, "AarsagAfgaaet", None)
                     cattle_type = getattr(animal, "Koen", None)  # Extract cattle type
-                    
+
                     # IMPORTANT: Add nation codes for international movement analysis
                     nation_code_from = getattr(animal, "NationskodeFra", None)
                     nation_code_to = getattr(animal, "NationskodeTil", None)
@@ -271,8 +253,10 @@ def aggregate_cattle_movements(response: Any, reporting_herd: int) -> Dict:
                 "primary_reason": unique_reasons[0] if unique_reasons else None,
                 "cattle_type_breakdown": dict(group_data["cattle_type_breakdown"]),
                 "nation_codes_from": list(group_data["nation_codes_from"]),  # Convert set to list for JSON
-                "nation_codes_to": list(group_data["nation_codes_to"]),      # Convert set to list for JSON
-                "is_international": bool(group_data["nation_codes_from"] or group_data["nation_codes_to"]),  # Flag for easy filtering
+                "nation_codes_to": list(group_data["nation_codes_to"]),  # Convert set to list for JSON
+                "is_international": bool(
+                    group_data["nation_codes_from"] or group_data["nation_codes_to"]
+                ),  # Flag for easy filtering
                 "source_data": "chr_dyr_aggregated",
             }
             movement_summaries["movements"].append(movement_summary)

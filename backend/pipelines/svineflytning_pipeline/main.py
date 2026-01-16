@@ -10,6 +10,16 @@ from typing import Any, Dict
 from bronze.load_svineflytning import ENDPOINTS, create_client, fetch_all_movements, get_fvm_credentials
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+# Import pipeline metadata system for data tracing
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 # Constants for resource management
@@ -47,10 +57,28 @@ def setup_logging(log_level: str):
 
 
 def get_default_dates() -> tuple[date, date]:
-    """Get default start and end dates (last 5 years)."""
+    """Get default start and end dates (last 5 years for full mode, 2 months for incremental)."""
     today = date.today()
     end_date = today
-    start_date = today.replace(year=today.year - 5)  # 5 years ago from today
+
+    # Check processing mode to determine default date range
+    processing_mode = os.getenv("SVINEFLYTNING_PROCESSING_MODE", "incremental").lower()
+
+    if processing_mode == "incremental":
+        # Last 2 months for incremental (as per CHR plan)
+        from datetime import timedelta
+
+        start_date = today - timedelta(days=60)
+        logger.info(f"Incremental mode: using 2-month range ({start_date} to {end_date})")
+    elif processing_mode == "full":
+        # Full backfill: 3 years (as per CHR plan)
+        start_date = today.replace(year=today.year - 3)
+        logger.info(f"Full mode: using 3-year range ({start_date} to {end_date})")
+    else:
+        # Default fallback
+        start_date = today.replace(year=today.year - 5)
+        logger.info(f"Default mode: using 5-year range ({start_date} to {end_date})")
+
     return start_date, end_date
 
 
@@ -192,8 +220,19 @@ def run_silver_stage(args: Dict[str, Any], bronze_result: Dict[str, Any] = None)
 
 def main():
     """Main pipeline execution."""
+    # Record start time for execution tracking
+    start_time = datetime.now()
+
     args = parse_args()
     setup_logging(args["log_level"])
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
 
     logger.warning(f"Starting Svineflytning pipeline - Stage: {args['stage']}")
 
@@ -214,6 +253,47 @@ def main():
             if not silver_result or not silver_result["success"]:
                 logger.error("Silver stage failed")
                 sys.exit(1)
+
+        # Create and save metadata for Svineflytning data
+        if pipeline_metadata_manager and (bronze_result or silver_result):
+            try:
+                import time
+
+                processing_duration = time.time() - start_time.timestamp()
+
+                # Determine record count from results
+                record_count = None
+                if silver_result and "processed_movements" in silver_result:
+                    record_count = silver_result["processed_movements"]
+                elif bronze_result and "total_movements" in bronze_result:
+                    record_count = bronze_result["total_movements"]
+
+                # Create metadata for Svineflytning movements
+                svineflytning_metadata = pipeline_metadata_manager.create_metadata(
+                    source_key="svineflytning_movements",
+                    record_count=record_count,
+                    processing_duration=processing_duration,
+                    file_size_bytes=None,  # Will be calculated automatically
+                    source_datasets=None,
+                )
+
+                # Determine where to save metadata
+                metadata_dir = None
+                if silver_result and "output_path" in silver_result:
+                    metadata_dir = silver_result["output_path"]
+                elif bronze_result and "storage_path" in bronze_result:
+                    metadata_dir = bronze_result["storage_path"]
+
+                if metadata_dir:
+                    from pathlib import Path
+
+                    metadata_path = pipeline_metadata_manager.save_metadata(
+                        svineflytning_metadata, Path(metadata_dir) / "svineflytning_movements_metadata.json"
+                    )
+                    logger.info(f"✅ Svineflytning movements metadata saved to {metadata_path}")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to create Svineflytning pipeline metadata: {e}")
 
         # Summary
         logger.warning("Pipeline completed successfully")

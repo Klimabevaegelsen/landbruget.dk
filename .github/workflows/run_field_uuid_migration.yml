@@ -14,6 +14,10 @@ on:
         - WARNING
         - ERROR
 
+env:
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
 jobs:
   run-migration:
     runs-on: ubuntu-latest
@@ -28,7 +32,7 @@ jobs:
 
       - name: Install uv
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      
+
       - name: Configure uv
         run: source ~/.cargo/env && uv venv
 
@@ -52,4 +56,4 @@ jobs:
         run: |
           source .venv/bin/activate
           python scripts/migration/add_field_uuid_to_gold_tables.py
-        continue-on-error: false 
+        continue-on-error: false

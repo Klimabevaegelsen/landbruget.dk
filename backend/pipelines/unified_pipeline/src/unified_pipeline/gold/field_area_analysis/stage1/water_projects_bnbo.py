@@ -1,6 +1,7 @@
 """Stage 1A: Water Projects × BNBO Intersection Analysis
 
-Calculate which BNBO (Biodiversity Net Benefit Obligation) areas are covered by water projects.
+Calculate which BNBO (Boringsnære Beskyttelsesområder - Well-adjacent Protection Areas)
+areas are covered by water projects.
 This creates a foundation dataset for later field-level environmental coverage analysis.
 
 Optimized for DuckDB Spatial v1.2.2 with ST_Dump for multipolygon decomposition.
@@ -24,7 +25,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         """Load Stage 0 pre-filtered BNBO and water projects datasets."""
         # Get year-aware dataset names
         updated_outputs = CONFIG.update_outputs_for_year()
-        
+
         # Load Stage 0 pre-filtered BNBO (3.7K → ~1K, 70% reduction)
         self.log.info("Loading Stage 0 pre-filtered BNBO dataset...")
         stage0_bnbo_dataset = updated_outputs["bnbo_prefiltered"]
@@ -52,7 +53,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         # Step 1: Decompose multipolygons with ST_Dump
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_status_decomposed AS
-            SELECT 
+            SELECT
                 status_category,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM bnbo_status_raw
@@ -61,8 +62,11 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         # Step 2: Add unique IDs with ROW_NUMBER using the decomposed geometries
         self.conn.execute("""
             CREATE OR REPLACE TABLE bnbo_status AS
-            SELECT 
-                ROW_NUMBER() OVER (ORDER BY status_category, ST_X(ST_Centroid(geometry)), ST_Y(ST_Centroid(geometry))) as bnbo_id,
+            SELECT
+                ROW_NUMBER() OVER (
+                    ORDER BY status_category, ST_X(ST_Centroid(geometry)),
+                             ST_Y(ST_Centroid(geometry))
+                ) as bnbo_id,
                 status_category,
                 geometry
             FROM bnbo_status_decomposed
@@ -73,7 +77,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
 
         self.conn.execute("""
             CREATE OR REPLACE TABLE water_projects AS
-            SELECT 
+            SELECT
                 project_id,
                 UNNEST(ST_Dump(geometry)).geom as geometry
             FROM water_projects_raw
@@ -100,7 +104,7 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
         # Optimized spatial intersection query - focus on water projects covering BNBO
         intersection_query = """
         CREATE OR REPLACE TABLE water_projects_bnbo_intersections AS
-        SELECT 
+        SELECT
             wp.project_id,
             b.bnbo_id,  -- Add unique BNBO ID for foundation data joins
             b.status_category,
@@ -109,11 +113,13 @@ class WaterProjectsBNBOIntersection(FieldAnalysisStageBase):
             ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) as intersection_area_m2,
             ST_Area_Spheroid(wp.geometry) as water_project_area_m2,
             ST_Area_Spheroid(b.geometry) as bnbo_area_m2,
-            (ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) / ST_Area_Spheroid(wp.geometry)) * 100 as wp_coverage_percentage
-            
+            (ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) /
+             ST_Area_Spheroid(wp.geometry)) * 100 as wp_coverage_percentage
+
         FROM water_projects wp
         JOIN bnbo_status b ON ST_Intersects(wp.geometry, b.geometry)
-        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 0  -- Keep all intersections
+        WHERE ST_Area_Spheroid(ST_Intersection(b.geometry, wp.geometry)) > 0
+              -- Keep all intersections
         """
 
         self.log.info("Executing Water Projects × BNBO spatial intersection...")

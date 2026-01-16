@@ -41,6 +41,13 @@ The following matrix jobs now have configurable concurrency limits:
 - **Configurable**: Via environment variable
 - **Effect**: Limits asyncio semaphore for concurrent API requests
 
+### VetStat API Requests
+- **Environment Variable**: `VETSTAT_MAX_WORKERS`
+- **Default**: 10 (optimized for VetStat API performance)
+- **Configurable**: Via environment variable
+- **Effect**: Limits ThreadPoolExecutor concurrent threads for VetStat SOAP requests
+- **Rate Limiting**: 100ms delay between requests to prevent API overwhelm
+
 ## Configuration Options
 
 ### GitHub Actions Inputs
@@ -55,6 +62,7 @@ max_concurrent_jobs:
 ```bash
 CHR_MAX_WORKERS=3           # Main pipeline thread pool size
 SPF_SU_MAX_WORKERS=2        # SPF-SU API concurrency limit
+VETSTAT_MAX_WORKERS=10      # VetStat API concurrency limit
 ```
 
 ### Command Line Arguments

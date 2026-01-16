@@ -26,6 +26,13 @@ from typing import Any, Dict, List, Optional
 
 import duckdb
 import gcsfs
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from unified_pipeline.util.log_util import Logger
 
@@ -35,23 +42,22 @@ logger = Logger.get_logger()
 
 @lru_cache(maxsize=1)
 def get_gcs_filesystem() -> gcsfs.GCSFileSystem:
-    """Get cached gcsfs filesystem instance using gcloud credentials."""
-    import subprocess
+    """
+    Get cached gcsfs filesystem instance with optimal authentication.
 
-    try:
-        # Get access token from active gcloud account
-        result = subprocess.run(
-            ["gcloud", "auth", "print-access-token"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
-        token = result.stdout.strip()
-        logger.info("✅ Using gcloud access token for GCS authentication")
-        return gcsfs.GCSFileSystem(token=token)
-    except Exception as e:
-        logger.warning(f"Failed to get gcloud token, falling back to default: {e}")
+    Priority order:
+    1. HMAC credentials (fastest, no OAuth required)
+    2. Service account authentication (fallback)
+    """
+    # Try HMAC authentication first (no OAuth required)
+    gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+    gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+
+    if gcs_access_key and gcs_secret_key:
+        logger.info("✅ Using HMAC authentication for gcsfs (no OAuth required)")
+        return gcsfs.GCSFileSystem(access_key_id=gcs_access_key, secret_access_key=gcs_secret_key)
+    else:
+        logger.info("ℹ️ Using service account authentication for gcsfs (requires OAuth)")
         return gcsfs.GCSFileSystem()
 
 
@@ -60,28 +66,77 @@ def get_duckdb_with_gcs() -> duckdb.DuckDBPyConnection:
     """Get DuckDB connection with gcsfs registered (6x faster than HTTPFS)."""
     conn = duckdb.connect()
 
-    # Register gcsfs filesystem for direct gs:// URL access
-    try:
-        from fsspec import filesystem
-        import subprocess
+    # Try native HMAC first (fastest), fallback to gcsfs
+    if _setup_native_gcs_auth(conn):
+        logger.info("✅ DuckDB configured with native GCS HMAC authentication")
+    else:
+        # Fallback to gcsfs integration
+        try:
+            from fsspec import filesystem
 
-        # Get gcloud token for fsspec
-        result = subprocess.run(
-            ["gcloud", "auth", "print-access-token"],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=10,
-        )
-        token = result.stdout.strip()
+            # Use HMAC credentials if available for fsspec as well
+            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
 
-        fs = filesystem("gs", token=token)
-        conn.register_filesystem(fs)
-        logger.info("✅ DuckDB configured with gcsfs integration using gcloud token")
-    except Exception as e:
-        logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
+            if gcs_access_key and gcs_secret_key:
+                fs = filesystem(
+                    "gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key
+                )
+                logger.info("✅ DuckDB configured with gcsfs integration using HMAC (no OAuth)")
+            else:
+                fs = filesystem("gs")
+                logger.info("✅ DuckDB configured with gcsfs integration using service account")
+
+            conn.register_filesystem(fs)
+        except Exception as e:
+            logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
 
     return conn
+
+
+def _setup_native_gcs_auth(conn: duckdb.DuckDBPyConnection) -> bool:
+    """
+    Setup native GCS HMAC authentication if credentials are available.
+
+    Uses DuckDB's httpfs extension with GCS secret type.
+    Reference: https://duckdb.org/docs/stable/core_extensions/httpfs/s3api
+    Reference: https://duckdb.org/docs/stable/guides/network_cloud_storage/gcs_import
+
+    Returns:
+        True if native authentication was configured successfully, False otherwise.
+    """
+    try:
+        # Install and load httpfs extension
+        conn.execute("INSTALL httpfs")
+        conn.execute("LOAD httpfs")
+
+        # Check for HMAC credentials
+        gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+        gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+
+        if gcs_access_key and gcs_secret_key:
+            # Create GCS secret for native access
+            # Note: TYPE gcs automatically configures the correct GCS endpoint
+            # No s3_region setting needed - that's only for S3
+            # Use proper SQL escaping by doubling single quotes
+            escaped_key = gcs_access_key.replace("'", "''")
+            escaped_secret = gcs_secret_key.replace("'", "''")
+            conn.execute(f"""
+                CREATE OR REPLACE SECRET gcs_secret (
+                    TYPE gcs,
+                    KEY_ID '{escaped_key}',
+                    SECRET '{escaped_secret}'
+                );
+            """)
+            logger.info("✅ Created DuckDB GCS secret with HMAC credentials")
+            return True
+        else:
+            logger.info("ℹ️  GCS HMAC credentials not found, using gcsfs fallback")
+            return False
+
+    except Exception as e:
+        logger.warning(f"Could not setup native GCS authentication: {e}")
+        return False
 
 
 class ResourceMonitor:
@@ -153,6 +208,9 @@ class GCSDataAccess:
             self.duckdb_conn = connection
             self.log = logger
             self.log.info("✅ GCSDataAccess: Using provided DuckDB connection")
+            # CRITICAL: Register gcsfs filesystem even when connection is provided
+            # This is required for DuckDB to read gs:// URLs
+            self._register_gcsfs()
         else:
             # Create a fresh connection for this instance
             self.duckdb_conn = duckdb.connect()
@@ -161,6 +219,48 @@ class GCSDataAccess:
             self.log.info("✅ GCSDataAccess: Created new DuckDB connection")
 
         self.monitor = ResourceMonitor()
+        self._native_gcs_available = self._check_native_gcs_support()
+
+    def _register_gcsfs(self):
+        """
+        Register GCS access with DuckDB for gs:// URL support.
+
+        CRITICAL: This must be called for any DuckDB connection that needs to read from GCS.
+
+        Tries two approaches in order:
+        1. Native DuckDB GCS HMAC authentication (fastest, requires httpfs extension)
+        2. fsspec + gcsfs registration (fallback, 5x faster than httpfs alone)
+
+        Uses HMAC credentials if available for better performance in GitHub Actions.
+        """
+        # Try native GCS HMAC authentication first (fastest)
+        if _setup_native_gcs_auth(self.duckdb_conn):
+            logger.info("✅ DuckDB configured with native GCS HMAC authentication")
+            logger.info("✅ DuckDB can now read gs:// URLs via httpfs + HMAC")
+            return
+
+        # Fallback to gcsfs filesystem registration
+        try:
+            from fsspec import filesystem
+
+            # Use HMAC authentication if available
+            gcs_access_key = os.getenv("GCS_ACCESS_KEY_ID")
+            gcs_secret_key = os.getenv("GCS_SECRET_ACCESS_KEY")
+
+            if gcs_access_key and gcs_secret_key:
+                fs = filesystem(
+                    "gs", access_key_id=gcs_access_key, secret_access_key=gcs_secret_key
+                )
+                logger.info("✅ Registered gcsfs with DuckDB using HMAC credentials")
+            else:
+                fs = filesystem("gs")  # Uses gcsfs under the hood
+                logger.info("✅ Registered gcsfs with DuckDB using default authentication")
+
+            self.duckdb_conn.register_filesystem(fs)
+            logger.info("✅ DuckDB can now read gs:// URLs via gcsfs (5x faster than httpfs)")
+        except Exception as e:
+            logger.warning(f"Failed to register gcsfs with DuckDB: {e}")
+            logger.warning("⚠️  DuckDB will not be able to read gs:// URLs directly")
 
     def _configure_duckdb(self):
         """
@@ -179,19 +279,34 @@ class GCSDataAccess:
             # Install spatial extension
             self.duckdb_conn.execute("INSTALL spatial; LOAD spatial;")
 
-            # CRITICAL: Register gcsfs filesystem for optimal GCS performance
-            # This approach is 5x faster than httpfs according to benchmarks
-            from fsspec import filesystem
-
-            fs = filesystem("gs")  # Uses gcsfs under the hood
-            self.duckdb_conn.register_filesystem(fs)
+            # Register gcsfs filesystem for optimal GCS performance
+            self._register_gcsfs()
 
             logger.info("✅ DuckDB configured with spatial and gcsfs filesystem integration")
-            logger.info(
-                "✅ Using fsspec + gcsfs for optimal GCS performance (5x faster than httpfs)"
-            )
         except Exception as e:
             logger.warning(f"DuckDB configuration warning: {e}")
+
+    def _check_native_gcs_support(self) -> bool:
+        """Check if native GCS access is available."""
+        try:
+            # Check if httpfs extension is loaded
+            result = self.duckdb_conn.execute(
+                "SELECT * FROM duckdb_extensions() WHERE extension_name = 'httpfs'"
+            ).fetchall()
+            if not result:
+                return False
+
+            # Check if GCS secret exists
+            try:
+                secrets = self.duckdb_conn.execute("SELECT name FROM duckdb_secrets()").fetchall()
+                return any("gcs" in s[0].lower() for s in secrets)
+            except Exception:
+                # Some DuckDB versions don't support listing secrets
+                return bool(os.getenv("GCS_ACCESS_KEY_ID") and os.getenv("GCS_SECRET_ACCESS_KEY"))
+
+        except Exception as e:
+            self.log.debug(f"Native GCS check failed: {e}")
+            return False
 
     def check_file_size_limits(self, gcs_path: str) -> bool:
         """Check if file is too large for runner constraints."""
@@ -200,12 +315,12 @@ class GCSDataAccess:
             file_size_gb = file_info["size"] / (1024**3)
 
             # Conservative limit: 8 GB (leave room for DuckDB processing)
-            MAX_FILE_SIZE_GB = 8
+            max_file_size_gb = 8
 
-            if file_size_gb > MAX_FILE_SIZE_GB:
+            if file_size_gb > max_file_size_gb:
                 raise ValueError(
                     f"File {gcs_path} is {file_size_gb:.1f} GB, "
-                    f"exceeds runner limit of {MAX_FILE_SIZE_GB} GB. "
+                    f"exceeds runner limit of {max_file_size_gb} GB. "
                     f"Consider using chunked processing or larger runners."
                 )
             return True
@@ -221,7 +336,7 @@ class GCSDataAccess:
             temp_file = None
             try:
                 # Check available space before download
-                free_space = self.monitor.check_resources("pre_download")["disk_gb"]
+                self.monitor.check_resources("pre_download")["disk_gb"]
 
                 # Check file size constraints
                 self.check_file_size_limits(gcs_path)
@@ -401,6 +516,138 @@ class GCSDataAccess:
         self.monitor.check_resources("post_gcs_to_gcs")
         self.log.info(f"✅ Processed {input_gcs_path} → {output_gcs_path} with zero  conversions")
 
+    def query_parquet_native(
+        self, gcs_path: str, query: str = "SELECT *", table_name: str = "native_result"
+    ) -> str:
+        """
+        ✅ ULTIMATE PERFORMANCE: Query GCS parquet directly using native DuckDB HMAC access.
+
+        This bypasses all temporary files and streams directly from GCS.
+        Falls back to current method if native access is unavailable.
+
+        Args:
+            gcs_path: GCS path (gs://bucket/path/file.parquet)
+            query: SQL query to execute
+            table_name: Name for the result table
+
+        Returns:
+            Table name containing the results
+        """
+        if self._native_gcs_available:
+            self.log.info(f"🚀 Using native GCS access for {gcs_path}")
+            self.monitor.check_resources("start_native_query")
+
+            try:
+                # Direct native access - no temp files!
+                # Handle different query patterns properly
+                if query.strip().upper().startswith("SELECT"):
+                    # Parse SELECT query to extract WHERE clause if present
+                    query_upper = query.upper()
+                    if "FROM" in query_upper:
+                        # Complete SELECT with FROM - replace the FROM source
+                        full_query = f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            {query.replace("FROM read_parquet", f"FROM read_parquet('{gcs_path}')")}
+                        """
+                    elif "WHERE" in query_upper:
+                        # SELECT with WHERE but no FROM - split and reassemble
+                        # Use case-insensitive regex to find WHERE position in original query
+                        import re
+
+                        where_match = re.search(r"\bWHERE\b", query, re.IGNORECASE)
+                        if where_match:
+                            where_start = where_match.start()
+                            select_part = query[:where_start].strip()
+                            where_part = query[where_start:].strip()
+                            full_query = f"""
+                                CREATE OR REPLACE TABLE {table_name} AS
+                                {select_part} FROM read_parquet('{gcs_path}')
+                                {where_part}
+                            """
+                        else:
+                            # Fallback if regex fails
+                            full_query = f"""
+                                CREATE OR REPLACE TABLE {table_name} AS
+                                {query} FROM read_parquet('{gcs_path}')
+                            """
+                    else:
+                        # Simple SELECT with no WHERE or FROM
+                        full_query = f"""
+                            CREATE OR REPLACE TABLE {table_name} AS
+                            {query} FROM read_parquet('{gcs_path}')
+                        """
+                else:
+                    # WHERE clause or other fragment - build full SELECT
+                    where_clause = (
+                        query if query.strip() and query.strip().upper() != "SELECT *" else ""
+                    )
+                    full_query = f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT * FROM read_parquet('{gcs_path}')
+                        {where_clause}
+                    """
+                self.duckdb_conn.execute(full_query)
+
+                # Log success
+                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                self.log.info(f"✅ Native query created table {table_name} with {count:,} rows")
+                self.monitor.check_resources("post_native_query")
+                return table_name
+
+            except Exception as e:
+                self.log.warning(f"Native GCS access failed, falling back to temp file method: {e}")
+                # Fall through to existing method
+
+        # Fallback to existing temp file method
+        return self.query_parquet_direct(gcs_path, query, table_name)
+
+    def export_to_gcs_native(self, table_name: str, gcs_path: str, **parquet_options) -> bool:
+        """
+        ✅ ULTIMATE PERFORMANCE: Export table directly to GCS using native DuckDB HMAC access.
+
+        This bypasses all temporary files and streams directly to GCS.
+        Falls back to current method if native access is unavailable.
+
+        Args:
+            table_name: Name of the table to export
+            gcs_path: GCS destination path (gs://bucket/path/file.parquet)
+            **parquet_options: Parquet export options
+
+        Returns:
+            True if native export was used, False if fallback was used
+        """
+        if self._native_gcs_available:
+            self.log.info(f"🚀 Using native GCS export to {gcs_path}")
+            self.monitor.check_resources("start_native_export")
+
+            try:
+                # Build COPY options
+                copy_options = ["FORMAT PARQUET"]
+                compression = parquet_options.get("compression", "zstd")
+                copy_options.append(f"COMPRESSION {compression}")
+
+                if "row_group_size" in parquet_options:
+                    copy_options.append(f"ROW_GROUP_SIZE {parquet_options['row_group_size']}")
+
+                options_str = ", ".join(copy_options)
+
+                # Direct native export - no temp files!
+                self.duckdb_conn.execute(f"COPY {table_name} TO '{gcs_path}' ({options_str})")
+
+                # Log success
+                count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                self.log.info(f"✅ Native export saved {count:,} rows to {gcs_path}")
+                self.monitor.check_resources("post_native_export")
+                return True
+
+            except Exception as e:
+                self.log.warning(f"Native GCS export failed, falling back to temp file method: {e}")
+                # Fall through to existing method
+
+        # Fallback to existing method
+        self.export_table_to_gcs_direct(table_name, gcs_path, **parquet_options)
+        return False
+
     def query_multiple_direct(
         self, gcs_pattern: str, table_name: str = "combined_table", query: str = "SELECT *"
     ):
@@ -435,7 +682,8 @@ class GCSDataAccess:
 
             count = self.duckdb_conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
             self.log.info(
-                f"✅ Created combined table {table_name} with {count:,} rows from {len(gcs_paths)} files"
+                f"✅ Created combined table {table_name} with {count:,} rows "
+                f"from {len(gcs_paths)} files"
             )
 
         finally:
@@ -479,19 +727,36 @@ class GCSDataAccess:
 
         self.monitor.check_resources("post_upload")
 
+    @retry(
+        retry=retry_if_exception_type(
+            (
+                ConnectionError,
+                TimeoutError,
+                OSError,
+                Exception,  # Catch-all for network-related issues
+            )
+        ),
+        wait=wait_exponential(multiplier=2, min=4, max=60),
+        stop=stop_after_attempt(5),
+        before_sleep=before_sleep_log(logger, "WARNING"),
+    )
     def upload_json(self, data: Dict[str, Any] | List[Any], gcs_path: str, **kwargs):
         """
-        ✅ OPTIMIZED: Upload JSON data with streaming via gcsfs.
+        ✅ OPTIMIZED: Upload JSON data with streaming via gcsfs with retry logic.
 
         Uses streaming approach for optimal performance:
         - No temp file creation
         - Direct streaming to GCS
         - Memory efficient for large JSON objects
+        - Robust retry logic for network failures
 
         Args:
             data: Dictionary or list to upload as JSON
             gcs_path: GCS path (gs://bucket/path/file.json)
             **kwargs: Additional options for json.dumps (indent, ensure_ascii, etc.)
+
+        Raises:
+            Exception: After 5 retry attempts with exponential backoff
         """
         self.monitor.check_resources("start_json_upload")
 
@@ -515,6 +780,12 @@ class GCSDataAccess:
 
         except Exception as e:
             self.log.error(f"Failed to upload JSON to {gcs_path}: {e}")
+            # Check if it's a network-related error that should be retried
+            if any(
+                error_type in str(type(e).__name__).lower() or error_type in str(e).lower()
+                for error_type in ["network", "connection", "timeout", "unreachable", "oauth2"]
+            ):
+                self.log.warning(f"Network-related error detected, will retry: {e}")
             raise
 
     def upload_json_string(self, json_string: str, gcs_path: str):
@@ -600,18 +871,92 @@ class GCSDataAccess:
 
         options_str = ", ".join(copy_options)
 
-        with tempfile.NamedTemporaryFile(suffix=file_suffix) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=file_suffix, delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
             # DuckDB writes directly to the specified format
-            self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp.name}' ({options_str})")
+            self.duckdb_conn.execute(f"COPY {table_name} TO '{tmp_path}' ({options_str})")
+
+            # Get file size for verification
+            import os
+
+            local_size = os.path.getsize(tmp_path)
+            self.log.info(f"Created local temp file: {local_size:,} bytes")
 
             # Stream copy to GCS without loading into memory
-            with open(tmp.name, "rb") as src:
+            with open(tmp_path, "rb") as src:
                 with self.fs.open(gcs_path, "wb") as dst:
                     shutil.copyfileobj(src, dst)
+
+            self.log.info(f"Uploaded {local_size:,} bytes to GCS")
+
+            # Verify upload by checking if file exists
+            # CRITICAL: Invalidate gcsfs cache before verification to ensure fresh check
+            try:
+                # Invalidate cache for this path to force fresh GCS check
+                self.fs.invalidate_cache(gcs_path)
+
+                if self.fs.exists(gcs_path):
+                    remote_size = self.fs.size(gcs_path)
+                    self.log.info(f"✅ Verified upload: {remote_size:,} bytes at {gcs_path}")
+                    if remote_size != local_size:
+                        self.log.warning(
+                            f"⚠️  Size mismatch: local={local_size}, remote={remote_size}"
+                        )
+                else:
+                    self.log.error(f"❌ File not found after upload: {gcs_path}")
+                    raise Exception(f"Upload verification failed: file not found at {gcs_path}")
+            except Exception as verify_error:
+                self.log.error(f"❌ Upload verification failed: {verify_error}")
+                raise
+        finally:
+            # Clean up temp file
+            try:
+                import os
+
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
         self.monitor.check_resources("post_duckdb_upload")
         format_type = "CSV" if gcs_path.lower().endswith(".csv") else "Parquet"
         self.log.info(f"Uploaded DuckDB table {table_name} to {gcs_path} ({format_type} format)")
+
+    def verify_gcs_upload(self, gcs_path: str, expected_size: int = None) -> bool:
+        """
+        Verify that a file was successfully uploaded to GCS.
+
+        Args:
+            gcs_path: Full gs:// path to the file
+            expected_size: Expected file size in bytes (optional)
+
+        Returns:
+            True if file exists and size matches (if provided)
+
+        Raises:
+            Exception if file doesn't exist or size mismatch
+        """
+        try:
+            if not self.fs.exists(gcs_path):
+                self.log.error(f"❌ File not found after upload: {gcs_path}")
+                raise Exception(f"Upload verification failed: file not found at {gcs_path}")
+
+            remote_size = self.fs.size(gcs_path)
+            self.log.info(f"✅ Verified upload: {remote_size:,} bytes at {gcs_path}")
+
+            if expected_size is not None and remote_size != expected_size:
+                self.log.warning(
+                    f"⚠️  Size mismatch: expected={expected_size:,}, actual={remote_size:,}"
+                )
+                raise Exception(
+                    f"Upload size mismatch: expected {expected_size}, got {remote_size}"
+                )
+
+            return True
+        except Exception as e:
+            self.log.error(f"❌ Upload verification failed: {e}")
+            raise
 
     def upload_from_duckdb_query(self, query: str, gcs_path: str, **format_options):
         """Execute query and upload result directly to GCS without DataFrame conversion.
@@ -702,8 +1047,8 @@ class GCSDataAccess:
 
                 # Handle different mtime types from gcsfs
                 if isinstance(mtime, datetime.datetime):
-                    # mtime is already a datetime object
-                    timestamp = mtime
+                    # mtime is already a datetime object, normalize to timezone-naive
+                    timestamp = mtime.replace(tzinfo=None) if mtime.tzinfo else mtime
                 elif isinstance(mtime, (int, float)) and mtime > 0:
                     # mtime is a numeric timestamp
                     timestamp = datetime.datetime.fromtimestamp(mtime)
@@ -714,7 +1059,7 @@ class GCSDataAccess:
                 files_with_timestamps.append((f"gs://{file_path}", timestamp))
             except Exception as e:
                 self.log.warning(f"Could not get timestamp for {file_path}: {e}")
-                # Fall back to current time if timestamp unavailable
+                # Fall back to current time if timestamp unavailable (timezone-naive)
                 files_with_timestamps.append((f"gs://{file_path}", datetime.datetime.now()))
 
         return files_with_timestamps

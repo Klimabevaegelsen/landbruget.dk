@@ -16,6 +16,7 @@ from typing import Optional
 import loguru
 from simple_singleton import Singleton
 
+
 class LogLevel(Enum):
     """
     Enumeration of standard log levels used throughout the application.
@@ -40,6 +41,7 @@ class LogLevel(Enum):
     ERROR = "ERROR"
     FATAL = "FATAL"
     OFF = "OFF"
+
 
 class Logger(metaclass=Singleton):
     """
@@ -131,14 +133,14 @@ class Logger(metaclass=Singleton):
             cls.LOG.remove()
             cls.LOG.add(
                 sys.stderr,
-                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> "
-                "| {thread.name: <28} | <cyan>{name}</cyan> - {message}",
+                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <5}</level> "
+                "| {thread.name: <12} | <cyan>{name: <20}</cyan> - {message}",
                 level=level,
             )
             cls.LOG.add(
                 log_dir + "/log_{time}.log",
-                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> "
-                "| {thread.name: <28} | <cyan>{name}</cyan> - {message}",
+                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <5}</level> "
+                "| {thread.name: <12} | <cyan>{name: <20}</cyan> - {message}",
                 level=level,
             )
         return cls.LOG

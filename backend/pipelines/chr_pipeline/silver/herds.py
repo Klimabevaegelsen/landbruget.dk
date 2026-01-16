@@ -187,7 +187,9 @@ def create_herd_owners_table(
               AND (
                   (r.Besaetning.Ejer.CvrNummer IS NOT NULL OR r.Besaetning.Ejer.CprNummer IS NOT NULL)
                   OR
-                  (r.Besaetning.Ejer.Navn IS NOT NULL AND r.Besaetning.Ejer.Adresse IS NOT NULL AND r.Besaetning.Ejer.PostNummer IS NOT NULL)
+                  (r.Besaetning.Ejer.Navn IS NOT NULL
+                   AND r.Besaetning.Ejer.Adresse IS NOT NULL
+                   AND r.Besaetning.Ejer.PostNummer IS NOT NULL)
               )
         """)
 
@@ -221,7 +223,8 @@ def create_herd_owners_table(
         )
 
         # Filter out rows with null herd_number or (now removed) owner_identifier after cleaning
-        # Filter only on herd_number now, as identifier is removed. The SQL WHERE clause already filters unidentifiable owners.
+        # Filter only on herd_number now, as identifier is removed. The SQL WHERE clause
+        # already filters unidentifiable owners.
         herd_owners = herd_owners.filter(herd_owners.herd_number.notnull())
 
         # Define final columns order
@@ -315,7 +318,9 @@ def create_herd_users_table(
               AND (
                   (r.Besaetning.Bruger.CvrNummer IS NOT NULL OR r.Besaetning.Bruger.CprNummer IS NOT NULL)
                   OR
-                  (r.Besaetning.Bruger.Navn IS NOT NULL AND r.Besaetning.Bruger.Adresse IS NOT NULL AND r.Besaetning.Bruger.PostNummer IS NOT NULL)
+                  (r.Besaetning.Bruger.Navn IS NOT NULL
+                   AND r.Besaetning.Bruger.Adresse IS NOT NULL
+                   AND r.Besaetning.Bruger.PostNummer IS NOT NULL)
               )
         """)
 
@@ -347,7 +352,8 @@ def create_herd_users_table(
         )
 
         # Filter out rows with null herd_number or (now removed) user_identifier after cleaning
-        # Filter only on herd_number now, as identifier is removed. The SQL WHERE clause already filters unidentifiable users.
+        # Filter only on herd_number now, as identifier is removed. The SQL WHERE clause
+        # already filters unidentifiable users.
         herd_users = herd_users.filter(herd_users.herd_number.notnull())
 
         # Define final columns order

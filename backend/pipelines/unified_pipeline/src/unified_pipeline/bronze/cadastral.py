@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import time
@@ -16,12 +17,14 @@ from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInt
 
 logger = logging.getLogger(__name__)
 
+
 def clean_value(value):
     """Clean string values"""
     if not isinstance(value, str):
         return value
     value = value.strip()
     return value if value else None
+
 
 class CadastralBronzeConfig(BaseJobConfig):
     """Configuration for the Cadastral Bronze source."""
@@ -33,10 +36,10 @@ class CadastralBronzeConfig(BaseJobConfig):
     frequency: str = "weekly"
     bucket: str = os.getenv("GCS_BUCKET")
 
-    batch_size: int = 10000
-    max_concurrent: int = 5
-    request_timeout: int = 300
-    storage_batch_size: int = 10000  # Increased for better performance with 16GB RAM
+    batch_size: int = 25000  # Increased from 10k to 25k for fewer API calls
+    max_concurrent: int = 8  # Increased from 5 to 8 for better parallelism
+    request_timeout: int = 450  # Increased timeout for larger batches
+    storage_batch_size: int = 25000  # Match batch_size for consistency
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=300
     )
@@ -46,13 +49,16 @@ class CadastralBronzeConfig(BaseJobConfig):
     url: str = "https://wfs.datafordeler.dk/MATRIKLEN2/MatGaeldendeOgForeloebigWFS/1.0.0/WFS"
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
     load_dotenv()
-    save_local: bool = os.getenv("SAVE_LOCAL", False)
+    save_local: bool = os.getenv("SAVE_LOCAL", "False").lower() == "true"
+
 
 class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
     def __init__(self, config: CadastralBronzeConfig) -> None:
         super().__init__(config)
         self.last_request_time = {}
-        self.requests_per_second = int(os.getenv("CADASTRAL_REQUESTS_PER_SECOND", "2"))
+        self.requests_per_second = int(
+            os.getenv("CADASTRAL_REQUESTS_PER_SECOND", "4")
+        )  # Increased from 2 to 4 req/sec
 
         self.field_mapping = {
             "BFEnummer": ("bfe_number", int),
@@ -98,6 +104,70 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
             total=self.config.request_timeout, connect=60, sock_read=self.config.request_timeout
         )
 
+        # Checkpoint/resume functionality
+        self.checkpoint_enabled = (
+            os.getenv("CADASTRAL_CHECKPOINT_ENABLED", "true").lower() == "true"
+        )
+        self.checkpoint_file = f"/tmp/cadastral_checkpoint_{int(time.time())}.json"
+        self.checkpoint_interval = int(
+            os.getenv("CADASTRAL_CHECKPOINT_INTERVAL", "100000")
+        )  # Every 100k features
+
+    def _save_checkpoint(self, start_index: int, total_processed: int, features_batch: list):
+        """Save processing checkpoint to enable resume functionality"""
+        if not self.checkpoint_enabled:
+            return
+
+        try:
+            checkpoint_data = {
+                "start_index": start_index,
+                "total_processed": total_processed,
+                "timestamp": time.time(),
+                "features_count": len(features_batch),
+            }
+
+            with open(self.checkpoint_file, "w") as f:
+                json.dump(checkpoint_data, f)
+
+            self.log.info(f"Checkpoint saved: {total_processed:,} features processed")
+
+        except Exception as e:
+            self.log.warning(f"Failed to save checkpoint: {e}")
+
+    def _load_checkpoint(self):
+        """Load processing checkpoint to resume from last position"""
+        if not self.checkpoint_enabled:
+            return None
+
+        try:
+            if os.path.exists(self.checkpoint_file):
+                with open(self.checkpoint_file, "r") as f:
+                    checkpoint_data = json.load(f)
+
+                # Check if checkpoint is recent (within 6 hours)
+                if time.time() - checkpoint_data.get("timestamp", 0) < 21600:
+                    self.log.info(
+                        f"Resuming from checkpoint: {checkpoint_data['total_processed']:,} features"
+                    )
+                    return checkpoint_data
+                else:
+                    self.log.info("Checkpoint too old, starting fresh")
+                    os.remove(self.checkpoint_file)
+
+        except Exception as e:
+            self.log.warning(f"Failed to load checkpoint: {e}")
+
+        return None
+
+    def _cleanup_checkpoint(self):
+        """Clean up checkpoint file after successful completion"""
+        try:
+            if os.path.exists(self.checkpoint_file):
+                os.remove(self.checkpoint_file)
+                self.log.info("Checkpoint file cleaned up")
+        except Exception as e:
+            self.log.warning(f"Failed to cleanup checkpoint: {e}")
+
     def _get_base_params(self):
         """Get base WFS request parameters without pagination"""
         return {
@@ -133,8 +203,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                     continue
 
                 coords = [float(x) for x in pos_list.text.strip().split()]
-                # Keep the original 3D coordinate handling - take x,y and skip z
-                pairs = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 3)]
+                # Handle 2D coordinates - take x,y pairs
+                pairs = [(coords[i], coords[i + 1]) for i in range(0, len(coords), 2)]
 
                 if len(pairs) < 4:
                     logger.warning(f"Not enough coordinate pairs ({len(pairs)}) to form a polygon")
@@ -270,19 +340,22 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
 
                     valid_count = len(features)
                     self.log.info(
-                        f"Chunk {start_index}: parsed {valid_count} valid features out of {len(feature_elements)} elements"
+                        f"Chunk {start_index}: parsed {valid_count} valid features "
+                        f"out of {len(feature_elements)} elements"
                     )
 
                     # Validate that we're getting reasonable numbers
                     if valid_count == 0 and len(feature_elements) > 0:
                         self.log.warning(
-                            f"No valid features parsed from {len(feature_elements)} elements - possible parsing issue"
+                            f"No valid features parsed from {len(feature_elements)} elements - "
+                            "possible parsing issue"
                         )
                     elif (
                         valid_count < len(feature_elements) * 0.5
                     ):  # If we're losing more than 50% of features
                         self.log.warning(
-                            f"Low feature parsing success rate: {valid_count}/{len(feature_elements)}"
+                            f"Low feature parsing success rate: "
+                            f"{valid_count}/{len(feature_elements)}"
                         )
 
                     return features
@@ -297,21 +370,97 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 total_features = await self._get_total_count(session)
                 self.log.info(f"Found {total_features:,} total features")
 
+                # Performance tracking variables
+                start_time = time.time()
+                last_progress_time = start_time
                 features_batch = []
                 total_processed = 0
                 failed_chunks = []
 
-                for start_index in range(0, total_features, self.page_size):
+                # Check for existing checkpoint
+                checkpoint = self._load_checkpoint()
+                if checkpoint:
+                    # Resume from checkpoint
+                    start_from = checkpoint["start_index"]
+                    total_processed = checkpoint["total_processed"]
+                    self.log.info(
+                        f"Resuming from checkpoint at index {start_from:,} "
+                        f"with {total_processed:,} features already processed"
+                    )
+                else:
+                    start_from = 0
+
+                # Calculate expected processing time based on current performance
+                remaining_features = total_features - total_processed
+                expected_features_per_minute = 8000  # Target minimum performance
+                expected_duration_minutes = remaining_features / expected_features_per_minute
+                self.log.info(
+                    f"Expected processing duration: {expected_duration_minutes:.1f} minutes "
+                    f"for {remaining_features:,} remaining features"
+                )
+
+                for start_index in range(start_from, total_features, self.page_size):
+                    chunk_start_time = time.time()
+
                     try:
                         chunk = await self._fetch_chunk(session, start_index)
                         if chunk:
                             features_batch.extend(chunk)
                             total_processed += len(chunk)
 
-                            # Log progress every 10,000 features
-                            if total_processed % 10000 == 0:
-                                logger.info(
-                                    f"Progress: {total_processed:,}/{total_features:,} features ({(total_processed / total_features) * 100:.1f}%)"
+                            # Enhanced progress monitoring every 15 minutes or 50k features
+                            current_time = time.time()
+                            if (
+                                current_time - last_progress_time >= 900  # 15 minutes
+                                or total_processed % 50000 == 0
+                            ):
+                                elapsed_minutes = (current_time - start_time) / 60
+                                features_per_minute = (
+                                    total_processed / elapsed_minutes if elapsed_minutes > 0 else 0
+                                )
+                                remaining_features = total_features - total_processed
+                                eta_minutes = (
+                                    remaining_features / features_per_minute
+                                    if features_per_minute > 0
+                                    else 0
+                                )
+
+                                progress_pct = (total_processed / total_features) * 100
+
+                                self.log.info(
+                                    f"🚀 PROGRESS: {total_processed:,}/{total_features:,} features "
+                                    f"({progress_pct:.1f}%) | "
+                                    f"⚡ Speed: {features_per_minute:,.0f} features/min | "
+                                    f"⏱️  ETA: {eta_minutes:.1f} minutes | "
+                                    f"⌛ Elapsed: {elapsed_minutes:.1f} minutes"
+                                )
+
+                                # Early termination if processing is too slow
+                                if (
+                                    features_per_minute < 6000 and elapsed_minutes > 60
+                                ):  # Below 6k/min after 1 hour
+                                    self.log.warning(
+                                        f"⚠️  PERFORMANCE WARNING: Processing speed "
+                                        f"({features_per_minute:,.0f}/min) below target (8000/min)."
+                                    )
+
+                                last_progress_time = current_time
+
+                            # Save checkpoint periodically
+                            if (
+                                total_processed % self.checkpoint_interval == 0
+                                and total_processed > 0
+                            ):
+                                self._save_checkpoint(
+                                    start_index + self.page_size, total_processed, features_batch
+                                )
+
+                            # Log chunk performance for debugging
+                            chunk_duration = time.time() - chunk_start_time
+                            if chunk_duration > 60:  # Log slow chunks (>1 minute)
+                                self.log.warning(
+                                    f"Slow chunk at {start_index}: {chunk_duration:.1f}s "
+                                    f"for {len(chunk)} features"
                                 )
 
                     except Exception as e:
@@ -319,12 +468,25 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                         failed_chunks.append(start_index)
                         continue
 
+                # Final performance summary
+                total_duration = time.time() - start_time
+                final_features_per_minute = (
+                    total_processed / (total_duration / 60) if total_duration > 0 else 0
+                )
+
                 if failed_chunks:
                     logger.error(f"Failed to process chunks starting at indices: {failed_chunks}")
 
+                self.log.info(
+                    f"✅ SYNC COMPLETED: {total_processed:,} features processed | "
+                    f"⚡ Final speed: {final_features_per_minute:,.0f} features/min | "
+                    f"⏱️  Total time: {total_duration / 60:.1f} minutes"
+                )
+
+                # Clean up checkpoint file on successful completion
+                self._cleanup_checkpoint()
+
                 # Return the raw features batch for processing by silver layer
-                # Silver layer will use ibis/duckdb for proper data handling
-                logger.info(f"Sync completed. Total processed: {total_processed:,} features")
                 return total_processed, features_batch
 
         except Exception as e:
@@ -354,7 +516,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 number_returned = root.get("numberReturned", "0")
 
                 self.log.info(
-                    f"WFS response metadata - numberMatched: {number_matched}, numberReturned: {number_returned}"
+                    f"WFS response metadata - numberMatched: {number_matched}, "
+                    f"numberReturned: {number_returned}"
                 )
 
                 if number_matched == "*":
@@ -382,7 +545,8 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
                 # Add sanity check for unreasonable numbers
                 if total_available > 5000000:  # Adjust threshold as needed
                     self.log.warning(
-                        f"Unusually high feature count: {total_available:,}. This may indicate an issue."
+                        f"Unusually high feature count: {total_available:,}. "
+                        "This may indicate an issue."
                     )
                 self.log.info(f"Total available features: {total_available:,}")
                 return total_available
@@ -419,9 +583,17 @@ class CadastralBronze(BaseSource[CadastralBronzeConfig], BronzeJobInterface):
             return None
         self.log.info("Fetched raw data successfully")
 
-        # Save using existing method (already uses timestamped structure)
-        self._save_data(features_data, self.config.dataset, self.config.bucket, "bronze")
-        self.log.info("Saved raw data successfully")
+        # Save raw JSON data to bronze layer with explicit JSON filename
+        # Using the new metadata-enhanced save method for complete data tracing
+        self._save_data_with_metadata(
+            data=features_data,
+            dataset=self.config.dataset,
+            source_key="cadastral",  # From DATA_SOURCE_REGISTRY
+            bucket=self.config.bucket,
+            stage="bronze",
+            filename="data.json",
+        )
+        self.log.info("Saved raw data successfully with pipeline metadata")
 
         # Return data for in-memory passing
         return features_data

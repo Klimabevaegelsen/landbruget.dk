@@ -55,7 +55,7 @@ export interface ChartData {
 }
 
 export interface GeoJSONFeature {
-  type: "Feature";
+  type: 'Feature';
   geometry: {
     type: string;
     crs: {
@@ -72,9 +72,9 @@ export interface GeoJSONFeature {
 export interface GeoJSONLayer {
   name: string;
   type: string;
-  style: string;
+  style: string | undefined;
   data: {
-    type: "FeatureCollection";
+    type: 'FeatureCollection';
     features: GeoJSONFeature[];
   };
 }
@@ -104,73 +104,96 @@ export interface BaseDataGrid {
   columns: Column[];
   allowFiltering: boolean;
   isCollapsible?: boolean;
+  documentation?: DocumentationLink;
 }
 
 // Component types
 export interface InfoCard {
   _key: string;
-  _type: "infoCard";
+  _type: 'infoCard';
   title: string;
   items: InfoCardItem[];
+  documentation?: DocumentationLink;
 }
 
 export interface DataGrid extends BaseDataGrid {
-  _type: "dataGrid";
+  _type: 'dataGrid';
 }
 
 export interface KPIGroup {
   _key: string;
-  _type: "kpiGroup";
+  _type: 'kpiGroup';
   title: string;
   kpis: KPI[];
+  documentation?: DocumentationLink;
 }
 
 export interface MapChart {
   _key: string;
-  _type: "mapChart";
+  _type: 'mapChart';
   title: string;
   data: MapData;
+  documentation?: DocumentationLink;
+}
+
+export interface DocumentationLink {
+  title: string;
+  description: string;
+  sources: Array<{
+    name: string;
+    url: string;
+  }>;
+  dataLineage?: string;
 }
 
 export interface BarChart {
   _key: string;
-  _type: "barChart";
+  _type: 'barChart';
   title: string;
   data: ChartData;
+  unit?: string;
+  documentation?: DocumentationLink;
 }
 
 export interface StackedBarChart {
   _key: string;
-  _type: "stackedBarChart";
+  _type: 'stackedBarChart';
   title: string;
   data: ChartData;
+  unit?: string;
+  documentation?: DocumentationLink;
 }
 
 export interface HorizontalStackedBarChart {
   _key: string;
-  _type: "horizontalStackedBarChart";
+  _type: 'horizontalStackedBarChart';
   title: string;
   data: ChartData;
+  unit?: string;
+  documentation?: DocumentationLink;
 }
 
 export interface ComboChart {
   _key: string;
-  _type: "comboChart";
+  _type: 'comboChart';
   title: string;
   data: ChartData;
+  unit?: string;
+  documentation?: DocumentationLink;
 }
 
 export interface Timeline {
   _key: string;
-  _type: "timeline";
+  _type: 'timeline';
   title: string;
   events: TimelineEvent[];
   config: TimelineConfig;
+  documentation?: DocumentationLink;
 }
 
 export interface IteratedSection {
   _key: string;
-  _type: "iteratedSection";
+  _type: 'iteratedSection';
   title: string;
   iterationConfig: {
     layout: string;

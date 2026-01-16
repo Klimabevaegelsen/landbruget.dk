@@ -224,11 +224,11 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
             except ET.ParseError as e:
                 err_msg = f"Failed to parse XML response: {e}"
                 self.log.error(err_msg, exc_info=True)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
             except Exception as e:
                 err_msg = f"Error fetching chunk: {e}"
                 self.log.error(err_msg, exc_info=True)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
 
     @retry(
         retry=retry_if_exception_type(Exception),
@@ -306,7 +306,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
             except Exception as e:
                 err_msg = f"Error fetching data: {e}"
                 self.log.error(err_msg)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
 
     async def _fetch_wfs_data(
         self, session: aiohttp.ClientSession, layer: str, url: str
@@ -454,7 +454,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
         self.conn.execute(
             """
             CREATE OR REPLACE TABLE final_dataframe AS
-            SELECT 
+            SELECT
                 payload,
                 layer,
                 ? as source,

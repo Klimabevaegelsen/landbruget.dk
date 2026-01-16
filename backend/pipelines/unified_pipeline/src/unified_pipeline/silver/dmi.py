@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import timed
 
+
 class DMISilverConfig(BaseJobConfig):
     """
     Configuration for DMI Silver data processing.
@@ -41,6 +42,7 @@ class DMISilverConfig(BaseJobConfig):
     parameters: list[str] = ["pot_evaporation_makkink", "acc_precip"]
     target_crs: str = "EPSG:4326"  # Required target CRS
     source_crs: str = "EPSG:25832"  # DMI's native CRS
+
 
 class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
     """
@@ -64,7 +66,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
         Initialize the DMISilver processor.
 
         Args:
-            config: Configuration for the silver processing job        """
+            config: Configuration for the silver processing job"""
         super().__init__(config)
         # Setup DuckDB with spatial extension
         self._setup_duckdb_spatial()
@@ -222,12 +224,14 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                     parameter_id,
                     valid_time,
                     created,
-                    ST_Transform(geometry, '{self.config.source_crs}', '{self.config.target_crs}') as geometry
+                    ST_Transform(
+                        geometry, '{self.config.source_crs}', '{self.config.target_crs}'
+                    ) as geometry
                 FROM extracted_data
             """)
 
             # Process data using DuckDB and calculate statistics
-            result = self.conn.execute("""
+            self.conn.execute("""
                 SELECT
                     parameter_id,
                     valid_time,
@@ -275,7 +279,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
             """)
 
             self.log.info(
-                f"Successfully transformed {len(raw_data['features'])} monthly records for parameter {parameter_id}"
+                f"Successfully transformed {len(raw_data['features'])} monthly records "
+                f"for parameter {parameter_id}"
             )
             return processed_result
 
@@ -312,7 +317,7 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                     continue
 
                 raw_data = parameter_bronze_data.get("data")
-                metadata = parameter_bronze_data.get("metadata", {})
+                parameter_bronze_data.get("metadata", {})
 
                 if not raw_data:
                     self.log.warning(f"No raw data found for parameter {parameter_id}")
@@ -321,7 +326,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                 # Check if there was an error in bronze data
                 if "error" in raw_data:
                     self.log.warning(
-                        f"Bronze data contains error for parameter {parameter_id}: {raw_data['error']}"
+                        f"Bronze data contains error for parameter {parameter_id}: "
+                        f"{raw_data['error']}"
                     )
                     continue
 
@@ -372,7 +378,8 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
 
                         all_processed_data[parameter_id] = final_table_name
                         self.log.info(
-                            f"Successfully processed {row_count} monthly records for parameter {parameter_id}"
+                            f"Successfully processed {row_count} monthly records "
+                            f"for parameter {parameter_id}"
                         )
                     else:
                         self.log.warning(
@@ -385,7 +392,9 @@ class DMISilver(BaseSource[DMISilverConfig], SilverJobInterface):
                 self.log.error("No DMI parameters were successfully processed")
                 return None
 
-            self.log.info(f"Successfully processed {len(all_processed_data)} DMI monthly parameters")
+            self.log.info(
+                f"Successfully processed {len(all_processed_data)} DMI monthly parameters"
+            )
             return all_processed_data
 
         except Exception as e:

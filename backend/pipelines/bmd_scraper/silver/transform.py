@@ -29,7 +29,9 @@ def _get_optimized_gcs_access():
         return GCSDataAccess
     except ImportError as e:
         logger.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
-        logger.warning("⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance")
+        logger.warning(
+            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed " "for optimal performance"
+        )
         return None
 
 
@@ -65,10 +67,10 @@ class OptimizedGCSStorage:
             self.gcs_client = storage.Client()
             self.gcs_bucket = self.gcs_client.bucket(bucket_name)
             logger.info(f"✅ BMD Silver: Using fallback GCS for bucket: {bucket_name}")
-        except ImportError:
-            raise ImportError("google-cloud-storage is required but not available")
+        except ImportError as e:
+            raise ImportError("google-cloud-storage is required but not available") from e
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize GCS storage: {e}")
+            raise RuntimeError(f"Failed to initialize GCS storage: {e}") from e
 
     def upload_file(self, local_path: Path, gcs_path: str = None) -> bool:
         """Upload file to GCS with optimized or fallback method."""
@@ -192,7 +194,7 @@ class BMDTransformer:
         if self.conn is not None:
             try:
                 self.conn.close()
-            except:
+            except Exception:
                 pass
 
     def read_excel(self) -> str:
@@ -538,19 +540,20 @@ class BMDTransformer:
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE pfas_enhanced AS
                 SELECT *,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN {pfas_check_sql} THEN true
                         ELSE false
                     END AS contains_pfas,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
                         WHEN LOWER({active_ingredient_col}) LIKE '%diquat%' THEN true
                         ELSE false
                     END AS contains_diquat,
-                    CASE 
+                    CASE
                         WHEN {active_ingredient_col} IS NULL OR {active_ingredient_col} = '' THEN NULL
-                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%' OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
+                        WHEN LOWER({active_ingredient_col}) LIKE '%glyphosat%'
+                            OR LOWER({active_ingredient_col}) LIKE '%glyphosate%' THEN true
                         ELSE false
                     END AS contains_glyphosate
                 FROM {table_name};
@@ -558,33 +561,36 @@ class BMDTransformer:
 
             # Log detection statistics
             pfas_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_pfas = true
             """).fetchone()[0]
 
             diquat_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_diquat = true
             """).fetchone()[0]
 
             glyphosate_count = self.conn.execute("""
-                SELECT COUNT(*) 
-                FROM pfas_enhanced 
+                SELECT COUNT(*)
+                FROM pfas_enhanced
                 WHERE contains_glyphosate = true
             """).fetchone()[0]
 
             total_count = self.conn.execute("SELECT COUNT(*) FROM pfas_enhanced").fetchone()[0]
 
             logger.info(
-                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS ({pfas_count / total_count:.1%})"
+                f"PFAS detection complete: {pfas_count} out of {total_count} products contain PFAS "
+                f"({pfas_count / total_count:.1%})"
             )
             logger.info(
-                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat ({diquat_count / total_count:.1%})"
+                f"Diquat detection complete: {diquat_count} out of {total_count} products contain diquat "
+                f"({diquat_count / total_count:.1%})"
             )
             logger.info(
-                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate ({glyphosate_count / total_count:.1%})"
+                f"Glyphosate detection complete: {glyphosate_count} out of {total_count} products contain glyphosate "
+                f"({glyphosate_count / total_count:.1%})"
             )
 
             # Store detection metadata
@@ -663,7 +669,7 @@ class BMDTransformer:
 
     def save_parquet(self, table_name: str) -> Path:
         """
-        Save the processed data as a Parquet file.
+        Save the processed data as a Parquet file with enhanced GCS export.
 
         Args:
             table_name: Name of the DuckDB table
@@ -678,7 +684,25 @@ class BMDTransformer:
         logger.info(f"Saving Parquet file to {output_path}")
 
         try:
-            # Export directly from DuckDB to Parquet
+            # 🚀 ENHANCED: Try native GCS export first if OptimizedGCSDataAccess is available
+            gcs_export_success = False
+            if OptimizedGCSDataAccess:
+                try:
+                    gcs_access = OptimizedGCSDataAccess()
+                    bucket_name = "landbrugsdata-raw-data"
+                    gcs_path = f"gs://{bucket_name}/silver/bmd/{self.timestamp}/pesticide_products.parquet"
+
+                    # Use native GCS export with server-side compression
+                    gcs_access.export_to_gcs_native(
+                        connection=self.conn, table_name=table_name, gcs_path=gcs_path, compression="zstd"
+                    )
+
+                    logger.info(f"✅ Native GCS export successful: {gcs_path}")
+                    gcs_export_success = True
+                except Exception as e:
+                    logger.warning(f"Native GCS export failed, using local export: {e}")
+
+            # Always create local file as well (for compatibility)
             self.conn.execute(f"""
                 COPY (SELECT * FROM {table_name})
                 TO '{output_path}' (FORMAT 'parquet')
@@ -692,6 +716,7 @@ class BMDTransformer:
             metadata_path = self.output_dir / "metadata.json"
             self.silver_metadata["output_file"] = str(output_path)
             self.silver_metadata["output_size_bytes"] = os.path.getsize(output_path)
+            self.silver_metadata["gcs_native_export"] = gcs_export_success
 
             with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(self.silver_metadata, f, indent=2, ensure_ascii=False)

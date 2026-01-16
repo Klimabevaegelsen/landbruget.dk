@@ -14,6 +14,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 log = Logger.get_logger()
 
+
 def timed(func: Optional[F] = None, *, name: Optional[str] = None) -> Any:
     """
     Decorator to measure the execution time of a function.
@@ -55,6 +56,7 @@ def timed(func: Optional[F] = None, *, name: Optional[str] = None) -> Any:
     else:
         return decorator(func)
 
+
 class Timer:
     """
     Context manager for timing code blocks.
@@ -87,6 +89,7 @@ class Timer:
     def elapsed(self) -> float:
         """Get the current elapsed time without exiting the context"""
         return time.time() - self.start_time
+
 
 async def async_timed(func: Optional[F] = None, *, name: Optional[str] = None) -> Any:
     """
@@ -129,6 +132,7 @@ async def async_timed(func: Optional[F] = None, *, name: Optional[str] = None) -
         return decorator
     else:
         return decorator(func)
+
 
 class AsyncTimer:
     """

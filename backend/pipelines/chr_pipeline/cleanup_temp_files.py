@@ -103,7 +103,8 @@ def monitor_disk_usage():
             data_used_percent = (data_usage.used / data_usage.total) * 100
 
             logger.info(
-                f"/usr/data disk usage: {data_used_percent:.1f}% used, {data_free_gb:.1f}GB free of {data_total_gb:.1f}GB"
+                f"/usr/data disk usage: {data_used_percent:.1f}% used, "
+                f"{data_free_gb:.1f}GB free of {data_total_gb:.1f}GB"
             )
 
             if data_used_percent > 90:

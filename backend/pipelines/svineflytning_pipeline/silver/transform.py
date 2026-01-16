@@ -266,7 +266,11 @@ class SvineflytningSilverProcessor:
 
                 self.conn.execute(
                     """
-                    INSERT INTO raw_movements VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO raw_movements VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?
+                    )
                 """,
                     [
                         movement.get("Id"),
@@ -336,17 +340,17 @@ class SvineflytningSilverProcessor:
 
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE silver_movements AS
-            SELECT 
+            SELECT
                 -- Movement identification
                 Id as movement_id,
                 Oprindelse as origin_system,
                 Handling as action_type,
-                
+
                 -- Movement timing
                 FlytteTidspunkt_SvineflytDato as movement_date,
                 FlytteTidspunkt_SvineflytTidspunkt as movement_time,
                 FlytteTidspunkt_SvineflytRaekkefoelge as movement_sequence,
-                
+
                 -- Sender information
                 Afsender_Landekode as sender_country_code,
                 Afsender_ChrNummer as sender_chr_number,
@@ -360,8 +364,8 @@ class SvineflytningSilverProcessor:
                 Afsender_Ejendom_DatoOpret as sender_property_created,
                 Afsender_Ejendom_DatoOpdatering as sender_property_updated,
                 Afsender_UdlandsEjendom as sender_foreign_property,
-                
-                -- Receiver information  
+
+                -- Receiver information
                 Modtager_Landekode as receiver_country_code,
                 Modtager_ChrNummer as receiver_chr_number,
                 Modtager_BesaetningsNummer as receiver_herd_number,
@@ -374,49 +378,49 @@ class SvineflytningSilverProcessor:
                 Modtager_Ejendom_DatoOpret as receiver_property_created,
                 Modtager_Ejendom_DatoOpdatering as receiver_property_updated,
                 Modtager_UdlandsEjendom as receiver_foreign_property,
-                
+
                 -- Animal counts
                 AntalDyr_AntalDyrIAlt as total_animals,
                 AntalDyr_AntalSoer as sow_count,
                 AntalDyr_AntalSlagtesvin as slaughter_pig_count,
                 AntalDyr_Antal190LitersContainere as containers_190l,
                 AntalDyr_Antal240LitersContainere as containers_240l,
-                
+
                 -- Transport information
                 Koeretoej_Forvogn_Landekode as vehicle_country_code,
                 Koeretoej_Forvogn_RegNr as vehicle_registration,
                 Koeretoej_Haenger_Landekode as trailer_country_code,
                 Koeretoej_Haenger_RegNr as trailer_registration,
-                
+
                 -- Additional transport and documentation
                 Omlaesser as transshipment_info,
                 TracesDokument as traces_document,
                 Sundhedscertifikat as health_certificate,
-                
+
                 -- Administrative information
                 IndberetterLogon as reporter_login,
                 IndberetningForetaget as report_timestamp,
-                
+
                 -- Processing metadata
                 '{export_timestamp}' as processed_timestamp,
                 _chunk_timestamp as source_chunk_timestamp,
                 _chunk_start_date as source_period_start,
                 _chunk_end_date as source_period_end,
-                
+
                 -- Data quality flags
-                CASE 
-                    WHEN Handling = 'slet' THEN true 
-                    ELSE false 
+                CASE
+                    WHEN Handling = 'slet' THEN true
+                    ELSE false
                 END as is_deleted,
-                CASE 
+                CASE
                     WHEN Id IS NULL THEN true
                     ELSE false
                 END as is_invalid,
-                CASE 
+                CASE
                     WHEN AntalDyr_AntalDyrIAlt IS NULL OR AntalDyr_AntalDyrIAlt <= 0 THEN true
                     ELSE false
                 END as missing_animal_count
-                
+
             FROM raw_movements
             WHERE Id IS NOT NULL  -- Filter out completely invalid records
         """)
@@ -430,7 +434,8 @@ class SvineflytningSilverProcessor:
         ).fetchone()[0]
 
         logger.info(
-            f"Movements table created: {total_count} total, {deleted_count} deleted, {invalid_count} invalid, {missing_animals} missing animal counts"
+            f"Movements table created: {total_count} total, {deleted_count} deleted, "
+            f"{invalid_count} invalid, {missing_animals} missing animal counts"
         )
 
     def _create_properties_table(self, export_timestamp: str):
@@ -478,7 +483,7 @@ class SvineflytningSilverProcessor:
                 UNION ALL
                 SELECT * FROM receiver_properties
             )
-            SELECT 
+            SELECT
                 chr_number,
                 herd_number,
                 address,
@@ -495,8 +500,8 @@ class SvineflytningSilverProcessor:
                 ARRAY_AGG(DISTINCT property_role) as roles
             FROM all_properties
             WHERE chr_number IS NOT NULL
-            GROUP BY chr_number, herd_number, address, city_name, postal_code, 
-                     postal_district, municipality_code, municipality_name, 
+            GROUP BY chr_number, herd_number, address, city_name, postal_code,
+                     postal_district, municipality_code, municipality_name,
                      date_created, date_updated, foreign_property
         """)
 
@@ -520,7 +525,8 @@ class SvineflytningSilverProcessor:
                 MAX(FlytteTidspunkt_SvineflytDato) as last_movement_date
             FROM raw_movements
             WHERE Koeretoej_Forvogn_RegNr IS NOT NULL
-            GROUP BY Koeretoej_Forvogn_RegNr, Koeretoej_Forvogn_Landekode, Koeretoej_Haenger_RegNr, Koeretoej_Haenger_Landekode
+            GROUP BY Koeretoej_Forvogn_RegNr, Koeretoej_Forvogn_Landekode,
+                     Koeretoej_Haenger_RegNr, Koeretoej_Haenger_Landekode
         """)
 
         vehicle_count = self.conn.execute("SELECT COUNT(*) FROM silver_vehicles").fetchone()[0]
@@ -542,22 +548,50 @@ class SvineflytningSilverProcessor:
         local_destination = self.output_dir / export_timestamp
         local_destination.mkdir(parents=True, exist_ok=True)
 
-        # Export each table to local files first
+        # 🚀 ENHANCED: Try native GCS export first if available
+        gcs_export_success = False
         tables = ["silver_movements", "silver_properties", "silver_vehicles"]
         exported_files = []
 
-        for table in tables:
-            filename = f"{table.replace('silver_', '')}.parquet"
-            local_path = local_destination / filename
-
-            # Export to local file using DuckDB COPY
-            self.conn.execute(f"""
-                COPY {table} TO '{local_path}' (FORMAT PARQUET)
-            """)
-            logger.info(f"Exported {table} to local file: {local_path}")
-
-        # If using GCS, upload the local files
         if USE_GCS:
+            try:
+                from unified_pipeline.util.gcs_access import GCSDataAccess
+
+                gcs_access = GCSDataAccess()
+
+                # Try native DuckDB HTTPFS GCS export for each table
+                for table in tables:
+                    filename = f"{table.replace('silver_', '')}.parquet"
+                    gcs_path = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}/{filename}"
+
+                    gcs_access.export_to_gcs_native(
+                        connection=self.conn, table_name=table, gcs_path=gcs_path, compression="zstd"
+                    )
+                    exported_files.append(gcs_path)
+                    logger.info(f"✅ Native GCS export successful: {gcs_path}")
+
+                gcs_export_success = True
+                destination_base = f"gs://{GCS_BUCKET}/silver/svineflytning/{export_timestamp}"
+                storage_type = "gcs"
+
+            except Exception as e:
+                logger.warning(f"Native GCS export failed, using fallback: {e}")
+                gcs_export_success = False
+
+        if not gcs_export_success:
+            # Fallback: Export each table to local files first
+            for table in tables:
+                filename = f"{table.replace('silver_', '')}.parquet"
+                local_path = local_destination / filename
+
+                # Export to local file using DuckDB COPY
+                self.conn.execute(f"""
+                    COPY {table} TO '{local_path}' (FORMAT PARQUET)
+                """)
+                logger.info(f"Exported {table} to local file: {local_path}")
+
+        # If using GCS and native export didn't work, upload the local files
+        if USE_GCS and not gcs_export_success:
             success = self._upload_silver_data_to_gcs(local_destination, export_timestamp)
             if success:
                 # Build GCS paths for return
@@ -575,14 +609,15 @@ class SvineflytningSilverProcessor:
                     exported_files.append(str(local_path))
                 destination_base = str(local_destination)
                 storage_type = "local"
-        else:
-            # Local storage only
-            for table in tables:
-                filename = f"{table.replace('silver_', '')}.parquet"
-                local_path = local_destination / filename
-                exported_files.append(str(local_path))
-            destination_base = str(local_destination)
-            storage_type = "local"
+        elif not gcs_export_success:
+            # Local storage only (populate files list if not done already)
+            if not exported_files:
+                for table in tables:
+                    filename = f"{table.replace('silver_', '')}.parquet"
+                    local_path = local_destination / filename
+                    exported_files.append(str(local_path))
+                destination_base = str(local_destination)
+                storage_type = "local"
 
         return {
             "destination": destination_base,

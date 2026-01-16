@@ -17,6 +17,7 @@ import duckdb
 from unified_pipeline.common.native_schema_manager import NativeSchemaManager
 from unified_pipeline.util.log_util import Logger
 
+
 class SchemaToGitHub:
     """Manages automatic schema generation and GitHub commits."""
 
@@ -54,8 +55,10 @@ class SchemaToGitHub:
                 "",
                 f"- **Table Name:** `{table_name}`",
                 f"- **Stage:** {stage}",
-                f"- **Estimated Rows:** {schema_info.get('basic_info', {}).get('estimated_size', 'Unknown'):,}",
-                f"- **Column Count:** {schema_info.get('basic_info', {}).get('column_count', 'Unknown')}",
+                f"- **Estimated Rows:** "
+                f"{schema_info.get('basic_info', {}).get('estimated_size', 'Unknown'):,}",
+                f"- **Column Count:** "
+                f"{schema_info.get('basic_info', {}).get('column_count', 'Unknown')}",
                 "",
                 "## Schema",
                 "",
@@ -189,7 +192,7 @@ class SchemaToGitHub:
                     count_result = self.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
                     if count_result:
                         context_lines.append(f"-- Row count: {count_result[0]:,}")
-                except:
+                except Exception:
                     pass
 
                 context_lines.extend(["```", ""])
@@ -294,9 +297,9 @@ class SchemaToGitHub:
         try:
             # Get all user tables
             query = """
-            SELECT table_name 
-            FROM duckdb_tables() 
-            WHERE NOT internal 
+            SELECT table_name
+            FROM duckdb_tables()
+            WHERE NOT internal
             AND NOT temporary
             """
 
@@ -340,6 +343,7 @@ class SchemaToGitHub:
         except Exception as e:
             self.logger.error(f"Failed to generate and commit schemas: {e}")
             return generated_files
+
 
 class SchemaGitHubMixin:
     """Mixin to add GitHub schema integration to pipeline sources."""

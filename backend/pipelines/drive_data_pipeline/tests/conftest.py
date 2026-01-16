@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 from unittest import mock
 
@@ -11,14 +12,14 @@ from drive_data_pipeline.utils.storage import LocalStorageManager
 
 
 @pytest.fixture
-def temp_dir():
+def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for test data."""
     with tempfile.TemporaryDirectory() as temp_dir:
         yield Path(temp_dir)
 
 
 @pytest.fixture
-def mock_settings(temp_dir):
+def mock_settings(temp_dir: Path) -> mock.MagicMock:
     """Create mock settings for testing."""
     settings = mock.MagicMock(spec=Settings)
     settings.base_path = temp_dir
@@ -27,31 +28,27 @@ def mock_settings(temp_dir):
     settings.google_drive_folder_id = "test-folder-id"
     settings.storage_type.value = "local"
     settings.gcs_bucket = None
-    
+
     # Create directories
     os.makedirs(settings.bronze_path, exist_ok=True)
     os.makedirs(settings.silver_path, exist_ok=True)
-    
+
     return settings
 
 
 @pytest.fixture
-def storage_manager(temp_dir):
+def storage_manager(temp_dir: Path) -> LocalStorageManager:
     """Create a local storage manager for testing."""
     return LocalStorageManager()
 
 
 @pytest.fixture
-def sample_file_content():
+def sample_file_content() -> bytes:
     """Create sample file content for testing."""
     return b"Sample file content for testing"
 
 
 @pytest.fixture
-def sample_json_content():
+def sample_json_content() -> dict[str, str]:
     """Create sample JSON content for testing."""
-    return {
-        "id": "test-id",
-        "name": "test-file.pdf",
-        "description": "Test file for unit tests"
-    } 
+    return {"id": "test-id", "name": "test-file.pdf", "description": "Test file for unit tests"}

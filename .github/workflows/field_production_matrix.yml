@@ -1,0 +1,305 @@
+name: Field Production Matrix Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: 'Years to process (comma-separated, e.g., "2020,2021,2022" or "all")'
+        type: string
+        default: "all"
+        required: true
+      max_parallel_jobs:
+        description: "Maximum number of parallel jobs"
+        type: string
+        default: "8"
+        required: true
+      dry_run:
+        description: "Dry run mode (discover years only)"
+        type: boolean
+        default: false
+
+env:
+  GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+  GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+
+jobs:
+  discover-years:
+    runs-on: ubuntu-latest
+    outputs:
+      years: ${{ steps.discover.outputs.years }}
+      year_count: ${{ steps.discover.outputs.year_count }}
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: Discover available years
+        id: discover
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+
+          # Create discovery script
+          cat > discover_field_production_years.py << 'EOF'
+          #!/usr/bin/env python3
+          """
+          Discover available years for field production gold layer processing.
+          """
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          # Add unified pipeline to path
+          sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+          from unified_pipeline.util.gcs_access import GCSDataAccess
+          from unified_pipeline.util.log_util import Logger
+
+          def discover_fvm_marker_years():
+              """Discover available fvm_marker years from silver data."""
+              import re
+              logger = Logger.get_logger()
+              gcs_access = GCSDataAccess()
+              bucket = os.getenv('GCS_BUCKET', 'landbrugsdata-raw-data')
+
+              try:
+                  # Get files with timestamps to find latest for each year
+                  files_with_timestamps = gcs_access.list_files_with_timestamps(f"gs://{bucket}/silver/fvm_marker_*/*/*.parquet")
+
+                  # Group by year and find latest timestamp for each
+                  year_latest_files = {}
+                  for file_path, timestamp in files_with_timestamps:
+                      # Extract year from directory name
+                      match = re.search(r"/fvm_marker_(\d{4})/", file_path)
+                      if match:
+                          year = int(match.group(1))
+                          if 2005 <= year <= 2030:  # Reasonable year range
+                              if year not in year_latest_files or timestamp > year_latest_files[year][1]:
+                                  year_latest_files[year] = (file_path, timestamp)
+
+                  years_list = sorted(list(year_latest_files.keys()))
+                  logger.info(f"Discovered {len(years_list)} years with latest fvm_marker data: {years_list}")
+
+                  # Log the latest files being used
+                  for year in years_list:
+                      file_path, timestamp = year_latest_files[year]
+                      logger.info(f"  Year {year}: {file_path} (timestamp: {timestamp})")
+
+                  return years_list
+
+              except Exception as e:
+                  logger.error(f"Error discovering years: {e}")
+                  return []
+
+          def main():
+              """Main discovery function."""
+              logger = Logger.get_logger()
+
+              # Get input years
+              input_years = "${{ github.event.inputs.years }}"
+
+              # Discover available years
+              available_years = discover_fvm_marker_years()
+
+              if not available_years:
+                  logger.error("No fvm_marker years found")
+                  print("[]")
+                  return
+
+              # Filter based on input
+              if input_years == "all":
+                  selected_years = available_years
+              else:
+                  try:
+                      requested_years = [int(y.strip()) for y in input_years.split(',')]
+                      selected_years = [y for y in requested_years if y in available_years]
+
+                      missing_years = [y for y in requested_years if y not in available_years]
+                      if missing_years:
+                          logger.warning(f"Requested years not found: {missing_years}")
+                          logger.warning(f"Available years: {available_years}")
+
+                  except ValueError as e:
+                      logger.error(f"Invalid year format: {e}")
+                      selected_years = available_years
+
+              logger.info(f"Selected years for processing: {selected_years}")
+              print(json.dumps(selected_years))
+
+          if __name__ == "__main__":
+              main()
+          EOF
+
+          # Run discovery and capture output
+          python discover_field_production_years.py > discovery_output.txt 2>&1
+          discovery_exit_code=$?
+
+          if [ $discovery_exit_code -ne 0 ]; then
+            echo "❌ Discovery script failed with exit code $discovery_exit_code"
+            cat discovery_output.txt
+            exit $discovery_exit_code
+          fi
+
+          years=$(tail -n 1 discovery_output.txt)
+          year_count=$(echo "$years" | jq '. | length')
+
+          echo "years=$years" >> $GITHUB_OUTPUT
+          echo "year_count=$year_count" >> $GITHUB_OUTPUT
+
+          echo "Discovered $year_count years for matrix processing: $years"
+
+  process-years:
+    if: ${{ !inputs.dry_run && needs.discover-years.outputs.years != '[]' && needs.discover-years.outputs.years != '' }}
+    needs: discover-years
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    strategy:
+      max-parallel: ${{ fromJson(inputs.max_parallel_jobs) }}
+      fail-fast: false # Don't stop other jobs if one fails
+      matrix:
+        year: ${{ fromJson(needs.discover-years.outputs.years) }}
+
+    name: Field Production Year ${{ matrix.year }}
+
+    env:
+      ENVIRONMENT: production
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      SAVE_LOCAL: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+        with:
+          install_components: "gke-gcloud-auth-plugin"
+
+      - name: Run Field Production for Year ${{ matrix.year }}
+        env:
+          GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+        run: |
+          cd backend/pipelines/unified_pipeline
+          echo "🌾 Processing field production estimates for year ${{ matrix.year }}..."
+
+          # Set up signal handling for graceful cancellation
+          trap 'echo "Received cancellation signal, stopping..."; kill -TERM $PID 2>/dev/null; wait $PID 2>/dev/null; exit 130' SIGINT SIGTERM
+
+          python -m unified_pipeline run \
+            -s field_production \
+            -j gold \
+            --year ${{ matrix.year }} &
+
+          PID=$!
+          wait $PID
+
+      - name: Report completion
+        if: success()
+        run: |
+          echo "✅ Successfully processed field production estimates for year ${{ matrix.year }}"
+          echo "Data saved to: gs://landbrugsdata-raw-data/gold/field_production_${{ matrix.year }}/"
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "❌ Failed to process field production estimates for year ${{ matrix.year }}"
+          exit 1
+
+
+
+  summary:
+    needs: [discover-years, process-years]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Processing Summary
+        run: |
+          YEAR_COUNT="${{ needs.discover-years.outputs.year_count }}"
+          YEARS="${{ needs.discover-years.outputs.years }}"
+
+          echo "## Field Production Matrix Processing Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Years Requested | ${{ github.event.inputs.years }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Years Processed | $YEAR_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| Max Parallel Jobs | ${{ github.event.inputs.max_parallel_jobs }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Processing Mode | Matrix (parallel by year) |" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Years Processed" >> $GITHUB_STEP_SUMMARY
+          echo "$(echo "$YEARS" | jq -r 'join(", ")')" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Performance Benefits" >> $GITHUB_STEP_SUMMARY
+          echo "- **Memory Isolation**: Each year processed independently (no memory accumulation)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Parallel Processing**: Up to ${{ github.event.inputs.max_parallel_jobs }} years processed simultaneously" >> $GITHUB_STEP_SUMMARY
+          echo "- **Fault Tolerance**: Failed years don't stop other years from processing" >> $GITHUB_STEP_SUMMARY
+          echo "- **Scalability**: Can process 18+ years efficiently within GitHub Actions limits" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Technical Optimizations" >> $GITHUB_STEP_SUMMARY
+          echo "- **SPATIAL_JOIN Compliance**: Optimized for DuckDB Spatial PR #545" >> $GITHUB_STEP_SUMMARY
+          echo "- **Memory Management**: 10GB temp directory, 50k spatial join batches" >> $GITHUB_STEP_SUMMARY
+          echo "- **No Geometry Text**: Eliminated ST_AsText() memory waste" >> $GITHUB_STEP_SUMMARY
+          echo "- **Individual Year Storage**: Each year saved independently for optimal access" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Data Location" >> $GITHUB_STEP_SUMMARY
+          echo "- **Individual Years**: \`gs://landbrugsdata-raw-data/gold/field_production_YYYY/\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Access Pattern**: Query individual years or combine multiple years as needed" >> $GITHUB_STEP_SUMMARY

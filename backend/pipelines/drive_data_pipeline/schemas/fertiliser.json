@@ -1,0 +1,116 @@
+{
+  "name": "fertiliser",
+  "description": "Schema for harmonized fertiliser data from Danish agricultural sources (GKEA, Efterafgrøder, Gødningsregnskaber)",
+  "version": "1.0",
+  "source_type": "Excel",
+  "columns": [
+    {
+      "name": "data_source",
+      "data_type": "VARCHAR",
+      "nullable": false,
+      "description": "Source of the fertiliser data (gkea, efterafgroeder, goedningsregnskaber, etc.)"
+    },
+    {
+      "name": "year",
+      "data_type": "VARCHAR",
+      "nullable": true,
+      "description": "Year of the fertiliser data (extracted from filename or folder structure)"
+    },
+    {
+      "name": "cvr_number",
+      "data_type": "VARCHAR",
+      "nullable": true,
+      "description": "CVR number of the agricultural company",
+      "pattern": "^[0-9]{8}$"
+    },
+    {
+      "name": "capnumber",
+      "data_type": "VARCHAR",
+      "nullable": true,
+      "description": "CAP (Common Agricultural Policy) number"
+    },
+    {
+      "name": "markbloknummer",
+      "data_type": "VARCHAR",
+      "nullable": true,
+      "description": "Field block number (markblok nummer)"
+    },
+    {
+      "name": "marknummer",
+      "data_type": "VARCHAR",
+      "nullable": true,
+      "description": "Field number (mark nummer)"
+    },
+    {
+      "name": "indberet_alternativ",
+      "data_type": "VARCHAR",
+      "nullable": true,
+      "description": "Reported alternative/option for fertiliser application"
+    },
+    {
+      "name": "faktisk_areal_ha",
+      "data_type": "DOUBLE",
+      "nullable": true,
+      "description": "Actual area in hectares",
+      "min_value": 0
+    },
+    {
+      "name": "omregnet_areal_ha",
+      "data_type": "DOUBLE",
+      "nullable": true,
+      "description": "Converted/calculated area in hectares",
+      "min_value": 0
+    },
+    {
+      "name": "journal_nummer",
+      "data_type": "VARCHAR",
+      "nullable": true,
+      "description": "Journal/reference number from the source system"
+    },
+    {
+      "name": "total_n_kvote",
+      "data_type": "DOUBLE",
+      "nullable": true,
+      "description": "Total nitrogen quota/allocation",
+      "min_value": 0
+    },
+    {
+      "name": "fosfortal",
+      "data_type": "DOUBLE",
+      "nullable": true,
+      "description": "Phosphorus number/level",
+      "min_value": 0
+    },
+    {
+      "name": "data_type",
+      "data_type": "VARCHAR",
+      "nullable": false,
+      "description": "Type/category of fertiliser data (GKEA Markplan, Efterafgrøder, Gødningsregnskaber, etc.)"
+    },
+    {
+      "name": "data_source_file",
+      "data_type": "VARCHAR",
+      "nullable": false,
+      "description": "Name of the source file from which the data was extracted"
+    }
+  ],
+  "primary_key": [
+    "data_source",
+    "data_source_file",
+    "cvr_number",
+    "markbloknummer",
+    "marknummer"
+  ],
+  "partition_by": ["year", "data_source"],
+  "metadata": {
+    "harmonization_method": "multi_source",
+    "description": "Harmonized fertiliser data from multiple Danish agricultural data sources with standardized column mapping",
+    "data_sources": [
+      "GKEA markplan files - detailed field fertiliser plans",
+      "Efterafgrøder files - cover crop and alternative fertiliser applications",
+      "Gødningsregnskaber files - fertiliser account records",
+      "In-depth files - detailed fertiliser account subsets (B_*, V_* files)"
+    ],
+    "note": "Year extraction is dynamic from filenames and folder structures. CVR numbers enable company-level analysis."
+  }
+}

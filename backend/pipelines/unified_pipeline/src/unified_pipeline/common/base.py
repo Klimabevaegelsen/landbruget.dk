@@ -10,8 +10,10 @@ import json
 import os
 import re
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Generic, Optional, TypeVar
 
 import duckdb
@@ -21,6 +23,16 @@ from unified_pipeline.common.native_schema_manager import NativeSchemaManager
 from unified_pipeline.util.gcs_access import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 from unified_pipeline.util.timing import timed
+
+# Import the new data tracing system
+try:
+    from backend.common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+    PIPELINE_METADATA_AVAILABLE = True
+except ImportError:
+    print("⚠️  Pipeline metadata system not available - continuing without data tracing")
+    PipelineMetadataManager = None
+    PIPELINE_METADATA_AVAILABLE = False
 
 # Import schema documentation
 try:
@@ -160,12 +172,148 @@ class BaseSource(Generic[T], ABC):
         # Create GCS access layer with shared connection
         self.gcs_access = GCSDataAccess(connection=self.conn)
 
+        # Initialize pipeline metadata manager (pipeline-level data tracing)
+        if PIPELINE_METADATA_AVAILABLE:
+            self.pipeline_metadata_manager = PipelineMetadataManager()
+            self.processing_start_time = time.time()
+            self.log.info("✅ Pipeline metadata system initialized for unified pipeline")
+        else:
+            self.pipeline_metadata_manager = None
+            self.processing_start_time = None
+            self.log.warning("⚠️  Pipeline metadata system not available")
+
         # Use pipeline start time consistently (not save time)
-        self.pipeline_start_time = datetime.now()
+        # Check if shared timestamp is provided via environment variable (for GitHub Actions)
+        pipeline_start_env = os.getenv("PIPELINE_START_TIME")
+        if pipeline_start_env:
+            try:
+                # Parse GitHub's ISO timestamp format
+                self.pipeline_start_time = datetime.fromisoformat(
+                    pipeline_start_env.replace("Z", "+00:00")
+                )
+                self.log.info(
+                    f"Using shared pipeline start time from environment: "
+                    f"{self.pipeline_start_time}"
+                )
+            except (ValueError, TypeError) as e:
+                self.log.warning(f"Failed to parse PIPELINE_START_TIME environment variable: {e}")
+                self.pipeline_start_time = datetime.now()
+        else:
+            self.pipeline_start_time = datetime.now()
+
         self.date_pattern = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
 
         # Initialize schema managers with shared connection
         self._initialize_schema_managers()
+
+    def _save_data_with_metadata(
+        self,
+        data: Any,
+        dataset: str,
+        source_key: str,  # Must be in DATA_SOURCE_REGISTRY
+        bucket: str = None,
+        stage: str = "bronze",
+        subdataset: str = None,
+        conn: Any = None,
+        filename: str = None,
+        source_datasets: Optional[list] = None,  # For gold layer lineage
+    ) -> str:
+        """
+        Enhanced save method with pipeline metadata for data tracing.
+
+        This method combines the existing _save_data functionality with automatic
+        pipeline metadata creation and saving for complete data traceability.
+
+        Args:
+            data: Table name (str) or data structure to save
+            dataset: Primary dataset name
+            source_key: Key from DATA_SOURCE_REGISTRY for metadata
+            bucket: GCS bucket name (optional, uses config if not provided)
+            stage: Pipeline stage (bronze/silver/gold)
+            subdataset: Optional subdataset name for multi-table outputs
+            conn: Optional DuckDB connection (deprecated - uses shared connection)
+            filename: Optional filename override
+            source_datasets: For gold datasets, list of source dataset keys
+
+        Returns:
+            str: Path where the data was saved
+        """
+        # Use the regular _save_data method first
+        self._save_data(
+            data=data,
+            dataset=dataset,
+            bucket=bucket or self.config.bucket,
+            stage=stage,
+            subdataset=subdataset,
+            conn=conn,
+            filename=filename,
+        )
+
+        # Create and save pipeline metadata if available
+        if self.pipeline_metadata_manager and self.processing_start_time:
+            try:
+                # Calculate record count if data is available
+                record_count = None
+                if isinstance(data, str):  # Table name
+                    try:
+                        result = self.conn.execute(f"SELECT COUNT(*) FROM {data}").fetchone()
+                        record_count = result[0] if result else None
+                    except Exception:
+                        pass  # Skip if table doesn't exist or other error
+                elif isinstance(data, list):
+                    record_count = len(data)
+                elif isinstance(data, dict) and "features" in data:
+                    record_count = len(data["features"])
+
+                # Calculate processing duration
+                processing_duration = time.time() - self.processing_start_time
+
+                # Create metadata
+                pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                    source_key=source_key,
+                    record_count=record_count,
+                    processing_duration=processing_duration,
+                    source_datasets=source_datasets,
+                )
+
+                # Determine save path for metadata
+                final_dataset = f"{dataset}_{subdataset}" if subdataset else dataset
+                timestamp = self.date_pattern
+                metadata_filename = (
+                    f"{Path(filename).stem}_metadata.json" if filename else "pipeline_metadata.json"
+                )
+                metadata_path = Path(
+                    f"/tmp/{stage}_{final_dataset}_{timestamp}_{metadata_filename}"
+                )
+
+                # Save pipeline metadata
+                metadata_file_path = self.pipeline_metadata_manager.save_metadata(
+                    pipeline_metadata, metadata_path
+                )
+
+                self.log.info(f"✅ Pipeline metadata saved to {metadata_file_path}")
+
+                # If using GCS, also upload the metadata file
+                if not self.config.save_local:
+                    try:
+                        metadata_gcs_path = (
+                            f"{stage}/{final_dataset}/{timestamp}/{metadata_filename}"
+                        )
+                        # Read JSON metadata and upload using upload_json_string method
+                        with open(metadata_file_path, "r", encoding="utf-8") as f:
+                            metadata_json_string = f.read()
+
+                        self.gcs_access.upload_json_string(metadata_json_string, metadata_gcs_path)
+                        self.log.info(f"✅ Pipeline metadata uploaded to GCS: {metadata_gcs_path}")
+                    except Exception as e:
+                        self.log.warning(f"⚠️  Failed to upload metadata to GCS: {e}")
+
+            except Exception as e:
+                self.log.error(f"❌ Failed to create pipeline metadata: {e}")
+
+        # Return the data path for reference
+        final_dataset = f"{dataset}_{subdataset}" if subdataset else dataset
+        return f"{stage}/{final_dataset}/{self.date_pattern}/{filename or 'data.parquet'}"
 
     def _configure_duckdb(self):
         """
@@ -190,7 +338,8 @@ class BaseSource(Generic[T], ABC):
             # ✅ MIGRATION: Install latest spatial extension with SPATIAL_JOIN operator support
             # Based on DuckDB-spatial PR #545 merged in v1.2.2+
             try:
-                # Force install latest spatial extension to ensure SPATIAL_JOIN operator is available
+                # Force install latest spatial extension to ensure SPATIAL_JOIN operator
+                # is available
                 self.conn.execute("FORCE INSTALL spatial")
                 self.conn.execute("LOAD spatial")
 
@@ -203,7 +352,7 @@ class BaseSource(Generic[T], ABC):
                     test_result = self.conn.execute("""
                         EXPLAIN SELECT * FROM (
                             SELECT 1 as id, ST_Point(0, 0) as geom
-                        ) t1 
+                        ) t1
                         INNER JOIN (
                             SELECT 1 as id, ST_Point(0, 0) as geom
                         ) t2 ON ST_Intersects(t1.geom, t2.geom)
@@ -219,7 +368,8 @@ class BaseSource(Generic[T], ABC):
                         )
                     else:
                         self.log.warning(
-                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN operator not detected"
+                            "⚠️ DuckDB spatial extension loaded but SPATIAL_JOIN operator "
+                            "not detected"
                         )
 
                 except Exception as test_e:
@@ -259,10 +409,20 @@ class BaseSource(Generic[T], ABC):
             self.conn.execute("""
                 CREATE OR REPLACE FUNCTION uuid5(namespace, data) AS (
                     SELECT CONCAT(
-                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
-                        SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
-                        '5', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
-                        CONCAT('8', SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                        SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8
+                        ), '-',
+                        SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4
+                        ), '-',
+                        '5', SUBSTR(
+                            crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3
+                        ), '-',
+                        CONCAT(
+                            '8', SUBSTR(
+                                crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3
+                            )
+                        ), '-',
                         SUBSTR(crypto_hash('md5', CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
                     )
                 )
@@ -279,7 +439,9 @@ class BaseSource(Generic[T], ABC):
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 1, 8), '-',
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 9, 4), '-',
                             '5', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 13, 3), '-',
-                            CONCAT('8', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)), '-',
+                            CONCAT(
+                                '8', SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 17, 3)
+                            ), '-',
                             SUBSTR(md5(CONCAT(namespace, CAST(data AS VARCHAR))), 21, 12)
                         )
                     )
@@ -303,7 +465,7 @@ class BaseSource(Generic[T], ABC):
         if hasattr(self, "conn") and self.conn:
             try:
                 self.conn.close()
-            except:
+            except Exception:
                 pass
 
     def cleanup_resources(self):
@@ -345,7 +507,7 @@ class BaseSource(Generic[T], ABC):
                     try:
                         self.conn.execute(f"DROP TABLE IF EXISTS {table}")
                         self.log.debug(f"🧹 Dropped table: {table}")
-                    except:
+                    except Exception:
                         pass
 
                 # Force DuckDB cleanup
@@ -354,7 +516,7 @@ class BaseSource(Generic[T], ABC):
                     # Note: PRAGMA force_checkpoint may not be available in all DuckDB versions
                     # self.conn.execute("PRAGMA force_checkpoint")
                     self.conn.execute("PRAGMA wal_autocheckpoint = 1")
-                except:
+                except Exception:
                     pass
 
                 self.log.info(f"🧹 Cleaned up {len(temp_tables)} tables")
@@ -395,14 +557,14 @@ class BaseSource(Generic[T], ABC):
                     result = self.conn.execute("PRAGMA memory_usage").fetchone()
                     if result:
                         duckdb_memory["usage_mb"] = result[0]
-                except:
+                except Exception:
                     pass
 
                 # Get table count
                 try:
                     tables = self.conn.execute("SHOW TABLES").fetchall()
                     duckdb_memory["table_count"] = len(tables)
-                except:
+                except Exception:
                     duckdb_memory["table_count"] = 0
 
             return {
@@ -441,6 +603,7 @@ class BaseSource(Generic[T], ABC):
         stage: str,
         subdataset: str = None,
         conn: Any = None,
+        filename: str = None,
     ) -> None:
         """
         Save data using unified GCS access layer.
@@ -465,7 +628,10 @@ class BaseSource(Generic[T], ABC):
 
         # Create path with timestamp
         timestamp = self.date_pattern
-        filename = "data.parquet"  # Standardized filename
+        if not filename:
+            # Default to parquet for silver/gold layers (processed data)
+            # Bronze layers should explicitly specify their file format
+            filename = "data.parquet"
         path = f"{stage}/{final_dataset}/{timestamp}/{filename}"
 
         if self.config.save_local:
@@ -524,7 +690,8 @@ class BaseSource(Generic[T], ABC):
                 # Get row count for logging using shared connection
                 row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
                 self.log.info(
-                    f"✅ Successfully loaded {row_count} records using unified connection from {latest_file_name}"
+                    f"✅ Successfully loaded {row_count} records using unified connection "
+                    f"from {latest_file_name}"
                 )
 
                 # Return table name - caller can use self.conn to access it
@@ -602,7 +769,7 @@ class BaseSource(Generic[T], ABC):
                             tmp_file.flush()
 
                             self.conn.execute(f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """)
 
@@ -618,7 +785,7 @@ class BaseSource(Generic[T], ABC):
                         tmp_file.flush()
 
                         self.conn.execute(f"""
-                            CREATE TABLE {table_name} AS 
+                            CREATE TABLE {table_name} AS
                             SELECT * FROM read_json_auto('{tmp_file.name}')
                         """)
 
@@ -696,7 +863,7 @@ class BaseSource(Generic[T], ABC):
                                 tmp_file.flush()
 
                                 self.conn.execute(f"""
-                                    CREATE TABLE {table_name} AS 
+                                    CREATE TABLE {table_name} AS
                                     SELECT * FROM read_json_auto('{tmp_file.name}')
                                 """)
 
@@ -712,7 +879,7 @@ class BaseSource(Generic[T], ABC):
                                 tmp_file.flush()
 
                                 self.conn.execute(f"""
-                                    CREATE TABLE {table_name} AS 
+                                    CREATE TABLE {table_name} AS
                                     SELECT * FROM read_json_auto('{tmp_file.name}')
                                 """)
 
@@ -765,7 +932,7 @@ class BaseSource(Generic[T], ABC):
 
                             self.conn.execute(
                                 f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """
                             )
@@ -783,7 +950,7 @@ class BaseSource(Generic[T], ABC):
 
                             self.conn.execute(
                                 f"""
-                                CREATE TABLE {table_name} AS 
+                                CREATE TABLE {table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """
                             )
@@ -858,7 +1025,7 @@ class BaseSource(Generic[T], ABC):
                             tmp_file.flush()
 
                             self.conn.execute(f"""
-                                CREATE TABLE {temp_table_name} AS 
+                                CREATE TABLE {temp_table_name} AS
                                 SELECT * FROM read_json_auto('{tmp_file.name}')
                             """)
 
@@ -868,7 +1035,7 @@ class BaseSource(Generic[T], ABC):
                         # List of values
                         values_str = ", ".join([f"'{v}'" for v in data])
                         self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
+                            CREATE TABLE {temp_table_name} AS
                             SELECT unnest([{values_str}]) as value
                         """)
                 elif isinstance(data, dict):
@@ -879,7 +1046,7 @@ class BaseSource(Generic[T], ABC):
                         tmp_file.flush()
 
                         self.conn.execute(f"""
-                            CREATE TABLE {temp_table_name} AS 
+                            CREATE TABLE {temp_table_name} AS
                             SELECT * FROM read_json_auto('{tmp_file.name}')
                         """)
 
@@ -1061,7 +1228,8 @@ class BaseSource(Generic[T], ABC):
             stage: Processing stage (should NOT be 'bronze' due to memory constraints)
 
         Note:
-            Bronze stage documentation is not supported due to memory constraints with large raw datasets.
+            Bronze stage documentation is not supported due to memory constraints with
+            large raw datasets.
             Use 'silver', 'gold', or other processed stages instead.
         """
         if not self._standardized_schema_manager:
@@ -1113,7 +1281,8 @@ class BaseSource(Generic[T], ABC):
         self, dataset: str, filter_condition: str, table_name: str = None
     ) -> str:
         """
-        ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table - NO DataFrame conversion.
+        ✅ OPTIMAL: Read silver data with filtering directly into DuckDB table -
+        NO DataFrame conversion.
         """
         gcs_path = self._get_latest_silver_path(dataset)
         table_name = table_name or f"silver_{dataset}_filtered"
@@ -1241,3 +1410,128 @@ class BaseSource(Generic[T], ABC):
             )
         else:
             self._standardized_schema_manager = None
+
+    # ========================================
+    # ENHANCED GCS METHODS WITH NATIVE HMAC
+    # ========================================
+
+    def load_parquet_with_native_acceleration(
+        self, gcs_path: str, table_name: Optional[str] = None, query: str = "SELECT *"
+    ) -> str:
+        """
+        ⚡ ENHANCED: Load parquet from GCS with automatic native acceleration.
+
+        This method automatically uses native HMAC access when available, falling back
+        to the existing temp file approach when not available.
+
+        Args:
+            gcs_path: GCS path to parquet file (gs://bucket/path/file.parquet)
+            table_name: Optional table name (auto-generated if not provided)
+            query: SQL query to apply during load (default: SELECT *)
+
+        Returns:
+            Table name in DuckDB
+        """
+        if table_name is None:
+            table_name = f"enhanced_load_{int(datetime.now().timestamp())}"
+
+        try:
+            # Try native method first (3-5x faster if HMAC available)
+            return self.gcs_access.query_parquet_native(gcs_path, query, table_name)
+        except Exception as e:
+            self.log.warning(f"Native GCS load failed, using fallback: {e}")
+            # Fallback to existing method
+            return self.gcs_access.query_parquet_direct(gcs_path, query, table_name)
+
+    def save_table_with_native_acceleration(
+        self, table_name: str, gcs_path: str, **parquet_options
+    ) -> bool:
+        """
+        ⚡ ENHANCED: Save table to GCS with automatic native acceleration.
+
+        This method automatically uses native HMAC access when available, falling back
+        to the existing temp file approach when not available.
+
+        Args:
+            table_name: Name of DuckDB table to save
+            gcs_path: GCS destination path (gs://bucket/path/file.parquet)
+            **parquet_options: Parquet compression options
+
+        Returns:
+            True if native method was used, False if fallback was used
+        """
+        try:
+            # Try native method first (3-5x faster if HMAC available)
+            return self.gcs_access.export_to_gcs_native(table_name, gcs_path, **parquet_options)
+        except Exception as e:
+            self.log.warning(f"Native GCS save failed, using fallback: {e}")
+            # Fallback to existing method
+            self.gcs_access.export_table_to_gcs_direct(table_name, gcs_path, **parquet_options)
+            return False
+
+    def enhanced_save_data_direct(
+        self, table_name: str, dataset: str, bucket: str, stage: str
+    ) -> str:
+        """
+        ⚡ ENHANCED: Enhanced version of save_data_direct with native acceleration.
+
+        This method combines the existing save_data_direct logic with automatic
+        native HMAC acceleration when available.
+
+        Returns:
+            GCS path where data was saved
+        """
+        # Build GCS path using existing logic
+        gcs_path = f"gs://{bucket}/{stage}/{dataset}_{self.date_pattern}/{self.date_pattern}/{dataset}_{self.date_pattern}.parquet"
+
+        # Use enhanced save method with native acceleration
+        native_used = self.save_table_with_native_acceleration(
+            table_name,
+            gcs_path,
+            compression="zstd",  # Default compression for best performance
+            row_group_size=100000,
+        )
+
+        if native_used:
+            self.log.info(f"🚀 NATIVE: Saved {table_name} to {gcs_path} using HMAC acceleration")
+        else:
+            self.log.info(f"💾 FALLBACK: Saved {table_name} to {gcs_path} using temp file method")
+
+        return gcs_path
+
+    def load_latest_with_native_acceleration(
+        self, dataset: str, stage: str = "silver"
+    ) -> Optional[str]:
+        """
+        ⚡ ENHANCED: Load latest dataset with native acceleration.
+
+        This method finds the latest file for a dataset and loads it using
+        native HMAC acceleration when available.
+
+        Args:
+            dataset: Dataset name to load
+            stage: Data stage (silver, gold, bronze)
+
+        Returns:
+            Table name in DuckDB, or None if not found
+        """
+        try:
+            # Find latest file using existing logic
+            pattern = f"gs://{self.config.bucket}/{stage}/{dataset}_*/*/{dataset}_*.parquet"
+            files = self.gcs_access.list_files_with_timestamps(pattern)
+
+            if not files:
+                self.log.warning(f"No files found for pattern: {pattern}")
+                return None
+
+            # Get latest file
+            latest_file = max(files, key=lambda x: x[1])[0]  # Sort by timestamp
+            self.log.info(f"Loading latest {dataset} from: {latest_file}")
+
+            # Load with native acceleration
+            table_name = f"{dataset}_latest"
+            return self.load_parquet_with_native_acceleration(latest_file, table_name)
+
+        except Exception as e:
+            self.log.error(f"Failed to load latest {dataset} with native acceleration: {e}")
+            return None

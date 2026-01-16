@@ -11,7 +11,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger() -> logging.Logger:
+        return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
 from .base import BaseValidator, ValidationResult
 
@@ -61,7 +63,7 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
         action: PIIAction = PIIAction.REPORT,
         threshold: float = 0.3,
         column_name_hints: dict[PIIType, list[str]] = None,
-    ):
+    ) -> None:
         """Initialize the PII validator.
 
         Args:
@@ -203,8 +205,8 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
                     try:
                         # Count total non-null values
                         total_count = self.conn.execute(f"""
-                            SELECT COUNT(*) 
-                            FROM {table_name} 
+                            SELECT COUNT(*)
+                            FROM {table_name}
                             WHERE {col_name} IS NOT NULL AND {col_name} != ''
                         """).fetchone()[0]
 
@@ -213,8 +215,8 @@ class PIIValidator(BaseValidator, DuckDBProcessor):
 
                         # Count values that match the pattern
                         match_count = self.conn.execute(f"""
-                            SELECT COUNT(*) 
-                            FROM {table_name} 
+                            SELECT COUNT(*)
+                            FROM {table_name}
                             WHERE {col_name} ~ '{pattern}'
                         """).fetchone()[0]
 

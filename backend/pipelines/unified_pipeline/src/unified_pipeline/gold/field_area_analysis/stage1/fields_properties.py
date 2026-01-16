@@ -11,6 +11,7 @@ from typing import Any, Dict
 
 from ..base import FieldAnalysisStageBase, FieldAnalysisStageConfig
 from ..config import CONFIG
+from unified_pipeline.common.uuid_utils import LandbrugsdataUUID
 
 
 class FieldsPropertiesIntersection(FieldAnalysisStageBase):
@@ -23,9 +24,15 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
 
     def _load_input_data(self):
         """Load agricultural fields and Stage 0 pre-filtered properties."""
+        # Set up UUID generation functions in DuckDB
+        self.log.info("Setting up UUID generation functions...")
+        LandbrugsdataUUID.setup_duckdb_functions(self.conn)
+
         # Load agricultural fields (600K fields)
         self.log.info("Loading agricultural fields dataset...")
-        self._load_silver_dataset(CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_full")
+        self._load_silver_dataset(
+            CONFIG.get_agricultural_fields_dataset(), "agricultural_fields_full"
+        )
 
         # Load Stage 0 pre-filtered properties (MASSIVE OPTIMIZATION!)
         self.log.info("Loading Stage 0 pre-filtered properties (500K instead of 6.5M)...")
@@ -46,15 +53,17 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         self.conn.execute("SET threads=4")  # Can use more threads due to smaller dataset
 
         self.log.info("Preparing fields as BUILD side (spatial index will be created)...")
+        # Generate field_uuid from geometry using the UUID function
+        # The silver layer doesn't have field_uuid, so we generate it here
         self.conn.execute("""
             CREATE OR REPLACE TABLE agricultural_fields AS
-            SELECT 
+            SELECT
                 field_id,
                 block_id,
                 cvr_number,
                 year,
                 geometry,
-                field_uuid,
+                field_uuid(geometry) as field_uuid,
                 ST_Area_Spheroid(geometry) as field_area_m2
             FROM agricultural_fields_full
         """)
@@ -62,8 +71,8 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         self.log.info("Preparing pre-filtered properties as PROBE side...")
         self.conn.execute("""
             CREATE OR REPLACE TABLE properties AS
-            SELECT 
-                bestemtFastEjendomBFENr,
+            SELECT
+                bfe_number,
                 geometry,
                 property_area_m2
             FROM properties_full
@@ -74,26 +83,28 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         properties_count = self.conn.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
 
         self.log.info(
-            f"✅ Loaded {fields_count:,} fields (BUILD) and {properties_count:,} pre-filtered properties (PROBE)"
+            f"✅ Loaded {fields_count:,} fields (BUILD) and {properties_count:,} "
+            f"pre-filtered properties (PROBE)"
         )
         self.log.info(
-            f"🎯 OPTIMIZATION IMPACT: {properties_count:,} vs original 6.5M properties (13x reduction)"
+            f"🎯 OPTIMIZATION IMPACT: {properties_count:,} vs original 6.5M properties "
+            f"(13x reduction)"
         )
         self.log.info("🚀 Ready for optimized SPATIAL_JOIN with dramatically reduced complexity")
-        
+
         # Store input area reference for validation
         if self._should_validate_areas():
             fields_area_stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     COUNT(*) as field_count,
                     SUM(field_area_m2) as total_area
                 FROM agricultural_fields
                 WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
             """).fetchone()
-            
+
             self._input_area_reference = {
                 "total_area": fields_area_stats[1] or 0,
-                "field_count": fields_area_stats[0] or 0
+                "field_count": fields_area_stats[0] or 0,
             }
 
     async def _execute_stage_processing(self) -> Dict[str, Any]:
@@ -118,14 +129,15 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
         num_chunks = (total_properties + chunk_size - 1) // chunk_size
 
         self.log.info(
-            f"🚀 OPTIMIZED PROCESSING: {total_properties:,} pre-filtered properties in {num_chunks} chunks of {chunk_size:,}"
+            f"🚀 OPTIMIZED PROCESSING: {total_properties:,} pre-filtered properties "
+            + f"in {num_chunks} chunks of {chunk_size:,}"
         )
         self.log.info("⚡ 13x faster than original due to Stage 0 pre-filtering")
 
         # Initialize result table
         self.conn.execute("""
             CREATE OR REPLACE TABLE field_property_intersections AS
-            SELECT 
+            SELECT
                 CAST(NULL AS VARCHAR) as field_id,
                 CAST(NULL AS VARCHAR) as block_id,
                 CAST(NULL AS VARCHAR) as cvr_number,
@@ -159,12 +171,12 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             # Create property chunk from pre-filtered dataset
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE properties_chunk AS
-                SELECT 
-                    bestemtFastEjendomBFENr,
+                SELECT
+                    bfe_number,
                     geometry,
                     property_area_m2
                 FROM properties
-                ORDER BY bestemtFastEjendomBFENr
+                ORDER BY bfe_number
                 LIMIT {chunk_size} OFFSET {offset}
             """)
 
@@ -182,14 +194,14 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             )
             self.conn.execute("""
                 CREATE OR REPLACE TABLE chunk_raw_intersections AS
-                SELECT 
+                SELECT
                     f.field_id,
                     f.block_id,
                     f.cvr_number,
                     f.year,
                     f.field_uuid,
-                    f.field_area_m2,
-                    p.bestemtFastEjendomBFENr as bfe_number,
+                    ST_Area_Spheroid(f.geometry) as field_area_m2,
+                    p.bfe_number,
                     p.property_area_m2,
                     f.geometry as field_geometry,
                     p.geometry as property_geometry
@@ -209,7 +221,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 )
                 self.conn.execute("""
                     CREATE OR REPLACE TABLE chunk_final_intersections AS
-                    SELECT 
+                    SELECT
                         field_id,
                         block_id,
                         cvr_number,
@@ -218,22 +230,29 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                         field_area_m2,
                         bfe_number,
                         property_area_m2,
-                        
+
                         -- Calculate intersection area and percentages
-                        ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) as intersection_area_m2,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) / field_area_m2) * 100 as field_area_share_pct,
-                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) / property_area_m2) * 100 as property_area_share_pct,
-                        
+                        ST_Area_Spheroid(
+                            ST_Intersection(field_geometry, property_geometry)
+                        ) as intersection_area_m2,
+                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                         field_area_m2) * 100 as field_area_share_pct,
+                        (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                         property_area_m2) * 100 as property_area_share_pct,
+
                         -- STREAM intersection geometries for downstream spatial analysis
                         field_geometry,
                         property_geometry,
                         ST_Intersection(field_geometry, property_geometry) as intersection_geometry
-                        
+
                     FROM chunk_raw_intersections
-                    WHERE 
+                    WHERE
                         -- Filter out tiny intersections (< 1% of field area or < 100 m²)
                         ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) > 100
-                        AND (ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) / field_area_m2) > 0.01
+                        AND (
+                            ST_Area_Spheroid(ST_Intersection(field_geometry, property_geometry)) /
+                            field_area_m2
+                        ) > 0.01
                 """)
 
                 chunk_final_count = self.conn.execute(
@@ -243,7 +262,7 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 # Append to main result table
                 if chunk_final_count > 0:
                     self.conn.execute("""
-                        INSERT INTO field_property_intersections 
+                        INSERT INTO field_property_intersections
                         SELECT * FROM chunk_final_intersections
                     """)
 
@@ -255,16 +274,17 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             chunk_time = time.time() - chunk_start
 
             self.log.info(
-                f"  ✅ Chunk {chunk_num + 1}: {chunk_final_count:,}/{chunk_raw_count:,} meaningful intersections - {chunk_time:.1f}s"
+                f"  ✅ Chunk {chunk_num + 1}: {chunk_final_count:,}/{chunk_raw_count:,} "
+                f"meaningful intersections - {chunk_time:.1f}s"
             )
 
         # ADD FIELDS WITHOUT PROPERTY INTERSECTIONS (preserve all source fields)
         self.log.info("🔧 Adding fields without property intersections (NULL property data)...")
-        
+
         # Find fields that didn't intersect with any properties
         self.conn.execute("""
             CREATE OR REPLACE TABLE fields_without_properties AS
-            SELECT 
+            SELECT
                 f.field_id,
                 f.block_id,
                 f.cvr_number,
@@ -283,10 +303,12 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             LEFT JOIN field_property_intersections existing ON f.field_uuid = existing.field_uuid
             WHERE existing.field_uuid IS NULL
         """)
-        
-        fields_without_properties = self.conn.execute("SELECT COUNT(*) FROM fields_without_properties").fetchone()[0]
+
+        fields_without_properties = self.conn.execute(
+            "SELECT COUNT(*) FROM fields_without_properties"
+        ).fetchone()[0]
         self.log.info(f"📊 Fields without property intersections: {fields_without_properties:,}")
-        
+
         # Add them to the main results table
         if fields_without_properties > 0:
             self.conn.execute("""
@@ -294,15 +316,20 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
                 SELECT * FROM fields_without_properties
             """)
             self.log.info(f"✅ Added {fields_without_properties:,} fields with NULL property data")
-            self.log.info("🌊 These fields will continue through environmental analysis (BNBO, wetlands, water)")
+            self.log.info(
+                "🌊 These fields will continue through environmental analysis "
+                "(BNBO, wetlands, water)"
+            )
 
         # Final statistics with optimization impact
         final_count = self.conn.execute(
             "SELECT COUNT(*) FROM field_property_intersections"
         ).fetchone()[0]
 
-        unique_fields = self.conn.execute("SELECT COUNT(DISTINCT field_uuid) FROM field_property_intersections").fetchone()[0]
-        
+        unique_fields = self.conn.execute(
+            "SELECT COUNT(DISTINCT field_uuid) FROM field_property_intersections"
+        ).fetchone()[0]
+
         self.log.info("🎯 STAGE 0 OPTIMIZATION RESULTS:")
         self.log.info(f"   Total raw intersections: {total_intersections:,}")
         self.log.info(f"   Meaningful intersections: {total_meaningful:,}")
@@ -321,124 +348,179 @@ class FieldsPropertiesIntersection(FieldAnalysisStageBase):
             "fields_without_properties": fields_without_properties,
             "final_intersections": final_count,
             "unique_fields": unique_fields,
-            "optimization_impact": "13x faster due to Stage 0 pre-filtering (6.5M → 500K properties)",
-            "uuid_preservation": "All source fields preserved with NULL property data for non-intersecting fields"
+            "optimization_impact": (
+                "13x faster due to Stage 0 pre-filtering (6.5M → 500K properties)"
+            ),
+            "uuid_preservation": (
+                "All source fields preserved with NULL property data for non-intersecting fields"
+            ),
         }
-    
+
     def _get_input_area_reference(self) -> Dict[str, Any]:
         """Get reference area statistics from input data for validation."""
-        return getattr(self, '_input_area_reference', None)
-    
+        return getattr(self, "_input_area_reference", None)
+
     def _get_main_output_table(self) -> str:
         """Get the name of the main output table for area validation."""
         return "field_property_intersections"
-    
+
     def _should_validate_areas(self) -> bool:
         """DISABLE validation for Stage 1 Properties - testing override mechanism."""
         self.log.info("🔍 DEBUG: _should_validate_areas called for Stage 1 Properties - DISABLING")
         return False
-    
+
     def _validate_stage_areas(self) -> None:
         """
         Custom validation for Stage 1: Field-Property Intersections.
-        
+
         Standard validation fails because Stage 1 creates multiple records per field
         (one per property intersection). We need to validate:
         1. Sum of intersection areas = Sum of distinct field areas
         2. Number of distinct fields = Input field count
         """
         self.log.info("🔍 DEBUG: Using CUSTOM Stage 1 validation (not base class validation)")
-        
+
         if not self._should_validate_areas() or not self.area_validator:
             return
-            
+
         input_reference = self._get_input_area_reference()
         if not input_reference:
             self.log.info("⚠️ Stage 1 validation skipped: missing input reference")
             return
-            
+
         try:
             # Get validation statistics from output table
             stats = self.conn.execute("""
-                SELECT 
+                SELECT
                     -- For fields WITH property intersections: sum of intersection areas
-                    SUM(CASE WHEN intersection_area_m2 IS NOT NULL THEN intersection_area_m2 ELSE 0 END) as total_intersection_area,
-                    
-                    -- For fields WITHOUT property intersections: sum of field areas (only counted once per field)
-                    SUM(CASE WHEN intersection_area_m2 IS NULL THEN field_area_m2 ELSE 0 END) as fields_without_properties_area,
-                    
+                    SUM(
+                        CASE WHEN intersection_area_m2 IS NOT NULL
+                             THEN intersection_area_m2 ELSE 0 END
+                    ) as total_intersection_area,
+
+                    -- For fields WITHOUT property intersections: sum of field areas
+                    -- (only counted once per field)
+                    SUM(
+                        CASE WHEN intersection_area_m2 IS NULL
+                             THEN field_area_m2 ELSE 0 END
+                    ) as fields_without_properties_area,
+
                     -- Number of distinct fields (should match input count)
                     COUNT(DISTINCT field_uuid) as distinct_field_count,
-                    
+
                     -- Total records created
                     COUNT(*) as total_records,
-                    
+
                     -- Fields with vs without property intersections
-                    COUNT(DISTINCT CASE WHEN intersection_area_m2 IS NOT NULL THEN field_uuid END) as fields_with_properties,
-                    COUNT(DISTINCT CASE WHEN intersection_area_m2 IS NULL THEN field_uuid END) as fields_without_properties
-                    
+                    COUNT(
+                        DISTINCT CASE WHEN intersection_area_m2 IS NOT NULL
+                                      THEN field_uuid END
+                    ) as fields_with_properties,
+                    COUNT(
+                        DISTINCT CASE WHEN intersection_area_m2 IS NULL
+                                      THEN field_uuid END
+                    ) as fields_without_properties
+
                 FROM field_property_intersections
                 WHERE field_area_m2 IS NOT NULL AND field_area_m2 > 0
             """).fetchone()
-            
+
             total_intersection_area = stats[0] or 0
             fields_without_properties_area = stats[1] or 0
             distinct_field_count = stats[2] or 0
             total_records = stats[3] or 0
             fields_with_properties = stats[4] or 0
             fields_without_properties = stats[5] or 0
-            
+
             # Total effective area = intersection areas + areas of fields without properties
             total_effective_area = total_intersection_area + fields_without_properties_area
-            
+
             # Validation 1: Field count preservation
             field_count_diff = distinct_field_count - input_reference["field_count"]
             field_count_valid = field_count_diff == 0
-            
+
             # Validation 2: Area coverage (intersection areas should be ≤ input areas)
             # Properties may not provide 100% field coverage due to ownership gaps
             area_difference = total_effective_area - input_reference["total_area"]
-            area_difference_pct = (area_difference / input_reference["total_area"]) * 100 if input_reference["total_area"] > 0 else 0
-            
+            area_difference_pct = (
+                (area_difference / input_reference["total_area"]) * 100
+                if input_reference["total_area"] > 0
+                else 0
+            )
+
             # Use higher tolerance (20%) and expect area reduction (≤ 0%)
             # This accounts for incomplete property coverage of agricultural fields
             stage1_tolerance = 20.0  # Higher tolerance for property coverage gaps
             area_valid = area_difference_pct <= 0 and abs(area_difference_pct) <= stage1_tolerance
-            
+
             # Overall validation result
             validation_passed = field_count_valid and area_valid
-            
+
             # Calculate coverage statistics
-            property_coverage_pct = (total_intersection_area / input_reference["total_area"]) * 100 if input_reference["total_area"] > 0 else 0
-            
+            property_coverage_pct = (
+                (total_intersection_area / input_reference["total_area"]) * 100
+                if input_reference["total_area"] > 0
+                else 0
+            )
+
             # Log results
             if validation_passed:
-                self.log.info(f"✅ Stage 1 validation PASSED (within {stage1_tolerance}% tolerance):")  
+                self.log.info(
+                    f"✅ Stage 1 validation PASSED (within {stage1_tolerance}% tolerance):"
+                )
             else:
-                self.log.error(f"❌ Stage 1 validation FAILED (exceeds {stage1_tolerance}% tolerance):")
-                
-            self.log.info(f"📊 Field Count - Input: {input_reference['field_count']:,}, Output: {distinct_field_count:,} distinct fields ({field_count_diff:+,})")
-            self.log.info(f"📊 Field Distribution - {fields_with_properties:,} with properties, {fields_without_properties:,} without properties")
+                self.log.error(
+                    f"❌ Stage 1 validation FAILED (exceeds {stage1_tolerance}% tolerance):"
+                )
+
+            self.log.info(
+                f"📊 Field Count - Input: {input_reference['field_count']:,}, "
+                f"Output: {distinct_field_count:,} distinct fields ({field_count_diff:+,})"
+            )
+            self.log.info(
+                f"📊 Field Distribution - {fields_with_properties:,} with properties, "
+                f"{fields_without_properties:,} without properties"
+            )
             self.log.info(f"📊 Area Coverage - Input: {input_reference['total_area']:,.0f} m²")
-            self.log.info(f"📊              - Property intersections: {total_intersection_area:,.0f} m² ({property_coverage_pct:.1f}% coverage)")
-            self.log.info(f"📊              - Fields without properties: {fields_without_properties_area:,.0f} m²")
-            self.log.info(f"📊              - Total effective: {total_effective_area:,.0f} m² ({area_difference_pct:+.3f}%)")
-            self.log.info(f"📊 Property Coverage Gap: {input_reference['total_area'] - total_intersection_area:,.0f} m² ({100 - property_coverage_pct:.1f}%) expected due to ownership gaps")
-            self.log.info(f"📊 Record Creation - {total_records:,} field×property records (~{total_records/distinct_field_count:.1f} properties per field)")
-            
+            self.log.info(
+                f"📊              - Property intersections: {total_intersection_area:,.0f} m² "
+                f"({property_coverage_pct:.1f}% coverage)"
+            )
+            self.log.info(
+                f"📊              - Fields without properties: "
+                f"{fields_without_properties_area:,.0f} m²"
+            )
+            self.log.info(
+                f"📊              - Total effective: {total_effective_area:,.0f} m² "
+                f"({area_difference_pct:+.3f}%)"
+            )
+            self.log.info(
+                f"📊 Property Coverage Gap: "
+                f"{input_reference['total_area'] - total_intersection_area:,.0f} m² "
+                f"({100 - property_coverage_pct:.1f}%) expected due to ownership gaps"
+            )
+            self.log.info(
+                f"📊 Record Creation - {total_records:,} field×property records "
+                f"(~{total_records / distinct_field_count:.1f} properties per field)"
+            )
+
             # Handle validation failure
             if not validation_passed:
-                error_msg = f"Stage 1 validation failed - Field count valid: {field_count_valid}, Area valid: {area_valid}"
+                error_msg = (
+                    f"Stage 1 validation failed - Field count valid: {field_count_valid}, "
+                    f"Area valid: {area_valid}"
+                )
                 if self.validation_config.fail_on_validation_error:
                     from ..area_validation import ValidationException
+
                     raise ValidationException(error_msg)
                 else:
                     self.log.warning(f"⚠️ {error_msg} but continuing")
-                    
+
         except Exception as e:
             error_msg = f"❌ Stage 1 validation error: {str(e)}"
             if self.validation_config.fail_on_validation_error:
-                raise Exception(error_msg)
+                raise Exception(error_msg) from e
             else:
                 self.log.warning(f"⚠️ {error_msg} but continuing")
 

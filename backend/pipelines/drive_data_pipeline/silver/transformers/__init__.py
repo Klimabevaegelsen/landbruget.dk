@@ -2,6 +2,7 @@
 
 from .advanced_pdf_transformer import AdvancedPDFTransformer
 from .base import BaseTransformer, TransformResult
+from .csv_transformer import CSVTransformer
 from .excel_transformer import ExcelTransformer
 from .pdf_transformer import PDFTransformer
 from .work_permits_transformer import WorkPermitsTransformer
@@ -9,8 +10,9 @@ from .work_permits_transformer import WorkPermitsTransformer
 __all__ = [
     "BaseTransformer",
     "TransformResult",
+    "CSVTransformer",
     "ExcelTransformer",
     "PDFTransformer",
     "AdvancedPDFTransformer",
     "WorkPermitsTransformer",
-] 
+]
