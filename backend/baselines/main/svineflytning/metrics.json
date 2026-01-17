@@ -1,0 +1,29 @@
+{
+  "dataset_name": "svineflytning",
+  "source_path": "gs://landbrugsdata-raw-data/silver/svineflytning/20260107_035748/movements.parquet",
+  "generated_at": "2026-01-17T11:11:28.808858",
+  "record_count": 1272808,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "movement_id": 0,
+    "origin_system": 0,
+    "action_type": 0,
+    "movement_date": 5565,
+    "movement_time": 5565,
+    "movement_sequence": 1249969,
+    "sender_country_code": 5565,
+    "sender_chr_number": 5572,
+    "sender_herd_number": 5572,
+    "sender_address": 5572,
+    "sender_city_name": 1264593,
+    "sender_postal_code": 5572,
+    "sender_postal_district": 5572,
+    "sender_municipality_code": 5572,
+    "sender_municipality_name": 5572,
+    "sender_property_created": 1272808,
+    "sender_property_updated": 1272808,
+    "sender_foreign_property": 1272808,
+    "receiver_country_code": 5565,
+    "receiver_chr_number": 76874
+  }
+}

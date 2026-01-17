@@ -6,25 +6,25 @@ Direct test for the DuckDBHelper class without going through __init__.py.
 # Standard library imports
 import sys
 from pathlib import Path
+from typing import Any
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Third-party imports
-import duckdb
-import ibis
+import duckdb  # noqa: E402
 
 # Import the logger directly
-from utils.logging import get_logger
+from utils.logging import get_logger  # noqa: E402
 
 logger = get_logger()
 
 
 class DuckDBHelper:
-    """Helper class for DuckDB and Ibis operations."""
-    
-    def __init__(self, database_path=None):
+    """Helper class for DuckDB operations."""
+
+    def __init__(self, database_path: Path | str | None = None) -> None:
         """Initialize the DuckDB helper."""
         # Create DuckDB connection
         if database_path:
@@ -37,149 +37,162 @@ class DuckDBHelper:
             self.db_path = ":memory:"
             self.conn = duckdb.connect(self.db_path)
             logger.info("Connected to in-memory DuckDB database")
-        
-        # Initialize Ibis connection - use the path string, not the connection object
-        self.ibis_conn = ibis.duckdb.connect(self.db_path)
-        
-    def dataframe_to_ibis(self, df, table_name):
-        """Convert a pandas DataFrame to an Ibis table."""
+
+    def register_dataframe(self, df: Any, table_name: str) -> str:
+        """Register a pandas DataFrame as a DuckDB table."""
         try:
             # Register the DataFrame with DuckDB
             self.conn.register(table_name, df)
-            
-            # Create a table in DuckDB from the DataFrame
-            self.conn.execute(f"CREATE OR REPLACE TABLE {table_name} AS SELECT * FROM df")
-            
-            # Get the table as an Ibis expression
-            table = self.ibis_conn.table(table_name)
-            
-            logger.debug(f"Converted DataFrame to Ibis table: {table_name}")
-            return table
-        
+
+            logger.debug(f"Registered DataFrame as table: {table_name}")
+            return table_name
+
         except Exception as e:
-            logger.error(f"Failed to convert DataFrame to Ibis table: {str(e)}")
+            logger.error(f"Failed to register DataFrame as table: {e!s}")
             raise
-    
-    def ibis_to_dataframe(self, table):
-        """Convert an Ibis table to pandas DataFrame."""
+
+    def table_to_dataframe(self, table_name: str) -> Any:
+        """Convert a DuckDB table to pandas DataFrame."""
         try:
-            df = table.execute()
-            logger.debug("Converted Ibis table to DataFrame")
+            df = self.conn.sql(f"SELECT * FROM {table_name}").df()
+            logger.debug(f"Converted table {table_name} to DataFrame")
             return df
-        
+
         except Exception as e:
-            logger.error(f"Failed to convert Ibis table to DataFrame: {str(e)}")
+            logger.error(f"Failed to convert table to DataFrame: {e!s}")
             raise
-    
-    def save_to_parquet(self, table, output_path, compression="snappy"):
-        """Save an Ibis table to Parquet format."""
+
+    def save_to_parquet(
+        self, table_name: str, output_path: Path, compression: str = "snappy"
+    ) -> Path:
+        """Save a DuckDB table to Parquet format."""
         try:
-            # Execute the Ibis expression and convert to a DataFrame
-            df = self.ibis_to_dataframe(table)
-            
             # Ensure parent directory exists
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Use pandas to save to Parquet (simplified for test)
-            df.to_parquet(output_path, compression=compression)
-            
+
+            # Use DuckDB's COPY statement to write the Parquet file
+            self.conn.execute(
+                f"""
+                COPY {table_name}
+                TO '{output_path}' (FORMAT 'PARQUET', COMPRESSION '{compression}')
+                """
+            )
+
             logger.info(f"Saved table to Parquet: {output_path}")
             return output_path
-        
+
         except Exception as e:
-            logger.error(f"Failed to save table to Parquet: {str(e)}")
+            logger.error(f"Failed to save table to Parquet: {e!s}")
             raise
-    
-    def get_schema(self, table):
-        """Get the schema of an Ibis table."""
+
+    def get_schema(self, table_name: str) -> dict[str, str]:
+        """Get the schema of a DuckDB table."""
         try:
-            schema = {}
-            for col_name, dtype in zip(table.columns, table.dtypes, strict=False):
-                schema[col_name] = str(dtype)
-            
+            result = self.conn.sql(f"DESCRIBE {table_name}").fetchall()
+            schema = {row[0]: row[1] for row in result}
+
             logger.debug(f"Retrieved schema with {len(schema)} columns")
             return schema
-        
+
         except Exception as e:
-            logger.error(f"Failed to get schema: {str(e)}")
+            logger.error(f"Failed to get schema: {e!s}")
             raise
-    
-    def cast_column_types(self, table, type_mapping):
-        """Cast columns to specified types."""
+
+    def cast_column_types(self, table_name: str, type_mapping: dict[str, str]) -> str:
+        """Cast columns to specified types by creating a new table."""
         try:
-            for col_name, dtype in type_mapping.items():
-                if col_name in table.columns:
-                    # Cast the column to the specified type
-                    table = table.mutate(
-                        **{col_name: table[col_name].cast(dtype)}
-                    )
-            
+            # Get current schema to know all columns
+            current_schema = self.get_schema(table_name)
+
+            # Build SELECT clause with casts
+            select_columns = []
+            for col_name in current_schema:
+                if col_name in type_mapping:
+                    target_type = type_mapping[col_name]
+                    select_columns.append(f'CAST("{col_name}" AS {target_type}) AS "{col_name}"')
+                else:
+                    select_columns.append(f'"{col_name}"')
+
+            select_clause = ", ".join(select_columns)
+
+            # Create a new table with the casted columns and replace the old one
+            temp_table = f"{table_name}_temp"
+            self.conn.execute(
+                f"CREATE TABLE {temp_table} AS SELECT {select_clause} FROM {table_name}"
+            )
+            self.conn.execute(f"DROP TABLE {table_name}")
+            self.conn.execute(f"ALTER TABLE {temp_table} RENAME TO {table_name}")
+
             logger.debug(f"Cast {len(type_mapping)} columns to specified types")
-            return table
-        
+            return table_name
+
         except Exception as e:
-            logger.error(f"Failed to cast column types: {str(e)}")
+            logger.error(f"Failed to cast column types: {e!s}")
             raise
-    
-    def close(self):
+
+    def close(self) -> None:
         """Close the DuckDB connection."""
         try:
             self.conn.close()
             logger.info("Closed DuckDB connection")
         except Exception as e:
-            logger.error(f"Error closing DuckDB connection: {str(e)}")
-            raise 
+            logger.error(f"Error closing DuckDB connection: {e!s}")
+            raise
 
 
-def test_duckdb_helper():
+def test_duckdb_helper() -> bool:
     """Test the DuckDBHelper class."""
     print("Testing DuckDBHelper class...")
-    
+
     # Create a DuckDBHelper instance (using in-memory database)
     helper = DuckDBHelper()
-    
-    # Create a test DataFrame
-    df = self.conn.execute("CREATE TABLE temp_table AS SELECT ...")
-    
+
+    # Create a test DataFrame using pandas
+    import pandas as pd
+
+    df = pd.DataFrame(
+        {"id": [1, 2, 3], "name": ["test1", "test2", "test3"], "value": [10.5, 20.5, 30.5]}
+    )
+
     print("Created test DataFrame:")
     print(df.head())
-    
-    # Convert DataFrame to Ibis table
+
+    # Register DataFrame as DuckDB table
     table_name = "test_table"
-    table = helper.dataframe_to_ibis(df, table_name)
-    print(f"Converted DataFrame to Ibis table: {table_name}")
-    
+    result_name = helper.register_dataframe(df, table_name)
+    print(f"Registered DataFrame as table: {result_name}")
+
     # Get schema
-    schema = helper.get_schema(table)
+    schema = helper.get_schema(table_name)
     print("Table schema:")
     for col, dtype in schema.items():
         print(f"  {col}: {dtype}")
-    
+
     # Cast column types
-    type_mapping = {'value': 'int32'}
-    table = helper.cast_column_types(table, type_mapping)
-    
+    type_mapping = {"value": "INTEGER"}
+    helper.cast_column_types(table_name, type_mapping)
+
     # Convert back to DataFrame
-    result_df = helper.ibis_to_dataframe(table)
+    result_df = helper.table_to_dataframe(table_name)
     print("Result DataFrame after casting:")
     print(result_df.head())
     print(f"Value column dtype: {result_df['value'].dtype}")
-    
+
     # Create a directory for test output
     output_dir = project_root / "test_output"
     output_dir.mkdir(exist_ok=True)
-    
+
     # Save to Parquet
     output_path = output_dir / "test_table.parquet"
-    helper.save_to_parquet(table, output_path)
+    helper.save_to_parquet(table_name, output_path)
     print(f"Saved table to Parquet: {output_path}")
-    
+
     # Close the connection
     helper.close()
-    
+
     print("DuckDBHelper test completed successfully!")
     return True
 
 
 if __name__ == "__main__":
-    test_duckdb_helper() 
+    test_duckdb_helper()

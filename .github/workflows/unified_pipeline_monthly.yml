@@ -1,0 +1,513 @@
+# Unified Pipeline - Monthly Schedule
+# Runs monthly pipelines with proper dependency ordering
+
+name: Unified Pipeline - Monthly
+
+on:
+  schedule:
+    - cron: "0 1 1 * *" # First day of every month at 1 AM UTC
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Specific monthly source to run (optional - runs all monthly sources if not specified)"
+        required: false
+        type: choice
+        options:
+          - "all_monthly"
+          - "foundation_only" # Run only foundation sources (no dependencies)
+          - "dependent_only" # Run only sources with dependencies
+          - "dst"
+          - "fvm_wfs"
+          - "cadastral"
+          - "bnbo"
+          - "dagi"
+          - "water_projects"
+          - "arbejdstilsynet_inspections"
+          - "drive_data"
+          - "bbr_buildings"
+          - "property_cadastral_merge"
+          - "field_production"
+          - "field_area_analysis"
+      stage:
+        description: "Pipeline stage to run"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - bronze
+          - silver
+          - gold
+      batch:
+        description: "Run specific dependency batch (1=foundation, 2=dependent)"
+        required: false
+        type: choice
+        options:
+          - "all"
+          - "1"
+          - "2"
+
+jobs:
+  # Batch 1: Foundation sources (no dependencies) - can run in parallel
+  monthly-foundation:
+    if: >-
+      ${{
+        github.event.inputs.source == 'all_monthly' ||
+        github.event.inputs.source == 'foundation_only' ||
+        github.event.inputs.batch == 'all' ||
+        github.event.inputs.batch == '1' ||
+        github.event_name == 'schedule' ||
+        contains(fromJson('["dst","fvm_wfs","cadastral","bnbo","dagi","water_projects","arbejdstilsynet_inspections","drive_data","bbr_buildings"]'), github.event.inputs.source)
+      }}
+    name: Monthly Foundation Sources
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+      actions: "write"  # Required to trigger other workflows
+    strategy:
+      matrix:
+        include: >-
+          ${{
+            (github.event.inputs.source == 'all_monthly' ||
+             github.event.inputs.source == 'foundation_only' ||
+             github.event.inputs.batch == 'all' ||
+             github.event.inputs.batch == '1' ||
+             github.event_name == 'schedule') &&
+            fromJson('[
+              {"source":"dst","priority":1,"description":"Danish Statistics data","duration_est":"60min"},
+              {"source":"fvm_wfs","priority":2,"description":"FVM WFS Agricultural Data (triggers matrix workflow)","duration_est":"240min"},
+              {"source":"cadastral","priority":3,"description":"Danish cadastral parcels","duration_est":"120min"},
+              {"source":"bnbo","priority":4,"description":"Well Protection Areas","duration_est":"90min"},
+              {"source":"dagi","priority":5,"description":"Danish Administrative Geographic Division","duration_est":"60min"},
+              {"source":"water_projects","priority":6,"description":"Water projects data","duration_est":"75min"},
+              {"source":"arbejdstilsynet_inspections","priority":7,"description":"Work Environment Authority inspections","duration_est":"45min"},
+              {"source":"drive_data","priority":8,"description":"Google Drive regulatory compliance documents","duration_est":"90min"},
+              {"source":"bbr_buildings","priority":9,"description":"BBR Buildings and GeoDanmark infrastructure","duration_est":"180min"}
+            ]') ||
+            fromJson(format('[{{"source":"{0}","priority":1,"description":"Manual execution"}}]', github.event.inputs.source))
+          }}
+      fail-fast: false
+      max-parallel: 3 # Run foundation sources with some parallelism
+    env:
+      ENVIRONMENT: production
+      DATAFORDELER_USERNAME: ${{ secrets.DATAFORDELER_USERNAME }}
+      DATAFORDELER_PASSWORD: ${{ secrets.DATAFORDELER_PASSWORD }}
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+      SAVE_LOCAL: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free up disk space for memory-intensive jobs
+        if: matrix.source == 'fvm_wfs' || matrix.source == 'cadastral'
+        run: |
+          echo "=== Initial disk usage ==="
+          df -h
+
+          echo "=== Freeing up disk space for memory-intensive processing ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/share/swift
+
+          sudo docker system prune -af
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+          echo "=== Disk usage after cleanup ==="
+          df -h
+
+          AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
+          echo "Available space: ${AVAILABLE_GB}GB"
+
+          if [ $AVAILABLE_GB -lt 10 ]; then
+            echo "❌ ERROR: Not enough disk space! Available: ${AVAILABLE_GB}GB, Required: ~10GB"
+            exit 1
+          fi
+
+          echo "✅ Sufficient disk space: ${AVAILABLE_GB}GB"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Monthly Foundation Pipeline - ${{ matrix.source }}
+        run: |
+          echo "🗓️ Running monthly foundation pipeline: ${{ matrix.source }}"
+          echo "📝 Description: ${{ matrix.description }}"
+          echo "⏱️ Estimated duration: ${{ matrix.duration_est }}"
+          echo "🏗️ Batch: Foundation (no dependencies)"
+          echo "⏰ Started at: $(date)"
+
+          cd backend/pipelines/unified_pipeline
+
+          # Enhanced resource monitoring and optimization for long-running jobs
+          if [ "${{ matrix.source }}" = "fvm_wfs" ] || [ "${{ matrix.source }}" = "cadastral" ]; then
+            echo "🔍 Starting enhanced resource monitoring for ${{ matrix.source }}"
+
+            # Set performance optimizations for cadastral
+            if [ "${{ matrix.source }}" = "cadastral" ]; then
+              export CADASTRAL_REQUESTS_PER_SECOND=4
+              export CADASTRAL_CHECKPOINT_ENABLED=true
+              export CADASTRAL_CHECKPOINT_INTERVAL=100000
+              export CADASTRAL_CREATE_DISSOLVED=false  # Skip dissolved to save time
+              export CADASTRAL_SKIP_VALIDATION=true    # Skip expensive geometry validation
+              echo "📈 Cadastral performance optimizations enabled:"
+              echo "   - Request rate: 4 req/sec (increased from 2)"
+              echo "   - Batch size: 25k features (increased from 10k)"
+              echo "   - Concurrent workers: 8 (increased from 5)"
+              echo "   - Checkpoints: Every 100k features"
+              echo "   - Dissolved data: Disabled for speed"
+              echo "   - Geometry validation: Skipped (coordinate bug fixed)"
+            fi
+
+            (while true; do
+              sleep 900  # Check every 15 minutes for detailed monitoring
+              echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
+              echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+
+              MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+              DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+
+              if [ $MEMORY_USED_PCT -gt 85 ]; then
+                echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+              fi
+              if [ $DISK_USED_PCT -gt 85 ]; then
+                echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+              fi
+
+              # Check for checkpoint files (cadastral progress monitoring)
+              if [ "${{ matrix.source }}" = "cadastral" ]; then
+                if ls /tmp/cadastral_checkpoint_*.json 1> /dev/null 2>&1; then
+                  echo "📍 Cadastral checkpoint files found - processing in progress"
+                fi
+              fi
+            done) &
+            MONITOR_PID=$!
+          fi
+
+          # Handle special cases
+          if [ "${{ matrix.source }}" = "fvm_wfs" ]; then
+            # FVM WFS - trigger the dedicated matrix workflow
+            echo "🚜 FVM WFS detected - triggering dedicated matrix workflow"
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"layer_types\":\"all\",\"years\":\"all\"}}")
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ FVM WFS matrix workflow triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger FVM WFS workflow (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
+          elif [ "${{ matrix.source }}" = "drive_data" ]; then
+            # Google Drive - trigger the dedicated pipeline workflow
+            echo "📁 Google Drive pipeline detected - triggering dedicated workflow"
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/drive_pipeline.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"log_level\":\"INFO\",\"max_workers\":\"4\"}}")
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ Google Drive pipeline triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger Google Drive pipeline (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
+          elif [ "${{ matrix.source }}" = "bbr_buildings" ]; then
+            # BBR Buildings - trigger the dedicated pipeline workflow
+            echo "🏢 BBR Buildings pipeline detected - triggering dedicated workflow"
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/bbr_buildings_pipeline.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"layer\":\"both\",\"sample_size\":\"0\",\"log_level\":\"INFO\"}}")
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ BBR Buildings pipeline triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger BBR Buildings pipeline (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
+          else
+            # Regular pipeline execution
+            SOURCE="${{ matrix.source }}"
+            STAGE="${{ github.event.inputs.stage || 'all' }}"
+
+            if [ -z "$SOURCE" ]; then
+              echo "❌ ERROR: matrix.source is empty or null"
+              echo "Matrix values: ${{ toJson(matrix) }}"
+              exit 1
+            fi
+
+            echo "🚀 Executing: python -m unified_pipeline run -s ${SOURCE} -j ${STAGE}"
+            python -m unified_pipeline run -s "${SOURCE}" -j "${STAGE}"
+          fi
+
+          # Stop monitoring
+          if [ -n "$MONITOR_PID" ]; then
+            kill $MONITOR_PID 2>/dev/null || true
+            echo "Resource monitoring stopped"
+          fi
+
+          echo "✅ Monthly foundation pipeline completed: ${{ matrix.source }}"
+          echo "⏰ Finished at: $(date)"
+
+      - name: Cleanup temporary files
+        if: always()
+        run: |
+          echo "🧹 Cleaning up temporary files..."
+          sudo rm -rf /tmp/duckdb* || true
+          find /tmp -type f -size +100M -delete 2>/dev/null || true
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          echo "✅ Cleanup completed"
+
+  # Batch 2: Dependent sources (run after foundation sources complete)
+  monthly-dependent:
+    if: >-
+      ${{
+        github.event.inputs.source == 'all_monthly' ||
+        github.event.inputs.source == 'dependent_only' ||
+        github.event.inputs.batch == 'all' ||
+        github.event.inputs.batch == '2' ||
+        github.event_name == 'schedule' ||
+        contains(fromJson('["cvr_enrichment","property_cadastral_merge","field_production","field_area_analysis"]'), github.event.inputs.source)
+      }}
+    needs: monthly-foundation # Wait for foundation sources to complete
+    name: Monthly Dependent Sources
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+      actions: "write" # Required to trigger other workflows
+    strategy:
+      matrix:
+        include: >-
+          ${{
+            (github.event.inputs.source == 'all_monthly' ||
+             github.event.inputs.source == 'dependent_only' ||
+             github.event.inputs.batch == 'all' ||
+             github.event.inputs.batch == '2' ||
+             github.event_name == 'schedule') &&
+            fromJson('[
+              {"source":"cvr_enrichment","priority":1,"description":"CVR company data enrichment (monthly run after foundation)","duration_est":"180min","dependencies":"foundation_pipelines"},
+              {"source":"property_cadastral_merge","priority":10,"description":"Property-Cadastral merge (depends on cadastral)","duration_est":"90min","dependencies":"cadastral"},
+              {"source":"field_production","priority":11,"description":"Field production estimates (depends on FVM + DST)","duration_est":"150min","dependencies":"fvm_wfs,dst"},
+              {"source":"field_area_analysis","priority":12,"description":"Field area analysis (depends on FVM + BNBO + Water projects)","duration_est":"180min","dependencies":"fvm_wfs,bnbo,water_projects"}
+            ]') ||
+            fromJson(format('[{{"source":"{0}","priority":10,"description":"Manual execution"}}]', github.event.inputs.source))
+          }}
+      fail-fast: false
+      max-parallel: 2 # Run dependent sources with limited parallelism
+    env:
+      ENVIRONMENT: production
+      GCS_BUCKET: ${{ secrets.GCS_BUCKET }}
+      GCS_ACCESS_KEY_ID: ${{ secrets.GCS_ACCESS_KEY_ID }}
+      GCS_SECRET_ACCESS_KEY: ${{ secrets.GCS_SECRET_ACCESS_KEY }}
+      CVR_USERID: ${{ secrets.CVR_USERID }}
+      CVR_PASSWORD: ${{ secrets.CVR_PASSWORD }}
+      LANDBRUGSDATA_UUID_NAMESPACE: ${{ secrets.LANDBRUGSDATA_UUID_NAMESPACE }}
+      SAVE_LOCAL: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free up disk space for memory-intensive jobs
+        if: contains(fromJson('["property_cadastral_merge","field_area_analysis"]'), matrix.source)
+        run: |
+          echo "=== Initial disk usage ==="
+          df -h
+
+          echo "=== Freeing up disk space for memory-intensive processing ==="
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/share/swift
+
+          sudo docker system prune -af
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+          echo "=== Disk usage after cleanup ==="
+          df -h
+
+          AVAILABLE_GB=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
+          echo "Available space: ${AVAILABLE_GB}GB"
+
+          if [ $AVAILABLE_GB -lt 12 ]; then
+            echo "❌ ERROR: Not enough disk space! Available: ${AVAILABLE_GB}GB, Required: ~12GB"
+            exit 1
+          fi
+
+          echo "✅ Sufficient disk space: ${AVAILABLE_GB}GB"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip uv
+          cd backend/pipelines/unified_pipeline
+          uv pip install --system -e .
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Run Monthly Dependent Pipeline - ${{ matrix.source }}
+        run: |
+          echo "🗓️ Running monthly dependent pipeline: ${{ matrix.source }}"
+          echo "📝 Description: ${{ matrix.description }}"
+          echo "⏱️ Estimated duration: ${{ matrix.duration_est }}"
+          echo "🔗 Dependencies: ${{ matrix.dependencies }}"
+          echo "🏗️ Batch: Dependent (runs after foundation)"
+          echo "⏰ Started at: $(date)"
+
+          cd backend/pipelines/unified_pipeline
+
+          # Resource monitoring for memory-intensive jobs
+          if [ "${{ matrix.source }}" = "property_cadastral_merge" ] || [ "${{ matrix.source }}" = "field_area_analysis" ] || [ "${{ matrix.source }}" = "cvr_enrichment" ]; then
+            echo "🔍 Starting resource monitoring for ${{ matrix.source }}"
+            (while true; do
+              sleep 120  # Check every 2 minutes
+              echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
+              echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+
+              MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+              DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+
+              if [ $MEMORY_USED_PCT -gt 90 ]; then
+                echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+              fi
+              if [ $DISK_USED_PCT -gt 85 ]; then
+                echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+              fi
+            done) &
+            MONITOR_PID=$!
+          fi
+
+          # Handle special cases
+          if [ "${{ matrix.source }}" = "cvr_enrichment" ]; then
+            # CVR Enrichment - trigger the dedicated workflow with job splitting
+            echo "🏢 CVR Enrichment detected - triggering dedicated workflow with job splitting"
+
+            PAYLOAD=$(jq -n \
+              --arg ref "${{ github.ref }}" \
+              '{ref: $ref, inputs: {log_level: "INFO"}}')
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/cvr_enrichment_pipeline.yml/dispatches" \
+              -d "$PAYLOAD")
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ CVR Enrichment workflow triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger CVR Enrichment workflow (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
+          elif [ "${{ matrix.source }}" = "field_area_analysis" ]; then
+            # Field Area Analysis - trigger the dedicated matrix workflow
+            echo "📊 Field Area Analysis detected - triggering dedicated matrix workflow"
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/field_area_analysis_multi_stage.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"agricultural_fields_year\":\"both\"}}"
+            echo "✅ Field Area Analysis matrix workflow triggered successfully"
+          elif [ "${{ matrix.source }}" = "fvm_wfs" ]; then
+            # FVM WFS - trigger the dedicated matrix workflow
+            echo "🚜 FVM WFS detected - triggering dedicated matrix workflow"
+
+            HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/curl_response.txt -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/fvm_wfs_matrix_download.yml/dispatches" \
+              -d "{\"ref\":\"${{ github.ref }}\",\"inputs\":{\"stage\":\"all\",\"layer_types\":\"all\",\"years\":\"all\"}}")
+
+            if [ "$HTTP_CODE" = "204" ]; then
+              echo "✅ FVM WFS matrix workflow triggered successfully (HTTP $HTTP_CODE)"
+            else
+              echo "❌ Failed to trigger FVM WFS workflow (HTTP $HTTP_CODE)"
+              cat /tmp/curl_response.txt
+              exit 1
+            fi
+          else
+            # Regular pipeline execution
+            SOURCE="${{ matrix.source }}"
+            STAGE="${{ github.event.inputs.stage || 'all' }}"
+
+            if [ -z "$SOURCE" ]; then
+              echo "❌ ERROR: matrix.source is empty or null"
+              echo "Matrix values: ${{ toJson(matrix) }}"
+              exit 1
+            fi
+
+            echo "🚀 Executing: python -m unified_pipeline run -s ${SOURCE} -j ${STAGE}"
+            python -m unified_pipeline run -s "${SOURCE}" -j "${STAGE}"
+          fi
+
+          # Stop monitoring
+          if [ -n "$MONITOR_PID" ]; then
+            kill $MONITOR_PID 2>/dev/null || true
+            echo "Resource monitoring stopped"
+          fi
+
+          echo "✅ Monthly dependent pipeline completed: ${{ matrix.source }}"
+          echo "⏰ Finished at: $(date)"
+
+      - name: Cleanup temporary files for memory-intensive jobs
+        if: always() && contains(fromJson('["property_cadastral_merge","field_area_analysis"]'), matrix.source)
+        run: |
+          echo "🧹 Cleaning up temporary files after memory-intensive job..."
+
+          # Clean up DuckDB temp files
+          sudo rm -rf /tmp/duckdb* || true
+          sudo rm -rf /tmp/duckdb_field_analysis/* || true
+
+          # Clean up any large temporary files
+          find /tmp -type f -size +100M -delete 2>/dev/null || true
+
+          # Clean up Python cache
+          find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+          find . -type f -name "*.pyc" -delete 2>/dev/null || true
+
+          echo "=== Final disk usage ==="
+          df -h
+          echo "✅ Cleanup completed"

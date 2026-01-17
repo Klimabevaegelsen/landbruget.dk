@@ -1,0 +1,33 @@
+{
+  "table_name": "Tabel 38: Standardværdier for produktregnskab (Svineproduktion, Side 120)",
+  "data": [
+    {
+      "Dyretype": "Pattegris (7 kg)",
+      "Indkøb_af_dyr_Kg_CO2e": "X",
+      "Fordøjelse_og_gødning_Kg_CO2e": "X",
+      "Foder_KG_CO2e": "X",
+      "Energi_kg_CO2e_dyr": "X"
+    },
+    {
+      "Dyretype": "Smågris (30 kg)",
+      "Indkøb_af_dyr_Kg_CO2e": "X",
+      "Fordøjelse_og_gødning_Kg_CO2e": "X",
+      "Foder_KG_CO2e": "X",
+      "Energi_kg_CO2e_dyr": "X"
+    },
+    {
+      "Dyretype": "Slagtegris (88 kg)",
+      "Indkøb_af_dyr_Kg_CO2e": "X",
+      "Fordøjelse_og_gødning_Kg_CO2e": "X",
+      "Foder_KG_CO2e": "X",
+      "Energi_kg_CO2e_dyr": "X"
+    },
+    {
+      "Dyretype": "Polte pr. 7 kg gris",
+      "Indkøb_af_dyr_Kg_CO2e": null,
+      "Fordøjelse_og_gødning_Kg_CO2e": null,
+      "Foder_KG_CO2e": null,
+      "Energi_kg_CO2e_dyr": null
+    }
+  ]
+}

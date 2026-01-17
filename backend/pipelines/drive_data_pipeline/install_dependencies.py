@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 
-def install_dependencies():
+def install_dependencies() -> None:
     """Install all required dependencies for the Drive Data Pipeline."""
     print("Installing Drive Data Pipeline dependencies...")
 

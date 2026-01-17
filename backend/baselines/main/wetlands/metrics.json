@@ -1,0 +1,21 @@
+{
+  "dataset_name": "wetlands",
+  "source_path": "gs://landbrugsdata-raw-data/silver/wetlands/20260116_224018/data.parquet",
+  "generated_at": "2026-01-17T11:10:47.589655",
+  "record_count": 1702479,
+  "unique_identifiers": {},
+  "geometry_bounds": {
+    "min_x": 54.565936505722796,
+    "max_x": 57.74300167901615,
+    "min_y": 8.082936188719023,
+    "max_y": 15.11293803373287
+  },
+  "detected_crs": "EPSG:4326",
+  "column_null_counts": {
+    "id": 0,
+    "gridcode": 0,
+    "toerv_pct": 0,
+    "geometry": 0,
+    "geometry_wkt_original": 0
+  }
+}

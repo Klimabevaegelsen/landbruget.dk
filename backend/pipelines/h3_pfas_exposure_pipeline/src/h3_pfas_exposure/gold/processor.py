@@ -2,6 +2,7 @@
 Main H3 PFAS processor with modular architecture and GCS data loading.
 """
 
+import contextlib
 import gc
 from pathlib import Path
 
@@ -74,7 +75,8 @@ class H3PFASProcessorRefactored:
             if process_memory_gb > max_process_memory_gb:
                 self._memory_alerts += 1
                 self.log.warning(
-                    f"⚠️ {operation}: High process memory usage {process_memory_gb:.1f}GB (limit: {max_process_memory_gb}GB)"
+                    f"⚠️ {operation}: High process memory usage {process_memory_gb:.1f}GB "
+                    f"(limit: {max_process_memory_gb}GB)"
                 )
 
                 # Only trigger cleanup after more alerts and avoid during critical operations
@@ -88,7 +90,8 @@ class H3PFASProcessorRefactored:
             if available_disk_gb < min_free_disk_gb:
                 self._disk_alerts += 1
                 self.log.warning(
-                    f"⚠️ {operation}: Low available disk space {available_disk_gb:.1f}GB (minimum: {min_free_disk_gb}GB)"
+                    f"⚠️ {operation}: Low available disk space {available_disk_gb:.1f}GB "
+                    f"(minimum: {min_free_disk_gb}GB)"
                 )
 
                 # Only trigger cleanup after more alerts and avoid during critical operations
@@ -159,11 +162,8 @@ class H3PFASProcessorRefactored:
         # Force garbage collection
         gc.collect()
 
-        # Clear DuckDB cache
-        try:
-            self.conn.execute("CHECKPOINT")
-        except Exception:
-            pass
+        # NOTE: CHECKPOINT not supported for in-memory databases
+        # DuckDB handles memory management automatically for in-memory mode
 
     def _aggressive_cleanup(self):
         """Aggressive cleanup for GitHub Actions constraints - only used at end of processing."""
@@ -196,11 +196,8 @@ class H3PFASProcessorRefactored:
         # Force garbage collection
         gc.collect()
 
-        # Clear DuckDB cache
-        try:
-            self.conn.execute("CHECKPOINT")
-        except Exception:
-            pass
+        # NOTE: CHECKPOINT not supported for in-memory databases
+        # DuckDB handles memory management automatically for in-memory mode
 
     def setup_duckdb(self):
         """Setup DuckDB with required extensions - OPTIMIZED for GitHub Actions."""
@@ -240,7 +237,7 @@ class H3PFASProcessorRefactored:
                 raise
 
         # Initialize GCS access with shared connection
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         self.gcs_access = GCSDataAccess(connection=self.conn)
 
@@ -297,13 +294,22 @@ class H3PFASProcessorRefactored:
         """)
 
         # Add geometry and area calculations using proper H3 functions
+        # H3 generates geometries in WGS84 (lon/lat) - transform to EPSG:25832 for processing
+        # Field data is now in EPSG:25832 (Danish UTM) per CRS refactor strategy
         self.conn.execute("""
             CREATE OR REPLACE TABLE h3_grid_with_geom AS
             SELECT
                 h3_index as h3_cell,
                 lat as center_lat,
                 lon as center_lon,
-                ST_GeomFromText(h3_boundary) as h3_geometry,
+                -- Transform H3 geometry from WGS84 to EPSG:25832 (Danish UTM) for spatial joins
+                -- H3 output is in lon/lat order, use always_xy to ensure correct interpretation
+                ST_Transform(
+                    ST_GeomFromText(h3_boundary),
+                    'EPSG:4326',
+                    'EPSG:25832',
+                    always_xy := true
+                ) as h3_geometry,
                 h3_cell_area(h3_index, 'm^2') / 10000.0 as h3_area_ha
             FROM h3_grid
         """)
@@ -313,7 +319,7 @@ class H3PFASProcessorRefactored:
 
         # Get statistics and validate
         stats = self.conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total_cells,
                 AVG(h3_area_ha) as avg_area,
                 MIN(h3_area_ha) as min_area,
@@ -412,8 +418,7 @@ class H3PFASProcessorRefactored:
                 self.log.error("   - Coordinate system mismatch")
                 self.log.error("   - Empty input data")
                 return
-            else:
-                self.log.info(f"📊 Results table contains {count:,} records")
+            self.log.info(f"📊 Results table contains {count:,} records")
         except Exception as e:
             self.log.error(f"❌ Cannot access results table '{results_table}': {e}")
             return
@@ -421,7 +426,7 @@ class H3PFASProcessorRefactored:
         # Check for NULL values in critical columns
         try:
             null_check = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     COUNT(*) as total_rows,
                     COUNT(h3_area_ha) as non_null_h3_area,
                     COUNT(total_intersection_area_ha) as non_null_intersection_area,
@@ -599,13 +604,11 @@ class H3PFASProcessorRefactored:
         ]
 
         for table in tables_to_drop:
-            try:
+            with contextlib.suppress(Exception):
                 self.conn.execute(f"DROP TABLE IF EXISTS {table}")
-            except Exception:
-                pass  # Ignore errors if table doesn't exist
 
         # Also drop any tables with temp_ prefix or year suffix
-        try:
+        with contextlib.suppress(Exception):
             tables = self.conn.execute("SHOW TABLES").fetchall()
             for (table_name,) in tables:
                 if (
@@ -614,19 +617,14 @@ class H3PFASProcessorRefactored:
                     or table_name.startswith("chunk_")
                     or table_name.startswith("stage")
                     or table_name.startswith("h3_chunk_")
-                ):
+                ) and table_name not in self._protected_tables:
                     # Don't drop protected tables or cached static data
-                    if table_name not in self._protected_tables:
-                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
-        except Exception:
-            pass
+                    self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
-        # Force garbage collection and checkpoint
+        # Force garbage collection
         gc.collect()
-        try:
-            self.conn.execute("CHECKPOINT")
-        except Exception:
-            pass
+        # NOTE: CHECKPOINT not supported for in-memory databases
+        # DuckDB handles memory management automatically for in-memory mode
 
         self._monitor_resources(f"cleanup_year_{year}")
 
@@ -960,7 +958,7 @@ class H3PFASProcessorRefactored:
         except Exception as e:
             self.log.error(f"❌ Could not load kommune boundaries from GCS: {e}")
             self.log.error("Kommune boundaries are required for proper PMTiles generation")
-            raise ValueError(f"Failed to load kommune boundaries: {e}")
+            raise ValueError(f"Failed to load kommune boundaries: {e}") from e
 
         return kommune_table
 
@@ -1042,22 +1040,22 @@ class H3PFASProcessorRefactored:
                     p.contains_diquat,
                     p.contains_glyphosate,
                     -- Weight pesticide amounts by intersection area ratio
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.pfas_containing_active_ingredient_grams, 0) as weighted_pfas_grams,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.diquat_containing_active_ingredient_grams, 0) as weighted_diquat_grams,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.glyphosate_containing_active_ingredient_grams, 0) as weighted_glyphosate_grams,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.pesticide_belastning_applied, 0) as weighted_pesticide_belastning,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.pfas_containing_pesticide_belastning_applied, 0) as weighted_pfas_belastning,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.diquat_containing_pesticide_belastning_applied, 0) as weighted_diquat_belastning,
-                    (fki.intersection_area_ha / fki.field_area_ha) * 
+                    (fki.intersection_area_ha / fki.field_area_ha) *
                         COALESCE(p.glyphosate_containing_pesticide_belastning_applied, 0) as weighted_glyphosate_belastning
                 FROM field_kommune_intersections fki
-                LEFT JOIN {pesticide_table} p ON fki.field_uuid = p.field_uuid 
+                LEFT JOIN {pesticide_table} p ON fki.field_uuid = p.field_uuid
                     AND fki.cvr_number = p.cvr
             )
             SELECT
@@ -1095,51 +1093,51 @@ class H3PFASProcessorRefactored:
                 COUNT(DISTINCT CASE WHEN contains_glyphosate = true THEN PesticideRegistrationNumber END) as unique_glyphosate_products,
                 COUNT(DISTINCT PesticideRegistrationNumber) as unique_pesticide_products,
                 -- Intensity metrics (grams per hectare)
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_pfas_grams, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as pfas_containing_active_ingredient_intensity_grams_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_diquat_grams, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as diquat_containing_active_ingredient_intensity_grams_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_glyphosate_grams, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as glyphosate_containing_active_ingredient_intensity_grams_per_ha,
                 -- Pesticide load intensity metrics
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_pesticide_belastning, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as pesticide_belastning_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_pfas_belastning, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as pfas_pesticide_belastning_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_diquat_belastning, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as diquat_pesticide_belastning_per_ha,
-                CASE 
-                    WHEN SUM(intersection_area_ha) > 0 THEN 
+                CASE
+                    WHEN SUM(intersection_area_ha) > 0 THEN
                         SUM(COALESCE(weighted_glyphosate_belastning, 0)) / SUM(intersection_area_ha)
-                    ELSE 0 
+                    ELSE 0
                 END as glyphosate_pesticide_belastning_per_ha,
                 -- Coverage metrics
-                CASE 
-                    WHEN kommune_area_ha > 0 THEN 
+                CASE
+                    WHEN kommune_area_ha > 0 THEN
                         (SUM(intersection_area_ha) / kommune_area_ha) * 100.0
-                    ELSE 0 
+                    ELSE 0
                 END as agricultural_coverage_pct,
                 CURRENT_TIMESTAMP as created_at
             FROM pesticide_kommune_data
-            GROUP BY 
+            GROUP BY
                 kommune_code, kommune_name, region_code, kommune_area_ha,
                 kommune_centroid_x, kommune_centroid_y
             HAVING SUM(intersection_area_ha) > 0
@@ -1296,10 +1294,10 @@ class H3PFASProcessorRefactored:
         pest_columns = self.conn.execute("PRAGMA table_info(temp_pesticide_raw)").fetchall()
         pest_column_names = [col[1] for col in pest_columns]
         has_field_uuid = "field_uuid" in pest_column_names
-        
+
         if not has_field_uuid:
             raise ValueError("field_uuid column is required in pesticide data for H3 PFAS analysis")
-        
+
         # Get pesticide field lookup - UUID based
         self.conn.execute("""
             CREATE OR REPLACE TABLE pesticide_field_lookup AS
@@ -1368,7 +1366,7 @@ class H3PFASProcessorRefactored:
         # Require field UUID column for proper field identification
         if "field_uuid" not in fvm_column_names:
             raise ValueError("field_uuid column is required in FVM data for H3 PFAS analysis")
-        
+
         field_uuid_select = "f.field_uuid"
         primary_field_id_select = "f.field_uuid as primary_field_id"
         self.log.info("✅ Using field_uuid for unique field identification")
@@ -1388,7 +1386,7 @@ class H3PFASProcessorRefactored:
                 {field_uuid_select},
                 {primary_field_id_select}
             FROM temp_fvm_raw f
-            INNER JOIN pesticide_field_lookup p ON f.field_uuid = p.field_uuid 
+            INNER JOIN pesticide_field_lookup p ON f.field_uuid = p.field_uuid
                 AND {cvr_join_condition}
             WHERE {geometry_column} IS NOT NULL
             AND {geometry_validation}

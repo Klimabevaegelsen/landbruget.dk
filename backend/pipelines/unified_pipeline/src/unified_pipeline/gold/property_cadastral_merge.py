@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import ConfigDict
 
@@ -61,8 +61,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
         self.conn.execute("LOAD spatial")
 
     def _load_silver_data_streaming(
-        self, silver_data: Optional[Dict[str, Any]]
-    ) -> tuple[Optional[str], Optional[str]]:
+        self, silver_data: dict[str, Any] | None
+    ) -> tuple[str | None, str | None]:
         """Load property owners and cadastral data paths for streaming processing."""
 
         property_path = None
@@ -74,38 +74,40 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                 "In-memory data passing not recommended for large datasets - using streaming"
             )
             return None, None
-        else:
-            # Get file paths for streaming processing
-            self.log.info("Setting up streaming data processing from GCS storage")
+        # Get file paths for streaming processing
+        self.log.info("Setting up streaming data processing from GCS storage")
 
-            # Get property owners data path
-            self.log.info(
-                f"Looking for property owners data in silver/{self.config.property_owners_dataset}/"
-            )
-            try:
-                property_path = self._get_latest_silver_path(self.config.property_owners_dataset)
-                if property_path:
-                    self.log.info(f"Found property owners data: {property_path}")
-                else:
-                    self.log.warning("No property owners data found in silver layer")
-            except Exception as e:
-                self.log.error(f"Error finding property owners data: {e}")
+        # Get property owners data path
+        self.log.info(
+            f"Looking for property owners data in silver/{self.config.property_owners_dataset}/"
+        )
+        try:
+            property_path = self._get_latest_silver_path(self.config.property_owners_dataset)
+            if property_path:
+                self.log.info(f"Found property owners data: {property_path}")
+            else:
+                self.log.warning("No property owners data found in silver layer")
+        except Exception as e:
+            self.log.error(f"Error finding property owners data: {e}")
 
-            # Get cadastral data path
-            self.log.info(f"Looking for cadastral data in silver/{self.config.cadastral_dataset}/")
-            try:
-                cadastral_path = self._get_latest_silver_path(self.config.cadastral_dataset)
-                if cadastral_path:
-                    self.log.info(f"Found cadastral data: {cadastral_path}")
-                else:
-                    self.log.warning("No cadastral data found in silver layer")
-            except Exception as e:
-                self.log.error(f"Error finding cadastral data: {e}")
+        # Get cadastral data path
+        self.log.info(f"Looking for cadastral data in silver/{self.config.cadastral_dataset}/")
+        try:
+            cadastral_path = self._get_latest_silver_path(self.config.cadastral_dataset)
+            if cadastral_path:
+                self.log.info(f"Found cadastral data: {cadastral_path}")
+            else:
+                self.log.warning("No cadastral data found in silver layer")
+        except Exception as e:
+            self.log.error(f"Error finding cadastral data: {e}")
 
         return property_path, cadastral_path
 
-    def _stream_merge_to_gcs(self, property_path: str, cadastral_path: str) -> Dict[str, Any]:
-        """Perform streaming BFE-based merge and save directly to GCS without loading into memory."""
+    def _stream_merge_to_gcs(self, property_path: str, cadastral_path: str) -> dict[str, Any]:
+        """
+        Perform streaming BFE-based merge and save directly to GCS
+        without loading into memory.
+        """
 
         try:
             self.log.info("Creating property_owners table from GCS parquet file...")
@@ -136,8 +138,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             try:
                 # Test if we can access the BFE number from the nested structure
                 test_result = self.conn.execute("""
-                    SELECT properties.bestemtFastEjendomBFENr as bfe_number 
-                    FROM property_owners 
+                    SELECT properties.bestemtFastEjendomBFENr as bfe_number
+                    FROM property_owners
                     LIMIT 1
                 """).fetchone()
 
@@ -151,13 +153,15 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             except Exception as e:
                 self.log.error(f"Failed to access BFE from nested structure: {e}")
-                raise ValueError(f"Cannot access BFE number from property data structure: {e}")
+                raise ValueError(
+                    f"Cannot access BFE number from property data structure: {e}"
+                ) from e
 
             # Perform the merge and save directly to parquet using DuckDB COPY
             self.log.info("Performing BFE-based merge and creating result table...")
             merge_query = f"""
             CREATE OR REPLACE TABLE merged_properties AS
-            SELECT 
+            SELECT
                 p.{bfe_column} as bfe_number,
                 p.properties.ejendePerson as person_data,
                 p.properties.ejendeVirksomhed as company_data,
@@ -208,14 +212,23 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
                 try:
                     # Extract CVR numbers from the company_data JSON structure
                     cvr_extraction_query = """
-                    SELECT DISTINCT 
-                        TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) as cvr_number
-                    FROM merged_properties 
+                    SELECT DISTINCT
+                        TRIM(CAST(
+                            JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR
+                        )) as cvr_number
+                    FROM merged_properties
                     WHERE company_data IS NOT NULL
                       AND JSON_EXTRACT_STRING(company_data, '$.cvrNummer') IS NOT NULL
-                      AND TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)) != ''
-                      AND LENGTH(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR))) = 8
-                      AND REGEXP_MATCHES(TRIM(CAST(JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR)), '^[1-9][0-9]{7}$')
+                      AND TRIM(CAST(
+                          JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR
+                      )) != ''
+                      AND LENGTH(TRIM(CAST(
+                          JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR
+                      ))) = 8
+                      AND REGEXP_MATCHES(TRIM(CAST(
+                          JSON_EXTRACT_STRING(company_data, '$.cvrNummer') AS VARCHAR
+                      )),
+                                        '^[1-9][0-9]{7}$')
                     ORDER BY cvr_number
                     """
 
@@ -224,7 +237,8 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
                     if cvr_numbers:
                         self.log.info(
-                            f"✅ Found {len(cvr_numbers)} unique CVR numbers from property ownership"
+                            f"✅ Found {len(cvr_numbers)} unique CVR numbers "
+                            f"from property ownership"
                         )
 
                         # Save CVR numbers using the collection utility
@@ -273,7 +287,7 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
             self.conn.execute("DROP TABLE IF EXISTS cadastral")
             self.conn.execute("DROP TABLE IF EXISTS merged_properties")
 
-    def _validate_merge_quality(self, quality_stats: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_merge_quality(self, quality_stats: dict[str, Any]) -> dict[str, Any]:
         """Validate merge quality using pre-calculated statistics."""
 
         match_rate = quality_stats["match_rate"]
@@ -285,7 +299,7 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
         return quality_stats
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> None:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> None:
         """
         Run the property-cadastral merge gold processing.
 
@@ -300,12 +314,14 @@ class PropertyCadastralMergeGold(BaseSource[PropertyCadastralMergeGoldConfig], G
 
             # Check if we have the required data
             if cadastral_path is None:
-                self.log.error("No cadastral data available - cannot proceed with merge")
-                return
+                error_msg = "No cadastral data available - cannot proceed with merge"
+                self.log.error(error_msg)
+                raise ValueError(error_msg)
 
             if property_path is None:
-                self.log.error("No property owners data available - cannot proceed with merge")
-                return
+                error_msg = "No property owners data available - cannot proceed with merge"
+                self.log.error(error_msg)
+                raise ValueError(error_msg)
 
             self.log.info(f"Using property data: {property_path}")
             self.log.info(f"Using cadastral data: {cadastral_path}")

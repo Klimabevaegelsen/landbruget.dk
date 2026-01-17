@@ -70,7 +70,10 @@ class H3SpatialConfig:
     stage_5_geometric_union: bool = True
 
     # Coordinate System Configuration
-    coordinate_system: str = "EPSG:4326"
+    # Processing CRS (spatial operations done in UTM for meter-based calculations)
+    processing_crs: str = "EPSG:25832"
+    # Output CRS (for GeoJSON/PMTiles display)
+    output_crs: str = "EPSG:4326"
 
     # H3 Resolution-specific validation (official areas from h3geo.org in hectares)
     h3_resolution_areas: dict[int, dict[str, float]] = field(

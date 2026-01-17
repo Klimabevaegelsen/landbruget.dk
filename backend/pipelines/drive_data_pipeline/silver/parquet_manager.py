@@ -5,8 +5,19 @@ import os
 import tempfile
 import time
 from pathlib import Path
+from typing import Any
 
 import pyarrow.parquet as pq
+
+try:
+    import geopandas as gpd
+    import pandas as pd
+
+    DataFrame = pd.DataFrame
+    GeoDataFrame = gpd.GeoDataFrame
+except ImportError:
+    DataFrame = Any
+    GeoDataFrame = Any
 
 # ✅ MIGRATION: Removed shapely import - using DuckDB ST_Point for all spatial operations
 
@@ -18,7 +29,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger() -> logging.Logger:
+        return logging.getLogger(__name__)
+
     DriveStorageManager = None
 from .duckdb_base import DuckDBProcessor
 
@@ -34,7 +47,7 @@ class ParquetManager(DuckDBProcessor):
         storage_manager: "DriveStorageManager",
         compression: str = "snappy",
         partition_by: list[str] | None = None,
-    ):
+    ) -> None:
         """Initialize the Parquet manager.
 
         Args:
@@ -78,8 +91,9 @@ class ParquetManager(DuckDBProcessor):
                 try:
                     # Export from DuckDB table to parquet
                     self.conn.execute(f"""
-                        COPY {table_name} TO '{temp_path}' 
-                        (FORMAT PARQUET, COMPRESSION {self.compression}, ROW_GROUP_SIZE {row_group_size})
+                        COPY {table_name} TO '{temp_path}'
+                        (FORMAT PARQUET, COMPRESSION {self.compression},
+                         ROW_GROUP_SIZE {row_group_size})
                     """)
 
                     # Add schema metadata if provided
@@ -91,9 +105,13 @@ class ParquetManager(DuckDBProcessor):
                         # Update metadata
                         new_metadata = {b"schema": schema_json.encode("utf-8")}
                         if table.schema.metadata:
-                            for key, value in table.schema.metadata.items():
-                                if key != b"schema":
-                                    new_metadata[key] = value
+                            new_metadata.update(
+                                {
+                                    key: value
+                                    for key, value in table.schema.metadata.items()
+                                    if key != b"schema"
+                                }
+                            )
 
                         # Write with updated metadata
                         table = table.replace_schema_metadata(new_metadata)
@@ -131,8 +149,9 @@ class ParquetManager(DuckDBProcessor):
 
                 # Export directly from DuckDB
                 self.conn.execute(f"""
-                    COPY {table_name} TO '{output_path}' 
-                    (FORMAT PARQUET, COMPRESSION {self.compression}, ROW_GROUP_SIZE {row_group_size})
+                    COPY {table_name} TO '{output_path}'
+                    (FORMAT PARQUET, COMPRESSION {self.compression},
+                     ROW_GROUP_SIZE {row_group_size})
                 """)
 
                 # Add schema metadata if provided (requires reading and rewriting)
@@ -142,9 +161,13 @@ class ParquetManager(DuckDBProcessor):
 
                     new_metadata = {b"schema": schema_json.encode("utf-8")}
                     if table.schema.metadata:
-                        for key, value in table.schema.metadata.items():
-                            if key != b"schema":
-                                new_metadata[key] = value
+                        new_metadata.update(
+                            {
+                                key: value
+                                for key, value in table.schema.metadata.items()
+                                if key != b"schema"
+                            }
+                        )
 
                     table = table.replace_schema_metadata(new_metadata)
                     pq.write_table(table, output_path, compression=self.compression)
@@ -153,14 +176,14 @@ class ParquetManager(DuckDBProcessor):
                 return output_path
 
         except Exception as e:
-            error_msg = f"Failed to save DuckDB table to Parquet: {str(e)}"
+            error_msg = f"Failed to save DuckDB table to Parquet: {e!s}"
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
 
     # Legacy method for backward compatibility during migration
     def save_dataframe_to_parquet(
         self,
-        df,  # Could be pandas DataFrame or table name
+        df: DataFrame | str,  # Could be pandas DataFrame or table name
         output_path: Path,
         schema_metadata: dict | None = None,
         row_group_size: int = 100000,
@@ -179,18 +202,16 @@ class ParquetManager(DuckDBProcessor):
         if isinstance(df, str):
             # It's already a table name
             return self.save_table_to_parquet(df, output_path, schema_metadata, row_group_size)
-        else:
-            # It's a pandas DataFrame - register it first
-            import pandas as pd
+        # It's a pandas DataFrame - register it first
+        import pandas as pd
 
-            if isinstance(df, pd.DataFrame):
-                table_name = f"temp_df_{int(time.time())}"
-                self.register_dataframe(df, table_name)
-                return self.save_table_to_parquet(
-                    table_name, output_path, schema_metadata, row_group_size
-                )
-            else:
-                raise ValueError(f"Unsupported data type: {type(df)}")
+        if isinstance(df, pd.DataFrame):
+            table_name = f"temp_df_{int(time.time())}"
+            self.register_dataframe(df, table_name)
+            return self.save_table_to_parquet(
+                table_name, output_path, schema_metadata, row_group_size
+            )
+        raise ValueError(f"Unsupported data type: {type(df)}")
 
     def create_spatial_table_from_coords(
         self,
@@ -218,11 +239,11 @@ class ParquetManager(DuckDBProcessor):
             # Create spatial table using DuckDB-spatial
             self.conn.execute(f"""
                 CREATE TABLE {spatial_table} AS
-                SELECT 
+                SELECT
                     * EXCLUDE ({latitude_col}, {longitude_col}),
                     ST_Point({longitude_col}, {latitude_col}) as geometry
                 FROM {table_name}
-                WHERE {latitude_col} IS NOT NULL 
+                WHERE {latitude_col} IS NOT NULL
                   AND {longitude_col} IS NOT NULL
                   AND {latitude_col} BETWEEN -90 AND 90
                   AND {longitude_col} BETWEEN -180 AND 180
@@ -233,7 +254,7 @@ class ParquetManager(DuckDBProcessor):
             return spatial_table
 
         except Exception as e:
-            error_msg = f"Failed to create spatial table: {str(e)}"
+            error_msg = f"Failed to create spatial table: {e!s}"
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
 
@@ -267,7 +288,7 @@ class ParquetManager(DuckDBProcessor):
                 try:
                     # Export geometry as WKT for geopandas conversion
                     df = self.conn.execute(f"""
-                        SELECT 
+                        SELECT
                             * EXCLUDE ({geometry_column}),
                             ST_AsText({geometry_column}) as {geometry_column}
                         FROM {table_name}
@@ -304,7 +325,7 @@ class ParquetManager(DuckDBProcessor):
 
                 # Export geometry as WKT for geopandas conversion
                 df = self.conn.execute(f"""
-                    SELECT 
+                    SELECT
                         * EXCLUDE ({geometry_column}),
                         ST_AsText({geometry_column}) as {geometry_column}
                     FROM {table_name}
@@ -328,14 +349,14 @@ class ParquetManager(DuckDBProcessor):
                 return output_path
 
         except Exception as e:
-            error_msg = f"Failed to save spatial table to GeoParquet: {str(e)}"
+            error_msg = f"Failed to save spatial table to GeoParquet: {e!s}"
             logger.error(error_msg)
             raise RuntimeError(error_msg) from e
 
     # Legacy methods for backward compatibility
     def save_geodataframe_to_geoparquet(
         self,
-        gdf,  # Could be GeoDataFrame or table name
+        gdf: GeoDataFrame | str,  # Could be GeoDataFrame or table name
         output_path: Path,
         geometry_column: str = "geometry",
         schema_metadata: dict | None = None,
@@ -346,40 +367,38 @@ class ParquetManager(DuckDBProcessor):
             return self.save_spatial_table_to_geoparquet(
                 gdf, output_path, geometry_column, schema_metadata
             )
-        else:
-            # It's a GeoDataFrame - register it first as spatial table
-            import time
+        # It's a GeoDataFrame - register it first as spatial table
+        import time
 
-            import geopandas as gpd
+        import geopandas as gpd
 
-            if isinstance(gdf, gpd.GeoDataFrame):
-                table_name = f"temp_gdf_{int(time.time())}"
+        if isinstance(gdf, gpd.GeoDataFrame):
+            table_name = f"temp_gdf_{int(time.time())}"
 
-                # Convert geometry to WKT for DuckDB
-                df_wkt = gdf.copy()
-                df_wkt[f"{geometry_column}_wkt"] = gdf[geometry_column].to_wkt()
-                df_wkt = df_wkt.drop(geometry_column, axis=1)
+            # Convert geometry to WKT for DuckDB
+            df_wkt = gdf.copy()
+            df_wkt[f"{geometry_column}_wkt"] = gdf[geometry_column].to_wkt()
+            df_wkt = df_wkt.drop(geometry_column, axis=1)
 
-                # Register as regular table first
-                self.register_dataframe(df_wkt, f"{table_name}_temp")
+            # Register as regular table first
+            self.register_dataframe(df_wkt, f"{table_name}_temp")
 
-                # Create spatial table
-                self.conn.execute(f"""
+            # Create spatial table
+            self.conn.execute(f"""
                     CREATE TABLE {table_name} AS
-                    SELECT 
+                    SELECT
                         * EXCLUDE ({geometry_column}_wkt),
                         ST_GeomFromText({geometry_column}_wkt) as {geometry_column}
                     FROM {table_name}_temp
                 """)
 
-                # Clean up temp table
-                self.drop_table(f"{table_name}_temp")
+            # Clean up temp table
+            self.drop_table(f"{table_name}_temp")
 
-                return self.save_spatial_table_to_geoparquet(
-                    table_name, output_path, geometry_column, schema_metadata
-                )
-            else:
-                raise ValueError(f"Unsupported data type: {type(gdf)}")
+            return self.save_spatial_table_to_geoparquet(
+                table_name, output_path, geometry_column, schema_metadata
+            )
+        raise ValueError(f"Unsupported data type: {type(gdf)}")
 
     # ✅ REMOVED: Legacy dataframe_to_geodataframe method
     # Use create_spatial_table_from_coords() instead for DuckDB-optimized spatial operations

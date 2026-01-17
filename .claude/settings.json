@@ -1,0 +1,63 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "Bash(cd frontend && npm:*)",
+      "Bash(cd backend && python:*)",
+      "Bash(pytest:*)",
+      "Bash(git:*)",
+      "Bash(bd:*)",
+      "Bash(gh:*)",
+      "Bash(supabase:*)",
+      "Bash(ruff:*)",
+      "Bash(npx oxlint:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(*--force*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'f=$(jq -r \".tool_input.file_path // empty\"); [[ -z \"$f\" ]] && exit 0; echo \"$f\" | grep -qE \"\\.env$|\\.env\\.local$\" && { echo \"BLOCKED: Cannot edit .env files directly. Use .env.example instead.\" >&2; exit 2; } || exit 0'"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'cmd=$(jq -r \".tool_input.command // empty\"); [[ -z \"$cmd\" ]] && exit 0; echo \"$cmd\" | grep -qE \"rm\\s+-rf\\s+/\" && { echo \"BLOCKED: Dangerous rm -rf / command\" >&2; exit 2; } || exit 0'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'f=$(jq -r \".tool_input.file_path // empty\"); [[ -z \"$f\" ]] && exit 0; case \"$f\" in *.ts|*.tsx) npx oxlint --fix \"$f\" 2>/dev/null || true ;; esac; exit 0'"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'f=$(jq -r \".tool_input.file_path // empty\"); [[ -z \"$f\" ]] && exit 0; case \"$f\" in *.py) ruff format \"$f\" 2>/dev/null || true ;; esac; exit 0'"
+          }
+        ]
+      }
+    ]
+  }
+}

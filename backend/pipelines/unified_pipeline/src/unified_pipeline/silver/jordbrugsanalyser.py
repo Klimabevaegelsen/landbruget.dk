@@ -1,7 +1,8 @@
 """
 Silver layer data processing for Jordbrugsanalyser Marker data.
 
-This module handles the processing of raw WFS responses from the bronze layer and convert them into structured tables with proper field mappings and data types.
+This module handles the processing of raw WFS responses from the bronze layer and
+convert them into structured tables with proper field mappings and data types.
 
 The module contains:
 - JordbrugsanalyserSilverConfig: Configuration class for the silver processing
@@ -13,7 +14,7 @@ with Danish field names mapped to English equivalents and proper geometry handli
 
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 import duckdb
 
@@ -24,6 +25,7 @@ from shapely.geometry import MultiPolygon, Polygon
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import AsyncTimer
+
 
 class JordbrugsanalyserSilverConfig(BaseJobConfig):
     """
@@ -56,14 +58,14 @@ class JordbrugsanalyserSilverConfig(BaseJobConfig):
     end_year: int = 2024
 
     # WFS namespaces for parsing XML responses
-    namespaces: Dict[str, str] = {
+    namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",
         "gml": "http://www.opengis.net/gml/3.2",
         "Jordbrugsanalyser": "Jordbrugsanalyser",
     }
 
     # Field mapping from Danish WFS fields to standardized English field names
-    field_mapping: Dict[str, tuple] = {
+    field_mapping: ClassVar[dict[str, tuple]] = {
         "AfgKat": ("crop_category", str),
         "AfgNavn": ("crop_name", str),
         "AfgNr": ("crop_code", lambda x: int(x) if x and x.isdigit() else None),
@@ -77,6 +79,7 @@ class JordbrugsanalyserSilverConfig(BaseJobConfig):
     }
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
 
 class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJobInterface):
     """
@@ -107,10 +110,10 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
         Initialize the JordbrugsanalyserSilver processor.
 
         Args:
-            config (JordbrugsanalyserSilverConfig): Configuration for the processor        """
+            config (JordbrugsanalyserSilverConfig): Configuration for the processor"""
         super().__init__(config)
 
-    def _clean_text_value(self, value: Optional[str]) -> Optional[str]:
+    def _clean_text_value(self, value: str | None) -> str | None:
         """
         Clean and normalize text values.
 
@@ -142,7 +145,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
 
         return cleaned
 
-    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[str]:
+    def _parse_geometry(self, geom_elem: ET.Element) -> str | None:
         """
         Parse GML geometry element to WKT string.
 
@@ -255,7 +258,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.error(f"Error parsing geometry: {e}")
             return None
 
-    def _parse_feature(self, feature_elem: ET.Element, year: int) -> Optional[Dict[str, Any]]:
+    def _parse_feature(self, feature_elem: ET.Element, year: int) -> dict[str, Any] | None:
         """
         Parse a single Marker feature from XML.
 
@@ -291,7 +294,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                     try:
                         raw_value = elem.text.strip()
                         if raw_value:
-                            if converter == str:
+                            if converter is str:
                                 feature_data[target_field] = self._clean_text_value(raw_value)
                             else:
                                 feature_data[target_field] = converter(raw_value)
@@ -310,7 +313,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.error(f"Error parsing feature: {e}")
             return None
 
-    def _parse_wfs_response(self, xml_content: str, year: int) -> List[Dict[str, Any]]:
+    def _parse_wfs_response(self, xml_content: str, year: int) -> list[dict[str, Any]]:
         """
         Parse a WFS FeatureCollection XML response.
 
@@ -336,7 +339,8 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                     parsed_features.append(feature_data)
 
             self.log.info(
-                f"Parsed {len(parsed_features)} features from {len(features)} XML elements for year {year}"
+                f"Parsed {len(parsed_features)} features from {len(features)} "
+                f"XML elements for year {year}"
             )
             return parsed_features
 
@@ -347,7 +351,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.error(f"Error parsing WFS response for year {year}: {e}")
             return []
 
-    def _process_year_data(self, year: int, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    def _process_year_data(self, year: int, bronze_data: Any | None = None) -> Any | None:
         """
         Process all data for a specific year from bronze layer.
 
@@ -455,13 +459,13 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             try:
                 bronze_conn.execute("INSTALL spatial")
                 bronze_conn.execute("LOAD spatial")
-            except:
+            except Exception:
                 pass  # May already be installed
 
             # Create processed table with spatial geometries
             bronze_conn.execute("""
                 CREATE OR REPLACE TABLE processed_features AS
-                SELECT 
+                SELECT
                     *,
                     ST_GeomFromText(geometry) as geom,
                     ST_IsValid(ST_GeomFromText(geometry)) as is_valid_geometry
@@ -505,7 +509,7 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
             self.log.error(f"Error processing year {year}: {e}")
             return None
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Any | None = None) -> None:
         """
         Run the silver layer processing pipeline.
 
@@ -558,15 +562,18 @@ class JordbrugsanalyserSilver(BaseSource[JordbrugsanalyserSilverConfig], SilverJ
                         # Log some statistics using DuckDB
                         total_area = (
                             self.conn.execute(
-                                f"SELECT SUM(area_ha) FROM {processed_table} WHERE area_ha IS NOT NULL"
+                                f"SELECT SUM(area_ha) FROM {processed_table} "
+                                f"WHERE area_ha IS NOT NULL"
                             ).fetchone()[0]
                             or 0
                         )
                         unique_crops = self.conn.execute(
-                            f"SELECT COUNT(DISTINCT crop_code) FROM {processed_table} WHERE crop_code IS NOT NULL"
+                            f"SELECT COUNT(DISTINCT crop_code) FROM {processed_table} "
+                            f"WHERE crop_code IS NOT NULL"
                         ).fetchone()[0]
                         unique_blocks = self.conn.execute(
-                            f"SELECT COUNT(DISTINCT field_block) FROM {processed_table} WHERE field_block IS NOT NULL"
+                            f"SELECT COUNT(DISTINCT field_block) FROM {processed_table} "
+                            f"WHERE field_block IS NOT NULL"
                         ).fetchone()[0]
 
                         self.log.info(f"Year {year} statistics:")

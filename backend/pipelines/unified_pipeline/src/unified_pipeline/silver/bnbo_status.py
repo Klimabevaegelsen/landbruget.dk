@@ -15,13 +15,19 @@ validates geometries, and stores the processed data in GCS.
 """
 
 import xml.etree.ElementTree as ET
-from typing import Any, Optional
+from typing import Any, ClassVar
 
 # ✅ MIGRATION: Removed pandas/geopandas imports - using DuckDB-spatial for all operations
 # ✅ MIGRATION: Removed shapely imports - using pure coordinate-based WKT generation
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.geometry_validator import (
+    validate_and_transform_geometries_duckdb,
+    validate_and_normalize_to_utm,
+)
 from unified_pipeline.util.timing import AsyncTimer, timed
+
+# CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
+USE_UTM_PROCESSING = True
 
 
 class BNBOStatusSilverConfig(BaseJobConfig):
@@ -44,7 +50,7 @@ class BNBOStatusSilverConfig(BaseJobConfig):
     dataset: str = "bnbo_status"
     bucket: str = "landbrugsdata-raw-data"
     storage_batch_size: int = 5000
-    status_mapping: dict[str, str] = {
+    status_mapping: ClassVar[dict[str, str]] = {
         "Frivillig aftale tilbudt (UDGÅET)": "Action Required",
         "Gennemgået, indsats nødvendig": "Action Required",
         "Ikke gennemgået (default værdi)": "Action Required",
@@ -85,7 +91,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         # No need to create another instance or setup DuckDB again
         self.log.info("✅ BNBOStatusSilver: Using unified GCS access and DuckDB connection")
 
-    def get_first_namespace(self, root: ET.Element) -> Optional[str]:
+    def get_first_namespace(self, root: ET.Element) -> str | None:
         """
         Extract the namespace from an XML root element.
 
@@ -108,7 +114,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 return elem.tag.split("}")[0].strip("{")
         return None
 
-    def clean_value(self, value: Any) -> Optional[str]:
+    def clean_value(self, value: Any) -> str | None:
         """
         Clean and standardize string values from XML.
 
@@ -132,7 +138,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         value = value.strip()
         return value if value else None
 
-    def _parse_geometry(self, geom_elem: ET.Element) -> Optional[dict[str, Any]]:
+    def _parse_geometry(self, geom_elem: ET.Element) -> dict[str, Any] | None:
         """
         Parse GML geometry into WKT format using pure coordinate-based approach.
 
@@ -175,7 +181,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                         polygon_wkt = f"POLYGON(({', '.join(coord_pairs)}))"
                         polygon_wkts.append(polygon_wkt)
                 except Exception as e:
-                    self.log.error(f"Failed to parse coordinates: {str(e)}")
+                    self.log.error(f"Failed to parse coordinates: {e!s}")
                     continue
 
             if not polygon_wkts:
@@ -217,10 +223,10 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             return {"wkt": final_wkt, "area_ha": area_ha}
 
         except Exception as e:
-            self.log.error(f"Error parsing geometry: {str(e)}")
+            self.log.error(f"Error parsing geometry: {e!s}")
             return None
 
-    def _parse_feature(self, feature: ET.Element) -> Optional[dict[str, Any]]:
+    def _parse_feature(self, feature: ET.Element) -> dict[str, Any] | None:
         """
         Parse a single XML feature into a dictionary of attributes.
 
@@ -241,7 +247,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         try:
             namespace = feature.tag.split("}")[0].strip("{")
 
-            geom_elem = feature.find("{%s}Shape" % namespace)
+            geom_elem = feature.find(f"{{{namespace}}}Shape")
             if geom_elem is None:
                 self.log.warning("No geometry found in feature")
                 return None
@@ -270,11 +276,11 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             return data
 
         except Exception as e:
-            self.log.error(f"Error parsing feature: {str(e)}", exc_info=True)
+            self.log.error(f"Error parsing feature: {e!s}", exc_info=True)
             return None
 
     @timed(name="Processing bronze data")  # type: ignore
-    def _process_xml_data(self, raw_data) -> Optional[str]:
+    def _process_xml_data(self, raw_data) -> str | None:
         """
         Process XML data from the bronze layer using DuckDB-spatial.
 
@@ -298,7 +304,6 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         # ✅ MIGRATION: Handle DuckDB table name (string) from bronze layer
         if isinstance(raw_data, str):
             # raw_data is a DuckDB table name from bronze layer
-            raw_df_table = raw_data
             # Get row count to check if empty
             row_count = self.conn.execute(f"SELECT COUNT(*) FROM {raw_data}").fetchone()[0]
             if row_count == 0:
@@ -324,7 +329,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         for index, row_tuple in enumerate(raw_df):
             try:
                 # Convert tuple to dict using column names
-                row = dict(zip(columns, row_tuple))
+                row = dict(zip(columns, row_tuple, strict=False))
                 # Parse the XML data
                 xml_data = row["payload"]
                 root = ET.fromstring(xml_data)
@@ -342,7 +347,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                             features.append(parsed)
 
             except Exception as e:
-                self.log.error(f"Error processing row {index}: {str(e)}", exc_info=True)
+                self.log.error(f"Error processing row {index}: {e!s}", exc_info=True)
                 raise e
 
         self.log.info(f"Parsed {len(features):,} features from XML data")
@@ -386,18 +391,30 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
         # ✅ MIGRATION: Use unified geometry validator instead of manual coordinate transformation
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {table_name} AS
-            SELECT 
+            SELECT
                 *,
-                ST_GeomFromText(geometry) as geometry_spatial,
-                geometry as geometry_wgs84
+                ST_GeomFromText(geometry) as geometry_spatial
             FROM bnbo_features_raw
             WHERE geometry IS NOT NULL
         """)
 
-        # ✅ COORDINATE FIX: Apply unified geometry validation and transformation
-        validate_and_transform_geometries_duckdb(
-            self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
-        )
+        # ✅ COORDINATE FIX: Apply unified geometry validation
+        # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
+        if USE_UTM_PROCESSING:
+            validate_and_normalize_to_utm(
+                self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
+            )
+        else:
+            validate_and_transform_geometries_duckdb(
+                self.conn, table_name, self.config.dataset, geometry_column="geometry_spatial"
+            )
+
+        # ✅ UPDATE: Replace original geometry column with transformed WKT
+        self.conn.execute(f"""
+            UPDATE {table_name} SET
+                geometry = ST_AsText(geometry_spatial)
+            WHERE geometry_spatial IS NOT NULL
+        """)
 
         feature_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         self.log.info(f"Created DuckDB table '{table_name}' with {feature_count:,} features")
@@ -429,7 +446,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             # Create dissolved geometries for each category using transformed coordinates
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                SELECT 
+                SELECT
                     status_category,
                     ST_Union_Agg(geometry_spatial) as dissolved_geometry
                 FROM {input_table_name}
@@ -450,7 +467,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 # Create empty table with proper schema
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                    SELECT 
+                    SELECT
                         CAST(NULL AS VARCHAR) as status_category,
                         CAST(NULL AS GEOMETRY) as geometry,
                         CAST(NULL AS TIMESTAMP) as dissolved_at
@@ -475,20 +492,22 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 # Create final table with overlap handling
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
-                    SELECT 
+                    SELECT
                         'Action Required' as status_category,
                         dissolved_geometry as geometry,
                         CURRENT_TIMESTAMP as dissolved_at
                     FROM {dissolved_table_name}
                     WHERE status_category = 'Action Required'
-                    
+
                     UNION ALL
-                    
-                    SELECT 
+
+                    SELECT
                         'Completed' as status_category,
                         ST_Difference(
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Completed'),
-                            (SELECT dissolved_geometry FROM {dissolved_table_name} WHERE status_category = 'Action Required')
+                            (SELECT dissolved_geometry FROM {dissolved_table_name}
+                             WHERE status_category = 'Completed'),
+                            (SELECT dissolved_geometry FROM {dissolved_table_name}
+                             WHERE status_category = 'Action Required')
                         ) as geometry,
                         CURRENT_TIMESTAMP as dissolved_at
                 """)
@@ -496,7 +515,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
                 # No overlaps to handle, use original dissolved geometries
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {dissolved_table_name}_final AS
-                    SELECT 
+                    SELECT
                         status_category,
                         dissolved_geometry as geometry,
                         CURRENT_TIMESTAMP as dissolved_at
@@ -517,17 +536,18 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             """).fetchone()[0]
 
             self.log.info(
-                f"Created dissolved table '{dissolved_table_name}' with {final_count} dissolved geometries"
+                f"Created dissolved table '{dissolved_table_name}' with "
+                f"{final_count} dissolved geometries"
             )
             return dissolved_table_name
 
         except Exception as e:
-            self.log.error(f"Error creating dissolved geometries: {str(e)}", exc_info=True)
+            self.log.error(f"Error creating dissolved geometries: {e!s}", exc_info=True)
             # Create empty table on error
             empty_table_name = "bnbo_dissolved_empty"
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {empty_table_name} AS
-                SELECT 
+                SELECT
                     CAST(NULL AS VARCHAR) as status_category,
                     CAST(NULL AS GEOMETRY) as geometry,
                     CAST(NULL AS TIMESTAMP) as dissolved_at
@@ -535,7 +555,7 @@ class BNBOStatusSilver(BaseSource[BNBOStatusSilverConfig], SilverJobInterface):
             """)
             return empty_table_name
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Any | None = None) -> None:
         """
         Run the complete BNBO status silver layer processing job.
 

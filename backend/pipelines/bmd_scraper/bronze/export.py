@@ -9,22 +9,22 @@ from bs4 import BeautifulSoup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def _get_optimized_gcs_access():
+def _get_optimized_gcs_access() -> type | None:
     """
     Get optimized GCS access with robust import handling.
 
     Returns GCSDataAccess if available, otherwise None for fallback.
     """
     try:
-        # Primary import path - should work when unified_pipeline is properly installed
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
 
         logging.info("✅ Successfully imported optimized GCSDataAccess")
         return GCSDataAccess
     except ImportError as e:
         logging.warning(f"⚠️ Could not import optimized GCSDataAccess: {e}")
         logging.warning(
-            "⚠️ Falling back to basic storage - ensure unified_pipeline is installed for optimal performance"
+            "⚠️ Falling back to basic storage - ensure common.gcs is installed "
+            "for optimal performance"
         )
         return None
 
@@ -44,7 +44,7 @@ class BMDScraper:
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
 
-    def get_verification_token(self):
+    def get_verification_token(self) -> str | None:
         """Get the __RequestVerificationToken from the export dialog."""
         url = f"{self.base_url}/External/Entry/ExportDialog"
         params = {
@@ -86,7 +86,7 @@ class BMDScraper:
         logging.info(f"Verification token obtained: {token[:10]}...")
         return token
 
-    def generate_document(self, token):
+    def generate_document(self, token) -> str | None:
         """Request document generation using the verification token."""
         url = f"{self.base_url}/External/Entry/GenerateDocument"
 
@@ -239,7 +239,7 @@ class GCSStorage:
     def _check_gcs_available(self):
         """Check if GCS is available (Google Cloud Storage library is installed)."""
         try:
-            from google.cloud import storage
+            from google.cloud import storage  # noqa: F401
 
             return True
         except ImportError:
@@ -254,7 +254,9 @@ class GCSStorage:
 
         if gcs_path is None:
             # Use the file structure from local path but with GCS prefix
-            relative_path = os.path.relpath(local_path, start=os.path.dirname(os.path.dirname(local_path)))
+            relative_path = os.path.relpath(
+                local_path, start=os.path.dirname(os.path.dirname(local_path))
+            )
             gcs_path = f"{self.prefix}/{relative_path}"
 
         try:
@@ -263,31 +265,32 @@ class GCSStorage:
                 full_gcs_path = f"gs://{self.bucket_name}/{gcs_path}"
 
                 # Stream file directly without loading into memory
-                with open(local_path, "rb") as file_obj:
-                    with self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file:
-                        import shutil
+                import shutil
 
-                        shutil.copyfileobj(file_obj, gcs_file)
+                with (
+                    open(local_path, "rb") as file_obj,
+                    self.gcs_access.fs.open(full_gcs_path, "wb") as gcs_file,
+                ):
+                    shutil.copyfileobj(file_obj, gcs_file)
 
                 logging.info(f"✅ Uploaded {local_path} to {full_gcs_path} (optimized streaming)")
                 return True
-            else:
-                # Fallback to old method if optimized access failed
-                from google.cloud import storage
+            # Fallback to old method if optimized access failed
+            from google.cloud import storage
 
-                client = storage.Client()
-                bucket = client.bucket(self.bucket_name)
-                blob = bucket.blob(gcs_path)
-                blob.upload_from_filename(local_path)
-                logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
-                return True
+            client = storage.Client()
+            bucket = client.bucket(self.bucket_name)
+            blob = bucket.blob(gcs_path)
+            blob.upload_from_filename(local_path)
+            logging.info(f"Uploaded {local_path} to gs://{self.bucket_name}/{gcs_path} (fallback)")
+            return True
 
         except Exception as e:
             logging.error(f"Failed to upload to GCS: {e}")
             return False
 
 
-def main():
+def main() -> None:
     # Example usage for local development
     scraper = BMDScraper(output_dir="bronze/bmd")
     file_path = scraper.scrape()

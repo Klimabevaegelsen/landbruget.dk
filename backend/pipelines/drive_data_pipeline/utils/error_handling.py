@@ -48,19 +48,18 @@ def retry_with_exponential_backoff(
                 wait=wait_exponential(multiplier=1, min=min_wait_seconds, max=max_wait_seconds),
                 reraise=True,
                 before_sleep=lambda retry_state: logger.warning(
-                    f"Retrying {func.__name__} (attempt {retry_state.attempt_number}/{max_attempts}) "
+                    f"Retrying {func.__name__} (attempt "
+                    f"{retry_state.attempt_number}/{max_attempts}) "
                     f"after error: {retry_state.outcome.exception()}"
                 ),
             )
-            
+
             try:
                 return retry_decorator(func)(*args, **kwargs)
             except RetryError as e:
-                logger.error(
-                    f"Failed all {max_attempts} attempts to execute {func.__name__}"
-                )
+                logger.error(f"Failed all {max_attempts} attempts to execute {func.__name__}")
                 if e.last_attempt.exception():
-                    raise e.last_attempt.exception()
+                    raise e.last_attempt.exception() from e
                 raise e
 
         return wrapper
@@ -89,4 +88,4 @@ class FileProcessingError(Exception):
 class StorageError(Exception):
     """Error during storage operations."""
 
-    pass 
+    pass

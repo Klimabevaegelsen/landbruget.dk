@@ -4,11 +4,10 @@ import base64
 import logging
 import os
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any
 
 import certifi
 import requests
-from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
 from dotenv import load_dotenv
 from requests import Session
@@ -38,7 +37,7 @@ ENDPOINTS = {
 }
 
 
-def get_fvm_credentials() -> Tuple[str, str, Any, Any]:
+def get_fvm_credentials() -> tuple[str, str, Any, Any]:
     """Get FVM username, password, VetStat certificate, and private key for robust authentication."""
     # Get required environment variables
     username = os.getenv("FVM_USERNAME")
@@ -79,21 +78,27 @@ def get_fvm_credentials() -> Tuple[str, str, Any, Any]:
             try:
                 # Check if the data is already binary (from Secret Manager) or base64 encoded
                 if isinstance(cert_base64, bytes):
-                    logger.debug("Using binary certificate data from VETSTAT_CERTIFICATE environment variable")
+                    logger.debug(
+                        "Using binary certificate data from VETSTAT_CERTIFICATE environment variable"
+                    )
                     p12_data = cert_base64
                     logger.debug(f"Using binary certificate data. Length: {len(p12_data)} bytes")
-                elif cert_base64.startswith('MII') or cert_base64.startswith('MIIC'):
+                elif cert_base64.startswith("MII") or cert_base64.startswith("MIIC"):
                     # Looks like base64 encoded certificate
-                    logger.debug("Using base64 certificate from VETSTAT_CERTIFICATE environment variable")
+                    logger.debug(
+                        "Using base64 certificate from VETSTAT_CERTIFICATE environment variable"
+                    )
                     p12_data = base64.b64decode(cert_base64)
-                    logger.debug(f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes")
+                    logger.debug(
+                        f"Successfully decoded base64 certificate. Decoded length: {len(p12_data)} bytes"
+                    )
                 else:
                     # Assume it's raw binary data stored as string (from Secret Manager)
                     logger.debug("Treating certificate as raw binary data from Secret Manager")
-                    p12_data = cert_base64.encode('latin1')  # Preserve binary data
+                    p12_data = cert_base64.encode("latin1")  # Preserve binary data
                     logger.debug(f"Using raw certificate data. Length: {len(p12_data)} bytes")
             except Exception as decode_error:
-                logger.error(f"Failed to process certificate data: {str(decode_error)}")
+                logger.error(f"Failed to process certificate data: {decode_error!s}")
                 p12_data = None
 
         # If base64 decoding failed or wasn't provided, try reading from file
@@ -104,18 +109,24 @@ def get_fvm_credentials() -> Tuple[str, str, Any, Any]:
                     p12_data = f.read()
                 logger.debug(f"Successfully read certificate file. Length: {len(p12_data)} bytes")
             except Exception as file_error:
-                logger.error(f"Failed to read certificate file {cert_path}: {str(file_error)}")
-                raise ValueError(f"Failed to read certificate file: {str(file_error)}") from file_error
+                logger.error(f"Failed to read certificate file {cert_path}: {file_error!s}")
+                raise ValueError(
+                    f"Failed to read certificate file: {file_error!s}"
+                ) from file_error
 
         if not p12_data:
-            raise ValueError("No valid certificate data found from either environment variable or file")
+            raise ValueError(
+                "No valid certificate data found from either environment variable or file"
+            )
 
         # Load the certificate and private key from the data
         try:
-            private_key, certificate, _ = load_key_and_certificates(p12_data, cert_password.encode("utf-8"))
+            private_key, certificate, _ = load_key_and_certificates(
+                p12_data, cert_password.encode("utf-8")
+            )
             logger.debug("Successfully loaded private key and certificate from PKCS12 data")
         except Exception as cert_error:
-            logger.error(f"Failed to load certificate with provided password: {str(cert_error)}")
+            logger.error(f"Failed to load certificate with provided password: {cert_error!s}")
             raise ValueError("Failed to load certificate with provided password") from cert_error
 
         if not private_key or not certificate:
@@ -124,11 +135,11 @@ def get_fvm_credentials() -> Tuple[str, str, Any, Any]:
         return username, password, certificate, private_key
 
     except Exception as e:
-        logger.error(f"Failed to load VetStat certificate/key: {str(e)}")
+        logger.error(f"Failed to load VetStat certificate/key: {e!s}")
         raise
 
 
-def get_legacy_fvm_credentials() -> Tuple[str, str]:
+def get_legacy_fvm_credentials() -> tuple[str, str]:
     """Get FVM credentials from environment variables (legacy simple auth)."""
     username = os.getenv("FVM_USERNAME")
     password = os.getenv("FVM_PASSWORD")
@@ -139,9 +150,11 @@ def get_legacy_fvm_credentials() -> Tuple[str, str]:
     return username, password
 
 
-def create_soap_client(wsdl_url: str, username: str, password: str, certificate: Any = None) -> Client:
+def create_soap_client(
+    wsdl_url: str, username: str, password: str, certificate: Any = None
+) -> Client:
     """Create a Zeep SOAP client with WSSE authentication.
-    
+
     Note: This is a legacy function for simple username/password auth.
     The new robust authentication uses certificate-based signing.
     """
@@ -162,30 +175,32 @@ def create_soap_client(wsdl_url: str, username: str, password: str, certificate:
         raise
 
 
-def create_robust_soap_client(endpoint_name: str) -> Tuple[Client, str, str, Any, Any]:
+def create_robust_soap_client(endpoint_name: str) -> tuple[Client, str, str, Any, Any]:
     """Create SOAP client with robust certificate-based authentication.
-    
+
     Returns:
         Tuple of (client, username, password, certificate, private_key)
     """
     if endpoint_name not in ENDPOINTS:
         raise ValueError(f"Unknown endpoint: {endpoint_name}. Available: {list(ENDPOINTS.keys())}")
-    
+
     wsdl_url = ENDPOINTS[endpoint_name]
-    
+
     try:
         # Try robust authentication first
         username, password, certificate, private_key = get_fvm_credentials()
         logger.info(f"Using robust authentication for {endpoint_name}")
     except Exception as e:
         # Fallback to legacy authentication if certificate is not available
-        logger.warning(f"Robust authentication failed for {endpoint_name}, falling back to legacy: {e}")
+        logger.warning(
+            f"Robust authentication failed for {endpoint_name}, falling back to legacy: {e}"
+        )
         username, password = get_legacy_fvm_credentials()
         certificate, private_key = None, None
-    
+
     # Create the client with simple auth (certificate-based signing would be implemented later)
     client = create_soap_client(wsdl_url, username, password, certificate)
-    
+
     return client, username, password, certificate, private_key
 
 

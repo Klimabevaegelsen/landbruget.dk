@@ -5,10 +5,21 @@ import logging
 import os
 import sys
 from datetime import date, datetime
-from typing import Any, Dict
+from typing import Any
 
-from bronze.load_svineflytning import ENDPOINTS, create_client, fetch_all_movements, get_fvm_credentials
 from tqdm.contrib.logging import logging_redirect_tqdm
+
+from bronze.load_svineflytning import (
+    ENDPOINTS,
+    create_client,
+    fetch_all_movements,
+    get_fvm_credentials,
+)
+
+# Import pipeline metadata system for data tracing
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+PIPELINE_METADATA_AVAILABLE = True
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +39,9 @@ def setup_logging(log_level: str):
         root.removeHandler(handler)
 
     # Set up root logger at WARNING by default with a format that works well with tqdm
-    logging.basicConfig(level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
     # Configure our pipeline loggers
     pipeline_logger = logging.getLogger("svineflytning_pipeline")
@@ -47,20 +60,41 @@ def setup_logging(log_level: str):
 
 
 def get_default_dates() -> tuple[date, date]:
-    """Get default start and end dates (last 5 years)."""
+    """Get default start and end dates (last 5 years for full mode, 2 months for incremental)."""
     today = date.today()
     end_date = today
-    start_date = today.replace(year=today.year - 5)  # 5 years ago from today
+
+    # Check processing mode to determine default date range
+    processing_mode = os.getenv("SVINEFLYTNING_PROCESSING_MODE", "incremental").lower()
+
+    if processing_mode == "incremental":
+        # Last 2 months for incremental (as per CHR plan)
+        from datetime import timedelta
+
+        start_date = today - timedelta(days=60)
+        logger.info(f"Incremental mode: using 2-month range ({start_date} to {end_date})")
+    elif processing_mode == "full":
+        # Full backfill: 3 years (as per CHR plan)
+        start_date = today.replace(year=today.year - 3)
+        logger.info(f"Full mode: using 3-year range ({start_date} to {end_date})")
+    else:
+        # Default fallback
+        start_date = today.replace(year=today.year - 5)
+        logger.info(f"Default mode: using 5-year range ({start_date} to {end_date})")
+
     return start_date, end_date
 
 
-def parse_args() -> Dict[str, Any]:
+def parse_args() -> dict[str, Any]:
     """Parse command line arguments."""
     start_date_def, end_date_def = get_default_dates()
 
     parser = argparse.ArgumentParser(description="Run the Svineflytning Data Pipeline.")
     parser.add_argument(
-        "--stage", choices=["bronze", "silver", "all"], default="all", help="Pipeline stage to run (default: all)"
+        "--stage",
+        choices=["bronze", "silver", "all"],
+        default="all",
+        help="Pipeline stage to run (default: all)",
     )
     parser.add_argument(
         "--start-date",
@@ -75,13 +109,19 @@ def parse_args() -> Dict[str, Any]:
         help="End date (YYYY-MM-DD)",
     )
     parser.add_argument(
-        "--bronze-timestamp", help="Specific bronze timestamp to process for silver stage (YYYYMMDD_HHMMSS)"
+        "--bronze-timestamp",
+        help="Specific bronze timestamp to process for silver stage (YYYYMMDD_HHMMSS)",
     )
     parser.add_argument(
-        "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="WARNING", help="Logging level"
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="WARNING",
+        help="Logging level",
     )
     parser.add_argument("--progress", action="store_true", help="Show progress information")
-    parser.add_argument("--environment", choices=["prod", "test"], default="prod", help="Environment to use")
+    parser.add_argument(
+        "--environment", choices=["prod", "test"], default="prod", help="Environment to use"
+    )
     parser.add_argument("--test", action="store_true", help="Run in test mode with limited data")
     parser.add_argument(
         "--max-concurrent-fetches",
@@ -109,7 +149,7 @@ def parse_args() -> Dict[str, Any]:
     return vars(args)
 
 
-def run_bronze_stage(args: Dict[str, Any]) -> Dict[str, Any]:
+def run_bronze_stage(args: dict[str, Any]) -> dict[str, Any]:
     """Run the bronze stage of the pipeline."""
     logger.warning("Starting bronze stage")
     if args["progress"]:
@@ -144,7 +184,9 @@ def run_bronze_stage(args: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def run_silver_stage(args: Dict[str, Any], bronze_result: Dict[str, Any] = None) -> Dict[str, Any]:
+def run_silver_stage(
+    args: dict[str, Any], bronze_result: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Run the silver stage of the pipeline."""
     logger.warning("Starting silver stage")
 
@@ -165,7 +207,9 @@ def run_silver_stage(args: Dict[str, Any], bronze_result: Dict[str, Any] = None)
             export_timestamp = bronze_result.get("export_timestamp")
 
             result = run_silver_processing(
-                bronze_data_path=bronze_path, export_timestamp=export_timestamp, use_latest_bronze=False
+                bronze_data_path=bronze_path,
+                export_timestamp=export_timestamp,
+                use_latest_bronze=False,
             )
         else:
             # Auto-discover latest bronze data
@@ -192,8 +236,19 @@ def run_silver_stage(args: Dict[str, Any], bronze_result: Dict[str, Any] = None)
 
 def main():
     """Main pipeline execution."""
+    # Record start time for execution tracking
+    start_time = datetime.now()
+
     args = parse_args()
     setup_logging(args["log_level"])
+
+    # Initialize pipeline metadata manager
+    pipeline_metadata_manager = None
+    if PIPELINE_METADATA_AVAILABLE:
+        pipeline_metadata_manager = PipelineMetadataManager()
+        logger.info("✅ Pipeline metadata system initialized")
+    else:
+        logger.warning("⚠️ Pipeline metadata system not available - continuing without data tracing")
 
     logger.warning(f"Starting Svineflytning pipeline - Stage: {args['stage']}")
 
@@ -215,6 +270,48 @@ def main():
                 logger.error("Silver stage failed")
                 sys.exit(1)
 
+        # Create and save metadata for Svineflytning data
+        if pipeline_metadata_manager and (bronze_result or silver_result):
+            try:
+                import time
+
+                processing_duration = time.time() - start_time.timestamp()
+
+                # Determine record count from results
+                record_count = None
+                if silver_result and "processed_movements" in silver_result:
+                    record_count = silver_result["processed_movements"]
+                elif bronze_result and "total_movements" in bronze_result:
+                    record_count = bronze_result["total_movements"]
+
+                # Create metadata for Svineflytning movements
+                svineflytning_metadata = pipeline_metadata_manager.create_metadata(
+                    source_key="svineflytning_movements",
+                    record_count=record_count,
+                    processing_duration=processing_duration,
+                    file_size_bytes=None,  # Will be calculated automatically
+                    source_datasets=None,
+                )
+
+                # Determine where to save metadata
+                metadata_dir = None
+                if silver_result and "output_path" in silver_result:
+                    metadata_dir = silver_result["output_path"]
+                elif bronze_result and "storage_path" in bronze_result:
+                    metadata_dir = bronze_result["storage_path"]
+
+                if metadata_dir:
+                    from pathlib import Path
+
+                    metadata_path = pipeline_metadata_manager.save_metadata(
+                        svineflytning_metadata,
+                        Path(metadata_dir) / "svineflytning_movements_metadata.json",
+                    )
+                    logger.info(f"✅ Svineflytning movements metadata saved to {metadata_path}")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to create Svineflytning pipeline metadata: {e}")
+
         # Summary
         logger.warning("Pipeline completed successfully")
         if args["progress"]:
@@ -222,10 +319,12 @@ def main():
                 logger.warning(f"Bronze: {bronze_result.get('storage_path', 'N/A')}")
             if silver_result:
                 logger.warning(f"Silver: {silver_result.get('output_path', 'N/A')}")
-                logger.warning(f"Movements processed: {silver_result.get('processed_movements', 'N/A')}")
+                logger.warning(
+                    f"Movements processed: {silver_result.get('processed_movements', 'N/A')}"
+                )
 
     except Exception as e:
-        logger.error(f"Pipeline failed: {str(e)}", exc_info=True)
+        logger.error(f"Pipeline failed: {e!s}", exc_info=True)
         sys.exit(1)
 
 

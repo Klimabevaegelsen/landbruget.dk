@@ -3,4 +3,4 @@
 from .metadata import MetadataManager
 from .processor import BronzeProcessor
 
-__all__ = ["BronzeProcessor", "MetadataManager"] 
+__all__ = ["BronzeProcessor", "MetadataManager"]

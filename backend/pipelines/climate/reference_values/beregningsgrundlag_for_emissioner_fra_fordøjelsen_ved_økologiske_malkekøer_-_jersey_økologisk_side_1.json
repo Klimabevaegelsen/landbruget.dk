@@ -1,0 +1,18 @@
+{
+  "table_name": "Beregningsgrundlag for emissioner fra fordøjelsen ved økologiske malkekøer - Jersey, økologisk (Side 18)",
+  "description": "x=ydelse, kg EKM per årsko",
+  "equations": [
+    {
+      "parameter": "Foderoptag",
+      "equation": "y = 0,0007x + 12,834"
+    },
+    {
+      "parameter": "Fedtsyre",
+      "equation": "y = 0,0003x + 28,775"
+    },
+    {
+      "parameter": "NDF",
+      "equation": "y = -0,0044x + 343,12"
+    }
+  ]
+}

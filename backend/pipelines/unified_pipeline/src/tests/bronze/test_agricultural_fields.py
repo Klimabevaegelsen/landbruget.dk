@@ -3,7 +3,7 @@ Tests for the AgriculturalFieldsBronze class.
 """
 
 import json
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -106,7 +106,7 @@ async def test_get_total_count_exception(
 async def test_fetch_chunk_success(agricultural_fields_bronze: AgriculturalFieldsBronze) -> None:
     """Test fetching a chunk with successful response."""
 
-    test_features: Dict[str, Any] = {
+    test_features: dict[str, Any] = {
         "features": [
             {"id": 1, "attributes": {"name": "Field1"}, "geometry": {"rings": [[[1, 1], [2, 2]]]}},
             {"id": 2, "attributes": {"name": "Field2"}, "geometry": {"rings": [[[3, 3], [4, 4]]]}},

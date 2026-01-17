@@ -3,12 +3,12 @@
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource
 from unified_pipeline.util.log_util import Logger
 
-from .area_validation import FieldAreaValidator, ValidationException
+from .area_validation import FieldAreaValidator, ValidationError
 from .config import CONFIG
 
 
@@ -19,7 +19,7 @@ class FieldAnalysisStageConfig(BaseJobConfig):
     batch_size: int = CONFIG.batch_size
     max_memory_gb: int = CONFIG.max_memory_gb
     max_threads: int = CONFIG.max_threads
-    
+
     # Area validation settings (enabled by default for data integrity)
     enable_area_validation: bool = os.getenv("ENABLE_AREA_VALIDATION", "true").lower() == "true"
     area_validation_tolerance_pct: float = float(os.getenv("AREA_VALIDATION_TOLERANCE_PCT", "1.0"))
@@ -34,17 +34,18 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         self.log = Logger.get_logger()
         self.stage_name = stage_name
         self.start_time = None
-        
+
         # Initialize area validator if validation is enabled
         self.area_validator = None
         if config.enable_area_validation:
             self.area_validator = FieldAreaValidator(
-                conn=self.conn,
-                log=self.log,
-                tolerance_pct=config.area_validation_tolerance_pct
+                conn=self.conn, log=self.log, tolerance_pct=config.area_validation_tolerance_pct
             )
-            self.log.info(f"🔍 Area validation ENABLED by default for {stage_name} (tolerance: {config.area_validation_tolerance_pct}%)")
-        
+            tolerance = config.area_validation_tolerance_pct
+            self.log.info(
+                f"🔍 Area validation ENABLED by default for {stage_name} (tolerance: {tolerance}%)"
+            )
+
         self.validation_config = config
 
     def _load_silver_dataset(self, dataset_name: str, table_name: str, where_clause: str = "1=1"):
@@ -85,94 +86,140 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
         # Log export statistics
         count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-        self.log.info(f"✅ Exported {count:,} rows to {output_dataset} (year: {CONFIG.agricultural_fields_year})")
+        year = CONFIG.agricultural_fields_year
+        self.log.info(f"✅ Exported {count:,} rows to {output_dataset} (year: {year})")
 
     def _get_latest_gold_path(self, dataset: str) -> str:
         """Get path to latest gold data file for a given dataset."""
+        # Try new standardized format first
         pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/data.parquet"
         files = self.gcs_access.list_files(pattern)
 
         if not files:
+            # Fallback to legacy format where file name matches dataset name
+            self.log.warning(f"No new format files found for {dataset}, trying legacy format")
+            legacy_pattern = f"gs://{CONFIG.bucket}/gold/{dataset}/*/{dataset}.parquet"
+            files = self.gcs_access.list_files(legacy_pattern)
+
+            if files:
+                self.log.info(f"Found legacy format files for {dataset}: {len(files)} files")
+                latest_file = sorted(files)[-1]
+                self.log.info(f"Selected latest file: {latest_file}")
+                return latest_file
+
+        if not files:
             raise FileNotFoundError(f"No gold data found for {dataset}")
 
-        return sorted(files)[-1]  # Latest by timestamp
-    
-    def _get_input_area_reference(self) -> Optional[Dict[str, Any]]:
+        latest_file = sorted(files)[-1]
+        self.log.info(f"Selected latest file: {latest_file}")
+        return latest_file
+
+    def _load_gold_dataset(self, dataset_name: str, table_name: str, where_clause: str = "1=1"):
+        """
+        Load a gold dataset into DuckDB using the gold data path.
+
+        Args:
+            dataset_name: Name of the dataset (e.g., 'property_cadastral_merged')
+            table_name: Name to give the table in DuckDB
+            where_clause: Optional WHERE clause for server-side filtering
+        """
+        self.log.info(f"Loading {dataset_name} from gold...")
+
+        # Get the latest gold path
+        gold_path = self._get_latest_gold_path(dataset_name)
+
+        # Use gcs_access to query the data directly
+        if where_clause != "1=1":
+            query = f"SELECT * WHERE {where_clause}"
+            self.gcs_access.query_parquet_direct(gold_path, query, table_name)
+        else:
+            self.gcs_access.query_parquet_direct(gold_path, "SELECT *", table_name)
+
+        # Log table statistics
+        count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+        self.log.info(f"✅ Loaded {count:,} rows into table {table_name}")
+
+    def _get_input_area_reference(self) -> dict[str, Any] | None:
         """
         Get reference area statistics from input data for validation.
         Should be overridden by stages that need validation.
-        
+
         Returns:
             Dict with 'total_area' and 'field_count' keys, or None if not applicable
         """
         return None
-    
-    def _get_main_output_table(self) -> Optional[str]:
+
+    def _get_main_output_table(self) -> str | None:
         """
         Get the name of the main output table for area validation.
         Should be overridden by stages that need validation.
-        
+
         Returns:
             Name of the main output table to validate, or None if not applicable
         """
         return None
-    
+
     def _should_validate_areas(self) -> bool:
         """Check if this stage should perform area validation."""
         # Skip validation for stages that intentionally filter/reduce the dataset
         if self.area_validator is None:
             return False
-            
+
         # Stage 0: Pre-filtering doesn't preserve areas exactly
         if self.stage_name.startswith("Stage 0"):
             return False
-            
-        # Stage 2: Filtering stages intentionally reduce dataset size (only fields with intersections)
-        if self.stage_name.startswith("Stage 2"):
-            return False
-            
-        # All other stages should preserve area (Stage 1: enrichment, Stage 3: analysis, Stage 4: consolidation)
-        return True
-    
+
+        # Stage 2: Filtering stages intentionally reduce dataset size
+        # (only fields with intersections)
+        # All other stages should preserve area
+        # (Stage 1: enrichment, Stage 3: analysis, Stage 4: consolidation)
+        return not self.stage_name.startswith("Stage 2")
+
     def _validate_stage_areas(self) -> None:
         """Validate areas after stage processing if validation is enabled."""
         if not self._should_validate_areas():
             return
-        
+
         # Get input reference and output table
         input_reference = self._get_input_area_reference()
         output_table = self._get_main_output_table()
-        
+
         if not input_reference or not output_table:
-            self.log.info(f"⚠️ Area validation skipped for {self.stage_name}: missing reference data or output table")
+            msg = (
+                f"⚠️ Area validation skipped for {self.stage_name}: "
+                f"missing reference data or output table"
+            )
+            self.log.info(msg)
             return
-        
+
         # Perform validation
         try:
             validation_result = self.area_validator.validate_stage_with_input_reference(
                 output_table=output_table,
                 stage_name=self.stage_name,
                 reference_total_area=input_reference["total_area"],
-                reference_field_count=input_reference["field_count"]
+                reference_field_count=input_reference["field_count"],
             )
-            
+
             # Handle validation failure
             if not validation_result.is_valid:
                 if self.validation_config.fail_on_validation_error:
-                    raise ValidationException(validation_result)
-                else:
-                    self.log.warning(f"⚠️ Area validation failed but continuing: {validation_result.validation_message}")
-            
-        except ValidationException:
+                    raise ValidationError(validation_result)
+                msg = (
+                    f"⚠️ Area validation failed but continuing: "
+                    f"{validation_result.validation_message}"
+                )
+                self.log.warning(msg)
+
+        except ValidationError:
             raise  # Re-raise validation exceptions
         except Exception as e:
-            error_msg = f"❌ Area validation error for {self.stage_name}: {str(e)}"
+            error_msg = f"❌ Area validation error for {self.stage_name}: {e!s}"
             if self.validation_config.fail_on_validation_error:
                 raise RuntimeError(error_msg) from e
-            else:
-                self.log.warning(f"⚠️ {error_msg} - continuing anyway")
+            self.log.warning(f"⚠️ {error_msg} - continuing anyway")
 
-    async def run(self, silver_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def run(self, silver_data: dict[str, Any] | None = None) -> dict[str, Any]:
         """Execute the stage processing."""
         self.start_time = time.time()
         self.log.info(f"🚀 Starting {self.stage_name}")
@@ -186,7 +233,7 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
 
             # Save output data
             self._save_output_data(result)
-            
+
             # Validate areas after processing (stages 1-4 only)
             self._validate_stage_areas()
 
@@ -207,11 +254,11 @@ class FieldAnalysisStageBase(BaseSource[FieldAnalysisStageConfig], ABC):
         pass
 
     @abstractmethod
-    async def _execute_stage_processing(self) -> Dict[str, Any]:
+    async def _execute_stage_processing(self) -> dict[str, Any]:
         """Execute the main processing logic for this stage."""
         pass
 
     @abstractmethod
-    def _save_output_data(self, result: Dict[str, Any]):
+    def _save_output_data(self, result: dict[str, Any]):
         """Save the output data from this stage."""
         pass

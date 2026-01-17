@@ -23,33 +23,30 @@ const getCachedSupabaseClient = cache(() => {
     db: {
       schema: 'public',
     },
-    realtime: {
-      enabled: false, // Disable realtime for better performance
-    },
   });
 });
 
 // Export the cached client
-export const supabase: SupabaseClient<Database> = getCachedSupabaseClient();
+export const supabase = getCachedSupabaseClient();
 
 // Utility function for error handling
 export function handleSupabaseError(error: unknown): never {
   console.error('Supabase error:', error);
-  
+
   if (error && typeof error === 'object' && 'code' in error) {
     if (error.code === 'PGRST116') {
       throw new Error('No data found for the specified criteria');
     }
-    
+
     if (error.code === 'PGRST301') {
       throw new Error('Database connection error');
     }
   }
-  
+
   if (error && typeof error === 'object' && 'message' in error) {
     throw new Error(`Database error: ${error.message}`);
   }
-  
+
   throw new Error('An unexpected database error occurred');
 }
 
@@ -63,40 +60,40 @@ export function transformWKTToGeoJSON(wkt: string): GeoJSON.Geometry {
         const [lon, lat] = coords.split(' ').map(Number);
         return {
           type: 'Point',
-          coordinates: [lon, lat]
+          coordinates: [lon, lat],
         };
       }
     }
-    
+
     if (wkt.startsWith('POLYGON')) {
       const coords = wkt.match(/POLYGON\(\(([^)]+)\)\)/)?.[1];
       if (coords) {
-        const points = coords.split(',').map(point => {
+        const points = coords.split(',').map((point) => {
           const [lon, lat] = point.trim().split(' ').map(Number);
           return [lon, lat];
         });
         return {
           type: 'Polygon',
-          coordinates: [points]
+          coordinates: [points],
         };
       }
     }
-    
+
     if (wkt.startsWith('MULTIPOLYGON')) {
       // Simplified MULTIPOLYGON parsing - would need more robust implementation for production
       const coords = wkt.match(/MULTIPOLYGON\(\(\(([^)]+)\)\)\)/)?.[1];
       if (coords) {
-        const points = coords.split(',').map(point => {
+        const points = coords.split(',').map((point) => {
           const [lon, lat] = point.trim().split(' ').map(Number);
           return [lon, lat];
         });
         return {
           type: 'MultiPolygon',
-          coordinates: [[points]]
+          coordinates: [[points]],
         };
       }
     }
-    
+
     throw new Error(`Unsupported WKT format: ${wkt.substring(0, 20)}...`);
   } catch (error) {
     console.error('WKT transformation error:', error);
@@ -121,9 +118,9 @@ export async function checkSupabaseConnection(): Promise<boolean> {
       .from('h3_pfas_exposure')
       .select('id')
       .limit(1);
-    
+
     return !error;
   } catch {
     return false;
   }
-} 
+}

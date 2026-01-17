@@ -6,7 +6,9 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 # Configure logging to stdout
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", stream=sys.stdout)
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s", stream=sys.stdout
+)
 
 # Updated namespace dictionary for parsing VetStat XML
 NAMESPACES = {
@@ -28,7 +30,9 @@ def extract_data_from_xml_chunk(xml_chunk):
             try:
                 root = ET.fromstring(xml_chunk)
             except ET.ParseError:
-                logging.warning(f"Skipping chunk due to parsing error (fragment attempt): {xml_chunk[:100]}...")
+                logging.warning(
+                    f"Skipping chunk due to parsing error (fragment attempt): {xml_chunk[:100]}..."
+                )
                 return []
         else:
             root = ET.fromstring(xml_chunk)
@@ -45,7 +49,8 @@ def extract_data_from_xml_chunk(xml_chunk):
             # Log the actual body content if response element is not found for debugging
             body_content_sample = ET.tostring(body, encoding="unicode", method="xml")[:200]
             logging.warning(
-                f"VetStat_CHRHentAntibiotikaForbrugResponse not found in SOAP Body. Body starts with: {body_content_sample}..."
+                f"VetStat_CHRHentAntibiotikaForbrugResponse not found in SOAP Body. "
+                f"Body starts with: {body_content_sample}..."
             )
             return []
 
@@ -85,7 +90,7 @@ def parse_vetstat_xml(input_file: Path, output_file: Path):
     """Parse concatenated VetStat SOAP XML responses into JSON Lines format."""
     try:
         # Read the input file in text mode to handle XML chunks
-        with open(input_file, "r", encoding="utf-8") as f:
+        with open(input_file, encoding="utf-8") as f:
             xml_content = f.read()
 
         # Split content into individual SOAP responses if multiple exist
@@ -100,7 +105,8 @@ def parse_vetstat_xml(input_file: Path, output_file: Path):
                 all_data.extend(chunk_data)
                 if chunk_data:
                     logging.info(f"Successfully parsed chunk {i} with {len(chunk_data)} records")
-                # else: # DEBUG: Removed the generic 'No data extracted' log here, handled in extract_data_from_xml_chunk
+                # else: # DEBUG: Removed the generic 'No data extracted' log here,
+                # handled in extract_data_from_xml_chunk
                 # logging.warning(f"No data extracted from chunk {i}") # DEBUG: Commented out
 
         # Write the collected data to JSON Lines format
@@ -109,7 +115,9 @@ def parse_vetstat_xml(input_file: Path, output_file: Path):
                 json.dump(record, f, ensure_ascii=False)
                 f.write("\n")
 
-        logging.info(f"Successfully processed {len(xml_chunks)} XML chunks into {len(all_data)} records")
+        logging.info(
+            f"Successfully processed {len(xml_chunks)} XML chunks into {len(all_data)} records"
+        )
         return True
 
     except Exception as e:
@@ -118,8 +126,12 @@ def parse_vetstat_xml(input_file: Path, output_file: Path):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Parse concatenated VetStat SOAP XML responses into JSON Lines.")
-    parser.add_argument("input_file", type=Path, help="Path to the input vetstat_antibiotics.xml file.")
+    parser = argparse.ArgumentParser(
+        description="Parse concatenated VetStat SOAP XML responses into JSON Lines."
+    )
+    parser.add_argument(
+        "input_file", type=Path, help="Path to the input vetstat_antibiotics.xml file."
+    )
     parser.add_argument("output_file", type=Path, help="Path to the output JSON Lines file.")
 
     args = parser.parse_args()

@@ -16,7 +16,7 @@ proper error handling and retry logic for robustness.
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 import requests
 from pydantic import ConfigDict
@@ -54,7 +54,7 @@ class DSTBronzeConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
 
     # DST-specific configuration
-    table_ids: List[str] = ["HST77", "GARTN1", "FRO", "HALM1"]
+    table_ids: ClassVar[list[str]] = ["HST77", "GARTN1", "FRO", "HALM1"]
     lang: str = "da"
     api_base_url: str = "https://api.statbank.dk/v1"
 
@@ -76,7 +76,7 @@ class DSTApiClient:
             }
         )
 
-    def get_table_info(self, table_id: str) -> Optional[Dict[str, Any]]:
+    def get_table_info(self, table_id: str) -> dict[str, Any] | None:
         """Fetch table metadata from the API"""
         try:
             url = f"{self.base_url}/tableinfo"
@@ -97,10 +97,10 @@ class DSTApiClient:
     def get_table_data(
         self,
         table_id: str,
-        variables: Optional[List[str]] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        variables: list[str] | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+    ) -> dict[str, Any] | None:
         """Fetch table data from the API"""
         try:
             url = f"{self.base_url}/data"
@@ -131,10 +131,10 @@ class DSTApiClient:
     def _build_request_payload(
         self,
         table_id: str,
-        variables: Optional[List[str]] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        variables: list[str] | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+    ) -> dict[str, Any]:
         """Build request payload based on table ID and parameters - DEPRECATED"""
         # This method is now deprecated since we use the simplified wildcard approach
         # Keeping for backward compatibility but not used anymore
@@ -151,8 +151,8 @@ class DSTApiClient:
         stop=stop_after_attempt(3),
     )
     def _make_request_with_retry(
-        self, url: str, payload: Dict[str, Any]
-    ) -> Optional[requests.Response]:
+        self, url: str, payload: dict[str, Any]
+    ) -> requests.Response | None:
         """Make API request with exponential backoff retry logic"""
         try:
             response = self.session.post(url, json=payload, timeout=60)
@@ -188,7 +188,7 @@ class DSTBronze(BaseSource[DSTBronzeConfig], BronzeJobInterface):
         self.api_client = DSTApiClient(base_url=self.config.api_base_url, lang=self.config.lang)
 
     @timed(name="Fetching DST table data")
-    async def _fetch_table_data(self, table_id: str) -> Optional[Dict[str, Any]]:
+    async def _fetch_table_data(self, table_id: str) -> dict[str, Any] | None:
         """
         Fetch data and metadata for a specific DST table.
 
@@ -240,9 +240,9 @@ class DSTBronze(BaseSource[DSTBronzeConfig], BronzeJobInterface):
     def _save_table_data(
         self,
         table_id: str,
-        table_data: Dict[str, Any],
-        table_info: Optional[Dict[str, Any]],
-        metadata: Dict[str, Any],
+        table_data: dict[str, Any],
+        table_info: dict[str, Any] | None,
+        metadata: dict[str, Any],
     ) -> None:
         """
         Save table data, info, and metadata to storage.
@@ -277,7 +277,7 @@ class DSTBronze(BaseSource[DSTBronzeConfig], BronzeJobInterface):
             self.log.error(f"Error saving data for table {table_id}: {e}")
             raise
 
-    async def run(self) -> Optional[Dict[str, Any]]:
+    async def run(self) -> dict[str, Any] | None:
         """
         Run bronze processing for all configured DST tables.
 

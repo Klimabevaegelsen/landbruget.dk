@@ -1,422 +1,361 @@
-"""CHR Properties processing using DuckDB and Ibis."""
+"""CHR Properties processing using vanilla DuckDB."""
 
 import logging
 from pathlib import Path
-from typing import Optional
 
-import ibis
-import ibis.expr.datatypes as dt
+import duckdb
 
-# Import export module
+# Import config constants and export module
+from .config import SOURCE_CRS, TARGET_CRS
 from . import export
 
 
 def create_properties_table(
-    con: ibis.BaseBackend, ejendom_oplys_raw: Optional[ibis.Table], silver_dir: Path
-) -> Optional[ibis.Table]:
-    """Creates the properties table from ejendom_oplysninger data using DuckDB and Ibis."""
+    con: duckdb.DuckDBPyConnection, ejendom_oplys_raw_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
+    """Creates the properties table from ejendom_oplysninger data using vanilla DuckDB.
+
+    Args:
+        con: DuckDB connection
+        ejendom_oplys_raw_table: Name of the raw ejendom_oplysninger data table in DuckDB (or None if not available)
+        silver_dir: Output directory for silver files
+
+    Returns:
+        DuckDB relation with processed properties data or None if failed
+    """
     logging.info("Starting creation of properties table.")
 
-    # Check for nested structure Response.EjendomsOplysninger
-    if ejendom_oplys_raw is None or "Response" not in ejendom_oplys_raw.columns:
-        logging.warning("Cannot create properties: 'Response' column missing in ejendom_oplys_raw.")
+    if ejendom_oplys_raw_table is None:
+        logging.warning("Cannot create properties: ejendom_oplys_raw_table is None.")
         return None
 
     try:
-        # Register the table with DuckDB for SQL operations
-        con.create_table("ejendom_oplys_raw", ejendom_oplys_raw, overwrite=True)
+        # Install and load spatial extension for geometry operations
+        try:
+            con.execute("INSTALL spatial")
+            con.execute("LOAD spatial")
+        except Exception:
+            pass  # Extensions might already be loaded
 
-        # Extract property information using SQL
-        properties_base = con.sql("""
+        # Create the cleaned and processed properties table with SQL
+        con.execute(f"""
+            CREATE OR REPLACE TABLE properties AS
+            WITH raw_data AS (
+                SELECT
+                    Response.EjendomsOplysninger.ChrNummer AS chr_number_raw,
+                    Response.EjendomsOplysninger.Ejendom.Adresse AS address_raw,
+                    Response.EjendomsOplysninger.Ejendom.PostNummer AS postal_code_raw,
+                    Response.EjendomsOplysninger.Ejendom.PostDistrikt AS postal_district_raw,
+                    Response.EjendomsOplysninger.Ejendom.ByNavn AS city_raw,
+                    Response.EjendomsOplysninger.Ejendom.KommuneNummer AS municipality_code_raw,
+                    Response.EjendomsOplysninger.Ejendom.KommuneNavn AS municipality_name_raw,
+                    'Danmark' AS country_raw,
+                    NULL AS phone_raw,
+                    NULL AS mobile_raw,
+                    NULL AS email_raw,
+                    Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatX AS geo_coord_x_source_raw,
+                    Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatY AS geo_coord_y_source_raw,
+                    NULL AS geo_coord_x_measured_raw,
+                    NULL AS geo_coord_y_measured_raw
+                FROM {ejendom_oplys_raw_table}
+                WHERE Response.EjendomsOplysninger IS NOT NULL
+            ),
+            cleaned_data AS (
+                SELECT
+                    uuid() AS property_id,
+                    -- Basic identifiers: cast to string, trim, nullif empty, then cast to int64
+                    COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                    -- Address fields
+                    NULLIF(TRIM(CAST(address_raw AS VARCHAR)), '') AS address,
+                    NULLIF(TRIM(CAST(postal_code_raw AS VARCHAR)), '') AS postal_code,
+                    NULLIF(TRIM(CAST(postal_district_raw AS VARCHAR)), '') AS postal_district,
+                    NULLIF(TRIM(CAST(city_raw AS VARCHAR)), '') AS city,
+                    COALESCE(TRY_CAST(NULLIF(TRIM(CAST(municipality_code_raw AS VARCHAR)), '') AS INTEGER), NULL) AS municipality_code,
+                    NULLIF(TRIM(CAST(municipality_name_raw AS VARCHAR)), '') AS municipality_name,
+                    NULLIF(TRIM(CAST(country_raw AS VARCHAR)), '') AS country,
+                    -- Contact fields
+                    NULLIF(TRIM(CAST(phone_raw AS VARCHAR)), '') AS phone,
+                    NULLIF(TRIM(CAST(mobile_raw AS VARCHAR)), '') AS mobile,
+                    NULLIF(TRIM(CAST(email_raw AS VARCHAR)), '') AS email,
+                    -- Coordinate fields
+                    COALESCE(TRY_CAST(NULLIF(TRIM(CAST(geo_coord_x_source_raw AS VARCHAR)), '') AS DOUBLE), NULL) AS geo_coord_x_source,
+                    COALESCE(TRY_CAST(NULLIF(TRIM(CAST(geo_coord_y_source_raw AS VARCHAR)), '') AS DOUBLE), NULL) AS geo_coord_y_source,
+                    COALESCE(TRY_CAST(NULLIF(TRIM(CAST(geo_coord_x_measured_raw AS VARCHAR)), '') AS DOUBLE), NULL) AS geo_coord_x_measured,
+                    COALESCE(TRY_CAST(NULLIF(TRIM(CAST(geo_coord_y_measured_raw AS VARCHAR)), '') AS DOUBLE), NULL) AS geo_coord_y_measured
+                FROM raw_data
+            )
             SELECT
-                CAST(Response.EjendomsOplysninger.ChrNummer AS STRING) AS chr_number_raw,
-                Response.EjendomsOplysninger.Ejendom.Adresse AS address_raw,
-                Response.EjendomsOplysninger.Ejendom.PostNummer AS postal_code_raw,
-                Response.EjendomsOplysninger.Ejendom.PostDistrikt AS postal_district_raw,
-                Response.EjendomsOplysninger.Ejendom.ByNavn AS city_raw,
-                Response.EjendomsOplysninger.Ejendom.KommuneNummer AS municipality_code_raw,
-                Response.EjendomsOplysninger.Ejendom.KommuneNavn AS municipality_name_raw,
-                'Danmark' AS country_raw,  -- Default to Danmark since it's not in the structure
-                NULL AS phone_raw,  -- Not available at property level
-                NULL AS mobile_raw,  -- Not available at property level
-                NULL AS email_raw,  -- Not available at property level
-                Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatX AS geo_coord_x_source_raw,
-                Response.EjendomsOplysninger.StaldKoordinater.StaldKoordinatY AS geo_coord_y_source_raw,
-                NULL AS geo_coord_x_measured_raw,  -- Not available in this structure
-                NULL AS geo_coord_y_measured_raw   -- Not available in this structure
-            FROM ejendom_oplys_raw
-            WHERE Response.EjendomsOplysninger IS NOT NULL
-        """)
-
-        # Generate UUID and clean/cast columns
-        properties = properties_base.mutate(
-            property_id=ibis.uuid(),
-            chr_number=ibis.coalesce(
-                properties_base.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            address=properties_base.address_raw.cast(dt.string).strip().nullif(""),
-            postal_code=properties_base.postal_code_raw.cast(dt.string).strip().nullif(""),
-            postal_district=properties_base.postal_district_raw.cast(dt.string).strip().nullif(""),
-            city=properties_base.city_raw.cast(dt.string).strip().nullif(""),
-            municipality_code=ibis.coalesce(
-                properties_base.municipality_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
-                ibis.null().cast(dt.int32),
-            ),
-            municipality_name=properties_base.municipality_name_raw.cast(dt.string).strip().nullif(""),
-            country=properties_base.country_raw.cast(dt.string).strip().nullif(""),
-            phone=properties_base.phone_raw.cast(dt.string).strip().nullif(""),
-            mobile=properties_base.mobile_raw.cast(dt.string).strip().nullif(""),
-            email=properties_base.email_raw.cast(dt.string).strip().nullif(""),
-            geo_coord_x_source=ibis.coalesce(
-                properties_base.geo_coord_x_source_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
-                ibis.null().cast(dt.float64),
-            ),
-            geo_coord_y_source=ibis.coalesce(
-                properties_base.geo_coord_y_source_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
-                ibis.null().cast(dt.float64),
-            ),
-            geo_coord_x_measured=ibis.coalesce(
-                properties_base.geo_coord_x_measured_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
-                ibis.null().cast(dt.float64),
-            ),
-            geo_coord_y_measured=ibis.coalesce(
-                properties_base.geo_coord_y_measured_raw.cast(dt.string).strip().nullif("").cast(dt.float64),
-                ibis.null().cast(dt.float64),
-            ),
-        )
-
-        # Create temporary table for geometry processing
-        con.create_table("properties_temp", properties, overwrite=True)
-
-        # Create geometry from coordinates using DuckDB-spatial SQL
-        properties_with_geom = con.sql("""
-            SELECT 
-                *,
-                CASE 
+                property_id,
+                chr_number,
+                address,
+                postal_code,
+                postal_district,
+                city,
+                municipality_code,
+                municipality_name,
+                country,
+                phone,
+                mobile,
+                email,
+                -- Transform UTM coordinates to WGS84 latitude and longitude
+                CASE
                     WHEN geo_coord_x_source IS NOT NULL AND geo_coord_y_source IS NOT NULL THEN
-                        ST_Transform(ST_Point(geo_coord_x_source, geo_coord_y_source), 'EPSG:25832', 'EPSG:4326')
+                        ST_X(ST_Transform(ST_Point(geo_coord_x_source, geo_coord_y_source), '{SOURCE_CRS}', '{TARGET_CRS}'))
                     WHEN geo_coord_x_measured IS NOT NULL AND geo_coord_y_measured IS NOT NULL THEN
-                        ST_Transform(ST_Point(geo_coord_x_measured, geo_coord_y_measured), 'EPSG:25832', 'EPSG:4326')
+                        ST_X(ST_Transform(ST_Point(geo_coord_x_measured, geo_coord_y_measured), '{SOURCE_CRS}', '{TARGET_CRS}'))
                     ELSE NULL
-                END as geometry
-            FROM properties_temp
+                END AS latitude,
+                CASE
+                    WHEN geo_coord_x_source IS NOT NULL AND geo_coord_y_source IS NOT NULL THEN
+                        ST_Y(ST_Transform(ST_Point(geo_coord_x_source, geo_coord_y_source), '{SOURCE_CRS}', '{TARGET_CRS}'))
+                    WHEN geo_coord_x_measured IS NOT NULL AND geo_coord_y_measured IS NOT NULL THEN
+                        ST_Y(ST_Transform(ST_Point(geo_coord_x_measured, geo_coord_y_measured), '{SOURCE_CRS}', '{TARGET_CRS}'))
+                    ELSE NULL
+                END AS longitude,
+                -- Create WGS84 geometry
+                CASE
+                    WHEN geo_coord_x_source IS NOT NULL AND geo_coord_y_source IS NOT NULL THEN
+                        ST_Transform(ST_Point(geo_coord_x_source, geo_coord_y_source), '{SOURCE_CRS}', '{TARGET_CRS}')
+                    WHEN geo_coord_x_measured IS NOT NULL AND geo_coord_y_measured IS NOT NULL THEN
+                        ST_Transform(ST_Point(geo_coord_x_measured, geo_coord_y_measured), '{SOURCE_CRS}', '{TARGET_CRS}')
+                    ELSE NULL
+                END AS geometry
+            FROM cleaned_data
+            WHERE chr_number IS NOT NULL
         """)
 
-        # Select final columns
-        final_cols = [
-            "property_id",
-            "chr_number",
-            "address",
-            "postal_code",
-            "postal_district",
-            "city",
-            "municipality_code",
-            "municipality_name",
-            "country",
-            "phone",
-            "mobile",
-            "email",
-            "geo_coord_x_source",
-            "geo_coord_y_source",
-            "geo_coord_x_measured",
-            "geo_coord_y_measured",
-            "geometry",
-        ]
-        properties_final = properties_with_geom.select(*final_cols)
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM properties").fetchone()[0]
 
-        # Save to parquet
-        output_path = silver_dir / "properties.parquet"
-        rows = properties_final.count().execute()
         if rows == 0:
             logging.warning("Properties table is empty after processing.")
             return None
 
         logging.info(f"Saving properties table with {rows} rows.")
-        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
-        saved_path = export.save_table(output_path, properties_final, is_geo=True)
+
+        # Save to parquet
+        output_path = silver_dir / "properties.parquet"
+        saved_path = export.save_table(output_path, "properties", con, is_geo=True)
+
         if saved_path is None:
             logging.error("Failed to save properties table - no path returned")
             return None
+
         logging.info(f"Saved properties table to {saved_path}")
 
-        # Clean up
-        try:
-            con.drop_table("ejendom_oplys_raw", force=True)
-            con.drop_table("properties_temp", force=True)
-        except Exception:
-            pass
-
-        return properties_final
+        # Return the relation
+        return con.sql("SELECT * FROM properties")
 
     except Exception as e:
         logging.error(f"Failed to create properties table: {e}", exc_info=True)
-        try:
-            con.drop_table("ejendom_oplys_raw", force=True)
-        except Exception:
-            pass
         return None
 
 
 def create_property_owners_table(
-    con: ibis.BaseBackend, ejendom_oplys_raw: Optional[ibis.Table], silver_dir: Path
-) -> Optional[ibis.Table]:
-    """Creates the property_owners table from ejendom_oplysninger data using DuckDB and Ibis."""
+    con: duckdb.DuckDBPyConnection, ejendom_oplys_raw_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
+    """Creates the property_owners table from ejendom_oplysninger data using vanilla DuckDB.
+
+    Args:
+        con: DuckDB connection
+        ejendom_oplys_raw_table: Name of the raw ejendom_oplysninger data table in DuckDB (or None if not available)
+        silver_dir: Output directory for silver files
+
+    Returns:
+        DuckDB relation with processed property owners data or None if failed
+    """
     logging.info("Starting creation of property_owners table.")
 
-    # Check for nested structure Response.EjendomsOplysninger.Ejer
-    if ejendom_oplys_raw is None or "Response" not in ejendom_oplys_raw.columns:
-        logging.warning("Cannot create property_owners: 'Response' column missing in ejendom_oplys_raw.")
+    if ejendom_oplys_raw_table is None:
+        logging.warning("Cannot create property_owners: ejendom_oplys_raw_table is None.")
         return None
 
     try:
-        # Register the table with DuckDB for SQL operations
-        con.create_table("ejendom_oplys_raw", ejendom_oplys_raw, overwrite=True)
-
-        # Extract property owner information using SQL
-        property_owners_base = con.sql("""
+        # Create the cleaned and processed property owners table with SQL
+        con.execute(f"""
+            CREATE OR REPLACE TABLE property_owners AS
             WITH unnested_besaetninger AS (
-                SELECT 
+                SELECT
                     Response.EjendomsOplysninger.ChrNummer AS chr_number,
                     UNNEST(Response.EjendomsOplysninger.Besaetninger.Besaetning) AS besaetning
-                FROM ejendom_oplys_raw
+                FROM {ejendom_oplys_raw_table}
                 WHERE Response.EjendomsOplysninger.Besaetninger.Besaetning IS NOT NULL
+            ),
+            raw_owners AS (
+                SELECT DISTINCT
+                    chr_number AS chr_number_raw,
+                    besaetning.Ejer.CvrNummer AS owner_cvr_raw,
+                    besaetning.Ejer.CprNummer AS owner_cpr_raw,
+                    besaetning.Ejer.Navn AS owner_name_raw,
+                    besaetning.Ejer.Adresse AS owner_address_raw,
+                    besaetning.Ejer.PostNummer AS owner_postal_code_raw,
+                    besaetning.Ejer.PostDistrikt AS owner_postal_district_raw,
+                    besaetning.Ejer.ByNavn AS owner_city_raw,
+                    besaetning.Ejer.KommuneNummer AS owner_municipality_code_raw,
+                    besaetning.Ejer.KommuneNavn AS owner_municipality_name_raw,
+                    besaetning.Ejer.Land AS owner_country_raw,
+                    besaetning.Ejer.TelefonNummer AS owner_phone_raw,
+                    besaetning.Ejer.MobilNummer AS owner_mobile_raw,
+                    besaetning.Ejer.Email AS owner_email_raw,
+                    besaetning.Ejer.Adressebeskyttelse AS owner_address_protection_raw,
+                    besaetning.Ejer.Reklamebeskyttelse AS owner_advertising_protection_raw
+                FROM unnested_besaetninger
+                WHERE besaetning.Ejer IS NOT NULL
             )
-            SELECT DISTINCT
-                CAST(chr_number AS STRING) AS chr_number_raw,
-                besaetning.Ejer.CvrNummer AS owner_cvr_raw,
-                besaetning.Ejer.CprNummer AS owner_cpr_raw,
-                besaetning.Ejer.Navn AS owner_name_raw,
-                besaetning.Ejer.Adresse AS owner_address_raw,
-                besaetning.Ejer.PostNummer AS owner_postal_code_raw,
-                besaetning.Ejer.PostDistrikt AS owner_postal_district_raw,
-                besaetning.Ejer.ByNavn AS owner_city_raw,
-                besaetning.Ejer.KommuneNummer AS owner_municipality_code_raw,
-                besaetning.Ejer.KommuneNavn AS owner_municipality_name_raw,
-                besaetning.Ejer.Land AS owner_country_raw,
-                besaetning.Ejer.TelefonNummer AS owner_phone_raw,
-                besaetning.Ejer.MobilNummer AS owner_mobile_raw,
-                besaetning.Ejer.Email AS owner_email_raw,
-                besaetning.Ejer.Adressebeskyttelse AS owner_address_protection_raw,
-                besaetning.Ejer.Reklamebeskyttelse AS owner_advertising_protection_raw
-            FROM unnested_besaetninger
-            WHERE besaetning.Ejer IS NOT NULL
+            SELECT
+                uuid() AS owner_id,
+                -- Basic identifiers
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                -- Owner identification
+                NULLIF(TRIM(CAST(owner_cvr_raw AS VARCHAR)), '') AS owner_cvr,
+                NULLIF(TRIM(CAST(owner_cpr_raw AS VARCHAR)), '') AS owner_cpr,
+                NULLIF(TRIM(CAST(owner_name_raw AS VARCHAR)), '') AS owner_name,
+                -- Owner address
+                NULLIF(TRIM(CAST(owner_address_raw AS VARCHAR)), '') AS owner_address,
+                NULLIF(TRIM(CAST(owner_postal_code_raw AS VARCHAR)), '') AS owner_postal_code,
+                NULLIF(TRIM(CAST(owner_postal_district_raw AS VARCHAR)), '') AS owner_postal_district,
+                NULLIF(TRIM(CAST(owner_city_raw AS VARCHAR)), '') AS owner_city,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(owner_municipality_code_raw AS VARCHAR)), '') AS INTEGER), NULL) AS owner_municipality_code,
+                NULLIF(TRIM(CAST(owner_municipality_name_raw AS VARCHAR)), '') AS owner_municipality_name,
+                NULLIF(TRIM(CAST(owner_country_raw AS VARCHAR)), '') AS owner_country,
+                -- Owner contact
+                NULLIF(TRIM(CAST(owner_phone_raw AS VARCHAR)), '') AS owner_phone,
+                NULLIF(TRIM(CAST(owner_mobile_raw AS VARCHAR)), '') AS owner_mobile,
+                NULLIF(TRIM(CAST(owner_email_raw AS VARCHAR)), '') AS owner_email,
+                -- Owner protection flags
+                NULLIF(TRIM(CAST(owner_address_protection_raw AS VARCHAR)), '') AS owner_address_protection,
+                NULLIF(TRIM(CAST(owner_advertising_protection_raw AS VARCHAR)), '') AS owner_advertising_protection
+            FROM raw_owners
+            WHERE COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) IS NOT NULL
         """)
 
-        # Generate UUID and clean/cast columns
-        property_owners = property_owners_base.mutate(
-            owner_id=ibis.uuid(),
-            chr_number=ibis.coalesce(
-                property_owners_base.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            owner_cvr=property_owners_base.owner_cvr_raw.cast(dt.string).strip().nullif(""),
-            owner_cpr=property_owners_base.owner_cpr_raw.cast(dt.string).strip().nullif(""),
-            owner_name=property_owners_base.owner_name_raw.cast(dt.string).strip().nullif(""),
-            owner_address=property_owners_base.owner_address_raw.cast(dt.string).strip().nullif(""),
-            owner_postal_code=property_owners_base.owner_postal_code_raw.cast(dt.string).strip().nullif(""),
-            owner_postal_district=property_owners_base.owner_postal_district_raw.cast(dt.string).strip().nullif(""),
-            owner_city=property_owners_base.owner_city_raw.cast(dt.string).strip().nullif(""),
-            owner_municipality_code=ibis.coalesce(
-                property_owners_base.owner_municipality_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
-                ibis.null().cast(dt.int32),
-            ),
-            owner_municipality_name=property_owners_base.owner_municipality_name_raw.cast(dt.string).strip().nullif(""),
-            owner_country=property_owners_base.owner_country_raw.cast(dt.string).strip().nullif(""),
-            owner_phone=property_owners_base.owner_phone_raw.cast(dt.string).strip().nullif(""),
-            owner_mobile=property_owners_base.owner_mobile_raw.cast(dt.string).strip().nullif(""),
-            owner_email=property_owners_base.owner_email_raw.cast(dt.string).strip().nullif(""),
-            owner_address_protection=property_owners_base.owner_address_protection_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-            owner_advertising_protection=property_owners_base.owner_advertising_protection_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-        )
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM property_owners").fetchone()[0]
 
-        # Filter out rows with null chr_number after cleaning
-        property_owners = property_owners.filter(property_owners.chr_number.notnull())
-
-        # Select final columns
-        final_cols = [
-            "owner_id",
-            "chr_number",
-            "owner_cvr",
-            "owner_cpr",
-            "owner_name",
-            "owner_address",
-            "owner_postal_code",
-            "owner_postal_district",
-            "owner_city",
-            "owner_municipality_code",
-            "owner_municipality_name",
-            "owner_country",
-            "owner_phone",
-            "owner_mobile",
-            "owner_email",
-            "owner_address_protection",
-            "owner_advertising_protection",
-        ]
-        property_owners_final = property_owners.select(*final_cols)
-
-        # Save to parquet
-        output_path = silver_dir / "property_owners.parquet"
-        rows = property_owners_final.count().execute()
         if rows == 0:
             logging.warning("Property owners table is empty after processing.")
             return None
 
         logging.info(f"Saving property_owners table with {rows} rows.")
-        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
-        saved_path = export.save_table(output_path, property_owners_final, is_geo=False)
+
+        # Save to parquet
+        output_path = silver_dir / "property_owners.parquet"
+        saved_path = export.save_table(output_path, "property_owners", con, is_geo=False)
+
         if saved_path is None:
             logging.error("Failed to save property_owners table - no path returned")
             return None
+
         logging.info(f"Saved property_owners table to {saved_path}")
 
-        # Clean up
-        try:
-            con.drop_table("ejendom_oplys_raw", force=True)
-        except Exception:
-            pass
-
-        return property_owners_final
+        # Return the relation
+        return con.sql("SELECT * FROM property_owners")
 
     except Exception as e:
         logging.error(f"Failed to create property_owners table: {e}", exc_info=True)
-        try:
-            con.drop_table("ejendom_oplys_raw", force=True)
-        except Exception:
-            pass
         return None
 
 
 def create_property_users_table(
-    con: ibis.BaseBackend, ejendom_oplys_raw: Optional[ibis.Table], silver_dir: Path
-) -> Optional[ibis.Table]:
-    """Creates the property_users table from ejendom_oplysninger data using DuckDB and Ibis."""
+    con: duckdb.DuckDBPyConnection, ejendom_oplys_raw_table: str | None, silver_dir: Path
+) -> duckdb.DuckDBPyRelation | None:
+    """Creates the property_users table from ejendom_oplysninger data using vanilla DuckDB.
+
+    Args:
+        con: DuckDB connection
+        ejendom_oplys_raw_table: Name of the raw ejendom_oplysninger data table in DuckDB (or None if not available)
+        silver_dir: Output directory for silver files
+
+    Returns:
+        DuckDB relation with processed property users data or None if failed
+    """
     logging.info("Starting creation of property_users table.")
 
-    # Check for nested structure Response.EjendomsOplysninger.Bruger
-    if ejendom_oplys_raw is None or "Response" not in ejendom_oplys_raw.columns:
-        logging.warning("Cannot create property_users: 'Response' column missing in ejendom_oplys_raw.")
+    if ejendom_oplys_raw_table is None:
+        logging.warning("Cannot create property_users: ejendom_oplys_raw_table is None.")
         return None
 
     try:
-        # Register the table with DuckDB for SQL operations
-        con.create_table("ejendom_oplys_raw", ejendom_oplys_raw, overwrite=True)
-
-        # Extract property user information using SQL
-        property_users_base = con.sql("""
+        # Create the cleaned and processed property users table with SQL
+        con.execute(f"""
+            CREATE OR REPLACE TABLE property_users AS
             WITH unnested_besaetninger AS (
-                SELECT 
+                SELECT
                     Response.EjendomsOplysninger.ChrNummer AS chr_number,
                     UNNEST(Response.EjendomsOplysninger.Besaetninger.Besaetning) AS besaetning
-                FROM ejendom_oplys_raw
+                FROM {ejendom_oplys_raw_table}
                 WHERE Response.EjendomsOplysninger.Besaetninger.Besaetning IS NOT NULL
+            ),
+            raw_users AS (
+                SELECT DISTINCT
+                    chr_number AS chr_number_raw,
+                    besaetning.Bruger.CvrNummer AS user_cvr_raw,
+                    besaetning.Bruger.CprNummer AS user_cpr_raw,
+                    besaetning.Bruger.Navn AS user_name_raw,
+                    besaetning.Bruger.Adresse AS user_address_raw,
+                    besaetning.Bruger.PostNummer AS user_postal_code_raw,
+                    besaetning.Bruger.PostDistrikt AS user_postal_district_raw,
+                    besaetning.Bruger.ByNavn AS user_city_raw,
+                    besaetning.Bruger.KommuneNummer AS user_municipality_code_raw,
+                    besaetning.Bruger.KommuneNavn AS user_municipality_name_raw,
+                    besaetning.Bruger.Land AS user_country_raw,
+                    besaetning.Bruger.TelefonNummer AS user_phone_raw,
+                    besaetning.Bruger.MobilNummer AS user_mobile_raw,
+                    besaetning.Bruger.Email AS user_email_raw,
+                    besaetning.Bruger.Adressebeskyttelse AS user_address_protection_raw,
+                    besaetning.Bruger.Reklamebeskyttelse AS user_advertising_protection_raw
+                FROM unnested_besaetninger
+                WHERE besaetning.Bruger IS NOT NULL
             )
-            SELECT DISTINCT
-                CAST(chr_number AS STRING) AS chr_number_raw,
-                besaetning.Bruger.CvrNummer AS user_cvr_raw,
-                besaetning.Bruger.CprNummer AS user_cpr_raw,
-                besaetning.Bruger.Navn AS user_name_raw,
-                besaetning.Bruger.Adresse AS user_address_raw,
-                besaetning.Bruger.PostNummer AS user_postal_code_raw,
-                besaetning.Bruger.PostDistrikt AS user_postal_district_raw,
-                besaetning.Bruger.ByNavn AS user_city_raw,
-                besaetning.Bruger.KommuneNummer AS user_municipality_code_raw,
-                besaetning.Bruger.KommuneNavn AS user_municipality_name_raw,
-                besaetning.Bruger.Land AS user_country_raw,
-                besaetning.Bruger.TelefonNummer AS user_phone_raw,
-                besaetning.Bruger.MobilNummer AS user_mobile_raw,
-                besaetning.Bruger.Email AS user_email_raw,
-                besaetning.Bruger.Adressebeskyttelse AS user_address_protection_raw,
-                besaetning.Bruger.Reklamebeskyttelse AS user_advertising_protection_raw
-            FROM unnested_besaetninger
-            WHERE besaetning.Bruger IS NOT NULL
+            SELECT
+                uuid() AS user_id,
+                -- Basic identifiers
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) AS chr_number,
+                -- User identification
+                NULLIF(TRIM(CAST(user_cvr_raw AS VARCHAR)), '') AS user_cvr,
+                NULLIF(TRIM(CAST(user_cpr_raw AS VARCHAR)), '') AS user_cpr,
+                NULLIF(TRIM(CAST(user_name_raw AS VARCHAR)), '') AS user_name,
+                -- User address
+                NULLIF(TRIM(CAST(user_address_raw AS VARCHAR)), '') AS user_address,
+                NULLIF(TRIM(CAST(user_postal_code_raw AS VARCHAR)), '') AS user_postal_code,
+                NULLIF(TRIM(CAST(user_postal_district_raw AS VARCHAR)), '') AS user_postal_district,
+                NULLIF(TRIM(CAST(user_city_raw AS VARCHAR)), '') AS user_city,
+                COALESCE(TRY_CAST(NULLIF(TRIM(CAST(user_municipality_code_raw AS VARCHAR)), '') AS INTEGER), NULL) AS user_municipality_code,
+                NULLIF(TRIM(CAST(user_municipality_name_raw AS VARCHAR)), '') AS user_municipality_name,
+                NULLIF(TRIM(CAST(user_country_raw AS VARCHAR)), '') AS user_country,
+                -- User contact
+                NULLIF(TRIM(CAST(user_phone_raw AS VARCHAR)), '') AS user_phone,
+                NULLIF(TRIM(CAST(user_mobile_raw AS VARCHAR)), '') AS user_mobile,
+                NULLIF(TRIM(CAST(user_email_raw AS VARCHAR)), '') AS user_email,
+                -- User protection flags
+                NULLIF(TRIM(CAST(user_address_protection_raw AS VARCHAR)), '') AS user_address_protection,
+                NULLIF(TRIM(CAST(user_advertising_protection_raw AS VARCHAR)), '') AS user_advertising_protection
+            FROM raw_users
+            WHERE COALESCE(TRY_CAST(NULLIF(TRIM(CAST(chr_number_raw AS VARCHAR)), '') AS BIGINT), NULL) IS NOT NULL
         """)
 
-        # Generate UUID and clean/cast columns
-        property_users = property_users_base.mutate(
-            user_id=ibis.uuid(),
-            chr_number=ibis.coalesce(
-                property_users_base.chr_number_raw.cast(dt.string).strip().nullif("").cast(dt.int64),
-                ibis.null().cast(dt.int64),
-            ),
-            user_cvr=property_users_base.user_cvr_raw.cast(dt.string).strip().nullif(""),
-            user_cpr=property_users_base.user_cpr_raw.cast(dt.string).strip().nullif(""),
-            user_name=property_users_base.user_name_raw.cast(dt.string).strip().nullif(""),
-            user_address=property_users_base.user_address_raw.cast(dt.string).strip().nullif(""),
-            user_postal_code=property_users_base.user_postal_code_raw.cast(dt.string).strip().nullif(""),
-            user_postal_district=property_users_base.user_postal_district_raw.cast(dt.string).strip().nullif(""),
-            user_city=property_users_base.user_city_raw.cast(dt.string).strip().nullif(""),
-            user_municipality_code=ibis.coalesce(
-                property_users_base.user_municipality_code_raw.cast(dt.string).strip().nullif("").cast(dt.int32),
-                ibis.null().cast(dt.int32),
-            ),
-            user_municipality_name=property_users_base.user_municipality_name_raw.cast(dt.string).strip().nullif(""),
-            user_country=property_users_base.user_country_raw.cast(dt.string).strip().nullif(""),
-            user_phone=property_users_base.user_phone_raw.cast(dt.string).strip().nullif(""),
-            user_mobile=property_users_base.user_mobile_raw.cast(dt.string).strip().nullif(""),
-            user_email=property_users_base.user_email_raw.cast(dt.string).strip().nullif(""),
-            user_address_protection=property_users_base.user_address_protection_raw.cast(dt.string).strip().nullif(""),
-            user_advertising_protection=property_users_base.user_advertising_protection_raw.cast(dt.string)
-            .strip()
-            .nullif(""),
-        )
+        # Get row count
+        rows = con.execute("SELECT COUNT(*) FROM property_users").fetchone()[0]
 
-        # Filter out rows with null chr_number after cleaning
-        property_users = property_users.filter(property_users.chr_number.notnull())
-
-        # Select final columns
-        final_cols = [
-            "user_id",
-            "chr_number",
-            "user_cvr",
-            "user_cpr",
-            "user_name",
-            "user_address",
-            "user_postal_code",
-            "user_postal_district",
-            "user_city",
-            "user_municipality_code",
-            "user_municipality_name",
-            "user_country",
-            "user_phone",
-            "user_mobile",
-            "user_email",
-            "user_address_protection",
-            "user_advertising_protection",
-        ]
-        property_users_final = property_users.select(*final_cols)
-
-        # Save to parquet
-        output_path = silver_dir / "property_users.parquet"
-        rows = property_users_final.count().execute()
         if rows == 0:
             logging.warning("Property users table is empty after processing.")
             return None
 
         logging.info(f"Saving property_users table with {rows} rows.")
-        # ✅ MIGRATION: Pass Ibis table directly instead of executing to pandas
-        saved_path = export.save_table(output_path, property_users_final, is_geo=False)
+
+        # Save to parquet
+        output_path = silver_dir / "property_users.parquet"
+        saved_path = export.save_table(output_path, "property_users", con, is_geo=False)
+
         if saved_path is None:
             logging.error("Failed to save property_users table - no path returned")
             return None
+
         logging.info(f"Saved property_users table to {saved_path}")
 
-        # Clean up
-        try:
-            con.drop_table("ejendom_oplys_raw", force=True)
-        except Exception:
-            pass
-
-        return property_users_final
+        # Return the relation
+        return con.sql("SELECT * FROM property_users")
 
     except Exception as e:
         logging.error(f"Failed to create property_users table: {e}", exc_info=True)
-        try:
-            con.drop_table("ejendom_oplys_raw", force=True)
-        except Exception:
-            pass
         return None

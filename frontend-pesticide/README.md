@@ -14,27 +14,32 @@ A modern, interactive web application for visualizing PFAS exposure data across 
 ## 🛠 Technology Stack
 
 ### Core Framework
+
 - **Next.js 15** with Turbopack for ultra-fast development
 - **React 19** with new features like React Compiler and Partial Prerendering
 - **TypeScript 5.6** for enhanced type safety and performance
 - **Tailwind CSS v4** with CSS-in-JS support and container queries
 
 ### Visualization & Mapping
+
 - **Kepler.gl v3.2** for advanced geospatial visualization
 - **Deck.gl v9.1** for high-performance WebGL rendering
 - **Protomaps v2.1** with PMTiles v3 for custom base map tiles
 
 ### State Management & Data
+
 - **Zustand v5** for lightweight, performant state management
 - **Supabase v2.45** for real-time database and API
 - **React 19 Cache** for automatic request deduplication
 
 ### UI Components & Animation
+
 - **Radix UI** primitives for accessible, unstyled components
 - **Framer Motion v11** for fluid animations and micro-interactions
 - **Lucide React** for consistent, beautiful icons
 
 ### Development & Quality
+
 - **ESLint 9** with modern configuration
 - **Prettier** with Tailwind plugin for consistent formatting
 - **Performance monitoring** with Core Web Vitals tracking
@@ -42,29 +47,34 @@ A modern, interactive web application for visualizing PFAS exposure data across 
 ## 📦 Installation
 
 ### Prerequisites
+
 - Node.js 18+ and npm 8+
 - Modern browser with WebGL support
 
 ### Setup
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/your-org/landbruget.dk
    cd landbruget.dk/frontend-pesticide
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 3. **Environment Configuration**
+
    ```bash
    cp .env.example .env.local
    # Edit .env.local with your configuration
    ```
 
 4. **Start development server**
+
    ```bash
    npm run dev
    ```
@@ -123,18 +133,21 @@ frontend-pesticide/
 This project follows a **3-developer architecture** with clear separation of concerns:
 
 ### Developer 1: Backend Infrastructure & Data Management
+
 - Database schema and API routes
 - Data synchronization from GCS
 - Performance optimization and caching
 - Type definitions for data structures
 
-### Developer 2: Map Visualization & Kepler.gl Integration  
+### Developer 2: Map Visualization & Kepler.gl Integration
+
 - Kepler.gl map component implementation
 - Protomaps base layer integration
 - Advanced layer controls and settings
 - Color schemes and visual design
 
 ### Developer 3: UI Components, Controls & Application Shell (This Implementation)
+
 - Next.js application foundation
 - Time controls with animations
 - Heatmap toggle system
@@ -145,18 +158,21 @@ This project follows a **3-developer architecture** with clear separation of con
 ## 🎮 Usage
 
 ### Basic Navigation
+
 - **Pan**: Click and drag to move around the map
 - **Zoom**: Use mouse wheel or zoom controls
 - **Layers**: Toggle BNBO and BBR layers using the layer controls
 - **Data**: Switch between Pesticide Load and PFAS Mass using the heatmap toggle
 
 ### Time Controls
+
 - **Year Selection**: Use the slider to select specific years (2020-2025)
 - **Cumulative Mode**: Toggle to view cumulative data from 2020 to selected year
 - **Playback**: Use play/pause controls for animated year progression
 - **Speed Control**: Adjust playback speed (slow/normal/fast)
 
 ### Data Analysis
+
 - **Statistics Panel**: View aggregated statistics for current selection
 - **Export Data**: Download current view data as JSON
 - **Hover Details**: Hover over hexagons for detailed information
@@ -179,6 +195,7 @@ NEXT_PUBLIC_DEBUG_MODE=false
 ```
 
 ### Feature Flags
+
 - `ENABLE_PWA`: Progressive Web App functionality
 - `ENABLE_OFFLINE_MODE`: Offline data caching
 - `ENABLE_STREAMING`: Server-side streaming responses
@@ -187,18 +204,21 @@ NEXT_PUBLIC_DEBUG_MODE=false
 ## 🚀 Deployment
 
 ### Vercel (Recommended)
+
 ```bash
 npm run build
 vercel deploy
 ```
 
 ### Docker
+
 ```bash
 docker build -t pfas-frontend .
 docker run -p 3000:3000 pfas-frontend
 ```
 
 ### Static Export
+
 ```bash
 npm run build
 npm run export
@@ -207,6 +227,7 @@ npm run export
 ## 📊 Performance
 
 ### Optimization Features
+
 - **React 19 Compiler**: Automatic component optimization
 - **Partial Prerendering**: Static + dynamic content combination
 - **Dynamic IO**: Streaming for faster page loads
@@ -214,6 +235,7 @@ npm run export
 - **Image Optimization**: Next.js 15 enhanced image handling
 
 ### Performance Targets
+
 - **Initial Load**: <3 seconds
 - **Layer Toggle**: <500ms
 - **Year Transition**: <1 second
@@ -252,10 +274,11 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🙋‍♂️ Support
 
 For questions about this frontend implementation:
+
 - Create an issue in the repository
 - Check the [documentation](docs/)
 - Review the component interfaces for integration
 
 ---
 
-**Built with ❤️ for environmental data visualization in Denmark** 
+**Built with ❤️ for environmental data visualization in Denmark**

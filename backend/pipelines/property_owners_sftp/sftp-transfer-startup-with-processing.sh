@@ -73,7 +73,7 @@ pip3 install uv
 
 # Install required Python packages (added ijson, pyarrow, uuid for processing)
 log_with_timestamp "Installing Python packages (ijson, pyarrow, geopandas, etc.)..."
-uv pip install --system google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
+uv pip install google-cloud-storage google-cloud-secret-manager paramiko ijson pyarrow uuid geopandas shapely pyproj
 
 log_with_timestamp "✅ Python packages installed"
 check_resources
@@ -90,7 +90,6 @@ import json
 import ijson
 import pyarrow as pa
 import pyarrow.parquet as pq
-import uuid
 import zipfile
 import geopandas as gpd
 from shapely.geometry import shape
@@ -101,6 +100,54 @@ from google.cloud import storage, secretmanager
 import subprocess
 import sys
 import traceback
+import hashlib
+
+# Inlined UUID generation to avoid repository dependency
+class LandbrugsdataUUID:
+    """
+    Inlined UUID generation for property_owners pipeline.
+    Uses MD5-based UUID5 format to match the centralized uuid_utils.
+    """
+    _namespace = None
+
+    @classmethod
+    def _get_namespace(cls):
+        """Get the UUID namespace from environment variable."""
+        if cls._namespace is None:
+            namespace_str = os.getenv("LANDBRUGSDATA_UUID_NAMESPACE")
+            if not namespace_str:
+                raise ValueError(
+                    "LANDBRUGSDATA_UUID_NAMESPACE environment variable is required"
+                )
+            cls._namespace = namespace_str
+        return cls._namespace
+
+    @classmethod
+    def generate_deterministic_uuid(cls, entity_type, identifier):
+        """
+        Generate deterministic UUID for any entity type with custom identifier.
+
+        Args:
+            entity_type: Type of entity (e.g., 'cpr', 'company', etc.)
+            identifier: Unique identifier string for this entity
+
+        Returns:
+            UUID string
+        """
+        if not identifier:
+            raise ValueError("Identifier cannot be empty")
+
+        # Use MD5-based UUID generation to match DuckDB implementation
+        namespace_str = str(cls._get_namespace())
+        input_str = f"{namespace_str}{entity_type}-{identifier}"
+        md5_hash = hashlib.md5(input_str.encode()).hexdigest()
+
+        # Format as UUID5 (version 5, variant 10)
+        uuid_str = (
+            f"{md5_hash[0:8]}-{md5_hash[8:12]}-5{md5_hash[12:15]}-"
+            f"8{md5_hash[15:18]}-{md5_hash[18:30]}"
+        )
+        return uuid_str
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -233,11 +280,12 @@ class PropertyDataProcessor:
             return geometry  # Return original if transformation fails
 
     def generate_uuid_for_cpr(self, cpr_id):
-        """Generate consistent UUID for CPR numbers."""
+        """Generate consistent deterministic UUID for CPR numbers."""
         if not cpr_id:
             return None
         if cpr_id not in self.cpr_to_uuid_mapping:
-            self.cpr_to_uuid_mapping[cpr_id] = str(uuid.uuid4())
+            # Generate deterministic UUID based on CPR number
+            self.cpr_to_uuid_mapping[cpr_id] = LandbrugsdataUUID.generate_deterministic_uuid("cpr", str(cpr_id))
         return self.cpr_to_uuid_mapping[cpr_id]
 
     def has_foreign_address(self, person_data):
@@ -724,8 +772,9 @@ class SFTPToGCSTransferWithProcessing:
                 logger.info(f"Processing complete. Parquet file size: {parquet_file_path.stat().st_size / (1024**2):.1f} MB")
                 flush_logs()
 
-                # Upload Parquet to GCS
-                gcs_filename = f"silver/property_owners/{timestamp}_property_owners_processed.parquet"
+                # Upload Parquet to GCS using unified pipeline naming convention
+                # Use new standardized format: silver/{dataset}/{timestamp}/data.parquet
+                gcs_filename = f"silver/property_owners/{timestamp}/data.parquet"
                 bucket = self.storage_client.bucket(self.bucket_name)
                 blob = bucket.blob(gcs_filename)
 
@@ -801,6 +850,15 @@ VM_NAME=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/comp
 ZONE=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone | awk -F/ '{print $NF}')
 PROJECT_ID=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
 
+# Get UUID namespace from instance metadata and export for Python script
+LANDBRUGSDATA_UUID_NAMESPACE=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/LANDBRUGSDATA_UUID_NAMESPACE 2>/dev/null || echo "")
+if [ -z "$LANDBRUGSDATA_UUID_NAMESPACE" ]; then
+  log_with_timestamp "ERROR: LANDBRUGSDATA_UUID_NAMESPACE not found in VM metadata"
+  exit 1
+fi
+export LANDBRUGSDATA_UUID_NAMESPACE
+log_with_timestamp "✅ LANDBRUGSDATA_UUID_NAMESPACE loaded from VM metadata"
+
 # Function to delete the VM
 delete_vm() {
   log_with_timestamp "Attempting to delete VM: $VM_NAME in zone: $ZONE project: $PROJECT_ID"
@@ -818,14 +876,24 @@ validate_success() {
     if gsutil ls gs://landbrugsdata-raw-data/silver/property_owners/ >/dev/null 2>&1; then
         log_with_timestamp "✅ Silver directory exists"
 
-        # Check if parquet file was created in last hour
-        recent_files=$(gsutil ls -l gs://landbrugsdata-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
+        # Check if data.parquet file was created in timestamped directory (new format)
+        # Look for directories created today and check for data.parquet files
+        today=$(date +%Y%m%d)
+        recent_files=$(gsutil ls gs://landbrugsdata-raw-data/silver/property_owners/${today}*/data.parquet 2>/dev/null | wc -l)
         if [ "$recent_files" -gt 0 ]; then
-            log_with_timestamp "✅ Recent Parquet file found in silver directory"
+            log_with_timestamp "✅ Recent data.parquet file found in timestamped directory (new format)"
             return 0
         else
-            log_with_timestamp "❌ No recent Parquet files found in silver directory"
-            return 1
+            log_with_timestamp "❌ No recent data.parquet files found in timestamped directories"
+            # Also check legacy format as fallback
+            legacy_files=$(gsutil ls -l gs://landbrugsdata-raw-data/silver/property_owners/*.parquet 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l)
+            if [ "$legacy_files" -gt 0 ]; then
+                log_with_timestamp "✅ Recent Parquet file found in legacy format"
+                return 0
+            else
+                log_with_timestamp "❌ No recent Parquet files found in either format"
+                return 1
+            fi
         fi
     else
         log_with_timestamp "❌ Silver property_owners directory does not exist"

@@ -16,7 +16,7 @@ async processing, and retry logic for robustness.
 import asyncio
 import os
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar
 
 import aiohttp
 from pydantic import ConfigDict
@@ -56,13 +56,14 @@ class DMIBronzeConfig(BaseJobConfig):
     bucket: str = "landbrugsdata-raw-data"
 
     # DMI-specific configuration
-    parameters: List[str] = ["pot_evaporation_makkink", "acc_precip"]
+    parameters: ClassVar[list[str]] = ["pot_evaporation_makkink", "acc_precip"]
     api_base_url: str = "https://dmigw.govcloud.dk/v2/climateData"
     max_concurrent_fetches: int = 5
     start_year: int = 2011  # DMI grid data available from 2011
     temporal_resolution: str = "monthly"  # Changed from daily to monthly
 
     model_config = ConfigDict(frozen=True)
+
 
 class DMIApiClient:
     """Client for interacting with DMI's climate data API"""
@@ -86,8 +87,8 @@ class DMIApiClient:
         stop=stop_after_attempt(3),
     )
     async def _make_request(
-        self, session: aiohttp.ClientSession, endpoint: str, params: Dict[str, Any] = None
-    ) -> Dict:
+        self, session: aiohttp.ClientSession, endpoint: str, params: dict[str, Any] | None = None
+    ) -> dict:
         """Make an authenticated request to the DMI API with error handling and retry logic"""
         if params is None:
             params = {}
@@ -107,7 +108,7 @@ class DMIApiClient:
                 return await response.json()
 
         except Exception as e:
-            raise aiohttp.ClientError(f"Error making request to DMI API: {str(e)}")
+            raise aiohttp.ClientError(f"Error making request to DMI API: {e!s}") from e
 
     async def fetch_grid_data(
         self,
@@ -115,7 +116,7 @@ class DMIApiClient:
         parameter_id: str,
         start_time: datetime,
         end_time: datetime,
-    ) -> Dict:
+    ) -> dict:
         """
         Fetch raw climate grid data and return as JSON.
 
@@ -126,7 +127,10 @@ class DMIApiClient:
         params = {
             "parameterId": parameter_id,
             "limit": 10000,  # Increased limit for monthly data spanning many years
-            "datetime": f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+            "datetime": (
+                f"{start_time.strftime('%Y-%m-%dT%H:%M:%SZ')}/"
+                f"{end_time.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            ),
         }
 
         try:
@@ -152,6 +156,7 @@ class DMIApiClient:
                 "end_time": end_time.isoformat(),
             }
 
+
 class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
     """
     Bronze layer processing for DMI climate data.
@@ -173,7 +178,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         Initialize the DMIBronze source.
 
         Args:
-            config (DMIBronzeConfig): Configuration for the data source        """
+            config (DMIBronzeConfig): Configuration for the data source"""
         super().__init__(config)
         self.api_client = DMIApiClient(config)
 
@@ -198,7 +203,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         parameter_id: str,
         start_time: datetime,
         end_time: datetime,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Fetch monthly-aggregated data for one climate parameter by iterating month-by-month.
         This avoids the 10 000-feature cap on the DMI endpoint and guarantees we retrieve
@@ -206,7 +211,8 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         """
         try:
             self.log.info(
-                f"📡 Fetching DMI monthly grid data for {parameter_id} from {start_time:%Y-%m} to {end_time:%Y-%m}"
+                f"📡 Fetching DMI monthly grid data for {parameter_id} "
+                f"from {start_time:%Y-%m} to {end_time:%Y-%m}"
             )
 
             # Helper to advance one month without pandas
@@ -218,10 +224,23 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
             all_features: list = []
             cur_start = datetime(start_time.year, start_time.month, 1)
+
+            # Calculate total months for progress tracking
+            total_months = (
+                (end_time.year - start_time.year) * 12 + (end_time.month - start_time.month) + 1
+            )
+            month_counter = 0
+
             while cur_start < end_time:
                 cur_end = _add_one_month(cur_start) - timedelta(seconds=1)
                 if cur_end > end_time:
                     cur_end = end_time
+
+                month_counter += 1
+                self.log.info(
+                    f"  [{parameter_id}] Fetching {cur_start:%Y-%m} "
+                    f"({month_counter}/{total_months}, {month_counter * 100 // total_months}%)"
+                )
 
                 monthly_data = await self.api_client.fetch_grid_data(
                     session, parameter_id, cur_start, cur_end
@@ -229,6 +248,14 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
                 if monthly_data.get("features"):
                     all_features.extend(monthly_data["features"])
+                    self.log.info(
+                        f"  [{parameter_id}] ✓ {cur_start:%Y-%m}: {len(monthly_data['features'])} features "
+                        f"(total: {len(all_features)})"
+                    )
+                else:
+                    self.log.warning(
+                        f"  [{parameter_id}] ⚠ {cur_start:%Y-%m}: No features returned"
+                    )
 
                 cur_start = _add_one_month(cur_start)
 
@@ -274,8 +301,8 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
     def _save_parameter_data(
         self,
         parameter_id: str,
-        parameter_data: Dict[str, Any],
-        metadata: Dict[str, Any],
+        parameter_data: dict[str, Any],
+        metadata: dict[str, Any],
     ) -> None:
         """
         Save parameter data and metadata to storage.
@@ -302,7 +329,7 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
             self.log.error(f"Error saving data for parameter {parameter_id}: {e}")
             raise
 
-    async def run(self) -> Optional[Dict[str, Any]]:
+    async def run(self) -> dict[str, Any] | None:
         """
         Run bronze processing for all configured DMI parameters.
 
@@ -312,13 +339,17 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
         """
         try:
             self.log.info(
-                f"Starting DMI bronze processing for monthly data - parameters: {self.config.parameters}"
+                f"Starting DMI bronze processing for monthly data - "
+                f"parameters: {self.config.parameters}"
             )
 
             # Calculate time range
             start_time, end_time = self._calculate_time_range()
             years_span = end_time.year - start_time.year + 1
-            self.log.info(f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} to {end_time.strftime('%Y-%m')} ({years_span} years)")
+            self.log.info(
+                f"Fetching DMI monthly data from {start_time.strftime('%Y-%m')} to "
+                f"{end_time.strftime('%Y-%m')} ({years_span} years)"
+            )
 
             # Create semaphore to limit concurrent requests
             semaphore = asyncio.Semaphore(self.config.max_concurrent_fetches)
@@ -331,7 +362,9 @@ class DMIBronze(BaseSource[DMIBronzeConfig], BronzeJobInterface):
 
             # Fetch data for all parameters concurrently
             async with aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=600, connect=60, sock_read=300)  # Increased timeout for larger monthly datasets
+                timeout=aiohttp.ClientTimeout(
+                    total=600, connect=60, sock_read=300
+                )  # Increased timeout for larger monthly datasets
             ) as session:
                 tasks = [
                     fetch_with_semaphore(session, parameter_id)

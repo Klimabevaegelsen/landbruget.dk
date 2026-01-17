@@ -1,0 +1,37 @@
+{
+  "dataset_name": "agricultural_fields_2025",
+  "source_path": "gs://landbrugsdata-raw-data/silver/agricultural_fields_2025/20260116_230917/data.parquet",
+  "generated_at": "2026-01-17T11:10:18.343500",
+  "record_count": 615700,
+  "total_area_m2": 2648853.250000042,
+  "unique_identifiers": {
+    "field_id": 28349,
+    "journal_number": 31545,
+    "cvr_number": 26912
+  },
+  "geometry_bounds": {
+    "min_x": 54.55982897607929,
+    "max_x": 57.74516914270037,
+    "min_y": 8.082480066451506,
+    "max_y": 15.155224668788494
+  },
+  "detected_crs": "EPSG:4326",
+  "column_null_counts": {
+    "field_id": 0,
+    "area_ha": 0,
+    "journal_number": 0,
+    "cvr_number": 18266,
+    "crop_code": 0,
+    "crop_name": 0,
+    "grundbetaling_eligible": 0,
+    "grundbetaling_area_ha": 0,
+    "block_id": 13687,
+    "shape_area": 0,
+    "shape_length": 0,
+    "OBJECTID": 0,
+    "DatoForHentning": 0,
+    "year": 0,
+    "geometry": 0,
+    "is_valid_geometry": 0
+  }
+}

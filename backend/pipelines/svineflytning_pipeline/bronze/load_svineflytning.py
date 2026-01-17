@@ -8,11 +8,17 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any
 
 import certifi
 from requests import Session
-from tenacity import before_log, retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    before_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 from tqdm.auto import tqdm
 from zeep import Client, Settings
 from zeep import exceptions as zeep_exceptions
@@ -78,7 +84,9 @@ def create_client(endpoint: str, username: str, password: str) -> Client:
     settings = Settings(strict=False, xml_huge_tree=True)
     transport = Transport(session=session)
 
-    client = Client(endpoint, settings=settings, transport=transport, wsse=UsernameToken(username, password))
+    client = Client(
+        endpoint, settings=settings, transport=transport, wsse=UsernameToken(username, password)
+    )
     logger.debug("Successfully created SOAP client")
     return client
 
@@ -99,7 +107,9 @@ def validate_date_range(start_date: date, end_date: date) -> None:
 
     date_diff = (end_date - start_date).days + 1
     if date_diff > MAX_DATE_RANGE_DAYS:
-        raise ValueError(f"Date range cannot exceed {MAX_DATE_RANGE_DAYS} days due to API limitations")
+        raise ValueError(
+            f"Date range cannot exceed {MAX_DATE_RANGE_DAYS} days due to API limitations"
+        )
 
 
 @retry(
@@ -109,7 +119,7 @@ def validate_date_range(start_date: date, end_date: date) -> None:
     after=before_log(logger, logging.DEBUG),
     retry=retry_if_exception_type((zeep_exceptions.Fault, zeep_exceptions.TransportError)),
 )
-def fetch_movements(client: Client, start_date: date, end_date: date) -> Dict[str, Any]:
+def fetch_movements(client: Client, start_date: date, end_date: date) -> dict[str, Any]:
     """
     Fetch movements for a given date range and stream directly to storage.
 
@@ -133,7 +143,10 @@ def fetch_movements(client: Client, start_date: date, end_date: date) -> Dict[st
                 "IPAdresse": "",
                 "TrackID": "1",
             },
-            "Request": {"RegistreringsDatoFra": start_date.isoformat(), "RegistreringsDatoTil": end_date.isoformat()},
+            "Request": {
+                "RegistreringsDatoFra": start_date.isoformat(),
+                "RegistreringsDatoTil": end_date.isoformat(),
+            },
         }
 
         response = client.service.listAlleFlytningerIPerioden(request)
@@ -148,13 +161,13 @@ def fetch_movements(client: Client, start_date: date, end_date: date) -> Dict[st
         }
 
     except zeep_exceptions.Fault as e:
-        logger.error(f"SOAP fault while fetching movements: {str(e)}")
+        logger.error(f"SOAP fault while fetching movements: {e!s}")
         raise
     except zeep_exceptions.TransportError as e:
-        logger.error(f"Transport error while fetching movements: {str(e)}")
+        logger.error(f"Transport error while fetching movements: {e!s}")
         raise
     except Exception as e:
-        logger.error(f"Unexpected error fetching movements: {str(e)}")
+        logger.error(f"Unexpected error fetching movements: {e!s}")
         raise
 
 
@@ -167,7 +180,7 @@ def fetch_all_movements(
     buffer_size: int = 50,
     show_progress: bool = False,
     test_mode: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Fetch all movements for the given date range with parallel processing.
 
@@ -218,7 +231,7 @@ def fetch_all_movements(
             current_buffer = []
             return str(temp_path)
 
-        def fetch_chunk(dates: Tuple[date, date]) -> Dict:
+        def fetch_chunk(dates: tuple[date, date]) -> dict:
             chunk_start, chunk_end = dates
             try:
                 response = fetch_movements(client, chunk_start, chunk_end)
@@ -229,7 +242,12 @@ def fetch_all_movements(
                 raise
 
         # Progress bar setup
-        pbar = tqdm(total=len(date_chunks), desc="Fetching movements", unit="chunks", disable=not show_progress)
+        pbar = tqdm(
+            total=len(date_chunks),
+            desc="Fetching movements",
+            unit="chunks",
+            disable=not show_progress,
+        )
 
         # Fetch data in parallel
         with ThreadPoolExecutor(max_workers=max_concurrent_fetches) as executor:
@@ -260,7 +278,9 @@ def fetch_all_movements(
         export_timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
 
         # Export the data using the optimized export function
-        export_result = export_movements_optimized(temp_files, export_timestamp, len(date_chunks), output_dir)
+        export_result = export_movements_optimized(
+            temp_files, export_timestamp, len(date_chunks), output_dir
+        )
 
         result = {
             "export_timestamp": export_timestamp,

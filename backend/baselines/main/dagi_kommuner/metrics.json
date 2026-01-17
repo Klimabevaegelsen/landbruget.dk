@@ -1,0 +1,35 @@
+{
+  "dataset_name": "dagi_kommuner",
+  "source_path": "gs://landbrugsdata-raw-data/silver/dagi_kommuner/20260116_221858/data.parquet",
+  "generated_at": "2026-01-17T11:11:30.304940",
+  "record_count": 99,
+  "unique_identifiers": {},
+  "geometry_bounds": {
+    "min_x": 54.55907837,
+    "max_x": 57.75257255,
+    "min_y": 8.07250975,
+    "max_y": 15.19740034
+  },
+  "detected_crs": "EPSG:4326",
+  "column_null_counts": {
+    "code": 0,
+    "name": 0,
+    "region_code": 0,
+    "dagi_id": 0,
+    "udenforkommuneinddeling": 0,
+    "regionsnavn": 0,
+    "\u00e6ndret": 0,
+    "geo_\u00e6ndret": 0,
+    "geo_version": 0,
+    "visueltcenter_x": 0,
+    "visueltcenter_y": 0,
+    "geometry": 0,
+    "is_valid_geometry": 0,
+    "area_m2": 0,
+    "centroid_x": 0,
+    "centroid_y": 0,
+    "geometry_wkt": 0,
+    "layer_type": 0,
+    "processed_at": 0
+  }
+}

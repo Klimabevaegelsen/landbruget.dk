@@ -17,7 +17,7 @@ import asyncio
 import ssl
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
-from typing import Optional
+from typing import ClassVar
 
 import aiohttp
 from pydantic import ConfigDict
@@ -25,6 +25,7 @@ from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_ex
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, BronzeJobInterface
 from unified_pipeline.util.timing import AsyncTimer
+
 
 class WetlandsBronzeConfig(BaseJobConfig):
     """
@@ -66,10 +67,11 @@ class WetlandsBronzeConfig(BaseJobConfig):
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=300
     )
-    headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
+    headers: ClassVar[dict[str, str]] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
     request_semaphore: Semaphore = Semaphore(max_concurrent)
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+
 
 class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
     """
@@ -93,7 +95,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
         Initialize the WetlandsBronze source.
 
         Args:
-            config (WetlandsBronzeConfig): Configuration for the data source        """
+            config (WetlandsBronzeConfig): Configuration for the data source"""
         super().__init__(config)
 
     def _get_params(self, start_index: int = 0) -> dict:
@@ -179,13 +181,13 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
                     except ET.ParseError as e:
                         err_msg = f"Failed to parse XML response: {e}"
                         self.log.error(err_msg)
-                        raise Exception(err_msg)
+                        raise Exception(err_msg) from e
             except Exception as e:
                 err_msg = f"Error fetching data: {e}"
                 self.log.error(err_msg)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
 
-    async def _fetch_raw_data(self) -> Optional[list[str]]:
+    async def _fetch_raw_data(self) -> list[str] | None:
         """
         Fetch all raw data from the WFS service.
 
@@ -226,9 +228,12 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
                 self.log.debug(f"Fetched {fetched_features_count} out of {total_features}")
 
                 # Create a list of tasks for all remaining chunks to fetch
-                tasks = []
-                for start_index in range(returned_features, total_features, self.config.batch_size):
-                    tasks.append(self._fetch_chunck(session, start_index))
+                tasks = [
+                    self._fetch_chunck(session, start_index)
+                    for start_index in range(
+                        returned_features, total_features, self.config.batch_size
+                    )
+                ]
 
                 # Fetch all chunks in parallel using asyncio.gather
                 results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -281,7 +286,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
         self.conn.execute(
             """
             CREATE OR REPLACE TABLE final_dataframe AS
-            SELECT 
+            SELECT
                 payload,
                 ? as source,
                 ? as created_at,
@@ -296,7 +301,7 @@ class WetlandsBronze(BaseSource[WetlandsBronzeConfig], BronzeJobInterface):
 
         return "final_dataframe"
 
-    async def run(self) -> Optional[list[str]]:
+    async def run(self) -> list[str] | None:
         """
         Run the data source processing pipeline.
 

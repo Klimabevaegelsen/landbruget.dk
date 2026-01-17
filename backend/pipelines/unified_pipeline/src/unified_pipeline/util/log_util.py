@@ -11,10 +11,11 @@ from __future__ import annotations
 import os
 import sys
 from enum import Enum
-from typing import Optional
+from typing import ClassVar
 
 import loguru
 from simple_singleton import Singleton
+
 
 class LogLevel(Enum):
     """
@@ -41,6 +42,7 @@ class LogLevel(Enum):
     FATAL = "FATAL"
     OFF = "OFF"
 
+
 class Logger(metaclass=Singleton):
     """
     Singleton logger class that provides consistent logging configuration.
@@ -56,7 +58,7 @@ class Logger(metaclass=Singleton):
         DEFAULT_LOG (str): Default log level if none specified
     """
 
-    _log_level_aliases: dict[str, str] = {
+    _log_level_aliases: ClassVar[dict[str, str]] = {
         "TRACE": "TRACE",
         "DEBUG": "DEBUG",
         "INFO": "INFO",
@@ -67,7 +69,7 @@ class Logger(metaclass=Singleton):
     }
 
     DEFAULT_LOG_DIR = "/tmp/unified_pipeline/"
-    LOG: Optional[loguru.Logger] = None
+    LOG: loguru.Logger | None = None
     DEFAULT_LOG = "INFO"
 
     def __init__(self) -> None:
@@ -100,7 +102,7 @@ class Logger(metaclass=Singleton):
         return cls._log_level_aliases[log_level]
 
     @classmethod
-    def get_logger(cls, level: Optional[str] = None) -> loguru.Logger:
+    def get_logger(cls, level: str | None = None) -> loguru.Logger:
         """
         Get or create a configured logger instance with the specified log level.
 
@@ -131,14 +133,14 @@ class Logger(metaclass=Singleton):
             cls.LOG.remove()
             cls.LOG.add(
                 sys.stderr,
-                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> "
-                "| {thread.name: <28} | <cyan>{name}</cyan> - {message}",
+                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <5}</level> "
+                "| {thread.name: <12} | <cyan>{name: <20}</cyan> - {message}",
                 level=level,
             )
             cls.LOG.add(
                 log_dir + "/log_{time}.log",
-                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> "
-                "| {thread.name: <28} | <cyan>{name}</cyan> - {message}",
+                format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <5}</level> "
+                "| {thread.name: <12} | <cyan>{name: <20}</cyan> - {message}",
                 level=level,
             )
         return cls.LOG

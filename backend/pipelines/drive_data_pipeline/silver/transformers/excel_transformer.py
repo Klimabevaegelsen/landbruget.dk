@@ -1,9 +1,11 @@
-"""Excel file transformer using pandas for reading, then DuckDB for processing."""
+"""Excel file transformer using DuckDB for processing.
+
+Refactored to use vanilla DuckDB instead of pandas, with fallback to openpyxl
+for reading Excel files when DuckDB's spatial extension is unavailable.
+"""
 
 import time
 from pathlib import Path
-
-import pandas as pd
 
 # Handle imports for both standalone and package usage
 try:
@@ -14,7 +16,9 @@ except ImportError:
     # Fallback for standalone usage
     import logging
 
-    get_logger = lambda: logging.getLogger(__name__)
+    def get_logger() -> logging.Logger:
+        return logging.getLogger(__name__)
+
     from silver.duckdb_base import DuckDBProcessor
     from silver.transformers.base import BaseTransformer, FileMetadata, TransformResult
 
@@ -22,9 +26,9 @@ logger = get_logger()
 
 
 class ExcelTransformer(BaseTransformer, DuckDBProcessor):
-    """Transform Excel files using pandas for reading, then DuckDB for processing."""
+    """Transform Excel files using DuckDB for processing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         BaseTransformer.__init__(self)
         DuckDBProcessor.__init__(self)
         logger.info("Initialized ExcelTransformer with DuckDB")
@@ -35,7 +39,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
         metadata: FileMetadata,
         output_dir: Path,
     ) -> TransformResult:
-        """Transform Excel file to standardized format using pandas + DuckDB.
+        """Transform Excel file to standardized format using DuckDB.
 
         Args:
             file_path: Path to the Excel file
@@ -46,14 +50,14 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             TransformResult with success status and metadata
         """
         try:
-            logger.info(f"Transforming Excel file using pandas + DuckDB: {file_path}")
+            logger.info(f"Transforming Excel file using DuckDB: {file_path}")
 
             # Create output directory for this file
             file_output_dir = output_dir / "Excel"
             file_output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Read Excel file and get all sheets using pandas
-            sheets_data = self._read_excel_sheets_pandas(file_path)
+            # Read Excel file and get all sheets
+            sheets_data = self._read_excel_sheets(file_path)
 
             if not sheets_data:
                 logger.warning(f"No valid sheets found in Excel file: {file_path}")
@@ -112,7 +116,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     }
                 except Exception as e:
                     logger.warning(
-                        f"Failed to get schema from table {last_standardized_table}: {str(e)}"
+                        f"Failed to get schema from table {last_standardized_table}: {e!s}"
                     )
                     # Use basic schema as fallback
                     schema = {"columns": [], "data_types": []}
@@ -133,15 +137,89 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             )
 
         except Exception as e:
-            error_msg = f"Failed to transform Excel file {file_path}: {str(e)}"
+            error_msg = f"Failed to transform Excel file {file_path}: {e!s}"
             logger.error(error_msg)
             return TransformResult(
                 success=False,
                 error=error_msg,
             )
 
-    def _read_excel_sheets_pandas(self, file_path: Path) -> list[tuple[str, str]]:
-        """Read Excel file sheets using pandas, then register as DuckDB tables.
+    def _read_excel_sheets(self, file_path: Path) -> list[tuple[str, str]]:
+        """Read Excel file sheets using DuckDB with fallback to openpyxl.
+
+        Args:
+            file_path: Path to the Excel file
+
+        Returns:
+            List of tuples containing (sheet_name, table_name)
+        """
+        # Try using DuckDB's spatial extension first for xlsx support
+        try:
+            self.conn.execute("INSTALL spatial; LOAD spatial;")
+            return self._read_excel_with_spatial(file_path)
+        except Exception as e:
+            logger.debug(f"Spatial extension not available or failed: {e}")
+
+        # Fallback to openpyxl
+        return self._read_excel_with_openpyxl(file_path)
+
+    def _read_excel_with_spatial(self, file_path: Path) -> list[tuple[str, str]]:
+        """Read Excel file using DuckDB's spatial extension st_read.
+
+        Args:
+            file_path: Path to the Excel file
+
+        Returns:
+            List of tuples containing (sheet_name, table_name)
+        """
+        sheets_data = []
+
+        # st_read with layer parameter can read specific sheets
+        # First, try to get sheet names using st_layers
+        try:
+            layers = self.conn.execute(f"SELECT * FROM st_layers('{file_path}')").fetchall()
+            sheet_names = [layer[0] for layer in layers] if layers else ["Sheet1"]
+        except Exception:
+            # If st_layers fails, try reading without specifying a layer
+            sheet_names = ["default"]
+
+        for sheet_name in sheet_names:
+            try:
+                clean_sheet_name = (
+                    "".join(c if c.isalnum() else "_" for c in str(sheet_name)).lower().strip("_")
+                )
+                if not clean_sheet_name:
+                    clean_sheet_name = f"sheet_{len(sheets_data) + 1}"
+
+                table_name = f"excel_{clean_sheet_name}_{int(time.time())}"
+
+                if sheet_name == "default":
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name} AS
+                        SELECT * FROM st_read('{file_path}')
+                    """)
+                else:
+                    self.conn.execute(f"""
+                        CREATE TABLE {table_name} AS
+                        SELECT * FROM st_read('{file_path}', layer='{sheet_name}')
+                    """)
+
+                # Check if table has data
+                row_count = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                if row_count > 0:
+                    sheets_data.append((clean_sheet_name, table_name))
+                    logger.debug(f"Read sheet '{sheet_name}' with {row_count} rows using spatial")
+                else:
+                    self.drop_table(table_name)
+
+            except Exception as e:
+                logger.debug(f"Failed to read sheet '{sheet_name}' with spatial: {e}")
+                continue
+
+        return sheets_data
+
+    def _read_excel_with_openpyxl(self, file_path: Path) -> list[tuple[str, str]]:
+        """Read Excel file sheets using openpyxl, then create DuckDB tables.
 
         Args:
             file_path: Path to the Excel file
@@ -150,52 +228,43 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             List of tuples containing (sheet_name, table_name)
         """
         try:
-            logger.debug(f"Reading Excel file sheets using pandas: {file_path}")
+            import openpyxl
 
-            # Use pandas ExcelFile to get sheet names and read data
-            excel_file = pd.ExcelFile(file_path)
+            logger.debug(f"Reading Excel file with openpyxl: {file_path}")
+
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
             sheets_data = []
 
-            logger.info(f"Found {len(excel_file.sheet_names)} sheets: {excel_file.sheet_names}")
+            logger.info(f"Found {len(wb.sheetnames)} sheets: {wb.sheetnames}")
 
-            for sheet_name in excel_file.sheet_names:
+            for sheet_name in wb.sheetnames:
                 try:
-                    # Read the sheet with pandas with specific options to handle problematic data
-                    df = pd.read_excel(
-                        excel_file,
-                        sheet_name=sheet_name,
-                        dtype=str,  # Read all columns as strings to avoid type inference issues
-                        na_filter=False,  # Don't convert empty strings to NaN
-                    )
+                    sheet = wb[sheet_name]
+                    rows = list(sheet.iter_rows(values_only=True))
 
-                    # Skip empty sheets
-                    if df.empty:
+                    if not rows:
                         logger.debug(f"Skipping empty sheet: {sheet_name}")
                         continue
 
-                    # Clean column names to avoid issues with special characters
-                    original_columns = df.columns.tolist()
-                    clean_columns = []
-
-                    for i, col in enumerate(original_columns):
-                        # Convert column name to string and clean it
-                        col_str = str(col).strip()
-
-                        # Handle unnamed columns
+                    # First row as headers
+                    headers = []
+                    for i, h in enumerate(rows[0]):
+                        col_str = str(h).strip() if h is not None else ""
                         if col_str.startswith("Unnamed:") or col_str == "":
                             col_str = f"column_{i}"
+                        # Replace problematic characters
+                        col_str = col_str.replace('"', "'").replace("\n", " ").replace("\r", " ")
+                        headers.append(col_str)
 
-                        # Replace problematic characters temporarily for DuckDB
-                        clean_col = col_str.replace('"', "'").replace("\n", " ").replace("\r", " ")
-                        clean_columns.append(clean_col)
+                    # Get data rows
+                    data_rows = []
+                    for row in rows[1:]:
+                        # Skip completely empty rows
+                        if all(v is None or str(v).strip() == "" for v in row):
+                            continue
+                        data_rows.append(row)
 
-                    # Update DataFrame column names
-                    df.columns = clean_columns
-
-                    # Remove completely empty rows
-                    df = df.dropna(how="all")
-
-                    if df.empty:
+                    if not data_rows:
                         logger.debug(f"Skipping empty sheet after cleaning: {sheet_name}")
                         continue
 
@@ -209,52 +278,49 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     if not clean_sheet_name:
                         clean_sheet_name = f"sheet_{len(sheets_data) + 1}"
 
-                    # Register DataFrame as DuckDB table with error handling
                     table_name = f"excel_{clean_sheet_name}_{int(time.time())}"
 
-                    try:
-                        self.register_table(df, table_name)
-                        logger.debug(f"Successfully registered table: {table_name}")
-                    except Exception as reg_error:
-                        logger.error(
-                            f"Failed to register DataFrame as table {table_name}: {str(reg_error)}"
-                        )
-                        # Try to create table manually with explicit column types
-                        try:
-                            # Create table manually using DuckDB's CREATE TABLE AS
-                            temp_table = f"temp_{table_name}"
+                    # Create table with all columns as VARCHAR
+                    columns_def = ", ".join([f'"{h}" VARCHAR' for h in headers])
+                    self.conn.execute(f"CREATE TABLE {table_name} ({columns_def})")
 
-                            # Convert DataFrame to a format DuckDB can handle
-                            df_clean = df.copy()
+                    # Insert data row by row
+                    for row in data_rows:
+                        values = []
+                        for i, v in enumerate(row):
+                            if i >= len(headers):
+                                break
+                            val = str(v) if v is not None else ""
+                            # Escape single quotes for SQL
+                            val = val.replace("'", "''")
+                            values.append(f"'{val}'")
 
-                            # Ensure all values are strings and handle nulls
-                            for col in df_clean.columns:
-                                df_clean[col] = df_clean[col].astype(str).replace("nan", "")
+                        # Pad values if row is shorter than headers
+                        while len(values) < len(headers):
+                            values.append("''")
 
-                            # Register the cleaned DataFrame
-                            self.register_table(df_clean, table_name)
-                            logger.debug(f"Successfully registered cleaned table: {table_name}")
-
-                        except Exception as manual_error:
-                            logger.error(
-                                f"Failed to manually create table {table_name}: {str(manual_error)}"
-                            )
-                            continue
+                        values_str = ", ".join(values)
+                        self.conn.execute(f"INSERT INTO {table_name} VALUES ({values_str})")
 
                     sheets_data.append((clean_sheet_name, table_name))
                     logger.debug(
-                        f"Successfully read sheet '{sheet_name}' as '{clean_sheet_name}' with {len(df)} rows"
+                        f"Read sheet '{sheet_name}' as '{clean_sheet_name}' "
+                        f"with {len(data_rows)} rows"
                     )
 
                 except Exception as e:
-                    logger.warning(f"Failed to read sheet '{sheet_name}': {str(e)}")
+                    logger.warning(f"Failed to read sheet '{sheet_name}': {e!s}")
                     continue
 
+            wb.close()
             logger.info(f"Successfully processed {len(sheets_data)} sheets from Excel file")
             return sheets_data
 
+        except ImportError:
+            logger.error("openpyxl not installed - cannot read Excel files")
+            return []
         except Exception as e:
-            logger.error(f"Failed to read Excel file with pandas: {str(e)}")
+            logger.error(f"Failed to read Excel file with openpyxl: {e!s}")
             return []
 
     def _standardize_column_names_duckdb(self, table_name: str) -> str:
@@ -281,7 +347,6 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             for i, col_info in enumerate(columns_info):
                 # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
                 col_name = col_info[0]
-                col_type = col_info[1]
 
                 # Apply domain-specific column name mappings first
                 mapped_name = self._apply_domain_specific_mappings(col_name)
@@ -290,7 +355,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                     # Use domain-specific mapping
                     standardized_name = mapped_name
                 else:
-                    # Standardize column name: lowercase, replace spaces/special chars with underscores
+                    # Standardize column name: lowercase, replace spaces/special chars
                     # Handle Danish characters properly
                     standardized_name = str(col_name).lower()
                     # Replace Danish characters
@@ -358,11 +423,11 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             return result_table
 
         except Exception as e:
-            logger.error(f"Failed to standardize column names: {str(e)}")
+            logger.error(f"Failed to standardize column names: {e!s}")
             # Return original table if standardization fails
             return table_name
 
-    def _apply_domain_specific_mappings(self, col_name: str) -> str:
+    def _apply_domain_specific_mappings(self, col_name: str) -> str | None:
         """Apply domain-specific column name mappings for known data types.
 
         Args:
@@ -407,12 +472,10 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
         if normalized_name in cvr_mappings:
             return cvr_mappings[normalized_name]
 
-        # Add other domain-specific mappings here as needed
-
         return None
 
     def _add_backward_compatibility_columns(self, table_name: str) -> None:
-        """Add backward compatibility columns for pesticide data to maintain downstream compatibility.
+        """Add backward compatibility columns for pesticide data to maintain compatibility.
 
         Args:
             table_name: Name of the table to add compatibility columns to
@@ -438,8 +501,12 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             alter_statements = []
             for new_col, old_col in backward_compatibility_mappings.items():
                 if new_col in column_names and old_col not in column_names:
+                    escaped_table = table_name.replace('"', '""')
+                    escaped_new = new_col.replace('"', '""')
+                    escaped_old = old_col.replace('"', '""')
                     alter_statements.append(
-                        f"ALTER TABLE {table_name} ADD COLUMN {old_col} AS {new_col}"
+                        f'ALTER TABLE "{escaped_table}" ADD COLUMN "{escaped_old}" '
+                        f'AS "{escaped_new}"'
                     )
 
             # Execute all alter statements
@@ -452,9 +519,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
                 )
 
         except Exception as e:
-            logger.warning(
-                f"Failed to add backward compatibility columns to {table_name}: {str(e)}"
-            )
+            logger.warning(f"Failed to add backward compatibility columns to {table_name}: {e!s}")
 
     def _standardize_data_types_duckdb(self, table_name: str) -> str:
         """Apply data type standardization using DuckDB operations.
@@ -479,7 +544,6 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             for col_info in columns_info:
                 # DuckDB DESCRIBE returns: (col_name, col_type, nullable, key, default, extra)
                 col_name = col_info[0]
-                col_type = col_info[1]
 
                 # Properly quote column name for DuckDB and escape quotes
                 escaped_col_name = str(col_name).replace('"', '""')
@@ -514,7 +578,7 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             # Simplified query without complex row filtering to avoid parsing issues
             self.conn.execute(f"""
                 CREATE TABLE {result_table} AS
-                SELECT 
+                SELECT
                     {transformations_sql}
                 FROM {table_name}
                 WHERE 1=1
@@ -524,6 +588,6 @@ class ExcelTransformer(BaseTransformer, DuckDBProcessor):
             return result_table
 
         except Exception as e:
-            logger.error(f"Failed to standardize data types: {str(e)}")
+            logger.error(f"Failed to standardize data types: {e!s}")
             # Return original table if standardization fails
             return table_name

@@ -1,40 +1,24 @@
 """Module for loading CHR Ejendom data (Properties) - Bronze Layer."""
 
 import logging
-import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 from zeep import Client
 
 # Import the exporter and auth
 from .auth import create_ejendom_client, get_fvm_credentials
 from .export import save_raw_data
+from .utils import create_base_request
 
 # Set up logging
 logger = logging.getLogger("backend.pipelines.chr_pipeline.bronze.load_ejendom")
 
-# Default Client ID for SOAP requests
-DEFAULT_CLIENT_ID = "LandbrugsData"
-
-
-# --- Base Request Structure ---
-
-
-def _create_base_request(username: str, session_id: str = "1", track_id: str = "load_ejendom") -> Dict[str, str]:
-    """Create the common GLRCHRWSInfoInbound structure."""
-    return {
-        "BrugerNavn": username,
-        "KlientId": DEFAULT_CLIENT_ID,
-        "SessionId": session_id,
-        "IPAdresse": "",  # Typically left blank
-        "TrackID": f"{track_id}-{uuid.uuid4()}",
-    }
-
-
 # --- Generic SOAP Fetcher ---
 
 
-def fetch_raw_soap_response(client: Client, operation_name: str, request_data: Dict) -> Optional[Any]:
+def fetch_raw_soap_response(
+    client: Client, operation_name: str, request_data: dict
+) -> Any | None:
     """Fetch raw response from a SOAP endpoint using Zeep."""
     try:
         operation = getattr(client.service, operation_name)
@@ -53,12 +37,12 @@ def fetch_raw_soap_response(client: Client, operation_name: str, request_data: D
 # --- Ejendom Loading Functions ---
 
 
-def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> Optional[Any]:
+def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> Any | None:
     """Load property details (EjendomsOplysninger) using the 'hentOplysninger' operation."""
     logger.info(f"Fetching property details for CHR: {chr_number}...")
 
     request_structure = {
-        "GLRCHRWSInfoInbound": _create_base_request(username, track_id="load_ejendom_oplysninger"),
+        "GLRCHRWSInfoInbound": create_base_request(username, track_id="load_ejendom_oplysninger"),
         "Request": {
             "ChrNummer": str(chr_number),
             "vis": None,  # Optional: Keep as None unless specific view is needed
@@ -72,16 +56,18 @@ def load_ejendom_oplysninger(client: Client, username: str, chr_number: int) -> 
         logger.warning(f"No response received for {operation_name} (CHR: {chr_number})")
     else:
         # Save the raw response
-        save_raw_data(raw_response=response, data_type="ejendom_oplysninger", identifier=f"{chr_number}")
+        save_raw_data(
+            raw_response=response, data_type="ejendom_oplysninger", identifier=f"{chr_number}"
+        )
     return response
 
 
-def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> Optional[Any]:
+def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> Any | None:
     """Load veterinary events (VeterinaereHaendelser) using the 'hentVeterinaereHaendelser' operation."""
     logger.info(f"Fetching veterinary events for CHR: {chr_number}...")
 
     request_structure = {
-        "GLRCHRWSInfoInbound": _create_base_request(username, track_id="load_ejendom_vet_events"),
+        "GLRCHRWSInfoInbound": create_base_request(username, track_id="load_ejendom_vet_events"),
         "Request": {"ChrNummer": str(chr_number)},
     }
 
@@ -92,7 +78,9 @@ def load_ejendom_vet_events(client: Client, username: str, chr_number: int) -> O
         logger.warning(f"No response received for {operation_name} (CHR: {chr_number})")
     else:
         # Save the raw response
-        save_raw_data(raw_response=response, data_type="ejendom_vet_events", identifier=f"{chr_number}")
+        save_raw_data(
+            raw_response=response, data_type="ejendom_vet_events", identifier=f"{chr_number}"
+        )
     return response
 
 
@@ -112,7 +100,8 @@ if __name__ == "__main__":
         oplysninger_raw = load_ejendom_oplysninger(ejendom_client, username, TEST_CHR_NUMBER)
         if oplysninger_raw:
             logger.info(
-                f"Successfully called load_ejendom_oplysninger for CHR {TEST_CHR_NUMBER}. Raw data saved via export module."
+                f"Successfully called load_ejendom_oplysninger for CHR {TEST_CHR_NUMBER}. "
+                f"Raw data saved via export module."
             )
         else:
             logger.warning("load_ejendom_oplysninger returned None or empty.")
@@ -122,7 +111,8 @@ if __name__ == "__main__":
         vet_events_raw = load_ejendom_vet_events(ejendom_client, username, TEST_CHR_NUMBER)
         if vet_events_raw:
             logger.info(
-                f"Successfully called load_ejendom_vet_events for CHR {TEST_CHR_NUMBER}. Raw data saved via export module."
+                f"Successfully called load_ejendom_vet_events for CHR {TEST_CHR_NUMBER}. "
+                f"Raw data saved via export module."
             )
         else:
             logger.warning("load_ejendom_vet_events returned None or empty.")

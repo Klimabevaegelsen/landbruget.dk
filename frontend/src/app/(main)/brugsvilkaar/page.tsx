@@ -1,0 +1,42 @@
+import { Container } from '@/components/layout/container';
+import { Metadata } from 'next';
+import fs from 'fs';
+import path from 'path';
+import { remark } from 'remark';
+import html from 'remark-html';
+
+export const metadata: Metadata = {
+  title: 'Brugsvilkår - Landbruget.dk',
+  description:
+    'Læs vores brugsvilkår for Landbruget.dk - et almennyttigt, open-source og non-profit initiativ drevet af Klimabevægelsen.',
+};
+
+async function getTermsContent() {
+  const termsPath = path.join(
+    process.cwd(),
+    'src',
+    'content',
+    'terms-of-use.md'
+  );
+  const fileContents = fs.readFileSync(termsPath, 'utf8');
+
+  const processedContent = await remark().use(html).process(fileContents);
+  return processedContent.toString();
+}
+
+export default async function TermsPage() {
+  const content = await getTermsContent();
+
+  return (
+    <div className="bg-background">
+      <Container className="py-16 lg:py-24">
+        <div className="mx-auto max-w-4xl">
+          <div
+            className="[&_h1]:text-primary [&_h2]:text-primary [&_h2]:border-primary/20 [&_h3]:text-primary-darker [&_li]:marker:text-primary [&_hr]:border-primary/20 [&_li]:text-muted-foreground [&_p]:text-muted-foreground [&_em]:text-muted-foreground [&_strong]:text-foreground max-w-none [&_em]:italic [&_h1]:mb-12 [&_h1]:text-5xl [&_h1]:leading-tight [&_h1]:font-black [&_h1]:tracking-tight [&_h2]:mt-20 [&_h2]:mb-10 [&_h2]:border-b [&_h2]:pb-4 [&_h2]:text-3xl [&_h2]:leading-tight [&_h2]:font-bold [&_h2]:tracking-tight [&_h3]:mt-16 [&_h3]:mb-8 [&_h3]:text-2xl [&_h3]:leading-tight [&_h3]:font-bold [&_h3]:tracking-tight [&_hr]:my-12 [&_hr]:border-t [&_li]:pl-2 [&_li]:text-lg [&_li]:leading-[1.8] [&_ol]:my-10 [&_ol]:list-inside [&_ol]:list-decimal [&_ol]:space-y-4 [&_p]:mb-8 [&_p]:text-lg [&_p]:leading-[1.8] [&_p]:font-normal [&_strong]:font-bold [&_ul]:my-10 [&_ul]:ml-6 [&_ul]:list-outside [&_ul]:list-disc [&_ul]:space-y-4"
+            dangerouslySetInnerHTML={{ __html: content }}
+          />
+        </div>
+      </Container>
+    </div>
+  );
+}

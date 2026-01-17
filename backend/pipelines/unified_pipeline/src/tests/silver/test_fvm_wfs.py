@@ -30,3 +30,8 @@ def test_fvm_wfs_silver_config() -> None:
     assert config.dataset_smaabiotoper == "fvm_smaabiotoper"
     assert config.dataset_organic_areas == "fvm_organic_areas"
     assert len(config.organic_areas_years) == 13  # 2012-2024
+
+    # Test new municipality assignment configuration
+    assert config.kommune_boundaries_dataset == "dagi_kommuner"
+    assert config.include_municipality_assignment is True
+    assert config.municipality_assignment_method == "spatial_with_fallback"

@@ -18,7 +18,7 @@ import asyncio
 import ssl
 import xml.etree.ElementTree as ET
 from asyncio import Semaphore
-from typing import Optional
+from typing import ClassVar
 
 import aiohttp
 from pydantic import ConfigDict
@@ -72,9 +72,9 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
     request_timeout_config: aiohttp.ClientTimeout = aiohttp.ClientTimeout(
         total=request_timeout, connect=60, sock_read=300
     )
-    headers: dict[str, str] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
+    headers: ClassVar[dict[str, str]] = {"User-Agent": "Mozilla/5.0 QGIS/33603/macOS 15.1"}
     request_semaphore: Semaphore = Semaphore(max_concurrent)
-    layers: list[str] = [
+    layers: ClassVar[list[str]] = [
         "N2000_projekter:Hydrologi_E",
         "N2000_projekter:Hydrologi_F",
         "Ovrige_projekter:Vandloebsrestaurering_E",
@@ -91,12 +91,14 @@ class WaterProjectsBronzeConfig(BaseJobConfig):
         "vandprojekter:kla_projektomraader",
         "Klima_lavbund_demarkation___offentlige_projekter:0",
     ]
-    url_mapping: dict[str, str] = {
+    url_mapping: ClassVar[dict[str, str]] = {
         "vandprojekter:kla_projektforslag": "https://wfs2-miljoegis.mim.dk/vandprojekter/wfs",
         "vandprojekter:kla_projektomraader": "https://wfs2-miljoegis.mim.dk/vandprojekter/wfs",
         "Klima_lavbund_demarkation___offentlige_projekter:0": "https://gis.nst.dk/server/rest/services/autonom/Klima_lavbund_demarkation___offentlige_projekter/FeatureServer",
     }
-    service_types: dict[str, str] = {"Klima_lavbund_demarkation___offentlige_projekter:0": "arcgis"}
+    service_types: ClassVar[dict[str, str]] = {
+        "Klima_lavbund_demarkation___offentlige_projekter:0": "arcgis"
+    }
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
@@ -224,11 +226,11 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
             except ET.ParseError as e:
                 err_msg = f"Failed to parse XML response: {e}"
                 self.log.error(err_msg, exc_info=True)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
             except Exception as e:
                 err_msg = f"Error fetching chunk: {e}"
                 self.log.error(err_msg, exc_info=True)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
 
     @retry(
         retry=retry_if_exception_type(Exception),
@@ -306,7 +308,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
             except Exception as e:
                 err_msg = f"Error fetching data: {e}"
                 self.log.error(err_msg)
-                raise Exception(err_msg)
+                raise Exception(err_msg) from e
 
     async def _fetch_wfs_data(
         self, session: aiohttp.ClientSession, layer: str, url: str
@@ -344,9 +346,10 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
             self.log.info(f"Fetched {fetched_features_count} out of {total_features}")
 
             # Create a list of tasks for all remaining chunks to fetch
-            tasks = []
-            for start_index in range(returned_features, total_features, self.config.batch_size):
-                tasks.append(self._fetch_chunk(session, layer, url, start_index))
+            tasks = [
+                self._fetch_chunk(session, layer, url, start_index)
+                for start_index in range(returned_features, total_features, self.config.batch_size)
+            ]
 
             # Fetch all chunks in parallel using asyncio.gather
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -367,7 +370,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
             self.log.info(f"Fetched all {fetched_features_count} out of {total_features} features")
             return raw_features
 
-    async def _fetch_raw_data(self) -> Optional[list[tuple[str, str]]]:
+    async def _fetch_raw_data(self) -> list[tuple[str, str]] | None:
         """
         Fetch raw data from all configured layers and services.
 
@@ -454,7 +457,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
         self.conn.execute(
             """
             CREATE OR REPLACE TABLE final_dataframe AS
-            SELECT 
+            SELECT
                 payload,
                 layer,
                 ? as source,
@@ -470,7 +473,7 @@ class WaterProjectsBronze(BaseSource[WaterProjectsBronzeConfig], BronzeJobInterf
 
         return "final_dataframe"
 
-    async def run(self) -> Optional[list[tuple[str, str]]]:
+    async def run(self) -> list[tuple[str, str]] | None:
         """
         Execute the complete Water Projects bronze job workflow.
 

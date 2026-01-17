@@ -112,8 +112,7 @@ class H3PFASPipeline:
         """
         if parallel:
             return await self.run_all_analyses_parallel(years)
-        else:
-            return await self.run_all_analyses_sequential(years)
+        return await self.run_all_analyses_sequential(years)
 
     async def run_all_analyses_sequential(self, years: list[int] | None = None) -> bool:
         """Run both H3 and kommune-level analyses sequentially."""

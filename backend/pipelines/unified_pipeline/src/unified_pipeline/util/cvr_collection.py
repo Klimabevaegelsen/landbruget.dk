@@ -11,9 +11,9 @@ The approach uses a standard file structure in GCS:
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from unified_pipeline.util.gcs_access import GCSDataAccess
+from common.gcs import GCSDataAccess
 from unified_pipeline.util.log_util import Logger
 
 
@@ -40,7 +40,7 @@ class CVRCollectionManager:
         self.log = Logger.get_logger()
 
     def save_pipeline_cvr_numbers(
-        self, pipeline_name: str, cvr_numbers: List[str], timestamp: Optional[str] = None
+        self, pipeline_name: str, cvr_numbers: list[str], timestamp: str | None = None
     ) -> str:
         """
         Save CVR numbers discovered by a pipeline to the standard location.
@@ -57,7 +57,7 @@ class CVRCollectionManager:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Remove duplicates and sort
-        unique_cvr_numbers = sorted(list(set(cvr_numbers)))
+        unique_cvr_numbers = sorted(set(cvr_numbers))
 
         # Create CVR collection data
         cvr_data = {
@@ -80,7 +80,7 @@ class CVRCollectionManager:
 
         return gcs_path
 
-    def collect_all_cvr_numbers(self) -> Dict[str, Any]:
+    def collect_all_cvr_numbers(self) -> dict[str, Any]:
         """
         Collect all CVR numbers from all pipelines.
 
@@ -159,7 +159,7 @@ class CVRCollectionManager:
             "collection_summary": collection_summary,
         }
 
-    def _get_latest_cvr_collection(self, pipeline_name: str) -> Optional[Dict[str, Any]]:
+    def _get_latest_cvr_collection(self, pipeline_name: str) -> dict[str, Any] | None:
         """
         Get the latest CVR collection for a specific pipeline.
 
@@ -189,7 +189,7 @@ class CVRCollectionManager:
             self.log.warning(f"Could not load CVR collection for {pipeline_name}: {e}")
             return None
 
-    def _list_pipeline_folders(self) -> List[str]:
+    def _list_pipeline_folders(self) -> list[str]:
         """List all pipeline folders in cvr_collections/."""
         try:
             # List all files in cvr_collections/ and extract unique pipeline names
@@ -211,7 +211,7 @@ class CVRCollectionManager:
             self.log.warning(f"Could not list pipeline folders: {e}")
             return []
 
-    def _list_timestamp_folders(self, pipeline_name: str) -> List[str]:
+    def _list_timestamp_folders(self, pipeline_name: str) -> list[str]:
         """List all timestamp folders for a specific pipeline."""
         try:
             # List all files for this pipeline and extract unique timestamps
@@ -233,58 +233,58 @@ class CVRCollectionManager:
             self.log.warning(f"Could not list timestamp folders for {pipeline_name}: {e}")
             return []
 
-    def _get_latest_timestamp(self, timestamps: List[str]) -> str:
+    def _get_latest_timestamp(self, timestamps: list[str]) -> str:
         """
         Get the latest timestamp from a list, handling different timestamp formats.
-        
+
         Args:
             timestamps: List of timestamp strings
-            
+
         Returns:
             Latest timestamp string
         """
         if not timestamps:
             raise ValueError("No timestamps provided")
-        
+
         # Separate different timestamp formats and filter out non-timestamp folders
         standard_timestamps = []  # Format: YYYYMMDD_HHMMSS
-        run_timestamps = []       # Format: run_XX_XXXXXXXXXX
-        
+        run_timestamps = []  # Format: run_XX_XXXXXXXXXX
+
         for ts in timestamps:
-            if ts.startswith('run_'):
+            if ts.startswith("run_"):
                 run_timestamps.append(ts)
             elif self._is_standard_timestamp(ts):
                 standard_timestamps.append(ts)
             # Skip non-timestamp folders like 'test', 'temp', etc.
-        
+
         # Prefer standard timestamps (they're more recent format)
         if standard_timestamps:
             return sorted(standard_timestamps)[-1]
-        elif run_timestamps:
+        if run_timestamps:
             # For run timestamps, sort by the numeric part after the last underscore
             def extract_run_number(run_ts):
                 try:
-                    return int(run_ts.split('_')[-1])
+                    return int(run_ts.split("_")[-1])
                 except (ValueError, IndexError):
                     return 0
+
             return sorted(run_timestamps, key=extract_run_number)[-1]
-        else:
-            # If no valid timestamps found, raise an error
-            raise ValueError(f"No valid timestamp folders found in: {timestamps}")
+        # If no valid timestamps found, raise an error
+        raise ValueError(f"No valid timestamp folders found in: {timestamps}")
 
     def _is_standard_timestamp(self, timestamp: str) -> bool:
         """
         Check if a string matches the standard timestamp format YYYYMMDD_HHMMSS.
-        
+
         Args:
             timestamp: String to check
-            
+
         Returns:
             True if it matches the standard format
         """
-        if len(timestamp) != 15 or timestamp[8] != '_':
+        if len(timestamp) != 15 or timestamp[8] != "_":
             return False
-        
+
         try:
             # Check if date part (YYYYMMDD) and time part (HHMMSS) are numeric
             date_part = timestamp[:8]
@@ -298,7 +298,7 @@ class CVRCollectionManager:
 
 def extract_cvr_numbers_from_table(
     table_name: str, connection, cvr_column: str = "cvr_number"
-) -> List[str]:
+) -> list[str]:
     """
     Extract unique CVR numbers from a DuckDB table.
 
@@ -312,9 +312,9 @@ def extract_cvr_numbers_from_table(
     """
     try:
         query = f"""
-        SELECT DISTINCT {cvr_column} 
-        FROM {table_name} 
-        WHERE {cvr_column} IS NOT NULL 
+        SELECT DISTINCT {cvr_column}
+        FROM {table_name}
+        WHERE {cvr_column} IS NOT NULL
         AND {cvr_column} != ''
         AND LENGTH(TRIM({cvr_column})) = 8
         AND {cvr_column} ~ '^[1-9][0-9]{{7}}$'  -- 8 digits, not starting with 0
@@ -331,10 +331,10 @@ def extract_cvr_numbers_from_table(
 
 def save_pipeline_cvr_numbers(
     pipeline_name: str,
-    cvr_numbers: List[str],
-    gcs_access: Optional[GCSDataAccess] = None,
+    cvr_numbers: list[str],
+    gcs_access: GCSDataAccess | None = None,
     bucket: str = "landbrugsdata-raw-data",
-    timestamp: Optional[str] = None,
+    timestamp: str | None = None,
 ) -> str:
     """
     Convenience function to save CVR numbers from a pipeline.
@@ -351,8 +351,9 @@ def save_pipeline_cvr_numbers(
     """
     # Create default GCS access if none provided
     if gcs_access is None:
-        from unified_pipeline.util.gcs_access import GCSDataAccess
+        from common.gcs import GCSDataAccess
+
         gcs_access = GCSDataAccess()
-    
+
     manager = CVRCollectionManager(gcs_access, bucket)
     return manager.save_pipeline_cvr_numbers(pipeline_name, cvr_numbers, timestamp)

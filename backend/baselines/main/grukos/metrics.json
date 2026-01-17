@@ -1,0 +1,26 @@
+{
+  "dataset_name": "grukos",
+  "source_path": "gs://landbrugsdata-raw-data/silver/grukos/20260116_221635/data.parquet",
+  "generated_at": "2026-01-17T11:10:48.868056",
+  "record_count": 3323,
+  "unique_identifiers": {},
+  "geometry_bounds": {
+    "min_x": 54.65630096950431,
+    "max_x": 57.72618053603983,
+    "min_y": 8.122361328557758,
+    "max_y": 15.111251780676433
+  },
+  "detected_crs": "EPSG:4326",
+  "column_null_counts": {
+    "aar_udpeget": 0,
+    "geometry_xml": 0,
+    "id": 0,
+    "kategori": 0,
+    "kortnavn": 0,
+    "layer": 0,
+    "source": 0,
+    "wkb_geometry": 3323,
+    "geometry_spatial": 0,
+    "geometry": 0
+  }
+}

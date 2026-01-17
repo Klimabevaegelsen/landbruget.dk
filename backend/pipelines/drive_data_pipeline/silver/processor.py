@@ -17,6 +17,11 @@ from .validators.pii_validator import PIIAction, PIIType, PIIValidator
 # Get logger
 logger = get_logger()
 
+# Import the new data tracing system
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+PIPELINE_METADATA_AVAILABLE = True
+
 
 class SilverProcessor:
     """Processor for the Silver layer."""
@@ -28,7 +33,7 @@ class SilverProcessor:
         metadata_manager: MetadataManager,
         schema_dir: Path | None = None,
         progress_callback: Callable[[int, bool], None] | None = None,
-    ):
+    ) -> None:
         """Initialize the Silver processor.
 
         Args:
@@ -50,6 +55,14 @@ class SilverProcessor:
 
         self.metadata_manager = metadata_manager
 
+        # Initialize pipeline metadata manager (pipeline-level data tracing)
+        if PIPELINE_METADATA_AVAILABLE:
+            self.pipeline_metadata_manager = PipelineMetadataManager()
+            logger.info("✅ Pipeline metadata system initialized for Silver layer data tracing")
+        else:
+            self.pipeline_metadata_manager = None
+            logger.warning("⚠️  Pipeline metadata system not available in Silver layer")
+
         # Initialize specialized managers
         self.parquet_manager = ParquetManager(
             storage_manager=storage_manager,
@@ -59,14 +72,22 @@ class SilverProcessor:
 
         # Initialize schema manager if schema_dir is provided
         self.schema_manager = SchemaManager(schema_dir=schema_dir)
-        
+
         # Store the silver run path for later access
         self.silver_run_path = None
 
-        # Initialize schema adapter
-        self.schema_adapter = SchemaAdapter()
+        # Create shared DuckDB connection for all processors
+        from .duckdb_base import DuckDBProcessor
 
-        # Initialize PII validator (excluding CVR from masking)
+        shared_processor = DuckDBProcessor(dataset_name="silver_shared")
+        shared_conn = shared_processor.conn
+
+        # Initialize schema adapter with shared connection
+        self.schema_adapter = SchemaAdapter()
+        self.schema_adapter.conn = shared_conn
+        self.schema_adapter._owns_connection = False
+
+        # Initialize PII validator with shared connection (excluding CVR from masking)
         self.pii_validator = PIIValidator(
             pii_types={
                 PIIType.EMAIL,
@@ -79,20 +100,59 @@ class SilverProcessor:
             action=PIIAction.MASK,
             threshold=0.3,
         )
+        # Override the PII validator's connection
+        self.pii_validator.conn = shared_conn
+        self.pii_validator._owns_connection = False
+
+        # Store reference to shared processor to prevent premature cleanup
+        self._shared_processor = shared_processor
+
+        # Override the parquet manager's connection to use shared connection
+        self.parquet_manager.conn = shared_conn
+        self.parquet_manager._owns_connection = False
+
+        # Create a persistent GCSDataAccess instance to avoid connection closure
+        from common.gcs import GCSDataAccess
+
+        self._shared_gcs_access = GCSDataAccess(connection=shared_conn)
 
         # Import transformers here to avoid circular imports
         from .transformers.advanced_pdf_transformer import AdvancedPDFTransformer
+        from .transformers.csv_transformer import CSVTransformer
         from .transformers.excel_transformer import ExcelTransformer
+        from .transformers.fertiliser_transformer import FertiliserTransformer
         from .transformers.work_permits_transformer import WorkPermitsTransformer
 
-        # Initialize transformers map
+        # Initialize transformers map with shared connection
+        excel_transformer = ExcelTransformer()
+        excel_transformer.conn = shared_conn
+        excel_transformer._owns_connection = False
+
+        csv_transformer = CSVTransformer()
+        csv_transformer.conn = shared_conn
+        csv_transformer._owns_connection = False
+
+        pdf_transformer = AdvancedPDFTransformer(
+            use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
+            ocr_language="dan+eng",
+        )
+        pdf_transformer.conn = shared_conn
+        pdf_transformer._owns_connection = False
+
+        fertiliser_transformer = FertiliserTransformer()
+        fertiliser_transformer.conn = shared_conn
+        fertiliser_transformer._owns_connection = False
+
+        work_permits_transformer = WorkPermitsTransformer()
+        work_permits_transformer.conn = shared_conn
+        work_permits_transformer._owns_connection = False
+
         self.transformers = {
-            "Excel": ExcelTransformer(),
-            "PDF": AdvancedPDFTransformer(
-                use_ocr=self.settings.enable_ocr if hasattr(self.settings, "enable_ocr") else False,
-                ocr_language="dan+eng",
-            ),
-            "WorkPermits": WorkPermitsTransformer(),
+            "Excel": excel_transformer,
+            "CSV": csv_transformer,
+            "PDF": pdf_transformer,
+            "Fertiliser": fertiliser_transformer,
+            "WorkPermits": work_permits_transformer,
         }
 
         logger.info("Initialized Silver processor")
@@ -123,9 +183,12 @@ class SilverProcessor:
         try:
             logger.info("Processing Bronze data from memory - skipping disk I/O")
 
+            # Track processing start time for pipeline metadata
+            processing_start_time = time.time()
+
             # Extract data from bronze_data structure
             file_data = bronze_data.get("data", {})
-            bronze_metadata = bronze_data.get("metadata", {})
+            bronze_data.get("metadata", {})
 
             logger.info(f"Found {len(file_data)} files in Bronze data")
 
@@ -135,9 +198,9 @@ class SilverProcessor:
             processed_count = 0
 
             # Process each file from memory
-            for file_key, file_info in file_data.items():
+            for file_info in file_data.values():
                 # Apply filters
-                file_metadata_dict = file_info.get("metadata", {})
+                file_info.get("metadata", {})
 
                 # Filter by file type if specified
                 if supported_file_types:
@@ -149,11 +212,28 @@ class SilverProcessor:
                         continue
 
                 # Filter by subfolder if specified
-                if specific_subfolders and file_info.get("folder_name") not in specific_subfolders:
-                    logger.debug(
-                        f"Skipping file from unspecified subfolder: {file_info.get('folder_name')}"
-                    )
-                    continue
+                if specific_subfolders:
+                    folder_name = file_info.get("folder_name", "")
+                    file_path = file_info.get("file_path", "")
+
+                    # Check if any of the specified subfolders match
+                    # Either exact match or if the file path contains the subfolder
+                    matches_subfolder = False
+                    for subfolder in specific_subfolders:
+                        if (
+                            folder_name == subfolder
+                            or subfolder.lower() in file_path.lower()
+                            or folder_name.lower().startswith(subfolder.lower())
+                        ):
+                            matches_subfolder = True
+                            break
+
+                    if not matches_subfolder:
+                        logger.debug(
+                            f"Skipping file from unspecified subfolder: {folder_name} "
+                            f"(path: {file_path})"
+                        )
+                        continue
 
                 # Process the file from memory
                 success = self._process_file_from_memory(
@@ -170,13 +250,42 @@ class SilverProcessor:
                 if success:
                     processed_count += 1
 
+            # Calculate processing duration and create pipeline metadata
+            processing_duration = time.time() - processing_start_time
+
             logger.info(
-                f"Successfully processed {processed_count} files from memory to Silver layer"
+                f"Successfully processed {processed_count} files from memory to Silver layer "
+                f"in {processing_duration:.1f}s"
             )
+
+            # Create and save pipeline metadata for data tracing
+            if self.pipeline_metadata_manager:
+                try:
+                    # Calculate total file size processed
+                    total_file_size = sum(item.get("file_size", 0) for item in file_data.values())
+
+                    # Create pipeline metadata for Silver layer
+                    pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                        source_key="drive_pesticide_reports",  # Same source as Bronze
+                        record_count=processed_count,
+                        processing_duration=processing_duration,
+                        file_size_bytes=total_file_size,
+                    )
+
+                    # Save pipeline metadata
+                    pipeline_metadata_path = self.pipeline_metadata_manager.save_metadata(
+                        pipeline_metadata, silver_run_path / "pipeline_metadata.json"
+                    )
+
+                    logger.info(f"✅ Silver pipeline metadata saved to {pipeline_metadata_path}")
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to create Silver pipeline metadata: {e}")
+
             return processed_count
 
         except Exception as e:
-            logger.error(f"Failed to process Bronze data from memory: {str(e)}")
+            logger.error(f"Failed to process Bronze data from memory: {e!s}")
             raise
 
     def process_bronze_files(
@@ -237,7 +346,7 @@ class SilverProcessor:
             return processed_count
 
         except Exception as e:
-            logger.error(f"Failed to process Bronze files: {str(e)}")
+            logger.error(f"Failed to process Bronze files: {e!s}")
             raise
 
     def _list_bronze_files(
@@ -277,7 +386,7 @@ class SilverProcessor:
                 # Local storage - use recursive glob through storage manager
                 import os
 
-                for root, dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
+                for root, _dirs, files in os.walk(self.storage_manager.base_dir / bronze_run_path):
                     for file in files:
                         if file.endswith(".metadata.json"):
                             file_path = Path(root) / file
@@ -288,7 +397,7 @@ class SilverProcessor:
                             all_files.append(relative_path)
 
         except Exception as e:
-            logger.error(f"Failed to list files in Bronze directory {bronze_run_path}: {str(e)}")
+            logger.error(f"Failed to list files in Bronze directory {bronze_run_path}: {e!s}")
             return bronze_files
 
         # Process each metadata file
@@ -325,7 +434,7 @@ class SilverProcessor:
                     logger.warning(f"File does not exist: {file_path}")
 
             except Exception as e:
-                logger.warning(f"Error processing metadata {metadata_path}: {str(e)}")
+                logger.warning(f"Error processing metadata {metadata_path}: {e!s}")
 
         logger.info(f"Found {len(bronze_files)} Bronze files to process")
         return bronze_files
@@ -353,7 +462,7 @@ class SilverProcessor:
             file_content = file_info["content"]
             metadata_dict = file_info["metadata"]
             original_filename = file_info["original_filename"]
-            mime_type = file_info.get("mime_type", "")
+            file_info.get("mime_type", "")
 
             # Convert metadata dict to FileMetadata object
             from ..bronze.metadata import FileMetadata
@@ -367,29 +476,34 @@ class SilverProcessor:
 
             logger.info(f"Processing file from memory to Silver: {original_filename}")
 
-            # Select transformer based on content type and file specifics (same logic as _process_file)
+            # Select transformer based on content type and file specifics
+            # (same logic as _process_file)
             transformer = None
             file_path = Path(original_filename)  # Create Path object for specialized transformers
-            
+
             # First, check if specialized transformers can handle this file
             for transformer_name, potential_transformer in self.transformers.items():
-                if hasattr(potential_transformer, 'can_handle'):
+                if hasattr(potential_transformer, "can_handle"):
                     # Convert metadata to dict for transformer
-                    metadata_dict_for_check = metadata.dict() if hasattr(metadata, 'dict') else metadata.__dict__
+                    metadata_dict_for_check = (
+                        metadata.dict() if hasattr(metadata, "dict") else metadata.__dict__
+                    )
                     if potential_transformer.can_handle(file_path, metadata_dict_for_check):
                         transformer = potential_transformer
                         logger.info(f"Using specialized transformer: {transformer_name}")
                         break
-            
+
             # If no specialized transformer found, use content type mapping
             if not transformer:
                 content_type = metadata.content_type
                 if not content_type or content_type not in self.transformers:
-                    logger.warning(f"Unsupported content type: {content_type} for {original_filename}")
+                    logger.warning(
+                        f"Unsupported content type: {content_type} for {original_filename}"
+                    )
                     return False
                 transformer = self.transformers[content_type]
                 logger.info(f"Using content type transformer: {content_type}")
-            
+
             if not transformer:
                 logger.error("No suitable transformer found")
                 return False
@@ -400,7 +514,7 @@ class SilverProcessor:
                     file_content, original_filename, metadata_dict
                 )
             except Exception as e:
-                logger.error(f"Failed to transform {original_filename}: {str(e)}")
+                logger.error(f"Failed to transform {original_filename}: {e!s}")
                 return False
 
             # Check if we have valid transformed data
@@ -433,7 +547,8 @@ class SilverProcessor:
                             logger.info(f"Saved transformed data to: {output_path}")
                         except Exception as e:
                             logger.error(
-                                f"Failed to save transformed data for {original_filename} sheet {sheet_name}: {str(e)}"
+                                f"Failed to save transformed data for {original_filename} "
+                                f"sheet {sheet_name}: {e!s}"
                             )
                             return False
 
@@ -468,7 +583,8 @@ class SilverProcessor:
                             logger.info(f"Saved transformed data to: {output_path}")
                         except Exception as e:
                             logger.error(
-                                f"Failed to save transformed data for {original_filename} part {i}: {str(e)}"
+                                f"Failed to save transformed data for {original_filename} "
+                                f"part {i}: {e!s}"
                             )
                             return False
 
@@ -497,21 +613,22 @@ class SilverProcessor:
 
                     # Save the DuckDB table using ParquetManager (handles GCS uploads)
                     try:
-                        # Get the data from transformer's connection and register it in ParquetManager
+                        # Get the data from transformer's connection and register it
+                        # in ParquetManager
                         df = transformer.conn.execute(f"SELECT * FROM {table_name}").df()
                         parquet_table_name = f"temp_parquet_{int(time.time())}"
                         self.parquet_manager.register_dataframe(df, parquet_table_name)
-                        
+
                         # Use the parquet manager to save the table (handles both local and GCS)
                         self.parquet_manager.save_table_to_parquet(parquet_table_name, output_path)
-                        
+
                         # Clean up the temporary table
                         self.parquet_manager.drop_table(parquet_table_name)
-                        
+
                         logger.info(f"Saved transformed data to: {output_path}")
                     except Exception as e:
                         logger.error(
-                            f"Failed to save transformed data for {original_filename}: {str(e)}"
+                            f"Failed to save transformed data for {original_filename}: {e!s}"
                         )
                         return False
 
@@ -538,7 +655,7 @@ class SilverProcessor:
                         logger.info(f"Saved transformed data to: {output_path}")
                     except Exception as e:
                         logger.error(
-                            f"Failed to save transformed data for {original_filename}: {str(e)}"
+                            f"Failed to save transformed data for {original_filename}: {e!s}"
                         )
                         return False
 
@@ -561,7 +678,8 @@ class SilverProcessor:
 
         except Exception as e:
             logger.error(
-                f"Failed to process file from memory {file_info.get('original_filename', 'unknown')}: {str(e)}"
+                f"Failed to process file from memory "
+                f"{file_info.get('original_filename', 'unknown')}: {e!s}"
             )
             return False
 
@@ -602,17 +720,19 @@ class SilverProcessor:
 
             # Select transformer based on content type and file specifics
             transformer = None
-            
+
             # First, check if specialized transformers can handle this file
             for transformer_name, potential_transformer in self.transformers.items():
-                if hasattr(potential_transformer, 'can_handle'):
+                if hasattr(potential_transformer, "can_handle"):
                     # Convert metadata to dict for transformer
-                    metadata_dict = metadata.dict() if hasattr(metadata, 'dict') else metadata.__dict__
+                    metadata_dict = (
+                        metadata.dict() if hasattr(metadata, "dict") else metadata.__dict__
+                    )
                     if potential_transformer.can_handle(file_path, metadata_dict):
                         transformer = potential_transformer
                         logger.info(f"Using specialized transformer: {transformer_name}")
                         break
-            
+
             # If no specialized transformer found, use content type mapping
             if not transformer:
                 if not metadata.content_type or metadata.content_type not in self.transformers:
@@ -620,7 +740,7 @@ class SilverProcessor:
                     return False
                 transformer = self.transformers[metadata.content_type]
                 logger.info(f"Using content type transformer: {metadata.content_type}")
-            
+
             if not transformer:
                 logger.error("No suitable transformer found")
                 return False
@@ -648,7 +768,7 @@ class SilverProcessor:
             return True
 
         except Exception as e:
-            logger.error(f"Error processing file {file_path}: {str(e)}")
+            logger.error(f"Error processing file {file_path}: {e!s}")
             return False
 
     def _apply_schema_to_file(
@@ -666,28 +786,63 @@ class SilverProcessor:
         """
         try:
             # Try to find a schema for this subfolder
-            table_schema = self.schema_manager.get_schema_by_subfolder(metadata.original_subfolder)
+            table_schema_dict = self.schema_manager.get_schema_by_subfolder(
+                metadata.original_subfolder
+            )
 
-            if not table_schema:
+            if not table_schema_dict:
                 logger.info(
-                    f"No schema found for {metadata.original_subfolder}, skipping schema application"
+                    f"No schema found for {metadata.original_subfolder}, "
+                    f"skipping schema application"
                 )
                 return None
 
-            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
-            import duckdb
+            # Convert dict to TableSchema object
+            from .models.schema import TableSchema
 
-            # Use DuckDB to read parquet file
-            temp_conn = duckdb.connect()
-            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
-            temp_conn.close()
+            table_schema = TableSchema.from_dict(table_schema_dict)
+
+            # ✅ MIGRATION: Read parquet file using DuckDB with GCS support
+            output_path_str = str(output_path)
+            is_gcs_path = output_path_str.startswith("gs://")
+
+            # Check if we're using GCS storage but have a local path
+            using_gcs_storage = (
+                hasattr(self.storage_manager, "storage_type")
+                and self.storage_manager.storage_type.lower() == "gcs"
+            )
+
+            if is_gcs_path or using_gcs_storage:
+                # Use the persistent GCSDataAccess instance to avoid connection closure
+                gcs_access = self._shared_gcs_access
+
+                # Construct GCS path if needed
+                if not is_gcs_path and using_gcs_storage:
+                    bucket = getattr(self.storage_manager, "bucket", "landbrugsdata-raw-data")
+                    gcs_path = f"gs://{bucket}/silver/{output_path_str}"
+                else:
+                    gcs_path = output_path_str
+
+                # Read from GCS using shared connection
+                table_name = gcs_access.query_parquet_native(gcs_path, "SELECT *", "schema_table")
+            else:
+                # Local file - use shared connection instead of temp connection
+                table_name = "local_schema_table"
+                self.schema_adapter.conn.execute(
+                    f"CREATE TABLE {table_name} AS SELECT * FROM read_parquet('{output_path}')"
+                )
 
             # Apply the schema
-            df_with_schema = self.schema_adapter.apply_schema(
-                df=df,
+            schema_table_name = self.schema_adapter.apply_schema(
+                table_name_or_data=table_name,  # Use the table name from GCS access
                 table_schema=table_schema,
                 infer_types=True,
             )
+
+            # Get the result as DataFrame
+            df_with_schema = self.schema_adapter.conn.execute(
+                f"SELECT * FROM {schema_table_name}"
+            ).df()
 
             # Save with schema to a new file
             schema_output_path = output_path.with_name(
@@ -711,53 +866,112 @@ class SilverProcessor:
             return schema_output_path
 
         except Exception as e:
-            logger.warning(f"Failed to apply schema to {output_path}: {str(e)}")
+            logger.warning(f"Failed to apply schema to {output_path}: {e!s}")
             return None
 
     def _handle_pii_in_file(self, output_path: Path, silver_run_path: Path) -> Path | None:
         """Detect and handle PII in a processed file.
 
         Args:
-            output_path: Path to the processed file
+            output_path: Path to the processed file (can be local or GCS path)
             silver_run_path: Silver layer run directory
 
         Returns:
             Path to the PII-handled file or None if failed
         """
         try:
-            # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
-            import duckdb
+            # Check if this is a GCS path or if we're using GCS storage
+            output_path_str = str(output_path)
+            is_gcs_path = output_path_str.startswith("gs://")
 
-            # Use DuckDB to read parquet file
-            temp_conn = duckdb.connect()
-            df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
-            temp_conn.close()
+            # Also check if we're using GCS storage but have a local path
+            using_gcs_storage = (
+                hasattr(self.storage_manager, "storage_type")
+                and self.storage_manager.storage_type.lower() == "gcs"
+            )
 
-            # Validate for PII
-            validation_result = self.pii_validator.validate(df)
+            if is_gcs_path or using_gcs_storage:
+                # Use the persistent GCSDataAccess instance to avoid connection closure
+                gcs_access = self._shared_gcs_access
 
-            # If PII is found, handle it
-            if not validation_result.is_valid:
-                # Handle PII according to validator's action
-                df_handled = self.pii_validator.handle_pii(df, validation_result)
+                # If we have a local path but are using GCS storage, construct the GCS path
+                if not is_gcs_path and using_gcs_storage:
+                    # Convert local path to GCS path using storage manager's bucket and base path
+                    # The output_path is relative to the silver base path
+                    bucket = getattr(self.storage_manager, "bucket", "landbrugsdata-raw-data")
+                    gcs_path = f"gs://{bucket}/silver/{output_path_str}"
+                else:
+                    gcs_path = output_path_str
 
-                # Save to new file
-                pii_output_path = output_path.with_name(
-                    f"{output_path.stem}_pii_handled{output_path.suffix}"
-                )
+                # Create a temporary table name for validation
+                temp_table = "pii_validation_table"
 
-                # Save handled file
-                self.parquet_manager.save_dataframe_to_parquet(
-                    df=df_handled,
-                    output_path=pii_output_path,
-                )
+                try:
+                    # Load parquet data into DuckDB table
+                    gcs_access.query_parquet_native(gcs_path, "SELECT *", temp_table)
 
-                logger.info(f"Handled PII in file: {pii_output_path}")
-                return pii_output_path
+                    # Validate for PII using the table name instead of dataframe
+                    validation_result = self.pii_validator.validate(temp_table)
+
+                    # If PII is found, handle it
+                    if not validation_result.is_valid:
+                        # Handle PII according to validator's action
+                        handled_table = self.pii_validator.handle_pii(temp_table, validation_result)
+
+                        # Generate new GCS path for handled file
+                        path_parts = gcs_path.split("/")
+                        filename = path_parts[-1]
+                        filename_stem = filename.rsplit(".", 1)[0] if "." in filename else filename
+                        filename_ext = "." + filename.rsplit(".", 1)[1] if "." in filename else ""
+                        new_filename = f"{filename_stem}_pii_handled{filename_ext}"
+
+                        pii_output_path_str = "/".join([*path_parts[:-1], new_filename])
+
+                        # Export handled table back to GCS
+                        gcs_access.export_table_to_gcs_direct(handled_table, pii_output_path_str)
+
+                        logger.info(f"Handled PII in file: {pii_output_path_str}")
+                        return Path(pii_output_path_str)
+
+                except Exception as gcs_e:
+                    logger.warning(f"GCS PII handling failed: {gcs_e}, skipping PII processing")
+                    return None
+
+            else:
+                # Original local file handling
+                # ✅ MIGRATION: Read parquet file using DuckDB instead of pandas
+                import duckdb
+
+                # Use DuckDB to read parquet file
+                temp_conn = duckdb.connect()
+                df = temp_conn.execute(f"SELECT * FROM read_parquet('{output_path}')").df()
+                temp_conn.close()
+
+                # Validate for PII
+                validation_result = self.pii_validator.validate(df)
+
+                # If PII is found, handle it
+                if not validation_result.is_valid:
+                    # Handle PII according to validator's action
+                    df_handled = self.pii_validator.handle_pii(df, validation_result)
+
+                    # Save to new file
+                    pii_output_path = output_path.with_name(
+                        f"{output_path.stem}_pii_handled{output_path.suffix}"
+                    )
+
+                    # Save handled file
+                    self.parquet_manager.save_dataframe_to_parquet(
+                        df=df_handled,
+                        output_path=pii_output_path,
+                    )
+
+                    logger.info(f"Handled PII in file: {pii_output_path}")
+                    return pii_output_path
 
             # If no PII found or just reporting, return None
             return None
 
         except Exception as e:
-            logger.warning(f"Failed to handle PII in {output_path}: {str(e)}")
+            logger.warning(f"Failed to handle PII in {output_path}: {e!s}")
             return None

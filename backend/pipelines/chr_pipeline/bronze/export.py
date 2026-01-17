@@ -5,11 +5,31 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from dotenv import load_dotenv
-from google.cloud import storage
 from zeep.helpers import serialize_object
+
+# Import the unified GCS access layer
+try:
+    from common.gcs import GCSDataAccess
+
+    GCS_AVAILABLE = True
+except ImportError:
+    GCSDataAccess = None
+    GCS_AVAILABLE = False
+
+# Import the unified metadata system
+try:
+    import sys
+
+    sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+    from common.pipeline_metadata import MetadataManager
+
+    METADATA_AVAILABLE = True
+except ImportError:
+    MetadataManager = None
+    METADATA_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -20,22 +40,29 @@ logger = logging.getLogger(__name__)
 # Initialize storage paths and clients
 GCS_BUCKET = os.getenv("GCS_BUCKET")
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
-LOCAL_DATA_PATH = os.getenv("LOCAL_DATA_PATH", "/tmp/data")  # Default to /tmp/data for GitHub Actions
+LOCAL_DATA_PATH = os.getenv(
+    "LOCAL_DATA_PATH", "/tmp/data"
+)  # Default to /tmp/data for GitHub Actions
 
 # Use GCS if we have the required configuration
-USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT)
+USE_GCS = bool(GCS_BUCKET and GOOGLE_CLOUD_PROJECT and GCS_AVAILABLE)
 
-logger.info(f"GCS Configuration - Bucket: {GCS_BUCKET}, Project: {GOOGLE_CLOUD_PROJECT}, USE_GCS: {USE_GCS}")
+logger.info(
+    f"GCS Configuration - Bucket: {GCS_BUCKET}, Project: {GOOGLE_CLOUD_PROJECT}, "
+    f"GCS_AVAILABLE: {GCS_AVAILABLE}, USE_GCS: {USE_GCS}"
+)
 
-# Initialize GCS client if bucket is configured
-gcs_client = None
+# Initialize GCS access layer if available
+gcs_access = None
 if USE_GCS:
     try:
-        logger.info("Attempting to initialize GCS client...")
-        gcs_client = storage.Client(project=GOOGLE_CLOUD_PROJECT)
-        logger.info(f"Successfully initialized GCS client. Using GCS storage with bucket: {GCS_BUCKET}")
+        logger.info("Attempting to initialize GCSDataAccess...")
+        gcs_access = GCSDataAccess()
+        logger.info(
+            f"Successfully initialized GCSDataAccess. Using GCS storage with bucket: {GCS_BUCKET}"
+        )
     except Exception as e:
-        logger.error(f"Failed to initialize GCS client: {e}", exc_info=True)
+        logger.error(f"Failed to initialize GCSDataAccess: {e}", exc_info=True)
         logger.info("Falling back to local storage")
         USE_GCS = False
 
@@ -44,12 +71,42 @@ if not USE_GCS:
 
 # --- In-memory buffer for consolidated output ---
 # Structure: { "buffer_key": { "json": [obj1, obj2], "xml": [str1, str2] } }
-_data_buffer: Dict[str, Dict[str, List[Any]]] = {}
+_data_buffer: dict[str, dict[str, list[Any]]] = {}
 
 # Get timestamp for this export run - use shared timestamp from workflow if available
-EXPORT_TIMESTAMP = os.getenv("BRONZE_EXPORT_TIMESTAMP") or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-timestamp_source = 'environment' if os.getenv('BRONZE_EXPORT_TIMESTAMP') else 'current time'
+EXPORT_TIMESTAMP = os.getenv("BRONZE_EXPORT_TIMESTAMP") or datetime.utcnow().strftime(
+    "%Y%m%d_%H%M%S"
+)
+timestamp_source = "environment" if os.getenv("BRONZE_EXPORT_TIMESTAMP") else "current time"
 logger.info(f"Using export timestamp: {EXPORT_TIMESTAMP} (from {timestamp_source})")
+
+
+def get_bronze_directory_path() -> str:
+    """Get the bronze directory path with appropriate suffixes for matrix job separation."""
+    base_path = EXPORT_TIMESTAMP
+
+    # Add month suffix if set (for monthly matrix jobs)
+    month_suffix = os.getenv("BRONZE_MONTH_SUFFIX", "")
+    if month_suffix:
+        base_path += month_suffix
+
+    # Add CHR group suffix if set (for CHR group matrix jobs)
+    chr_group_suffix = os.getenv("BRONZE_CHR_GROUP_SUFFIX", "")
+    if chr_group_suffix:
+        base_path += chr_group_suffix
+
+    return base_path
+
+
+# Initialize metadata manager
+_metadata_manager = None
+if METADATA_AVAILABLE:
+    try:
+        _metadata_manager = MetadataManager()
+        logger.info("✅ CHR pipeline metadata system initialized")
+    except Exception as e:
+        logger.warning(f"⚠️  Failed to initialize metadata manager: {e}")
+        _metadata_manager = None
 
 
 def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -> bool:
@@ -87,14 +144,52 @@ def save_data_immediately(data_type: str, data: Any, identifier: str = "data") -
                 content = json.dumps(data, indent=2, default=str)
             content_type = "application/json"
 
-        # Save directly to GCS
-        bucket = gcs_client.bucket(GCS_BUCKET)
+        # Save directly to GCS using unified GCSDataAccess
         blob_path = f"bronze/chr/{EXPORT_TIMESTAMP}/{filename}"
-        blob = bucket.blob(blob_path)
+        gcs_path = f"gs://{GCS_BUCKET}/{blob_path}"
 
-        blob.upload_from_string(content, content_type=content_type)
+        if content_type == "application/json":
+            # Parse back to dict/list for proper JSON upload if it was serialized
+            if isinstance(data, str):
+                gcs_access.upload_json_string(content, gcs_path)
+            else:
+                gcs_access.upload_json(data, gcs_path)
+        else:
+            # XML or other content - use streaming write
+            with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
+                f.write(content)
 
-        logger.info(f"✅ Saved {data_type} data immediately to gs://{GCS_BUCKET}/{blob_path}")
+        logger.info(f"✅ Saved {data_type} data immediately to {gcs_path}")
+
+        # Create and upload metadata using existing upload method
+        if _metadata_manager:
+            try:
+                record_count = len(data) if isinstance(data, list) else None
+                source_key_mapping = {
+                    "chr_dyr_movement_summaries": "chr_animal_movements",
+                    "vetstat_antibiotics": "chr_animal_movements",
+                    "chr_properties": "chr_properties",
+                    "chr_herds": "chr_herds",
+                    "spf_su_herds": "spf_su_herds",
+                }
+                source_key = source_key_mapping.get(data_type, "chr_animal_movements")
+
+                metadata = _metadata_manager.create_metadata(
+                    source_key=source_key,
+                    record_count=record_count,
+                    file_size_bytes=len(str(data).encode("utf-8")) if data else None,
+                )
+
+                # Use unified GCS upload method
+                metadata_blob_path = blob_path.replace(".json", "_metadata.json").replace(
+                    ".xml", "_metadata.json"
+                )
+                metadata_gcs_path = f"gs://{GCS_BUCKET}/{metadata_blob_path}"
+                gcs_access.upload_json(metadata.model_dump(mode="json"), metadata_gcs_path)
+                logger.info(f"✅ Uploaded metadata to {metadata_gcs_path}")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to create metadata for {data_type}: {e}")
+
         return True
 
     except Exception as e:
@@ -123,7 +218,7 @@ def _get_final_filename(data_source: str, operation: str, format: str) -> Path:
     return base_path / filename
 
 
-def _serialize_data(data: Any) -> Optional[str]:
+def _serialize_data(data: Any) -> str | None:
     """Serialize Python/Zeep object to a JSON string."""
     if data is None:
         return None
@@ -164,20 +259,21 @@ def _serialize_data(data: Any) -> Optional[str]:
 
 
 def _save_to_gcs(blob_path: str, content: str, format_type: str):
-    """Helper function to save content to GCS."""
-    bucket = gcs_client.bucket(GCS_BUCKET)
-    # Add bronze/chr/{timestamp} prefix to all files
-    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}/{blob_path}")
+    """Helper function to save content to GCS using unified GCSDataAccess."""
+    # Add bronze/chr/{timestamp_with_suffixes} prefix to all files
+    bronze_dir = get_bronze_directory_path()
+    gcs_path = f"gs://{GCS_BUCKET}/bronze/chr/{bronze_dir}/{blob_path}"
 
-    # Set content type based on format
-    content_type = "application/json" if format_type == "json" else "application/xml"
-    blob.upload_from_string(content, content_type=content_type)
+    # Use streaming write for both JSON and XML
+    with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
+        f.write(content)
 
 
 def _save_locally(filepath: Path, content: str, format_type: str):
     """Helper function to save content locally."""
-    # Add timestamp to the path
-    timestamped_path = filepath.parent / EXPORT_TIMESTAMP / filepath.name
+    # Add timestamp with suffixes to the path
+    bronze_dir = get_bronze_directory_path()
+    timestamped_path = filepath.parent / bronze_dir / filepath.name
     timestamped_path.parent.mkdir(parents=True, exist_ok=True)
     with open(timestamped_path, "w", encoding="utf-8") as f:
         f.write(content)
@@ -186,11 +282,13 @@ def _save_locally(filepath: Path, content: str, format_type: str):
 def save_raw_data(
     raw_response: Any,
     data_type: str,
-    identifier: Optional[Union[str, Dict[str, Any]]] = None,
+    identifier: str | dict[str, Any] | None = None,
 ):
     """Buffer raw data for later consolidated export."""
     if raw_response is None:
-        logger.warning(f"Received None for raw_response for data_type '{data_type}'. Skipping save.")
+        logger.warning(
+            f"Received None for raw_response for data_type '{data_type}'. Skipping save."
+        )
         return
 
     buffer_key = data_type
@@ -211,7 +309,7 @@ def save_raw_data(
             logger.error(f"Failed to serialize object for {buffer_key}: {e}")
 
 
-def get_data_buffer() -> Dict[str, Dict[str, List[Any]]]:
+def get_data_buffer() -> dict[str, dict[str, list[Any]]]:
     """Get a reference to the current data buffer."""
     return _data_buffer
 
@@ -226,7 +324,9 @@ def finalize_export(clear_buffer: bool = True):
     logger.info(f"Starting export using {storage_mode}")
 
     # Check if we're in a memory-constrained environment (like GitHub Actions)
-    is_memory_constrained = os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("MEMORY_CONSTRAINED") == "true"
+    is_memory_constrained = (
+        os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("MEMORY_CONSTRAINED") == "true"
+    )
 
     if is_memory_constrained:
         logger.info("Memory-constrained environment detected - using streaming export")
@@ -264,7 +364,9 @@ def finalize_export(clear_buffer: bool = True):
                 # Use original approach for smaller datasets
                 if USE_GCS:
                     try:
-                        logger.info(f"Writing {data_count} records to GCS bucket '{GCS_BUCKET}': {filename}")
+                        logger.info(
+                            f"Writing {data_count} records to GCS bucket '{GCS_BUCKET}': {filename}"
+                        )
                         json_content = json.dumps(json_data_list, indent=2, default=str)
                         _save_to_gcs(filename, json_content, "json")
                         total_files += 1
@@ -274,7 +376,9 @@ def finalize_export(clear_buffer: bool = True):
                     filepath = Path(f"{LOCAL_DATA_PATH}/bronze/chr/{filename}")
                     try:
                         logger.info(f"Writing {data_count} records locally to {filepath}")
-                        _save_locally(filepath, json.dumps(json_data_list, indent=2, default=str), "json")
+                        _save_locally(
+                            filepath, json.dumps(json_data_list, indent=2, default=str), "json"
+                        )
                         total_files += 1
                     except Exception as e:
                         logger.error(f"Error writing JSON file {filepath}: {e}")
@@ -287,7 +391,9 @@ def finalize_export(clear_buffer: bool = True):
 
             if USE_GCS:
                 try:
-                    logger.info(f"Writing {len(xml_data_list)} records to GCS bucket '{GCS_BUCKET}': {filename}")
+                    logger.info(
+                        f"Writing {len(xml_data_list)} records to GCS bucket '{GCS_BUCKET}': {filename}"
+                    )
                     _save_to_gcs(filename, full_xml_content, "xml")
                     total_files += 1
                 except Exception as e:
@@ -301,7 +407,10 @@ def finalize_export(clear_buffer: bool = True):
                 except Exception as e:
                     logger.error(f"Error writing XML file {filepath}: {e}")
 
-    logger.info(f"Export complete: {total_files} files written using {storage_mode} in bronze/chr/{EXPORT_TIMESTAMP}/")
+    bronze_dir = get_bronze_directory_path()
+    logger.info(
+        f"Export complete: {total_files} files written using {storage_mode} in bronze/chr/{bronze_dir}/"
+    )
     if clear_buffer:
         _data_buffer.clear()
 
@@ -331,16 +440,20 @@ def finalize_export(clear_buffer: bool = True):
         logger.warning(f"Error during post-export cleanup: {e}")
 
 
-def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str = ""):
-    """Save large datasets to GCS using streaming to avoid memory issues.
-    
+def _save_to_gcs_streaming(filename: str, data_list: list[Any], path_suffix: str = ""):
+    """Save large datasets to GCS using streaming via unified GCSDataAccess.
+
     Args:
         filename: Target filename in GCS
         data_list: List of data items to save
         path_suffix: Optional suffix to add to the bronze directory path (for matrix job separation)
     """
-    bucket = gcs_client.bucket(GCS_BUCKET)
-    blob = bucket.blob(f"bronze/chr/{EXPORT_TIMESTAMP}{path_suffix}/{filename}")
+    # Use the new directory path function that includes all suffixes
+    bronze_dir = get_bronze_directory_path()
+    # If path_suffix is provided, add it to the bronze directory
+    if path_suffix:
+        bronze_dir += path_suffix
+    gcs_path = f"gs://{GCS_BUCKET}/bronze/chr/{bronze_dir}/{filename}"
 
     # Estimate data size for logging
     import sys
@@ -351,8 +464,8 @@ def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str
     )
 
     try:
-        # Use blob.open() for streaming writes
-        with blob.open("w", content_type="application/json") as f:
+        # Use gcsfs streaming write via unified GCSDataAccess
+        with gcs_access.fs.open(gcs_path, "w", encoding="utf-8") as f:
             f.write("[\n")
 
             for i, item in enumerate(data_list):
@@ -364,11 +477,29 @@ def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str
 
                 # Log progress more frequently for very large datasets
                 if i > 0 and i % 1000 == 0:
-                    logger.info(f"Streamed {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)")
+                    logger.info(
+                        f"Streamed {i}/{len(data_list)} records to GCS ({(i / len(data_list) * 100):.1f}%)"
+                    )
 
             f.write("\n]")
 
         logger.info(f"Completed streaming upload to GCS for {filename}")
+
+        # Create and upload metadata using unified GCS access
+        if _metadata_manager:
+            try:
+                metadata = _metadata_manager.create_metadata(
+                    source_key="chr_animal_movements",  # Default for streaming uploads
+                    record_count=len(data_list),
+                    file_size_bytes=estimated_size_mb * 1024 * 1024,  # Convert back to bytes
+                )
+
+                metadata_filename = filename.replace(".json", "_metadata.json")
+                metadata_gcs_path = f"gs://{GCS_BUCKET}/bronze/chr/{EXPORT_TIMESTAMP}{path_suffix}/{metadata_filename}"
+                gcs_access.upload_json(metadata.model_dump(mode="json"), metadata_gcs_path)
+                logger.info(f"✅ Uploaded streaming metadata for {filename}")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to create streaming metadata for {filename}: {e}")
 
         # CRITICAL: Clear the data_list immediately after successful upload to free memory
         data_list.clear()
@@ -385,10 +516,11 @@ def _save_to_gcs_streaming(filename: str, data_list: List[Any], path_suffix: str
         raise
 
 
-def _save_locally_streaming(filepath: Path, data_list: List[Any]):
+def _save_locally_streaming(filepath: Path, data_list: list[Any]):
     """Save large datasets locally using streaming to avoid memory issues."""
-    # Add timestamp to the path
-    timestamped_path = filepath.parent / EXPORT_TIMESTAMP / filepath.name
+    # Add timestamp with suffixes to the path
+    bronze_dir = get_bronze_directory_path()
+    timestamped_path = filepath.parent / bronze_dir / filepath.name
     timestamped_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Estimate data size for logging
@@ -412,7 +544,9 @@ def _save_locally_streaming(filepath: Path, data_list: List[Any]):
 
                 # Log progress more frequently for very large datasets
                 if i > 0 and i % 1000 == 0:
-                    logger.info(f"Streamed {i}/{len(data_list)} records to file ({(i / len(data_list) * 100):.1f}%)")
+                    logger.info(
+                        f"Streamed {i}/{len(data_list)} records to file ({(i / len(data_list) * 100):.1f}%)"
+                    )
 
             f.write("\n]")
 
@@ -459,9 +593,13 @@ if __name__ == "__main__":
 
     logger.info(f"Data buffered. Buffer keys: {list(_data_buffer.keys())}")
     if "test_source_op_json" in _data_buffer:
-        logger.info(f"Buffer JSON count for 'test_source_op_json': {len(_data_buffer['test_source_op_json']['json'])}")
+        logger.info(
+            f"Buffer JSON count for 'test_source_op_json': {len(_data_buffer['test_source_op_json']['json'])}"
+        )
     if "test_source_op_xml" in _data_buffer:
-        logger.info(f"Buffer XML count for 'test_source_op_xml': {len(_data_buffer['test_source_op_xml']['xml'])}")
+        logger.info(
+            f"Buffer XML count for 'test_source_op_xml': {len(_data_buffer['test_source_op_xml']['xml'])}"
+        )
 
     # Finalize the export
     finalize_export()
@@ -489,7 +627,7 @@ if __name__ == "__main__":
 #     save_raw_data(sample_zeep_like, 'besaetning', 'hentStamoplysninger', {'herd': 5392, 'species': 15})
 
 
-def export_context_data(context: Dict[str, Any], export_path: Path):
+def export_context_data(context: dict[str, Any], export_path: Path):
     """Export pipeline context data for use by dependent jobs."""
     logger.info("Exporting pipeline context data...")
 
@@ -501,7 +639,10 @@ def export_context_data(context: Dict[str, Any], export_path: Path):
         "combinations": context.get("combinations", []),
         "args": {
             # Preserve all args, converting dates to strings for JSON serialization
-            **{k: (str(v) if k in ["start_date", "end_date"] else v) for k, v in context.get("args", {}).items()},
+            **{
+                k: (str(v) if k in ["start_date", "end_date"] else v)
+                for k, v in context.get("args", {}).items()
+            },
         },
     }
 
@@ -523,7 +664,7 @@ def export_context_data(context: Dict[str, Any], export_path: Path):
     logger.info(f"Exported {len(context_data['chr_to_species'])} CHR mappings")
 
 
-def import_context_data(import_path: Path) -> Dict[str, Any]:
+def import_context_data(import_path: Path) -> dict[str, Any]:
     """Import pipeline context data from a previous job."""
     if not import_path.exists():
         logger.warning(f"Context data file not found: {import_path}")
@@ -532,7 +673,7 @@ def import_context_data(import_path: Path) -> Dict[str, Any]:
     logger.info(f"Importing pipeline context data from {import_path}")
 
     try:
-        with open(import_path, "r") as f:
+        with open(import_path) as f:
             context_data = json.load(f)
 
         # Convert chr_to_species lists back to sets
@@ -548,11 +689,17 @@ def import_context_data(import_path: Path) -> Dict[str, Any]:
         # Convert date strings back to date objects for imported args
         imported_args = context_data.get("args", {}).copy()
         for date_key in ["start_date", "end_date"]:
-            if date_key in imported_args and isinstance(imported_args[date_key], str) and imported_args[date_key]:
+            if (
+                date_key in imported_args
+                and isinstance(imported_args[date_key], str)
+                and imported_args[date_key]
+            ):
                 try:
                     from datetime import datetime
 
-                    imported_args[date_key] = datetime.strptime(imported_args[date_key], "%Y-%m-%d").date()
+                    imported_args[date_key] = datetime.strptime(
+                        imported_args[date_key], "%Y-%m-%d"
+                    ).date()
                 except ValueError:
                     logger.warning(f"Failed to parse {date_key}: {imported_args[date_key]}")
                     imported_args[date_key] = None
@@ -575,9 +722,13 @@ def import_context_data(import_path: Path) -> Dict[str, Any]:
         return {}
 
 
-def export_bronze_data_summary() -> Dict[str, Any]:
+def export_bronze_data_summary() -> dict[str, Any]:
     """Export a summary of bronze data for verification."""
-    summary = {"export_timestamp": EXPORT_TIMESTAMP, "buffer_keys": list(_data_buffer.keys()), "data_counts": {}}
+    summary = {
+        "export_timestamp": EXPORT_TIMESTAMP,
+        "buffer_keys": list(_data_buffer.keys()),
+        "data_counts": {},
+    }
 
     for key, data in _data_buffer.items():
         summary["data_counts"][key] = {

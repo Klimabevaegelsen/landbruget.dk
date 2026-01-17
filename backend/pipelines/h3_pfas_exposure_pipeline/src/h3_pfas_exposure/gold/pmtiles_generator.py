@@ -5,6 +5,7 @@ This module generates PMTiles files directly from DuckDB tables in the H3 pipeli
 providing optimized vector tiles for frontend visualization.
 """
 
+import contextlib
 import os
 import subprocess
 import tempfile
@@ -70,17 +71,15 @@ class H3PMTilesGenerator:
                     if geojson_path and os.path.exists(geojson_path):
                         os.remove(geojson_path)
                     return gcs_path
-                else:
-                    # Clean up files on upload failure
-                    if geojson_path and os.path.exists(geojson_path):
-                        os.remove(geojson_path)
-                    return None
-            else:
-                self.log.info(f"✅ PMTiles generated locally: {pmtiles_path}")
-                # Clean up GeoJSON file even for local generation to save space
+                # Clean up files on upload failure
                 if geojson_path and os.path.exists(geojson_path):
                     os.remove(geojson_path)
-                return pmtiles_path
+                return None
+            self.log.info(f"✅ PMTiles generated locally: {pmtiles_path}")
+            # Clean up GeoJSON file even for local generation to save space
+            if geojson_path and os.path.exists(geojson_path):
+                os.remove(geojson_path)
+            return pmtiles_path
 
         except Exception as e:
             self.log.error(f"❌ PMTiles generation failed for year {year}: {e}")
@@ -88,7 +87,12 @@ class H3PMTilesGenerator:
             self._cleanup_temp_files_for_year(year)
             return None
 
-    def generate_kommune_pmtiles_for_year(self, results_table: str, year: int | str, kommune_boundaries_table: str = "kommune_boundaries") -> str | None:
+    def generate_kommune_pmtiles_for_year(
+        self,
+        results_table: str,
+        year: int | str,
+        kommune_boundaries_table: str = "kommune_boundaries",
+    ) -> str | None:
         """Generate PMTiles for kommune (municipality) data."""
         self.log.info(f"🏛️ Generating kommune PMTiles for year {year}")
 
@@ -112,7 +116,9 @@ class H3PMTilesGenerator:
             self.log.info(f"📊 Processing {count:,} kommuner for PMTiles generation")
 
             # Create GeoJSON for kommune data
-            geojson_path = self._create_kommune_geojson(results_table, year, kommune_boundaries_table)
+            geojson_path = self._create_kommune_geojson(
+                results_table, year, kommune_boundaries_table
+            )
             if not geojson_path:
                 return None
 
@@ -133,17 +139,15 @@ class H3PMTilesGenerator:
                     if geojson_path and os.path.exists(geojson_path):
                         os.remove(geojson_path)
                     return gcs_path
-                else:
-                    # Clean up files on upload failure
-                    if geojson_path and os.path.exists(geojson_path):
-                        os.remove(geojson_path)
-                    return None
-            else:
-                self.log.info(f"✅ Kommune PMTiles generated locally: {pmtiles_path}")
-                # Clean up GeoJSON file even for local generation to save space
+                # Clean up files on upload failure
                 if geojson_path and os.path.exists(geojson_path):
                     os.remove(geojson_path)
-                return pmtiles_path
+                return None
+            self.log.info(f"✅ Kommune PMTiles generated locally: {pmtiles_path}")
+            # Clean up GeoJSON file even for local generation to save space
+            if geojson_path and os.path.exists(geojson_path):
+                os.remove(geojson_path)
+            return pmtiles_path
 
         except Exception as e:
             self.log.error(f"❌ Kommune PMTiles generation failed for year {year}: {e}")
@@ -278,7 +282,7 @@ class H3PMTilesGenerator:
 
             self.conn.execute(f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         'Feature' as type,
                         ST_AsGeoJSON(ST_GeomFromText(h3_cell_to_boundary_wkt({h3_col})))::JSON as geometry,
                         json_object(
@@ -297,15 +301,15 @@ class H3PMTilesGenerator:
                             'coverage', ROUND({coverage_value}, 3),
                             'area_ha', ROUND(h3_area_ha, 3),
                             'agricultural_area_ha', ROUND(COALESCE(total_intersection_area_ha, 0), 3),
-                            
+
                             -- Use pre-calculated intensity fields (grams per hectare)
                             'pfas_intensity', ROUND({pfas_intensity_value}, 6),
                             'pesticide_intensity', ROUND({pesticide_intensity_value}, 6),
                             'diquat_intensity', ROUND({diquat_intensity_value}, 6),
                             'glyphosate_intensity', ROUND({glyphosate_intensity_value}, 6),
-                            
+
                             -- Zoom classification for level-of-detail rendering (based on total pesticide load)
-                            'zoom_class', CASE 
+                            'zoom_class', CASE
                                 WHEN {pesticide_value} > 1000 THEN 'very_high'
                                 WHEN {pesticide_value} > 100 THEN 'high'
                                 WHEN {pesticide_value} > 10 THEN 'medium'
@@ -323,9 +327,8 @@ class H3PMTilesGenerator:
                 size_mb = geojson_path.stat().st_size / (1024 * 1024)
                 self.log.info(f"✅ GeoJSON created: {size_mb:.1f} MB")
                 return str(geojson_path)
-            else:
-                self.log.error("❌ GeoJSON file was not created")
-                return None
+            self.log.error("❌ GeoJSON file was not created")
+            return None
 
         except Exception as e:
             self.log.error(f"❌ GeoJSON creation failed: {e}")
@@ -409,7 +412,7 @@ class H3PMTilesGenerator:
                 geojson_path,
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Clean up GeoJSON to save space
             os.remove(geojson_path)
@@ -418,9 +421,8 @@ class H3PMTilesGenerator:
                 size_mb = pmtiles_path.stat().st_size / (1024 * 1024)
                 self.log.info(f"✅ PMTiles generated: {size_mb:.1f} MB")
                 return str(pmtiles_path)
-            else:
-                self.log.error("❌ PMTiles file was not created")
-                return None
+            self.log.error("❌ PMTiles file was not created")
+            return None
 
         except subprocess.CalledProcessError as e:
             self.log.error(f"❌ Tippecanoe failed: {e.stderr}")
@@ -441,9 +443,8 @@ class H3PMTilesGenerator:
             self.log.info(f"☁️ Uploading PMTiles to: {gcs_path}")
 
             # Upload using GCS access - use the correct streaming method
-            with open(pmtiles_path, "rb") as src:
-                with self.gcs_access.fs.open(gcs_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+            with open(pmtiles_path, "rb") as src, self.gcs_access.fs.open(gcs_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
             # Set public read ACL on the uploaded file
             self._set_public_read_acl(gcs_path)
@@ -458,10 +459,8 @@ class H3PMTilesGenerator:
             self.log.error(f"❌ PMTiles upload failed: {e}")
             # Clean up local file on error too
             if os.path.exists(pmtiles_path):
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(pmtiles_path)
-                except Exception:
-                    pass
             return None
 
     def _set_public_read_acl(self, gcs_path: str) -> None:
@@ -490,7 +489,7 @@ class H3PMTilesGenerator:
                 # Fallback to gsutil command if google-cloud-storage is not available
                 import subprocess
 
-                result = subprocess.run(
+                subprocess.run(
                     ["gsutil", "acl", "ch", "-u", "AllUsers:R", gcs_path],
                     capture_output=True,
                     text=True,
@@ -504,7 +503,12 @@ class H3PMTilesGenerator:
             self.log.warning(f"⚠️ Failed to set public read ACL on {gcs_path}: {e}")
             self.log.warning("⚠️ File uploaded successfully but may not be publicly accessible")
 
-    def _create_kommune_geojson(self, results_table: str, year: int | str, kommune_boundaries_table: str = "kommune_boundaries") -> str | None:
+    def _create_kommune_geojson(
+        self,
+        results_table: str,
+        year: int | str,
+        kommune_boundaries_table: str = "kommune_boundaries",
+    ) -> str | None:
         """Create GeoJSON from kommune results table."""
         try:
             # Create temporary file for GeoJSON
@@ -524,8 +528,10 @@ class H3PMTilesGenerator:
                 tables = self.conn.execute("SHOW TABLES").fetchall()
                 table_names = [table[0] for table in tables]
                 self.log.info(f"🔍 Available tables: {table_names}")
-                
-                count = self.conn.execute(f"SELECT COUNT(*) FROM {kommune_boundaries_table}").fetchone()[0]
+
+                count = self.conn.execute(
+                    f"SELECT COUNT(*) FROM {kommune_boundaries_table}"
+                ).fetchone()[0]
                 has_kommune_boundaries = True
                 self.log.info(
                     f"✅ Using actual kommune polygon geometries from {kommune_boundaries_table} table ({count} kommuner)"
@@ -537,18 +543,24 @@ class H3PMTilesGenerator:
 
             if has_kommune_boundaries:
                 # Use actual kommune geometries from the boundaries table
+                # Kommune data is in EPSG:25832 (Danish UTM) - transform to WGS84 for GeoJSON
+                # Use always_xy := true to ensure output is in lon/lat order (GeoJSON standard)
                 geometry_select = """
-                    ST_AsGeoJSON(kb.geometry)::JSON
+                    ST_AsGeoJSON(ST_Transform(kb.geometry, 'EPSG:25832', 'EPSG:4326', always_xy := true))::JSON
                 """
                 geometry_condition = "kb.geometry IS NOT NULL"
-                join_clause = f"LEFT JOIN {kommune_boundaries_table} kb ON r.kommune_code = kb.kommune_code"
+                join_clause = (
+                    f"LEFT JOIN {kommune_boundaries_table} kb ON r.kommune_code = kb.kommune_code"
+                )
             else:
                 # Fallback to centroids as points if boundaries table is not available
+                # Centroid coordinates are in EPSG:25832 (Danish UTM) - easting (x) and northing (y)
+                # Transform to WGS84 for GeoJSON using ST_Transform with always_xy for lon/lat order
                 geometry_select = """
-                    json_object(
-                        'type', 'Point',
-                        'coordinates', json_array(kommune_centroid_x, kommune_centroid_y)
-                    )
+                    ST_AsGeoJSON(ST_Transform(
+                        ST_Point(kommune_centroid_x, kommune_centroid_y),
+                        'EPSG:25832', 'EPSG:4326', always_xy := true
+                    ))::JSON
                 """
                 geometry_condition = (
                     "kommune_centroid_x IS NOT NULL AND kommune_centroid_y IS NOT NULL"
@@ -561,7 +573,7 @@ class H3PMTilesGenerator:
 
             query = f"""
                 COPY (
-                    SELECT 
+                    SELECT
                         'Feature' as type,
                         {geometry_select} as geometry,
                         json_object(
@@ -588,18 +600,18 @@ class H3PMTilesGenerator:
                             'glyphosate_applications', COALESCE(r.glyphosate_containing_applications, 0),
                             'crop_diversity', COALESCE(r.crop_diversity, 0),
                             'crop_types', COALESCE(r.crop_types, ''),
-                            
+
                             -- Classification for visualization
-                            'pfas_class', CASE 
+                            'pfas_class', CASE
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 10000 THEN 'very_high'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 1000 THEN 'high'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 100 THEN 'medium'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 0 THEN 'low'
                                 ELSE 'none'
                             END,
-                            
+
                             -- Color coding for visualization
-                            'pfas_color', CASE 
+                            'pfas_color', CASE
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 10000 THEN '#8c2d04'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 1000 THEN '#d73027'
                                 WHEN COALESCE(r.total_pfas_containing_active_ingredient_grams, 0) > 100 THEN '#f46d43'
@@ -621,9 +633,8 @@ class H3PMTilesGenerator:
                 size_mb = geojson_path.stat().st_size / (1024 * 1024)
                 self.log.info(f"✅ Kommune GeoJSON created: {size_mb:.1f} MB")
                 return str(geojson_path)
-            else:
-                self.log.error("❌ Kommune GeoJSON file was not created")
-                return None
+            self.log.error("❌ Kommune GeoJSON file was not created")
+            return None
 
         except Exception as e:
             self.log.error(f"❌ Kommune GeoJSON creation failed: {e}")
@@ -710,7 +721,7 @@ class H3PMTilesGenerator:
                 geojson_path,
             ]
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             # Clean up GeoJSON to save space
             os.remove(geojson_path)
@@ -719,9 +730,8 @@ class H3PMTilesGenerator:
                 size_mb = pmtiles_path.stat().st_size / (1024 * 1024)
                 self.log.info(f"✅ Kommune PMTiles generated: {size_mb:.1f} MB")
                 return str(pmtiles_path)
-            else:
-                self.log.error("❌ Kommune PMTiles file was not created")
-                return None
+            self.log.error("❌ Kommune PMTiles file was not created")
+            return None
 
         except subprocess.CalledProcessError as e:
             self.log.error(f"❌ Tippecanoe failed for kommune data: {e.stderr}")
@@ -742,9 +752,8 @@ class H3PMTilesGenerator:
             self.log.info(f"☁️ Uploading kommune PMTiles to: {gcs_path}")
 
             # Upload using GCS access - use the correct streaming method
-            with open(pmtiles_path, "rb") as src:
-                with self.gcs_access.fs.open(gcs_path, "wb") as dst:
-                    shutil.copyfileobj(src, dst)
+            with open(pmtiles_path, "rb") as src, self.gcs_access.fs.open(gcs_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
 
             # Set public read ACL on the uploaded file
             self._set_public_read_acl(gcs_path)
@@ -759,10 +768,8 @@ class H3PMTilesGenerator:
             self.log.error(f"❌ Kommune PMTiles upload failed: {e}")
             # Clean up local file on error too
             if os.path.exists(pmtiles_path):
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(pmtiles_path)
-                except Exception:
-                    pass
             return None
 
     def generate_pmtiles_for_multiple_years(self, years_data: dict[int, str]) -> dict[int, str]:

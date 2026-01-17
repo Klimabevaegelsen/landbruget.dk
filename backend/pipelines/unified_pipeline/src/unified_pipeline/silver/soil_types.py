@@ -14,16 +14,22 @@ and quality assurance checks.
 """
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 # ✅ MIGRATION: Removed pandas import - using DuckDB for data operations
 from dotenv import load_dotenv
 from pydantic import ConfigDict
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
-from unified_pipeline.common.geometry_validator import validate_and_transform_geometries_duckdb
+from unified_pipeline.common.geometry_validator import (
+    validate_and_transform_geometries_duckdb,
+    validate_and_normalize_to_utm,
+)
 
 load_dotenv()
+
+# CRS Strategy: Use EPSG:25832 for processing, transform to EPSG:4326 only at Supabase upload
+USE_UTM_PROCESSING = True
 
 
 class SoilTypesSilverConfig(BaseJobConfig):
@@ -99,16 +105,18 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
 
             import aiohttp
 
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as session:
-                async with session.get(wfs_url) as response:
-                    if response.status != 200:
-                        response_text = await response.text()
-                        raise Exception(
-                            f"WFS request failed with status {response.status}: {response_text[:500]}"
-                        )
+            async with (
+                aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as session,
+                session.get(wfs_url) as response,
+            ):
+                if response.status != 200:
+                    response_text = await response.text()
+                    raise Exception(
+                        f"WFS request failed with status {response.status}: {response_text[:500]}"
+                    )
 
-                    # Get the response as JSON
-                    wfs_data = await response.json()
+                # Get the response as JSON
+                wfs_data = await response.json()
 
             self.log.info("Successfully fetched WFS data via HTTP request")
 
@@ -124,7 +132,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             import json
 
             # Save the GeoJSON to a temporary file that DuckDB can read
-            geojson_str = json.dumps(wfs_data)
+            json.dumps(wfs_data)
 
             # Stream process the features in batches to avoid memory issues
             features = wfs_data.get("features", [])
@@ -177,9 +185,9 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             # Flatten the properties JSON into individual columns
             # First, get the column names from the properties
             sample_properties = self.conn.execute(f"""
-                SELECT properties 
-                FROM {table_name} 
-                WHERE properties IS NOT NULL 
+                SELECT properties
+                FROM {table_name}
+                WHERE properties IS NOT NULL
                 LIMIT 1
             """).fetchone()
 
@@ -188,15 +196,15 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 property_columns = list(properties_dict.keys())
 
                 # Create column extractions
-                column_extractions = []
-                for col in property_columns:
-                    # Handle different data types
-                    column_extractions.append(f"json_extract(properties, '$.{col}') as \"{col}\"")
+                # Handle different data types
+                column_extractions = [
+                    f"json_extract(properties, '$.{col}') as \"{col}\"" for col in property_columns
+                ]
 
                 # Recreate table with flattened properties
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {table_name}_final AS
-                    SELECT 
+                    SELECT
                         {", ".join(column_extractions)},
                         geometry,
                         current_timestamp as processed_at,
@@ -211,7 +219,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 # If no properties, just add metadata columns
                 self.conn.execute(f"""
                     CREATE OR REPLACE TABLE {table_name}_final AS
-                    SELECT 
+                    SELECT
                         geometry,
                         current_timestamp as processed_at,
                         'validated' as data_quality
@@ -257,7 +265,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             # Create processed table with standardized columns
             self.conn.execute(f"""
                 CREATE OR REPLACE TABLE {processed_table} AS
-                SELECT 
+                SELECT
                     {", ".join(select_parts)},
                     current_timestamp as processed_at,
                     'validated' as data_quality
@@ -265,10 +273,15 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             """)
 
             # ✅ MIGRATION: Use DuckDB-spatial geometry validation
-            # ✅ COORDINATE FIX: ST_FlipCoordinates is applied in the validator to fix swapped lat/lon coordinates
-            validate_and_transform_geometries_duckdb(
-                self.conn, processed_table, self.config.dataset
-            )
+            # CRS Strategy: Keep in EPSG:25832 for processing, transform to 4326 at Supabase upload
+            # Output CRS: EPSG:25832 (Danish UTM) for downstream Gold processing
+            if USE_UTM_PROCESSING:
+                validate_and_normalize_to_utm(self.conn, processed_table, self.config.dataset)
+            else:
+                # Legacy: Keep in EPSG:25832 for processing consistency
+                validate_and_transform_geometries_duckdb(
+                    self.conn, processed_table, self.config.dataset, target_crs="EPSG:25832"
+                )
 
             # Clean up temporary table
             self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
@@ -279,7 +292,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             return processed_table
 
         except Exception as e:
-            self.log.error(f"Error in DuckDB-spatial validation and transformation: {str(e)}")
+            self.log.error(f"Error in DuckDB-spatial validation and transformation: {e!s}")
             raise
 
     def _geometry_to_wkt(self, geometry_dict: dict) -> str:
@@ -309,21 +322,20 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                         points.append(coord_str)
                 if points:
                     return f"POLYGON(({', '.join(points)}))"
-        elif geom_type == "MultiPolygon":
-            if coordinates:
-                polygons = []
-                for polygon in coordinates:
-                    if polygon and len(polygon) > 0:
-                        exterior = polygon[0]
-                        points = []
-                        for pt in exterior:
-                            coord_str = coord_to_string(pt)
-                            if coord_str:
-                                points.append(coord_str)
-                        if points:
-                            polygons.append(f"(({', '.join(points)}))")
-                if polygons:
-                    return f"MULTIPOLYGON({', '.join(polygons)})"
+        elif geom_type == "MultiPolygon" and coordinates:
+            polygons = []
+            for polygon in coordinates:
+                if polygon and len(polygon) > 0:
+                    exterior = polygon[0]
+                    points = []
+                    for pt in exterior:
+                        coord_str = coord_to_string(pt)
+                        if coord_str:
+                            points.append(coord_str)
+                    if points:
+                        polygons.append(f"(({', '.join(points)}))")
+            if polygons:
+                return f"MULTIPOLYGON({', '.join(polygons)})"
 
         return None
 
@@ -352,7 +364,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
 
             # Check geometry validity
             invalid_geom_count = self.conn.execute(f"""
-                SELECT COUNT(*) FROM {table_name} 
+                SELECT COUNT(*) FROM {table_name}
                 WHERE geometry IS NULL OR NOT ST_IsValid(geometry)
             """).fetchone()[0]
 
@@ -369,9 +381,9 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             if null_soil_code > 0:
                 self.log.info(f"Features with missing soil_code: {null_soil_code}")
 
-            # Check coordinate bounds (should be in Denmark after transformation to WGS84)
+            # Check coordinate bounds (should be in Denmark in EPSG:25832 UTM coordinates)
             bounds = self.conn.execute(f"""
-                SELECT 
+                SELECT
                     MIN(ST_XMin(geometry)) as min_x,
                     MAX(ST_XMax(geometry)) as max_x,
                     MIN(ST_YMin(geometry)) as min_y,
@@ -383,13 +395,24 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             if bounds:
                 min_x, max_x, min_y, max_y = bounds
                 self.log.info(
-                    f"Coordinate bounds: X({min_x:.3f}, {max_x:.3f}), Y({min_y:.3f}, {max_y:.3f})"
+                    f"Coordinate bounds (EPSG:25832): X({min_x:.0f}, {max_x:.0f}), Y({min_y:.0f}, {max_y:.0f})"
                 )
 
-                # Check if coordinates are reasonable for Denmark in WGS84
-                if not (7.0 <= min_x <= 16.0 and 54.0 <= min_y <= 58.0):
+                # Check if coordinates are reasonable for Denmark in EPSG:25832 (UTM 32N)
+                # X (Easting): ~400,000 - 900,000 meters
+                # Y (Northing): ~6,000,000 - 6,500,000 meters
+                x_valid = 400000 <= min_x <= 900000 and 400000 <= max_x <= 900000
+                y_valid = 6000000 <= min_y <= 6500000 and 6000000 <= max_y <= 6500000
+
+                if not (x_valid and y_valid):
                     self.log.warning(
-                        "Coordinates appear to be outside Denmark bounds (coordinates should be fixed with ST_FlipCoordinates)"
+                        f"Coordinates appear to be outside Denmark bounds (EPSG:25832): "
+                        f"x_valid={x_valid}, y_valid={y_valid} "
+                        "(may indicate CRS detection or transformation issue)"
+                    )
+                else:
+                    self.log.info(
+                        "Coordinate bounds are within expected Denmark ranges (EPSG:25832)"
                     )
 
             # Check attribute distributions
@@ -402,10 +425,10 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             self.log.info("Quality checks completed successfully")
 
         except Exception as e:
-            self.log.error(f"Quality check failed: {str(e)}")
+            self.log.error(f"Quality check failed: {e!s}")
             raise
 
-    async def run(self, bronze_data: Optional[Any] = None) -> None:
+    async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
         Run the soil types data processing pipeline using DuckDB-spatial.
 
@@ -417,7 +440,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                         should contain WFS metadata including the URL.
 
         Returns:
-            None
+            Optional[str]: Name of the processed DuckDB table, or None if processing fails
 
         Raises:
             Exception: If any step in the pipeline fails
@@ -435,7 +458,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                     self.log.error(
                         f"Expected dict with wfs_url from bronze stage, got {type(bronze_data)}"
                     )
-                    return
+                    return None
             else:
                 # Fallback to reading from storage
                 self.log.info("Reading bronze data from storage (fallback)")
@@ -444,14 +467,14 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
                 )
                 if bronze_metadata is None:
                     self.log.error("Failed to read bronze metadata from storage")
-                    return
+                    return None
 
                 # Extract WFS URL from stored metadata
                 if isinstance(bronze_metadata, dict) and "wfs_url" in bronze_metadata:
                     wfs_url = bronze_metadata["wfs_url"]
                 else:
                     self.log.error("Bronze metadata does not contain wfs_url")
-                    return
+                    return None
 
             # ✅ MIGRATION: Process data using DuckDB-spatial
             processed_table = await self._validate_and_transform_with_duckdb(wfs_url)
@@ -469,6 +492,7 @@ class SoilTypesSilver(BaseSource[SoilTypesSilverConfig], SilverJobInterface):
             )
 
             self.log.info("Soil types silver layer processing completed successfully")
+            return processed_table
 
         except Exception as e:
             self.log.error(f"Failed to process soil types silver layer: {e}")

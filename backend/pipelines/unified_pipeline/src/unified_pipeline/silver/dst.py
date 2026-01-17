@@ -14,10 +14,9 @@ for multiple DST tables (HST77, GARTN1, FRO, HALM1).
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar
 
-import ibis
-from ibis import _
+import duckdb
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import timed
@@ -39,17 +38,16 @@ class DSTSilverConfig(BaseJobConfig):
 
     dataset: str = "dst"
     bucket: str = "landbrugsdata-raw-data"
-    table_ids: list[str] = ["HST77", "GARTN1", "FRO", "HALM1"]
+    table_ids: ClassVar[list[str]] = ["HST77", "GARTN1", "FRO", "HALM1"]
 
 
 class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
     """
-    Silver layer processor for DST data using DuckDB and ibis.
+    Silver layer processor for DST data using DuckDB.
 
     This class transforms raw DST data from the bronze layer into
-    structured data using DuckDB for all data operations and ibis for
-    transformations. It handles multiple table types with specific
-    processing logic for each.
+    structured data using DuckDB for all data operations. It handles
+    multiple table types with specific processing logic for each.
 
     The processing includes:
     1. Reading raw data from GCS or in-memory bronze data
@@ -66,13 +64,12 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
         Args:
             config: Configuration for the silver processing job"""
         super().__init__(config)
-        # Configure ibis backend
-        ibis.options.interactive = True
-        self.ibis_con = ibis.duckdb.connect()
+        # Configure DuckDB connection for local processing
+        self.duckdb_conn = duckdb.connect()
 
     async def _find_latest_bronze_data(
-        self, table_id: str, bronze_data: Optional[Dict] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, table_id: str, bronze_data: dict | None = None
+    ) -> dict[str, Any] | None:
         """
         Find and load the most recent bronze data for a table.
 
@@ -135,29 +132,25 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
             return None
 
     @timed(name="Loading DST JSON into DuckDB")
-    def _load_dst_json_into_duckdb(self, json_data: Dict[str, Any], table_name: str):
+    def _load_dst_json_into_duckdb(self, json_data: dict[str, Any], table_name: str) -> bool:
         """
-        Load DST JSONSTAT data into DuckDB using ibis.
+        Load DST JSONSTAT data into DuckDB.
 
         Args:
             json_data (Dict[str, Any]): Raw JSONSTAT data from DST API
             table_name (str): Name for the DuckDB table
 
         Returns:
-            ibis table expression or None if loading fails
+            bool: True if loading succeeds, False otherwise
         """
         try:
             # Handle nested dataset structure from DST API
-            if "dataset" in json_data:
-                # Data is nested under 'dataset' key
-                dataset = json_data["dataset"]
-            else:
-                # Data is in direct JSONSTAT format
-                dataset = json_data
+            # Data may be nested under 'dataset' key or in direct JSONSTAT format
+            dataset = json_data.get("dataset", json_data)
 
             if not dataset or "value" not in dataset:
                 self.log.warning(f"No value data found in JSON for {table_name}")
-                return None
+                return False
 
             # Extract dimensions and values from JSONSTAT format
             dimensions = dataset.get("dimension", {})
@@ -165,7 +158,7 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
 
             if not dimensions or not values:
                 self.log.warning(f"Missing dimensions or values in JSONSTAT data for {table_name}")
-                return None
+                return False
 
             # Get dimension info
             dim_info = {}
@@ -203,63 +196,55 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
 
             if not records:
                 self.log.warning(f"No valid records extracted from JSONSTAT data for {table_name}")
-                return None
+                return False
 
-            # Create ibis table from records
-            self.ibis_con.create_table(table_name, records, overwrite=True)
-            table = self.ibis_con.table(table_name)
+            # Create DuckDB table from records
+            # First, drop the table if it exists
+            self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+            # Create table from the records using DuckDB's ability to infer schema from Python dicts
+            self.duckdb_conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM ?", [records])
 
             self.log.info(f"Successfully loaded {len(records)} records into {table_name}")
-            return table
+            return True
 
         except Exception as e:
             self.log.error(f"Error loading JSONSTAT data into DuckDB for {table_name}: {e}")
-            return None
+            return False
 
     @timed(name="Processing HST77 data")
     def _process_hst77_data(
-        self, json_data: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Optional[Any]:
-        """Process HST77 (harvest statistics) data using ibis."""
+        self, json_data: dict[str, Any], metadata: dict[str, Any]
+    ) -> str | None:
+        """Process HST77 (harvest statistics) data using DuckDB SQL."""
         try:
-            table = self._load_dst_json_into_duckdb(json_data, "hst77_raw")
-            if table is None:
+            if not self._load_dst_json_into_duckdb(json_data, "hst77_raw"):
                 return None
 
-            # Apply HST77-specific transformations
-            processed = (
-                table.mutate(
-                    area_code=_.OMRÅDE_code.cast("string"),
-                    area_name=_.OMRÅDE.cast("string"),
-                    crop_code=_.AFGRØDE_code.cast("string"),
-                    crop_name=_.AFGRØDE.cast("string"),
-                    measure_code=_.MÆNGDE4_code.cast("string"),
-                    measure_name=_.MÆNGDE4.cast("string"),
-                    time_period=_.Tid_code.cast("string"),
-                    time_label=_.Tid.cast("string"),
-                    harvest_value=_.value.cast("double"),
-                    table_id=ibis.literal("HST77"),
-                    processing_time=ibis.literal(datetime.now().isoformat()),
-                )
-                .select(
-                    [
-                        "table_id",
-                        "area_code",
-                        "area_name",
-                        "crop_code",
-                        "crop_name",
-                        "measure_code",
-                        "measure_name",
-                        "time_period",
-                        "time_label",
-                        "harvest_value",
-                        "processing_time",
-                    ]
-                )
-                .filter(_.harvest_value.notnull())
-            )
+            processing_time = datetime.now().isoformat()
+            output_table = "hst77_processed"
 
-            return processed
+            # Apply HST77-specific transformations using SQL
+            self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {output_table}")
+            self.duckdb_conn.execute(f"""
+                CREATE TABLE {output_table} AS
+                SELECT
+                    'HST77' AS table_id,
+                    CAST("OMRÅDE_code" AS VARCHAR) AS area_code,
+                    CAST("OMRÅDE" AS VARCHAR) AS area_name,
+                    CAST("AFGRØDE_code" AS VARCHAR) AS crop_code,
+                    CAST("AFGRØDE" AS VARCHAR) AS crop_name,
+                    CAST("MÆNGDE4_code" AS VARCHAR) AS measure_code,
+                    CAST("MÆNGDE4" AS VARCHAR) AS measure_name,
+                    CAST("Tid_code" AS VARCHAR) AS time_period,
+                    CAST("Tid" AS VARCHAR) AS time_label,
+                    CAST(value AS DOUBLE) AS harvest_value,
+                    '{processing_time}' AS processing_time
+                FROM hst77_raw
+                WHERE CAST(value AS DOUBLE) IS NOT NULL
+            """)
+
+            return output_table
 
         except Exception as e:
             self.log.error(f"Error processing HST77 data: {e}")
@@ -267,93 +252,71 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
 
     @timed(name="Processing GARTN1 data")
     def _process_gartn1_data(
-        self, json_data: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Optional[Any]:
-        """Process GARTN1 (horticulture) data using ibis."""
+        self, json_data: dict[str, Any], metadata: dict[str, Any]
+    ) -> str | None:
+        """Process GARTN1 (horticulture) data using DuckDB SQL."""
         try:
-            table = self._load_dst_json_into_duckdb(json_data, "gartn1_raw")
-            if table is None:
+            if not self._load_dst_json_into_duckdb(json_data, "gartn1_raw"):
                 return None
 
-            # Apply GARTN1-specific transformations
-            processed = (
-                table.mutate(
-                    area_code=_.OMRÅDE_code.cast("string"),
-                    area_name=_.OMRÅDE.cast("string"),
-                    measure_code=_.TAL_code.cast("string"),
-                    measure_name=_.TAL.cast("string"),
-                    crop_code=_.AFGRØDE_code.cast("string"),
-                    crop_name=_.AFGRØDE.cast("string"),
-                    time_period=_.Tid_code.cast("string"),
-                    time_label=_.Tid.cast("string"),
-                    horticulture_value=_.value.cast("double"),
-                    table_id=ibis.literal("GARTN1"),
-                    processing_time=ibis.literal(datetime.now().isoformat()),
-                )
-                .select(
-                    [
-                        "table_id",
-                        "area_code",
-                        "area_name",
-                        "measure_code",
-                        "measure_name",
-                        "crop_code",
-                        "crop_name",
-                        "time_period",
-                        "time_label",
-                        "horticulture_value",
-                        "processing_time",
-                    ]
-                )
-                .filter(_.horticulture_value.notnull())
-            )
+            processing_time = datetime.now().isoformat()
+            output_table = "gartn1_processed"
 
-            return processed
+            # Apply GARTN1-specific transformations using SQL
+            self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {output_table}")
+            self.duckdb_conn.execute(f"""
+                CREATE TABLE {output_table} AS
+                SELECT
+                    'GARTN1' AS table_id,
+                    CAST("OMRÅDE_code" AS VARCHAR) AS area_code,
+                    CAST("OMRÅDE" AS VARCHAR) AS area_name,
+                    CAST("TAL_code" AS VARCHAR) AS measure_code,
+                    CAST("TAL" AS VARCHAR) AS measure_name,
+                    CAST("AFGRØDE_code" AS VARCHAR) AS crop_code,
+                    CAST("AFGRØDE" AS VARCHAR) AS crop_name,
+                    CAST("Tid_code" AS VARCHAR) AS time_period,
+                    CAST("Tid" AS VARCHAR) AS time_label,
+                    CAST(value AS DOUBLE) AS horticulture_value,
+                    '{processing_time}' AS processing_time
+                FROM gartn1_raw
+                WHERE CAST(value AS DOUBLE) IS NOT NULL
+            """)
+
+            return output_table
 
         except Exception as e:
             self.log.error(f"Error processing GARTN1 data: {e}")
             return None
 
     @timed(name="Processing FRO data")
-    def _process_fro_data(
-        self, json_data: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Optional[Any]:
-        """Process FRO (seed) data using ibis."""
+    def _process_fro_data(self, json_data: dict[str, Any], metadata: dict[str, Any]) -> str | None:
+        """Process FRO (seed) data using DuckDB SQL."""
         try:
-            table = self._load_dst_json_into_duckdb(json_data, "fro_raw")
-            if table is None:
+            if not self._load_dst_json_into_duckdb(json_data, "fro_raw"):
                 return None
 
-            # Apply FRO-specific transformations
-            processed = (
-                table.mutate(
-                    crop_code=_.AFGRØDE_code.cast("string"),
-                    crop_name=_.AFGRØDE.cast("string"),
-                    measure_code=_.MÆNGDE4_code.cast("string"),
-                    measure_name=_.MÆNGDE4.cast("string"),
-                    time_period=_.Tid_code.cast("string"),
-                    time_label=_.Tid.cast("string"),
-                    seed_value=_.value.cast("double"),
-                    table_id=ibis.literal("FRO"),
-                    processing_time=ibis.literal(datetime.now().isoformat()),
-                )
-                .select(
-                    [
-                        "table_id",
-                        "crop_code",
-                        "crop_name",
-                        "measure_code",
-                        "measure_name",
-                        "time_period",
-                        "time_label",
-                        "seed_value",
-                        "processing_time",
-                    ]
-                )
-                .filter(_.seed_value.notnull())
-            )
+            processing_time = datetime.now().isoformat()
+            output_table = "fro_processed"
 
-            return processed
+            # Apply FRO-specific transformations using SQL
+            self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {output_table}")
+            self.duckdb_conn.execute(f"""
+                CREATE TABLE {output_table} AS
+                SELECT
+                    'FRO' AS table_id,
+                    CAST("AFGRØDE_code" AS VARCHAR) AS crop_code,
+                    CAST("AFGRØDE" AS VARCHAR) AS crop_name,
+                    CAST("MÆNGDE4_code" AS VARCHAR) AS measure_code,
+                    CAST("MÆNGDE4" AS VARCHAR) AS measure_name,
+                    CAST("Tid_code" AS VARCHAR) AS time_period,
+                    CAST("Tid" AS VARCHAR) AS time_label,
+                    CAST(value AS DOUBLE) AS seed_value,
+                    '{processing_time}' AS processing_time
+                FROM fro_raw
+                WHERE CAST(value AS DOUBLE) IS NOT NULL
+            """)
+
+            return output_table
 
         except Exception as e:
             self.log.error(f"Error processing FRO data: {e}")
@@ -361,58 +324,45 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
 
     @timed(name="Processing HALM1 data")
     def _process_halm1_data(
-        self, json_data: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Optional[Any]:
-        """Process HALM1 (straw) data using ibis."""
+        self, json_data: dict[str, Any], metadata: dict[str, Any]
+    ) -> str | None:
+        """Process HALM1 (straw) data using DuckDB SQL."""
         try:
-            table = self._load_dst_json_into_duckdb(json_data, "halm1_raw")
-            if table is None:
+            if not self._load_dst_json_into_duckdb(json_data, "halm1_raw"):
                 return None
 
-            # Apply HALM1-specific transformations (HALM1 uses ANVENDELSE and ENHED, not MÆNGDE4)
-            processed = (
-                table.mutate(
-                    area_code=_.OMRÅDE_code.cast("string"),
-                    area_name=_.OMRÅDE.cast("string"),
-                    crop_code=_.AFGRØDE_code.cast("string"),
-                    crop_name=_.AFGRØDE.cast("string"),
-                    usage_code=_.ANVENDELSE_code.cast("string"),
-                    usage_name=_.ANVENDELSE.cast("string"),
-                    unit_code=_.ENHED_code.cast("string"),
-                    unit_name=_.ENHED.cast("string"),
-                    time_period=_.Tid_code.cast("string"),
-                    time_label=_.Tid.cast("string"),
-                    straw_value=_.value.cast("double"),
-                    table_id=ibis.literal("HALM1"),
-                    processing_time=ibis.literal(datetime.now().isoformat()),
-                )
-                .select(
-                    [
-                        "table_id",
-                        "area_code",
-                        "area_name",
-                        "crop_code",
-                        "crop_name",
-                        "usage_code",
-                        "usage_name",
-                        "unit_code",
-                        "unit_name",
-                        "time_period",
-                        "time_label",
-                        "straw_value",
-                        "processing_time",
-                    ]
-                )
-                .filter(_.straw_value.notnull())
-            )
+            processing_time = datetime.now().isoformat()
+            output_table = "halm1_processed"
 
-            return processed
+            # Apply HALM1-specific transformations using SQL (HALM1 uses ANVENDELSE and ENHED, not MÆNGDE4)
+            self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {output_table}")
+            self.duckdb_conn.execute(f"""
+                CREATE TABLE {output_table} AS
+                SELECT
+                    'HALM1' AS table_id,
+                    CAST("OMRÅDE_code" AS VARCHAR) AS area_code,
+                    CAST("OMRÅDE" AS VARCHAR) AS area_name,
+                    CAST("AFGRØDE_code" AS VARCHAR) AS crop_code,
+                    CAST("AFGRØDE" AS VARCHAR) AS crop_name,
+                    CAST("ANVENDELSE_code" AS VARCHAR) AS usage_code,
+                    CAST("ANVENDELSE" AS VARCHAR) AS usage_name,
+                    CAST("ENHED_code" AS VARCHAR) AS unit_code,
+                    CAST("ENHED" AS VARCHAR) AS unit_name,
+                    CAST("Tid_code" AS VARCHAR) AS time_period,
+                    CAST("Tid" AS VARCHAR) AS time_label,
+                    CAST(value AS DOUBLE) AS straw_value,
+                    '{processing_time}' AS processing_time
+                FROM halm1_raw
+                WHERE CAST(value AS DOUBLE) IS NOT NULL
+            """)
+
+            return output_table
 
         except Exception as e:
             self.log.error(f"Error processing HALM1 data: {e}")
             return None
 
-    async def run(self, bronze_data: Optional[Any] = None) -> Optional[Any]:
+    async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
         Run silver processing for DST data.
 
@@ -446,81 +396,83 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
                     continue
 
                 # Process based on table type
-                processed_data = None
+                processed_table_name = None
                 if table_id == "HST77":
-                    processed_data = self._process_hst77_data(json_data, metadata)
+                    processed_table_name = self._process_hst77_data(json_data, metadata)
                 elif table_id == "GARTN1":
-                    processed_data = self._process_gartn1_data(json_data, metadata)
+                    processed_table_name = self._process_gartn1_data(json_data, metadata)
                 elif table_id == "FRO":
-                    processed_data = self._process_fro_data(json_data, metadata)
+                    processed_table_name = self._process_fro_data(json_data, metadata)
                 elif table_id == "HALM1":
-                    processed_data = self._process_halm1_data(json_data, metadata)
+                    processed_table_name = self._process_halm1_data(json_data, metadata)
                 else:
                     self.log.warning(f"Unknown table type: {table_id}")
                     continue
 
-                if processed_data is not None:
-                    # Create a DuckDB table from the Ibis expression in the base class connection
-                    table_name = f"dst_{table_id.lower()}_processed"
+                if processed_table_name is not None:
+                    # Create the final table name for storage
+                    final_table_name = f"dst_{table_id.lower()}_processed"
 
-                    # Execute the ibis expression and create table in base class connection
-                    # First create the table in ibis connection
-                    self.ibis_con.create_table(table_name, processed_data, overwrite=True)
-
-                    # Then copy the data to the base class connection
-                    # Get the data from ibis connection
-                    result = self.ibis_con.con.execute(f"SELECT * FROM {table_name}").fetchall()
+                    # Copy data from local DuckDB connection to base class connection
+                    result = self.duckdb_conn.execute(
+                        f"SELECT * FROM {processed_table_name}"
+                    ).fetchall()
                     columns = [
                         desc[0]
-                        for desc in self.ibis_con.con.execute(f"DESCRIBE {table_name}").fetchall()
+                        for desc in self.duckdb_conn.execute(
+                            f"DESCRIBE {processed_table_name}"
+                        ).fetchall()
                     ]
 
                     # Create table in base class connection
                     if result:
-                        # Create table structure in base class connection
-                        self.conn.execute(f"DROP TABLE IF EXISTS {table_name}")
+                        # Drop existing table if it exists
+                        self.conn.execute(f"DROP TABLE IF EXISTS {final_table_name}")
 
-                        # Create table with the same structure
+                        # Get column types from the local DuckDB connection
                         column_defs = []
                         for (
                             col_name,
                             col_type,
-                            nullable,
-                            key,
-                            default,
-                            extra,
-                        ) in self.ibis_con.con.execute(f"DESCRIBE {table_name}").fetchall():
-                            column_defs.append(f"{col_name} {col_type}")
+                            _nullable,
+                            _key,
+                            _default,
+                            _extra,
+                        ) in self.duckdb_conn.execute(
+                            f"DESCRIBE {processed_table_name}"
+                        ).fetchall():
+                            column_defs.append(f'"{col_name}" {col_type}')
 
-                        create_sql = f"CREATE TABLE {table_name} ({', '.join(column_defs)})"
+                        create_sql = f"CREATE TABLE {final_table_name} ({', '.join(column_defs)})"
                         self.conn.execute(create_sql)
 
                         # Insert data
                         placeholders = ", ".join(["?" for _ in columns])
-                        insert_sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
+                        insert_sql = f"INSERT INTO {final_table_name} VALUES ({placeholders})"
                         self.conn.executemany(insert_sql, result)
 
                     # Get record count for logging using the base class connection
                     record_count = self.conn.execute(
-                        f"SELECT COUNT(*) FROM {table_name}"
+                        f"SELECT COUNT(*) FROM {final_table_name}"
                     ).fetchone()[0]
 
                     # Save using the base class method
                     self._save_data(
-                        table_name,
+                        final_table_name,
                         f"{table_id.lower()}_processed",
                         self.config.bucket,
                         "silver",
                     )
 
                     # Store table name for gold stage processing
-                    all_processed_data[table_id] = table_name
+                    all_processed_data[table_id] = final_table_name
                     self.log.info(
                         f"Successfully processed {record_count:,} records for table {table_id}"
                     )
 
-                    # Clean up the temporary table from ibis connection
-                    self.ibis_con.con.execute(f"DROP TABLE IF EXISTS {table_name}")
+                    # Clean up the temporary tables from local DuckDB connection
+                    self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {processed_table_name}")
+                    self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_id.lower()}_raw")
                 else:
                     self.log.warning(f"Failed to process data for table {table_id}")
 

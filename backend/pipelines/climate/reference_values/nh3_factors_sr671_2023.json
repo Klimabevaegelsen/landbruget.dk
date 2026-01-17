@@ -1,0 +1,109 @@
+{
+  "table_name": "NH3 Emission Factors from SR671 National Data (2023)",
+  "source": "SR671: Forbedret grundlag for opgørelser af landbrugets emissioner",
+  "source_file": "Gennemsnitlig_emission_sub.csv",
+  "source_organization": "Aarhus University, DCE - National Center for Miljø og Energi",
+  "source_date": "2025",
+  "data_year": 2023,
+  "description": "NH3 emissions from livestock manure management (Husdyrgødning) - National average emission factors used for Danish GHG inventory reporting",
+  "units": {
+    "årsdyr": "kg NH3 per animal per year",
+    "produceret_dyr": "kg NH3 per produced animal (slaughter/sold)"
+  },
+  "notes": [
+    "NH3 emissions are reported separately and NOT converted to CO2e equivalent",
+    "These factors include emissions from housing, storage, and field application",
+    "Based on Danish national inventory methodology aligned with IPCC guidelines",
+    "Factors vary by animal type, production system, and manure management"
+  ],
+  "data": {
+    "grise": {
+      "årssøer": {
+        "nh3_kg_per_year": 3.386,
+        "unit": "kg NH3/årsdyr",
+        "description": "Sows (annual animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "årsdyr"
+      },
+      "smågrise": {
+        "nh3_kg_per_animal": 0.03299,
+        "unit": "kg NH3/produceret dyr",
+        "description": "Weaners (produced animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "produceret_dyr"
+      },
+      "slagtesvin": {
+        "nh3_kg_per_animal": 0.4235,
+        "unit": "kg NH3/produceret dyr",
+        "description": "Finishers (produced animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "produceret_dyr"
+      }
+    },
+    "kvæg": {
+      "malkekøer": {
+        "nh3_kg_per_year": 13.28,
+        "unit": "kg NH3/årsdyr",
+        "description": "Dairy cows (annual animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "årsdyr"
+      },
+      "ammekøer": {
+        "nh3_kg_per_year": 2.292,
+        "unit": "kg NH3/årsdyr",
+        "description": "Suckler cows (annual animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "årsdyr"
+      },
+      "opdræt_0_6_mdr": {
+        "nh3_kg_per_year": 2.226,
+        "unit": "kg NH3/årsdyr",
+        "description": "Heifers 0-6 months (annual animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "årsdyr"
+      },
+      "opdræt_6_mdr_kælvning": {
+        "nh3_kg_per_year": 5.236,
+        "unit": "kg NH3/årsdyr",
+        "description": "Heifers 6 months to calving (annual animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "årsdyr"
+      },
+      "tyre_0_6_mdr": {
+        "nh3_kg_per_animal": 0.9429,
+        "unit": "kg NH3/produceret dyr",
+        "description": "Bulls 0-6 months (produced animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "produceret_dyr"
+      },
+      "tyre_6_mdr_slagtning": {
+        "nh3_kg_per_animal": 2.185,
+        "unit": "kg NH3/produceret dyr",
+        "description": "Bulls 6 months to slaughter (produced animals)",
+        "source": "SR671 2023 - Husdyrgødning",
+        "production_type": "produceret_dyr"
+      }
+    }
+  },
+  "methodology_notes": {
+    "calculation_scope": "NH3 emissions from livestock manure management include:",
+    "components": [
+      "Housing emissions (stable/barn)",
+      "Manure storage emissions",
+      "Field application emissions"
+    ],
+    "not_included": [
+      "Direct NH3 emissions from synthetic fertilizer application",
+      "Indirect NH3 emissions from crop residues",
+      "NH3 from grazing animals (included in housing factors)"
+    ],
+    "gwp_conversion": "NH3 is NOT converted to CO2e - it contributes to acidification and eutrophication, not climate change directly",
+    "reporting": "NH3 is reported separately in kg NH3 for environmental footprint analysis"
+  },
+  "validation_notes": [
+    "These factors match Danish national GHG inventory (NIR 2025)",
+    "Used for EU EEA reporting and UNFCCC submissions",
+    "Based on Danish-specific research and farm measurements",
+    "Updated annually by DCE Aarhus University"
+  ]
+}

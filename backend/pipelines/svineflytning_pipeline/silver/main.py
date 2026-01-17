@@ -9,14 +9,14 @@ local and GCS data sources.
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .transform import process_svineflytning_silver
 
 logger = logging.getLogger(__name__)
 
 
-def get_latest_bronze_data_path() -> Optional[str]:
+def get_latest_bronze_data_path() -> str | None:
     """
     Get the path to the latest bronze data from GCS.
 
@@ -32,7 +32,7 @@ def get_latest_bronze_data_path() -> Optional[str]:
 
         # List all bronze svineflytning directories
         prefix = "bronze/svineflytning/"
-        blobs = list(bucket.list_blobs(prefix=prefix, delimiter="/"))
+        list(bucket.list_blobs(prefix=prefix, delimiter="/"))
 
         # Get all directory timestamps
         directories = []
@@ -48,7 +48,9 @@ def get_latest_bronze_data_path() -> Optional[str]:
 
         # Sort by timestamp and get the latest
         latest_timestamp = sorted(directories)[-1]
-        latest_path = f"gs://{bucket_name}/bronze/svineflytning/{latest_timestamp}/svineflytning.json"
+        latest_path = (
+            f"gs://{bucket_name}/bronze/svineflytning/{latest_timestamp}/svineflytning.json"
+        )
 
         logger.info(f"Found latest bronze data: {latest_path}")
         return latest_path
@@ -59,11 +61,11 @@ def get_latest_bronze_data_path() -> Optional[str]:
 
 
 def run_silver_processing(
-    bronze_data_path: Optional[str] = None,
-    output_dir: Optional[str] = None,
-    export_timestamp: Optional[str] = None,
+    bronze_data_path: str | None = None,
+    output_dir: str | None = None,
+    export_timestamp: str | None = None,
     use_latest_bronze: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Run the complete silver processing pipeline.
 
@@ -88,7 +90,10 @@ def run_silver_processing(
         if bronze_data_path is None:
             return {"success": False, "error": "No bronze data found and no specific path provided"}
     elif bronze_data_path is None:
-        return {"success": False, "error": "No bronze data path provided and auto-discovery disabled"}
+        return {
+            "success": False,
+            "error": "No bronze data path provided and auto-discovery disabled",
+        }
 
     # Set default output directory
     if output_dir is None:
@@ -101,7 +106,9 @@ def run_silver_processing(
     try:
         # Run the silver processing
         result = process_svineflytning_silver(
-            bronze_data_path=bronze_data_path, output_dir=output_dir, export_timestamp=export_timestamp
+            bronze_data_path=bronze_data_path,
+            output_dir=output_dir,
+            export_timestamp=export_timestamp,
         )
 
         if result["success"]:
@@ -115,10 +122,12 @@ def run_silver_processing(
 
     except Exception as e:
         logger.error(f"Unexpected error in silver processing: {e}", exc_info=True)
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+        return {"success": False, "error": f"Unexpected error: {e!s}"}
 
 
-def process_specific_bronze_timestamp(bronze_timestamp: str, output_dir: Optional[str] = None) -> Dict[str, Any]:
+def process_specific_bronze_timestamp(
+    bronze_timestamp: str, output_dir: str | None = None
+) -> dict[str, Any]:
     """
     Process a specific bronze timestamp to silver.
 
@@ -148,20 +157,27 @@ if __name__ == "__main__":
     parser.add_argument("--bronze-timestamp", help="Specific bronze timestamp to process")
     parser.add_argument("--output-dir", help="Output directory for silver data")
     parser.add_argument("--export-timestamp", help="Export timestamp")
-    parser.add_argument("--no-auto-bronze", action="store_true", help="Disable automatic bronze data discovery")
-    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    parser.add_argument(
+        "--no-auto-bronze", action="store_true", help="Disable automatic bronze data discovery"
+    )
+    parser.add_argument(
+        "--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"]
+    )
 
     args = parser.parse_args()
 
     # Setup logging
     logging.basicConfig(
-        level=getattr(logging, args.log_level), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
     # Determine processing mode
     if args.bronze_timestamp:
         # Process specific timestamp
-        result = process_specific_bronze_timestamp(bronze_timestamp=args.bronze_timestamp, output_dir=args.output_dir)
+        result = process_specific_bronze_timestamp(
+            bronze_timestamp=args.bronze_timestamp, output_dir=args.output_dir
+        )
     else:
         # General processing
         result = run_silver_processing(

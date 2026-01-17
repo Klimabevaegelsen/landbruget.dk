@@ -46,4 +46,4 @@ RUN mkdir -p /app/data/bronze /app/data/silver
 ENV PYTHONUNBUFFERED=1
 
 # Run the pipeline
-ENTRYPOINT ["python", "main.py"] 
+ENTRYPOINT ["python", "main.py"]

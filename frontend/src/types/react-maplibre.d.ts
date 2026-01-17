@@ -1,7 +1,7 @@
-import type { MapRef } from "@vis.gl/react-maplibre";
-import type { MapLib } from "@vis.gl/react-maplibre/types/lib";
+import type { MapRef } from '@vis.gl/react-maplibre';
+import type { MapLib } from '@vis.gl/react-maplibre/types/lib';
 
-declare module "@vis.gl/react-maplibre" {
+declare module '@vis.gl/react-maplibre' {
   export interface MapContextValue {
     mapLib: MapLib | null;
     map: MapRef | null;

@@ -1,0 +1,20 @@
+{
+  "dataset_name": "field_analysis_field_bnbo_2024",
+  "source_path": "gs://landbrugsdata-raw-data/gold/field_analysis_field_bnbo_intersections_2024/20260116_232448/data.parquet",
+  "generated_at": "2026-01-17T11:11:31.878456",
+  "record_count": 10900,
+  "total_area_m2": null,
+  "unique_identifiers": {
+    "field_uuid": 10110
+  },
+  "column_null_counts": {
+    "field_uuid": 0,
+    "field_id": 0,
+    "block_id": 0,
+    "cvr_number": 0,
+    "year": 0,
+    "bnbo_id": 0,
+    "status_category": 0,
+    "field_bnbo_geometry": 0
+  }
+}

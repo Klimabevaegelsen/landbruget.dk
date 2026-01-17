@@ -21,12 +21,12 @@ class CoordinateTransformer:
         self.log = logger.bind(component="CoordinateTransformer")
 
     def prepare_geometries(self, table_name: str, geometry_column: str = "geometry") -> str:
-        """Prepare geometries for spatial operations (coordinates now fixed in silver layer)."""
+        """Prepare geometries for spatial operations with coordinate system alignment."""
 
         prepared_table = f"{table_name}_prepared"
 
-        # Since we now standardize on 'geometry' column containing geometry objects,
-        # we can use it directly without conversion
+        # Field geometries are now correctly in lat/lon order for spherical calculations
+        # No transformation needed - just validate
         query = f"""
         CREATE OR REPLACE TABLE {prepared_table} AS
         SELECT *
@@ -35,8 +35,21 @@ class CoordinateTransformer:
         AND ST_IsValid({geometry_column})
         """
 
-        self.conn.execute(query)
-        self.log.debug(
-            f"✅ Prepared geometries for {table_name} (coordinates fixed in silver layer)"
-        )
+        try:
+            self.conn.execute(query)
+            self.log.info(
+                f"✅ Prepared geometries for {table_name} (field geometries in correct lat/lon order)"
+            )
+        except Exception as e:
+            # Fallback: just use the original geometries if coordinate swap fails
+            self.log.warning(f"⚠️ Coordinate swap failed, using original geometries: {e}")
+            fallback_query = f"""
+            CREATE OR REPLACE TABLE {prepared_table} AS
+            SELECT *
+            FROM {table_name}
+            WHERE {geometry_column} IS NOT NULL
+            AND ST_IsValid({geometry_column})
+            """
+            self.conn.execute(fallback_query)
+
         return prepared_table

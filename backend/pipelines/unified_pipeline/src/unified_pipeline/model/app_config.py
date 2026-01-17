@@ -6,9 +6,9 @@ managing settings and environment variables. It uses Pydantic for validation
 and automatic parsing of environment variables.
 """
 
-from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class GCSConfig(BaseSettings):
     """
@@ -30,7 +30,7 @@ class GCSConfig(BaseSettings):
         >>> config = GCSConfig(credentials_path="/path/to/credentials.json")
     """
 
-    credentials_path: Optional[str] = None
+    credentials_path: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

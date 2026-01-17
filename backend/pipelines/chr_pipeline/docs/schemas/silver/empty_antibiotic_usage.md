@@ -13,7 +13,7 @@
 
 | Column | Type | Nullable | Key | Default |
 |--------|------|----------|-----|---------|
-| entity_id | VARCHAR | ✓ |  |  |
+| usage_id | VARCHAR | ✓ |  |  |
 | cvr_number | VARCHAR | ✓ |  |  |
 | chr_number | BIGINT | ✓ |  |  |
 | year | INTEGER | ✓ |  |  |

@@ -1,0 +1,11 @@
+{
+  "dataset_name": "property_owners",
+  "source_path": "gs://landbrugsdata-raw-data/silver/property_owners/20260112_033012/data.parquet",
+  "generated_at": "2026-01-17T11:11:27.139009",
+  "record_count": 8233039,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "properties": 0,
+    "type": 0
+  }
+}

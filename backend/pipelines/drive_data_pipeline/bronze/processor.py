@@ -1,8 +1,11 @@
 """Bronze layer processor for Google Drive data pipeline."""
 
 import datetime
+import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 
 from ..config.settings import Settings
 from ..utils.logging import get_logger, set_context
@@ -10,6 +13,11 @@ from ..utils.storage import DriveStorageManager
 from .drive import DriveFile, DriveFolder, GoogleDriveFetcher
 from .metadata import MetadataManager
 from .storage import BronzeStorageManager
+
+# Import the new data tracing system
+from pipeline_metadata import MetadataManager as PipelineMetadataManager
+
+PIPELINE_METADATA_AVAILABLE = True
 
 # Get logger
 logger = get_logger()
@@ -25,7 +33,7 @@ class BronzeProcessor:
         storage_manager: DriveStorageManager,
         progress_callback: Callable[[int, bool, int], None] | None = None,
         pipeline_start_time: datetime.datetime | None = None,
-    ):
+    ) -> None:
         """Initialize the Bronze processor.
 
         Args:
@@ -44,8 +52,16 @@ class BronzeProcessor:
             base_path=settings.bronze_path,
         )
 
-        # Initialize metadata manager
+        # Initialize metadata manager (file-level)
         self.metadata_manager = MetadataManager(settings.bronze_path, storage_manager)
+
+        # Initialize pipeline metadata manager (pipeline-level data tracing)
+        if PIPELINE_METADATA_AVAILABLE:
+            self.pipeline_metadata_manager = PipelineMetadataManager()
+            logger.info("✅ Pipeline metadata system initialized for data tracing")
+        else:
+            self.pipeline_metadata_manager = None
+            logger.warning("⚠️  Pipeline metadata system not available")
 
         # Use provided pipeline start time or generate one
         if pipeline_start_time is not None:
@@ -57,11 +73,15 @@ class BronzeProcessor:
         self.run_timestamp = self.pipeline_start_time.strftime("%Y%m%d_%H%M%S")
         self.run_path = self.bronze_storage.create_run_directory(self.run_timestamp)
 
+        # Thread-safe progress tracking
+        self.progress_lock = Lock()
+
         logger.info(f"Initialized Bronze processor with run timestamp: {self.run_timestamp}")
+        logger.info(f"Max workers for parallel processing: {settings.max_workers}")
 
     def process_drive_folder(
         self,
-        folder_id: str = None,
+        folder_id: str | None = None,
         drive_folder: DriveFolder = None,
         specific_subfolders: list[str] | None = None,
         supported_file_types: set[str] | None = None,
@@ -103,14 +123,49 @@ class BronzeProcessor:
             # Initialize data collection for in-memory processing
             in_memory_data = {} if return_data else None
 
+            # Track processing start time for pipeline metadata
+            processing_start_time = time.time()
+
             # Process the folder
             processed_count = self._process_folder(
                 drive_folder, specific_subfolders, supported_file_types, in_memory_data
             )
 
+            # Calculate processing duration
+            processing_duration = time.time() - processing_start_time
+
             logger.info(
-                f"Successfully processed {processed_count} files from folder {drive_folder.id}"
+                f"Successfully processed {processed_count} files from folder "
+                f"{drive_folder.id} in {processing_duration:.1f}s"
             )
+
+            # Create and save pipeline metadata for data tracing
+            if self.pipeline_metadata_manager:
+                try:
+                    # Calculate total file size processed
+                    total_file_size = 0
+                    if in_memory_data:
+                        total_file_size = sum(
+                            item.get("file_size", 0) for item in in_memory_data.values()
+                        )
+
+                    # Create pipeline metadata
+                    pipeline_metadata = self.pipeline_metadata_manager.create_metadata(
+                        source_key="drive_pesticide_reports",  # From DATA_SOURCE_REGISTRY
+                        record_count=processed_count,
+                        processing_duration=processing_duration,
+                        file_size_bytes=total_file_size,
+                    )
+
+                    # Save pipeline metadata alongside the run
+                    pipeline_metadata_path = self.pipeline_metadata_manager.save_metadata(
+                        pipeline_metadata, self.run_path / "pipeline_metadata.json"
+                    )
+
+                    logger.info(f"✅ Pipeline metadata saved to {pipeline_metadata_path}")
+
+                except Exception as e:
+                    logger.error(f"❌ Failed to create pipeline metadata: {e}")
 
             if return_data:
                 return {
@@ -122,12 +177,11 @@ class BronzeProcessor:
                         "folder_id": drive_folder.id,
                     },
                 }
-            else:
-                return processed_count
+            return processed_count
 
         except Exception as e:
             folder_ref = drive_folder.id if drive_folder else folder_id
-            logger.error(f"Failed to process folder {folder_ref}: {str(e)}")
+            logger.error(f"Failed to process folder {folder_ref}: {e!s}")
             raise
 
     def _process_folder(
@@ -150,16 +204,24 @@ class BronzeProcessor:
         """
         processed_count = 0
 
-        # Process files in the folder
+        # Filter files by supported types first
+        files_to_process = []
         for file in folder.files:
-            # Check if the file type is supported
             if supported_file_types:
                 extension = Path(file.name).suffix.lower().lstrip(".")
                 if extension not in supported_file_types:
                     logger.debug(f"Skipping unsupported file type: {file.name}")
                     continue
+            files_to_process.append(file)
 
-            # Download and save the file
+        # TEMPORARILY DISABLE parallel processing due to Google Drive API SSL issues
+        # Process files sequentially to ensure stability
+        logger.info(
+            f"Processing {len(files_to_process)} files sequentially "
+            f"(parallel disabled for API stability)"
+        )
+
+        for file in files_to_process:
             success = self._process_file(file, folder.path, folder.name, in_memory_data)
             processed_count += 1 if success else 0
 
@@ -183,6 +245,73 @@ class BronzeProcessor:
                     subfolder, None, supported_file_types, in_memory_data
                 )
 
+        return processed_count
+
+    def _process_files_parallel(
+        self,
+        files: list[DriveFile],
+        folder_path: str,
+        folder_name: str,
+        in_memory_data: dict | None = None,
+    ) -> int:
+        """Process multiple files in parallel.
+
+        Args:
+            files: List of DriveFile objects to process
+            folder_path: Path of the folder containing the files
+            folder_name: Name of the folder containing the files
+            in_memory_data: Dict to collect file data for in-memory processing (optional)
+
+        Returns:
+            Number of files processed successfully
+        """
+        processed_count = 0
+
+        def process_single_file(file: DriveFile) -> tuple[bool, int]:
+            """Process a single file and return success status and file size."""
+            import random
+            import time
+
+            try:
+                # Add small random delay to stagger API calls and reduce SSL connection pressure
+                delay = random.uniform(0.5, 2.0)  # 0.5-2 second delay
+                time.sleep(delay)
+
+                success = self._process_file(file, folder_path, folder_name, in_memory_data)
+                file_size = int(file.size) if hasattr(file, "size") and file.size else 0
+                return success, file_size
+            except Exception as e:
+                logger.error(f"Error processing file {file.name}: {e}")
+                return False, 0
+
+        # Process files in parallel using ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=self.settings.max_workers) as executor:
+            # Submit all file processing tasks
+            future_to_file = {executor.submit(process_single_file, file): file for file in files}
+
+            # Process completed tasks as they finish
+            for future in as_completed(future_to_file):
+                file = future_to_file[future]
+                try:
+                    success, file_size = future.result()
+                    if success:
+                        processed_count += 1
+
+                    # Thread-safe progress update
+                    if self.progress_callback:
+                        with self.progress_lock:
+                            self.progress_callback(1, success, file_size)
+
+                except Exception as e:
+                    logger.error(f"Error in parallel processing of {file.name}: {e}")
+                    # Still update progress for failed files
+                    if self.progress_callback:
+                        with self.progress_lock:
+                            self.progress_callback(1, False, 0)
+
+        logger.info(
+            f"Parallel processing completed: {processed_count}/{len(files)} files successful"
+        )
         return processed_count
 
     def _process_file(
@@ -251,7 +380,8 @@ class BronzeProcessor:
                         saved_size = full_path.stat().st_size
                         if saved_size != len(file_content):
                             logger.warning(
-                                f"File size mismatch for {file.name}: expected {len(file_content)}, got {saved_size}"
+                                f"File size mismatch for {file.name}: "
+                                f"expected {len(file_content)}, got {saved_size}"
                             )
                 except Exception as e:
                     logger.warning(f"Could not verify file size locally: {e}")
@@ -292,5 +422,5 @@ class BronzeProcessor:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to process file {file.name} (ID: {file.id}): {str(e)}")
+            logger.error(f"Failed to process file {file.name} (ID: {file.id}): {e!s}")
             return False

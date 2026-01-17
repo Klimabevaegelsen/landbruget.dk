@@ -1,0 +1,21 @@
+{
+  "table_name": "Værdier for småkalve (Side 25)",
+  "data": [
+    {
+      "type": "opdræt 0-6 mdr. stor race",
+      "kg_CO2e_kalv_6_mdr_periode": 68
+    },
+    {
+      "type": "opdræt 0-6 mdr. Jersey",
+      "kg_CO2e_kalv_6_mdr_periode": 37
+    },
+    {
+      "type": "tyre 0-6 mdr. stor race",
+      "kg_CO2e_kalv_6_mdr_periode": 94
+    },
+    {
+      "type": "tyre 0-6 mdr. Jersey",
+      "kg_CO2e_kalv_6_mdr_periode": 99
+    }
+  ]
+}

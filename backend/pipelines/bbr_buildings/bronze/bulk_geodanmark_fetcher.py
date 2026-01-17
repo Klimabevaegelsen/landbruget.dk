@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class BulkGeoDanmarkFetcher:
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str) -> None:
         self.username = username
         self.password = password
         self.base_url = (
@@ -69,7 +69,7 @@ class BulkGeoDanmarkFetcher:
             "request": "GetFeature",
             "typeName": "gdk60:Bygning",
             "resultType": "hits",
-            "srsName": "EPSG:4326",  # Request data in WGS84 for consistency
+            "srsName": "EPSG:25832",  # Request in Danish UTM (native CRS) for processing
             "username": self.username,
             "password": self.password,
         }
@@ -103,7 +103,7 @@ class BulkGeoDanmarkFetcher:
             "request": "GetFeature",
             "typeName": "gdk60:Bygning",
             "outputFormat": "application/gml+xml; version=3.2",
-            "srsName": "EPSG:4326",  # Request data in WGS84 for consistency
+            "srsName": "EPSG:25832",  # Request in Danish UTM (native CRS) for processing
             "startIndex": start_index,
             "count": count,
             "username": self.username,
@@ -118,9 +118,8 @@ class BulkGeoDanmarkFetcher:
             if response.status_code == 200:
                 logger.info(f"Successfully fetched batch starting at {start_index:,}")
                 return response.text
-            else:
-                logger.error(f"HTTP {response.status_code}: {response.text}")
-                return None
+            logger.error(f"HTTP {response.status_code}: {response.text}")
+            return None
 
         except requests.exceptions.Timeout:
             logger.error(f"Timeout fetching batch starting at {start_index:,}")
@@ -144,7 +143,7 @@ class BulkGeoDanmarkFetcher:
             try:
                 # Read GML file into DuckDB table
                 self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {table_name} AS 
+                    CREATE OR REPLACE TABLE {table_name} AS
                     SELECT * FROM ST_Read('{temp_file}')
                 """)
 
@@ -273,7 +272,7 @@ class BulkGeoDanmarkFetcher:
             logger.error(f"Manual GML parsing failed: {e}")
             return False
 
-    def bulk_download_buildings(self, batch_size: int = 30000):
+    def bulk_download_buildings(self, batch_size: int = 30000) -> None:
         """
         Download all GeoDanmark buildings in batches with progress tracking.
 
@@ -339,7 +338,8 @@ class BulkGeoDanmarkFetcher:
                 # Check if we got fewer records than requested - indicates end of dataset
                 if current_batch_size < batch_size:
                     logger.info(
-                        f"Got {current_batch_size:,} buildings (less than batch size {batch_size:,}) - reached end of dataset"
+                        f"Got {current_batch_size:,} buildings "
+                        f"(less than batch size {batch_size:,}) - reached end of dataset"
                     )
                     break
 
@@ -361,7 +361,7 @@ class BulkGeoDanmarkFetcher:
         # Combine all intermediate files into final result
         self._combine_intermediate_files()
 
-    def _save_intermediate_results(self, table_names: list, batch_num: int):
+    def _save_intermediate_results(self, table_names: list, batch_num: int) -> None:
         """Save intermediate results to avoid memory issues."""
         if not table_names:
             return
@@ -381,7 +381,8 @@ class BulkGeoDanmarkFetcher:
             all_columns = sorted(all_columns)
 
             logger.info(
-                f"Normalizing schemas across {len(table_names)} tables with {len(all_columns)} total columns"
+                f"Normalizing schemas across {len(table_names)} tables "
+                f"with {len(all_columns)} total columns"
             )
 
             # Build normalized SELECT statements for each table
@@ -441,10 +442,10 @@ class BulkGeoDanmarkFetcher:
                 for table_name in table_names:
                     columns_info = self.conn.execute(f"DESCRIBE {table_name}").fetchall()
                     logger.info(f"  {table_name}: {[col[0] for col in columns_info]}")
-            except:
+            except Exception:
                 pass
 
-    def _combine_intermediate_files(self):
+    def _combine_intermediate_files(self) -> None:
         """Combine all intermediate files into final GeoParquet."""
         try:
             # Find all intermediate files
@@ -466,16 +467,16 @@ class BulkGeoDanmarkFetcher:
             # The synligBygning column appears to have mixed VARCHAR/BOOLEAN values
             query = f"""
             COPY (
-                SELECT 
+                SELECT
                     * EXCLUDE (synligBygning),
-                    CASE 
+                    CASE
                         WHEN synligBygning IS NULL THEN NULL
                         WHEN synligBygning = 'true' OR synligBygning = '1' THEN true
                         WHEN synligBygning = 'false' OR synligBygning = '0' THEN false
-                        ELSE NULL  -- Handle 'Mangler afklaring' and other non-boolean values as NULL
+                        ELSE NULL  -- Handle 'Mangler afklaring' and other non-boolean values
                     END as synligBygning
                 FROM read_parquet(['{file_list}'], union_by_name=true)
-            ) TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet' 
+            ) TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet'
             (FORMAT PARQUET)
             """
 
@@ -489,7 +490,8 @@ class BulkGeoDanmarkFetcher:
             total_buildings = result[0] if result else 0
 
             logger.info(
-                f"🏢 Combined {total_buildings:,} buildings into final file: geodanmark_buildings_complete.geoparquet"
+                f"🏢 Combined {total_buildings:,} buildings into final file: "
+                f"geodanmark_buildings_complete.geoparquet"
             )
 
             # Clean up intermediate files
@@ -510,12 +512,13 @@ class BulkGeoDanmarkFetcher:
                         schema_query = f"DESCRIBE SELECT * FROM read_parquet('{file_path}') LIMIT 1"
                         schema_result = self.conn.execute(schema_query).fetchall()
                         logger.info(f"Schema for file {i + 1} ({Path(file_path).name}):")
-                        for col_name, col_type, null, key, default, extra in schema_result:
+                        for col_name, col_type, _null, _key, _default, _extra in schema_result:
                             logger.info(f"  {col_name}: {col_type}")
                 except Exception as debug_e:
                     logger.error(f"Failed to debug schema: {debug_e}")
 
-                # Try a more aggressive fallback: read each file individually and cast all columns to string
+                # Try a more aggressive fallback: read each file individually and
+                # cast all columns to string
                 logger.info("Attempting fallback combination with string casting...")
                 try:
                     # Create a temporary table to collect all data
@@ -529,20 +532,20 @@ class BulkGeoDanmarkFetcher:
                         if i == 0:
                             # First file: create the table structure
                             self.conn.execute(f"""
-                                CREATE TABLE combined_buildings AS 
+                                CREATE TABLE combined_buildings AS
                                 SELECT * FROM read_parquet('{file_path}')
                             """)
                         else:
                             # Subsequent files: insert with union_by_name
                             self.conn.execute(f"""
-                                INSERT INTO combined_buildings 
+                                INSERT INTO combined_buildings
                                 SELECT * FROM read_parquet('{file_path}')
                             """)
 
                     # Now save the combined table
                     self.conn.execute(f"""
-                        COPY combined_buildings 
-                        TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet' 
+                        COPY combined_buildings
+                        TO '{self.output_dir}/geodanmark_buildings_complete.geoparquet'
                         (FORMAT PARQUET)
                     """)
 
@@ -569,13 +572,13 @@ class BulkGeoDanmarkFetcher:
 
             raise
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Clean up DuckDB connection."""
         if hasattr(self, "conn"):
             self.conn.close()
 
 
-def main():
+def main() -> None:
     """Main function to run bulk download."""
 
     # Get credentials from environment

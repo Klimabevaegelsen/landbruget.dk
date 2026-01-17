@@ -1,0 +1,21 @@
+{
+  "dataset_name": "field_analysis_field_wetland_2025",
+  "source_path": "gs://landbrugsdata-raw-data/gold/field_analysis_field_wetland_intersections_2025/20260116_232837/data.parquet",
+  "generated_at": "2026-01-17T11:11:40.007924",
+  "record_count": 945977,
+  "total_area_m2": null,
+  "unique_identifiers": {
+    "field_uuid": 176852
+  },
+  "column_null_counts": {
+    "field_uuid": 0,
+    "field_id": 0,
+    "block_id": 0,
+    "cvr_number": 0,
+    "year": 0,
+    "wetland_key": 0,
+    "wetland_id": 0,
+    "toerv_pct": 0,
+    "field_wetland_geometry": 0
+  }
+}

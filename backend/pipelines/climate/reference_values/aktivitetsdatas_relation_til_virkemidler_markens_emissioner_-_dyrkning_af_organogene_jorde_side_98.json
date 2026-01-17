@@ -1,0 +1,20 @@
+{
+  "table_name": "Aktivitetsdatas relation til virkemidler (Markens emissioner - dyrkning af organogene jorde, Side 98)",
+  "data": [
+    {
+      "Aktivitetsdata_Nummer": 22,
+      "Aktivitetsdata_Beskrivelse": "Areal",
+      "Virkemiddel": "Udtag"
+    },
+    {
+      "Aktivitetsdata_Nummer": 23,
+      "Aktivitetsdata_Beskrivelse": "Areal drænet",
+      "Virkemiddel": "Afskær dræn/hæv vandstanden"
+    },
+    {
+      "Aktivitetsdata_Nummer": 24,
+      "Aktivitetsdata_Beskrivelse": "Areal i omdrift",
+      "Virkemiddel": "Udtag af omdrift"
+    }
+  ]
+}

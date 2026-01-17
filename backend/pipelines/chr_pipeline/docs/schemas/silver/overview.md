@@ -8,31 +8,7 @@ This document contains schema information for all tables in this pipeline.
 
 ## Available Tables
 
-- [bes_list](#bes-list)
-- [cattle_movements](#cattle-movements)
 - [empty_antibiotic_usage](#empty-antibiotic-usage)
-
-## bes_list
-
-```sql
--- Table: bes_list
--- Rows: 1
--- Columns: 1
---
--- Schema:
---   test: VARCHAR NULL
-```
-
-## cattle_movements
-
-```sql
--- Table: cattle_movements
--- Rows: 1
--- Columns: 1
---
--- Schema:
---   test: VARCHAR NULL
-```
 
 ## empty_antibiotic_usage
 
@@ -42,7 +18,7 @@ This document contains schema information for all tables in this pipeline.
 -- Columns: 17
 --
 -- Schema:
---   entity_id: VARCHAR NULL
+--   usage_id: VARCHAR NULL
 --   cvr_number: VARCHAR NULL
 --   chr_number: BIGINT NULL
 --   year: INTEGER NULL

@@ -1,0 +1,40 @@
+{
+  "table_name": "Tabel 16: Oversigt over virkemidler for svineproduktionen i stald og lager (Side 66)",
+  "data": [
+    {
+      "Virkemiddel": "Hyppig udslusning",
+      "Konventionel_svineproduktion": "x",
+      "Økologisk_svineproduktion": null
+    },
+    {
+      "Virkemiddel": "Staldforsuring",
+      "Konventionel_svineproduktion": "x",
+      "Økologisk_svineproduktion": null
+    },
+    {
+      "Virkemiddel": "Gyllekøling",
+      "Konventionel_svineproduktion": "x",
+      "Økologisk_svineproduktion": null
+    },
+    {
+      "Virkemiddel": "Luftrensning",
+      "Konventionel_svineproduktion": "x",
+      "Økologisk_svineproduktion": null
+    },
+    {
+      "Virkemiddel": "Biogas",
+      "Konventionel_svineproduktion": "x",
+      "Økologisk_svineproduktion": "x"
+    },
+    {
+      "Virkemiddel": "Fodersammensætning",
+      "Konventionel_svineproduktion": "x",
+      "Økologisk_svineproduktion": "x"
+    },
+    {
+      "Virkemiddel": "Produktivitet",
+      "Konventionel_svineproduktion": "x",
+      "Økologisk_svineproduktion": "x"
+    }
+  ]
+}

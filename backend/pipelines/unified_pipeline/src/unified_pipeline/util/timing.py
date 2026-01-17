@@ -5,7 +5,8 @@ Provides decorators and context managers for timing code.
 
 import functools
 import time
-from typing import Any, Callable, Optional, TypeVar, cast
+from collections.abc import Callable
+from typing import Any, TypeVar, cast
 
 from unified_pipeline.util.log_util import Logger
 
@@ -14,7 +15,8 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 log = Logger.get_logger()
 
-def timed(func: Optional[F] = None, *, name: Optional[str] = None) -> Any:
+
+def timed(func: F | None = None, *, name: str | None = None) -> Any:
     """
     Decorator to measure the execution time of a function.
 
@@ -42,8 +44,7 @@ def timed(func: Optional[F] = None, *, name: Optional[str] = None) -> Any:
             timer_name = name or fn.__qualname__
             start_time = time.time()
             try:
-                result = fn(*args, **kwargs)
-                return result
+                return fn(*args, **kwargs)
             finally:
                 elapsed_time = time.time() - start_time
                 log.info(f"{timer_name} executed in {elapsed_time:.4f} seconds")
@@ -52,8 +53,8 @@ def timed(func: Optional[F] = None, *, name: Optional[str] = None) -> Any:
 
     if func is None:
         return decorator
-    else:
-        return decorator(func)
+    return decorator(func)
+
 
 class Timer:
     """
@@ -88,7 +89,8 @@ class Timer:
         """Get the current elapsed time without exiting the context"""
         return time.time() - self.start_time
 
-async def async_timed(func: Optional[F] = None, *, name: Optional[str] = None) -> Any:
+
+async def async_timed(func: F | None = None, *, name: str | None = None) -> Any:
     """
     Decorator to measure the execution time of an async function.
 
@@ -117,8 +119,7 @@ async def async_timed(func: Optional[F] = None, *, name: Optional[str] = None) -
 
             start_time = time.time()
             try:
-                result = await fn(*args, **kwargs)
-                return result
+                return await fn(*args, **kwargs)
             finally:
                 elapsed_time = time.time() - start_time
                 log.info(f"{timer_name} executed in {elapsed_time:.4f} seconds")
@@ -127,8 +128,8 @@ async def async_timed(func: Optional[F] = None, *, name: Optional[str] = None) -
 
     if func is None:
         return decorator
-    else:
-        return decorator(func)
+    return decorator(func)
+
 
 class AsyncTimer:
     """
