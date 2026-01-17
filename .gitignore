@@ -66,6 +66,17 @@ backend/pipelines/vetstat.p12
 *.pmtiles
 *.pdf
 *.gif
+
+# Excel files (data files should be in GCS)
+*.xlsx
+*.xls
+
+# Large XML data files
+*.xml
+
+# Webpack cache pack files (already have .next/ but these leaked)
+*.pack
+*.pack.old
 backend/data/
 data/bronze/
 temp_data/
