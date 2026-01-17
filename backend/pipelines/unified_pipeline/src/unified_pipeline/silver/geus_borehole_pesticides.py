@@ -42,10 +42,11 @@ class GEUSBoreholePesticidesSilverConfig(BaseJobConfig):
     storage_batch_size: int = 5000
 
     # XML namespaces for GEUS GML data
+    # Note: GEUS uses MapServer, so features are in 'ms' namespace, not 'geus'
     namespaces: ClassVar[dict[str, str]] = {
         "wfs": "http://www.opengis.net/wfs/2.0",
-        "geus": "http://data.geus.dk/geusmap",
-        "gml": "http://www.opengis.net/gml/3.2",
+        "ms": "http://mapserver.gis.umn.edu/mapserver",  # Actual feature namespace
+        "gml": "http://www.opengis.net/gml",  # GML 3.1.1, not 3.2
     }
 
     # Tracked pesticides (stofnr -> substance name)
@@ -115,14 +116,14 @@ class GEUSBoreholePesticidesSilver(
             Dictionary with borehole data or None if parsing fails
         """
         try:
-            # Extract basic identifiers
-            dgunr = self._get_element_text(feature, "geus:dgunr")
-            anlaegid = self._get_element_text(feature, "geus:anlaegid")
+            # Extract basic identifiers (fields are in MapServer 'ms:' namespace)
+            dgunr = self._get_element_text(feature, "ms:dgunr")
+            anlaegid = self._get_element_text(feature, "ms:anlaegid")
 
             if not dgunr:
                 return None
 
-            # Extract coordinates from GML point
+            # Extract coordinates from GML point (geometry is in ms:msGeometry wrapper)
             point = feature.find(".//gml:Point", self.config.namespaces)
             if point is None:
                 return None
@@ -138,19 +139,25 @@ class GEUSBoreholePesticidesSilver(
 
             x, y = float(coords[0]), float(coords[1])
 
-            # Extract additional metadata
+            # Extract additional metadata (all fields use ms: prefix)
             return {
                 "dgunr": dgunr,
                 "anlaegid": anlaegid,
                 "x": x,
                 "y": y,
-                "kommunenr": self._get_element_text(feature, "geus:kommunenr"),
-                "kommunenavn": self._get_element_text(feature, "geus:kommunenavn"),
-                "region_tekst": self._get_element_text(feature, "geus:region_tekst"),
-                "dybde": self._get_element_text(feature, "geus:dybde"),
-                "formaal": self._get_element_text(feature, "geus:formaal"),
-                "boringsstatus": self._get_element_text(feature, "geus:boringsstatus"),
-                "anlaegtype": self._get_element_text(feature, "geus:anlaegtype"),
+                "kommunenr": self._get_element_text(
+                    feature, "ms:komnr"
+                ),  # Note: 'komnr' not 'kommunenr'
+                "kommunenavn": self._get_element_text(feature, "ms:kommunenavn"),
+                "region_tekst": self._get_element_text(feature, "ms:region_tekst"),
+                "dybde": self._get_element_text(feature, "ms:dybde"),
+                "formaal": self._get_element_text(
+                    feature, "ms:formaal_tekst"
+                ),  # Use full text version
+                "boringsstatus": self._get_element_text(
+                    feature, "ms:kode_tekst"
+                ),  # Status is in kode_tekst
+                "anlaegtype": self._get_element_text(feature, "ms:hovedtype"),  # Facility type
             }
         except Exception as e:
             self.log.debug(f"Error parsing borehole feature: {e}")
@@ -169,8 +176,8 @@ class GEUSBoreholePesticidesSilver(
             Dictionary with analysis data or None if parsing fails
         """
         try:
-            # Extract substance identifiers
-            stofnr_str = self._get_element_text(feature, "geus:stofnr")
+            # Extract substance identifiers (fields are in MapServer 'ms:' namespace)
+            stofnr_str = self._get_element_text(feature, "ms:stofnr_num")
             if not stofnr_str:
                 return None
 
@@ -180,24 +187,24 @@ class GEUSBoreholePesticidesSilver(
             if stofnr not in self.config.tracked_pesticides:
                 return None
 
-            anlaegid = self._get_element_text(feature, "geus:anlaegid")
-            if not anlaegid:
+            anlaegid_str = self._get_element_text(feature, "ms:anlaegid_num")
+            if not anlaegid_str:
                 return None
 
             # Extract measurement data
-            maengde_str = self._get_element_text(feature, "geus:maengde")
+            maengde_str = self._get_element_text(feature, "ms:maengde_num")
             maengde = float(maengde_str) if maengde_str else None
 
             return {
-                "anlaegid": anlaegid,
+                "anlaegid": anlaegid_str,
                 "stofnr": stofnr,
-                "stof": self._get_element_text(feature, "geus:stof"),
-                "stof_status": self._get_element_text(feature, "geus:stof_status"),
+                "stof": self._get_element_text(feature, "ms:stof"),
+                "stof_status": self._get_element_text(feature, "ms:stof_status"),
                 "maengde": maengde,
-                "enhed": self._get_element_text(feature, "geus:enhed"),
-                "proevedato": self._get_element_text(feature, "geus:proevedato"),
-                "indtastdato": self._get_element_text(feature, "geus:indtastdato"),
-                "dgunr": self._get_element_text(feature, "geus:dgunr"),
+                "enhed": self._get_element_text(feature, "ms:enhed"),
+                "proevedato": self._get_element_text(feature, "ms:proevedato"),
+                "indtastdato": None,  # Not available in jupiter_anlaegsanalyser
+                "dgunr": None,  # Not directly available, need to join with boreholes via anlaegid
             }
         except Exception as e:
             self.log.debug(f"Error parsing analysis feature: {e}")
@@ -231,7 +238,7 @@ class GEUSBoreholePesticidesSilver(
                                 seen_dgunr.add(parsed["dgunr"])
 
                 # Also try direct path for formats without wfs:member wrapper
-                for feature in root.findall(".//geus:jupiter_boringer_ws", self.config.namespaces):
+                for feature in root.findall(".//ms:jupiter_boringer_ws", self.config.namespaces):
                     parsed = self._parse_borehole_feature(feature)
                     if parsed and parsed["dgunr"] not in seen_dgunr:
                         boreholes.append(parsed)
@@ -287,7 +294,7 @@ class GEUSBoreholePesticidesSilver(
 
                 # Also try direct path for formats without wfs:member wrapper
                 for feature in root.findall(
-                    ".//geus:jupiter_anlaegsanalyser", self.config.namespaces
+                    ".//ms:jupiter_anlaegsanalyser", self.config.namespaces
                 ):
                     total_analyses_seen += 1
                     parsed = self._parse_analysis_feature(feature)
