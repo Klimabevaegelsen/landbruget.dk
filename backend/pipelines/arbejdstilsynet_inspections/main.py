@@ -7,7 +7,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # Import pipeline metadata system for data tracing
-from pipeline_metadata import MetadataManager as PipelineMetadataManager
+from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
 
 import bronze.export
 import silver.transform

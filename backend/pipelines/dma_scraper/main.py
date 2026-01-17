@@ -12,7 +12,7 @@ ROOT = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
 sys.path.insert(0, ROOT)
 
 # Import pipeline metadata system for data tracing
-from pipeline_metadata import MetadataManager as PipelineMetadataManager  # noqa: E402
+from common.pipeline_metadata import MetadataManager as PipelineMetadataManager  # noqa: E402
 
 from bronze.fetch_company_data import DMAScraper  # noqa: E402
 from bronze.fetch_company_detail import DMACompanyDetailScraper  # noqa: E402
