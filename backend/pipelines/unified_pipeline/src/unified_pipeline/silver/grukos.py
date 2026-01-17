@@ -67,6 +67,7 @@ class GrukosSilverConfig(BaseJobConfig):
     gml_ns: str = "{http://www.opengis.net/gml/3.2}"  # This is not a f-string.
     layers: ClassVar[list[str]] = [
         "grukos:indsatsomraader",  # Indsatsområder (action areas for groundwater protection)
+        "grukos:indvindingsoplande_alle",  # Indvindingsoplande (groundwater abstraction catchments)
     ]
     service_types: ClassVar[dict[str, str]] = {}  # All layers use default WFS service type
 
@@ -596,38 +597,118 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
             self.log.error(f"Error processing raw data: {e}")
             return None
 
-    @timed(name="Creating dissolved table using DuckDB-spatial")  # type: ignore
-    def _create_dissolved_df(self, input_table_name: str) -> str:
+    @timed(name="Creating dissolved tables using DuckDB-spatial")  # type: ignore
+    def _create_dissolved_df(self, input_table_name: str) -> dict[str, str]:
         """
-        Create dissolved table for Grukos data using DuckDB-spatial.
+        Create separate dissolved tables for each layer type using DuckDB-spatial.
 
-        Dissolves ALL indsatsområder geometries into a single multipolygon,
-        combining both NFI (nitrate-sensitive) and SFI (pesticide-sensitive) areas.
+        Creates separate dissolved geometries for:
+        - indsatsomraader (action areas for groundwater protection)
+        - indvindingsoplande (groundwater abstraction catchments)
 
         Args:
             input_table_name: Name of the DuckDB table containing processed features
 
         Returns:
-            str: Name of the DuckDB table containing dissolved geometry
+            dict[str, str]: Mapping of layer type to dissolved table name
         """
-        try:
-            dissolved_table_name = "grukos_dissolved_features"
+        dissolved_tables = {}
 
-            self.log.info("Creating single dissolved geometry for all indsatsområder...")
+        # Define layer configurations for dissolving
+        layer_configs = [
+            {
+                "layer_filter": "grukos:indsatsomraader",
+                "table_name": "grukos_indsatsomraader_dissolved",
+                "description": "indsatsområder (action areas)",
+            },
+            {
+                "layer_filter": "grukos:indvindingsoplande_alle",
+                "table_name": "grukos_indvindingsoplande_dissolved",
+                "description": "indvindingsoplande (abstraction catchments)",
+            },
+        ]
 
-            # Get count of valid geometries
-            valid_count = self.conn.execute(f"""
-                SELECT COUNT(*)
-                FROM {input_table_name}
-                WHERE geometry_spatial IS NOT NULL
-                    AND ST_IsValid(geometry_spatial)
-            """).fetchone()[0]
+        for config in layer_configs:
+            layer_filter = config["layer_filter"]
+            table_name = config["table_name"]
+            description = config["description"]
 
-            if valid_count == 0:
-                self.log.warning("No valid geometries found for dissolving")
-                # Create empty table with proper schema
+            try:
+                self.log.info(f"Creating dissolved geometry for {description}...")
+
+                # Get count of valid geometries for this layer
+                valid_count = self.conn.execute(f"""
+                    SELECT COUNT(*)
+                    FROM {input_table_name}
+                    WHERE geometry_spatial IS NOT NULL
+                        AND ST_IsValid(geometry_spatial)
+                        AND layer = '{layer_filter}'
+                """).fetchone()[0]
+
+                if valid_count == 0:
+                    self.log.warning(f"No valid geometries found for {description}")
+                    # Create empty table with proper schema
+                    self.conn.execute(f"""
+                        CREATE OR REPLACE TABLE {table_name} AS
+                        SELECT
+                            CAST(NULL AS GEOMETRY) as geometry,
+                            CAST(0 AS DOUBLE) as area_ha,
+                            CAST(0 AS INTEGER) as feature_count,
+                            CAST(NULL AS TIMESTAMP) as dissolved_at
+                        WHERE FALSE
+                    """)
+                    dissolved_tables[layer_filter] = table_name
+                    continue
+
+                # Create dissolved geometry for this layer
                 self.conn.execute(f"""
-                    CREATE OR REPLACE TABLE {dissolved_table_name} AS
+                    CREATE OR REPLACE TABLE {table_name} AS
+                    SELECT
+                        ST_Union_Agg(geometry_spatial) as geometry,
+                        COUNT(*) as feature_count,
+                        CURRENT_TIMESTAMP as dissolved_at
+                    FROM {input_table_name}
+                    WHERE geometry_spatial IS NOT NULL
+                        AND ST_IsValid(geometry_spatial)
+                        AND layer = '{layer_filter}'
+                """)
+
+                # Calculate area in hectares for dissolved geometry
+                self.conn.execute(f"""
+                    ALTER TABLE {table_name}
+                    ADD COLUMN area_ha DOUBLE
+                """)
+
+                self.conn.execute(f"""
+                    UPDATE {table_name}
+                    SET area_ha = ST_Area(ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')) / 10000
+                    WHERE geometry IS NOT NULL
+                """)
+
+                # Get statistics
+                stats = self.conn.execute(f"""
+                    SELECT
+                        feature_count,
+                        ROUND(area_ha, 2) as area_ha
+                    FROM {table_name}
+                    WHERE geometry IS NOT NULL
+                """).fetchone()
+
+                if stats:
+                    feat_count, area = stats
+                    self.log.info(
+                        f"  {description}: {feat_count:,} features dissolved, "
+                        f"{area:,.2f} ha total area"
+                    )
+
+                dissolved_tables[layer_filter] = table_name
+                self.log.info(f"Created dissolved table '{table_name}'")
+
+            except Exception as e:
+                self.log.error(f"Error creating dissolved geometry for {description}: {e!s}")
+                # Create empty table on error
+                self.conn.execute(f"""
+                    CREATE OR REPLACE TABLE {table_name} AS
                     SELECT
                         CAST(NULL AS GEOMETRY) as geometry,
                         CAST(0 AS DOUBLE) as area_ha,
@@ -635,65 +716,9 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
                         CAST(NULL AS TIMESTAMP) as dissolved_at
                     WHERE FALSE
                 """)
-                return dissolved_table_name
+                dissolved_tables[layer_filter] = table_name
 
-            # Create single dissolved geometry combining ALL features
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {dissolved_table_name} AS
-                SELECT
-                    ST_Union_Agg(geometry_spatial) as geometry,
-                    COUNT(*) as feature_count,
-                    CURRENT_TIMESTAMP as dissolved_at
-                FROM {input_table_name}
-                WHERE geometry_spatial IS NOT NULL
-                    AND ST_IsValid(geometry_spatial)
-            """)
-
-            # Calculate area in hectares for dissolved geometry
-            self.conn.execute(f"""
-                ALTER TABLE {dissolved_table_name}
-                ADD COLUMN area_ha DOUBLE
-            """)
-
-            self.conn.execute(f"""
-                UPDATE {dissolved_table_name}
-                SET area_ha = ST_Area(ST_Transform(geometry, 'EPSG:4326', 'EPSG:25832')) / 10000
-                WHERE geometry IS NOT NULL
-            """)
-
-            # Get statistics
-            stats = self.conn.execute(f"""
-                SELECT
-                    feature_count,
-                    ROUND(area_ha, 2) as area_ha
-                FROM {dissolved_table_name}
-                WHERE geometry IS NOT NULL
-            """).fetchone()
-
-            if stats:
-                feat_count, area = stats
-                self.log.info(
-                    f"  All indsatsområder: {feat_count:,} features dissolved into single geometry, "
-                    f"{area:,.2f} ha total area"
-                )
-
-            self.log.info(f"Created dissolved table '{dissolved_table_name}' with single geometry")
-            return dissolved_table_name
-
-        except Exception as e:
-            self.log.error(f"Error creating dissolved geometries: {e!s}", exc_info=True)
-            # Create empty table on error
-            empty_table_name = "grukos_dissolved_empty"
-            self.conn.execute(f"""
-                CREATE OR REPLACE TABLE {empty_table_name} AS
-                SELECT
-                    CAST(NULL AS GEOMETRY) as geometry,
-                    CAST(0 AS DOUBLE) as area_ha,
-                    CAST(0 AS INTEGER) as feature_count,
-                    CAST(NULL AS TIMESTAMP) as dissolved_at
-                WHERE FALSE
-            """)
-            return empty_table_name
+        return dissolved_tables
 
     async def run(self, bronze_data: Any | None = None) -> Any | None:
         """
@@ -816,29 +841,37 @@ class GrukosSilver(BaseSource[GrukosSilverConfig], SilverJobInterface):
                     )
                     self.log.warning("This may indicate issues with geometry parsing from XML")
 
-                # Create dissolved geometries by kategori
-                dissolved_table_name = self._create_dissolved_df(table_name)
+                # Create separate dissolved geometries for each layer type
+                dissolved_tables = self._create_dissolved_df(table_name)
 
-                # Save individual features table
+                # Save individual features table (contains all layers combined)
                 self._save_data(
                     table_name, self.config.dataset, self.config.bucket, "silver", conn=self.conn
                 )
                 self.log.info("Saved individual features successfully")
 
-                # Save dissolved features table
-                self._save_data(
-                    dissolved_table_name,
-                    f"{self.config.dataset}_dissolved",
-                    self.config.bucket,
-                    "silver",
-                    conn=self.conn,
-                )
-                self.log.info("Saved dissolved geometries successfully")
+                # Save each dissolved table separately
+                for layer_name, dissolved_table in dissolved_tables.items():
+                    # Create dataset name from layer (e.g., "grukos_indsatsomraader_dissolved")
+                    layer_short = layer_name.split(":")[
+                        -1
+                    ]  # "indsatsomraader" or "indvindingsoplande_alle"
+                    dataset_name = f"{self.config.dataset}_{layer_short}_dissolved"
+                    self._save_data(
+                        dissolved_table,
+                        dataset_name,
+                        self.config.bucket,
+                        "silver",
+                        conn=self.conn,
+                    )
+                    self.log.info(f"Saved dissolved geometries for {layer_short}")
+
+                self.log.info("Saved all dissolved geometries successfully")
 
                 # Return processed data for potential gold layer consumption
                 return {
                     "processed_data": table_name,
-                    "dissolved_data": dissolved_table_name,
+                    "dissolved_tables": dissolved_tables,
                     "dataset": self.config.dataset,
                 }
 
