@@ -33,6 +33,10 @@ from unified_pipeline.bronze.soil_types import SoilTypesBronze, SoilTypesBronzeC
 from unified_pipeline.bronze.water_projects import WaterProjectsBronze, WaterProjectsBronzeConfig
 from unified_pipeline.bronze.water_typology import WaterTypologyBronze, WaterTypologyBronzeConfig
 from unified_pipeline.bronze.wetlands import WetlandsBronze, WetlandsBronzeConfig
+from unified_pipeline.bronze.geus_borehole_pesticides import (
+    GEUSBoreholePesticidesBronze,
+    GEUSBoreholePesticidesBronzeConfig,
+)
 from unified_pipeline.cli_scheduling import scheduling
 from unified_pipeline.common.base import BronzeJobInterface, GoldJobInterface, SilverJobInterface
 from unified_pipeline.gold.arbejdstilsynet_inspections import (
@@ -130,6 +134,10 @@ from unified_pipeline.silver.soil_types import SoilTypesSilver, SoilTypesSilverC
 from unified_pipeline.silver.water_projects import WaterProjectsSilver, WaterProjectsSilverConfig
 from unified_pipeline.silver.water_typology import WaterTypologySilver, WaterTypologySilverConfig
 from unified_pipeline.silver.wetlands import WetlandsSilver, WetlandsSilverConfig
+from unified_pipeline.silver.geus_borehole_pesticides import (
+    GEUSBoreholePesticidesSilver,
+    GEUSBoreholePesticidesSilverConfig,
+)
 from unified_pipeline.util.log_util import Logger
 
 load_dotenv()
@@ -490,6 +498,18 @@ def execute(cli_config: cli_models.CliConfig) -> int:
             cli_models.Stage.all: [
                 (GrukosBronze, GrukosBronzeConfig),
                 (GrukosSilver, GrukosSilverConfig),
+            ],
+        },
+        cli_models.Source.geus_borehole_pesticides: {
+            cli_models.Stage.bronze: [
+                (GEUSBoreholePesticidesBronze, GEUSBoreholePesticidesBronzeConfig)
+            ],
+            cli_models.Stage.silver: [
+                (GEUSBoreholePesticidesSilver, GEUSBoreholePesticidesSilverConfig)
+            ],
+            cli_models.Stage.all: [
+                (GEUSBoreholePesticidesBronze, GEUSBoreholePesticidesBronzeConfig),
+                (GEUSBoreholePesticidesSilver, GEUSBoreholePesticidesSilverConfig),
             ],
         },
         cli_models.Source.property_cadastral_merge: {
