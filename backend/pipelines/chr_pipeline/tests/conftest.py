@@ -5,11 +5,20 @@ pipeline testing, including SOAP client mocks, sample API responses, and
 CHR-specific test data.
 """
 
+import sys
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, Mock, PropertyMock
 
 import pytest
+
+# Add chr_pipeline directory to sys.path to allow imports like:
+#   from silver.X import Y
+#   from bronze.X import Y
+chr_pipeline_dir = Path(__file__).resolve().parent.parent
+if str(chr_pipeline_dir) not in sys.path:
+    sys.path.insert(0, str(chr_pipeline_dir))
 
 # Optional zeep import - only needed for type hints
 try:

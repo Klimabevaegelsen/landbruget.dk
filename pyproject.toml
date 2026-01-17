@@ -81,3 +81,40 @@ dev = [
     "detect-secrets>=1.5.0",
     "pre-commit>=4.3.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["backend"]
+pythonpath = [
+    "backend",
+    "backend/common",
+    "backend/pipelines",
+    "backend/pipelines/chr_pipeline",
+    "backend/pipelines/unified_pipeline/src",
+    "backend/pipelines/drive_data_pipeline",
+]
+# Ignore problematic paths that cause import cycles
+norecursedirs = [
+    ".git",
+    ".pytest_cache",
+    "__pycache__",
+    "*.egg-info",
+    ".venv",
+    "venv",
+    "standalone_tests",  # Scripts in drive_data_pipeline
+]
+# Don't import __init__.py files in test directories as conftest
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# Ignore standalone scripts that start with test_ but aren't actual tests
+addopts = [
+    "--ignore=backend/pipelines/drive_data_pipeline/test_visa_pdf.py",
+    "--ignore=backend/pipelines/drive_data_pipeline/test_drive_pipeline.py",
+    "--ignore=backend/pipelines/drive_data_pipeline/test_fertiliser_basic.py",
+    "--ignore=backend/pipelines/drive_data_pipeline/test_work_permits_pipeline.py",
+    "--ignore=backend/pipelines/drive_data_pipeline/setup_and_test.py",
+]
+markers = [
+    "pre_merge: marks tests that must pass before merging to main",
+    "gcs_required: marks tests that require GCS access",
+]
