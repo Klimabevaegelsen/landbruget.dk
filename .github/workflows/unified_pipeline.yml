@@ -156,24 +156,30 @@ jobs:
           # Start resource monitoring for memory-intensive jobs
           if [ "${{ matrix.source }}" = "field_area_analysis" ] || [ "${{ matrix.source }}" = "property_cadastral_merge" ]; then
             echo "🔍 Starting resource monitoring for memory-intensive job: ${{ matrix.source }}"
-            (while true; do
-              sleep 60  # Check every minute
-              echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
-              echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
-              echo "$(date): Temp: $(du -sh /tmp 2>/dev/null || echo 'N/A')"
+            {
+              while true; do
+                sleep 60  # Check every minute
+                TIMESTAMP=$(date)
+                MEMORY_INFO=$(free -h | grep Mem | awk '{print $3"/"$2}')
+                DISK_INFO=$(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')
+                TEMP_INFO=$(du -sh /tmp 2>/dev/null || echo 'N/A')
+                echo "${TIMESTAMP}: Memory: ${MEMORY_INFO}"
+                echo "${TIMESTAMP}: Disk: ${DISK_INFO}"
+                echo "${TIMESTAMP}: Temp: ${TEMP_INFO}"
 
-              # Check for critical resource usage
-              MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
-              DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+                # Check for critical resource usage
+                MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+                DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
 
-              if [ $MEMORY_USED_PCT -gt 90 ]; then
-                echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
-              fi
+                if [ $MEMORY_USED_PCT -gt 90 ]; then
+                  echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+                fi
 
-              if [ $DISK_USED_PCT -gt 85 ]; then
-                echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
-              fi
-            done) &
+                if [ $DISK_USED_PCT -gt 85 ]; then
+                  echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+                fi
+              done
+            } &
             MONITOR_PID=$!
             echo "Resource monitoring started with PID: $MONITOR_PID"
           fi
@@ -348,22 +354,27 @@ jobs:
           echo "📅 Pesticide year ${{ matrix.year }} uses field data from year $((${{ matrix.year }} + 1))"
 
           # Start resource monitoring
-          (while true; do
-            sleep 60
-            echo "$(date): Memory: $(free -h | grep Mem | awk '{print $3"/"$2}')"
-            echo "$(date): Disk: $(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')"
+          {
+            while true; do
+              sleep 60
+              TIMESTAMP=$(date)
+              MEMORY_INFO=$(free -h | grep Mem | awk '{print $3"/"$2}')
+              DISK_INFO=$(df -h / | tail -1 | awk '{print $3"/"$2" ("$5" used)"}')
+              echo "${TIMESTAMP}: Memory: ${MEMORY_INFO}"
+              echo "${TIMESTAMP}: Disk: ${DISK_INFO}"
 
-            MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
-            DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
+              MEMORY_USED_PCT=$(free | grep Mem | awk '{printf "%.0f", $3/$2 * 100}')
+              DISK_USED_PCT=$(df / | tail -1 | awk '{print $5}' | sed 's/%//')
 
-            if [ $MEMORY_USED_PCT -gt 90 ]; then
-              echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
-            fi
+              if [ $MEMORY_USED_PCT -gt 90 ]; then
+                echo "⚠️ WARNING: High memory usage: ${MEMORY_USED_PCT}%"
+              fi
 
-            if [ $DISK_USED_PCT -gt 85 ]; then
-              echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
-            fi
-          done) &
+              if [ $DISK_USED_PCT -gt 85 ]; then
+                echo "⚠️ WARNING: High disk usage: ${DISK_USED_PCT}%"
+              fi
+            done
+          } &
           MONITOR_PID=$!
 
           # Step 1: Run disaggregation

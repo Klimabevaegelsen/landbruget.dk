@@ -146,16 +146,21 @@ jobs:
         echo "🚀 Starting GeoDanmark WFS bulk download..."
 
         # Monitor disk space during execution
-        (while true; do
-          sleep 300  # Check every 5 minutes
-          echo "$(date): Disk usage: $(df -h . | tail -1)"
-          echo "$(date): Memory usage: $(free -h | grep Mem)"
+        {
+          while true; do
+            sleep 300  # Check every 5 minutes
+            TIMESTAMP=$(date)
+            DISK_USAGE=$(df -h . | tail -1)
+            MEMORY_USAGE=$(free -h | grep Mem)
+            echo "${TIMESTAMP}: Disk usage: ${DISK_USAGE}"
+            echo "${TIMESTAMP}: Memory usage: ${MEMORY_USAGE}"
 
-          AVAILABLE_MB=$(df . | tail -1 | awk '{print int($4/1024)}')
-          if [ $AVAILABLE_MB -lt 2048 ]; then
-            echo "⚠️ WARNING: Low disk space: ${AVAILABLE_MB}MB remaining"
-          fi
-        done) &
+            AVAILABLE_MB=$(df . | tail -1 | awk '{print int($4/1024)}')
+            if [ $AVAILABLE_MB -lt 2048 ]; then
+              echo "⚠️ WARNING: Low disk space: ${AVAILABLE_MB}MB remaining"
+            fi
+          done
+        } &
         MONITOR_PID=$!
 
         # Run GeoDanmark bulk fetcher directly - this will upload to GCS
