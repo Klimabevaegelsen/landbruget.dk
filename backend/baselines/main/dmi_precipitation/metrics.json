@@ -1,0 +1,23 @@
+{
+  "dataset_name": "dmi_precipitation",
+  "source_path": "gs://landbrugsdata-raw-data/silver/dmi_acc_precip_dmi_acc_precip/20260117_094128/data.parquet",
+  "generated_at": "2026-01-17T11:15:23.501778",
+  "record_count": 23541,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "parameter_id": 0,
+    "valid_time": 0,
+    "created": 0,
+    "avg_value": 0,
+    "min_value": 0,
+    "max_value": 0,
+    "count": 0,
+    "stddev_value": 655,
+    "centroid_geometry": 0,
+    "bbox_geometry": 0,
+    "processing_time": 0,
+    "source_crs": 0,
+    "target_crs": 0,
+    "original_feature_count": 0
+  }
+}

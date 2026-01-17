@@ -1,9 +1,12 @@
 {
   "dataset_name": "svineflytning",
   "source_path": "gs://landbrugsdata-raw-data/silver/svineflytning/20260107_035748/movements.parquet",
-  "generated_at": "2026-01-17T11:11:28.808858",
+  "generated_at": "2026-01-17T11:15:15.607658",
   "record_count": 1272808,
-  "unique_identifiers": {},
+  "unique_identifiers": {
+    "sender_chr_number": 6120,
+    "receiver_chr_number": 5421
+  },
   "column_null_counts": {
     "movement_id": 0,
     "origin_system": 0,

@@ -1,0 +1,15 @@
+{
+  "dataset_name": "animal_mortality",
+  "source_path": "gs://landbrugsdata-raw-data/silver/animal mortality/20260116_234019/Dodelighedsdata.Datatraek.til.udlevering_pr.parquet",
+  "generated_at": "2026-01-17T11:15:16.697135",
+  "record_count": 54808,
+  "unique_identifiers": {},
+  "column_null_counts": {
+    "data_er_forbundet_med_vaesentlig_usikkerhed_idet_det_bagvedliggende_data_ikke_er_valideret": 0,
+    "column_1": 0,
+    "column_2": 0,
+    "column_3": 0,
+    "column_4": 0,
+    "column_5": 0
+  }
+}

@@ -1,10 +1,10 @@
 {
-  "dataset_name": "dagi_kommuner",
-  "source_path": "gs://landbrugsdata-raw-data/silver/dagi_kommuner/20260116_221858/data.parquet",
-  "generated_at": "2026-01-17T11:15:18.769955",
-  "record_count": 99,
+  "dataset_name": "dagi_regioner",
+  "source_path": "gs://landbrugsdata-raw-data/silver/dagi_regioner/20260116_221909/data.parquet",
+  "generated_at": "2026-01-17T11:15:20.185980",
+  "record_count": 5,
   "unique_identifiers": {
-    "code": 99
+    "code": 5
   },
   "geometry_bounds": {
     "min_x": 54.55907837,
@@ -16,10 +16,8 @@
   "column_null_counts": {
     "code": 0,
     "name": 0,
-    "region_code": 0,
     "dagi_id": 0,
-    "udenforkommuneinddeling": 0,
-    "regionsnavn": 0,
+    "nuts2": 0,
     "\u00e6ndret": 0,
     "geo_\u00e6ndret": 0,
     "geo_version": 0,
