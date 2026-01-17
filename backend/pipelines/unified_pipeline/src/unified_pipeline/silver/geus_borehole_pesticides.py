@@ -121,15 +121,28 @@ class GEUSBoreholePesticidesSilver(
             anlaegid = self._get_element_text(feature, "ms:anlaegid")
 
             if not dgunr:
+                # Debug: log first failure reason
+                if not hasattr(self, "_debug_no_dgunr_logged"):
+                    self._debug_no_dgunr_logged = True
+                    self.log.warning(f"First feature missing dgunr. Feature tag: {feature.tag}")
+                    # Log first few child tags to understand structure
+                    children = list(feature)[:5]
+                    self.log.warning(f"  Feature children: {[c.tag for c in children]}")
                 return None
 
             # Extract coordinates from GML point (geometry is in ms:msGeometry wrapper)
             point = feature.find(".//gml:Point", self.config.namespaces)
             if point is None:
+                if not hasattr(self, "_debug_no_point_logged"):
+                    self._debug_no_point_logged = True
+                    self.log.warning(f"First feature missing gml:Point. dgunr={dgunr}")
                 return None
 
             pos = point.find("gml:pos", self.config.namespaces)
             if pos is None or not pos.text:
+                if not hasattr(self, "_debug_no_pos_logged"):
+                    self._debug_no_pos_logged = True
+                    self.log.warning(f"First feature missing gml:pos. dgunr={dgunr}")
                 return None
 
             # Parse coordinates (format: "x y" in EPSG:25832)
