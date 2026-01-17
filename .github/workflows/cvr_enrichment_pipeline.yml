@@ -456,7 +456,7 @@ jobs:
   data_parsing:
     name: "Data Parsing (Silver Layer)"
     runs-on: ubuntu-latest
-    needs: company_fetching_consolidate
+    needs: [cvr_collection, company_fetching_consolidate]
     if: ${{ !cancelled() && (inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'data_parsing')) }}
 
     steps:
@@ -494,6 +494,7 @@ jobs:
         env:
           LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
           PYTHONUNBUFFERED: 1
+          PIPELINE_START_TIME: ${{ needs.cvr_collection.outputs.pipeline_timestamp }}
         run: |
           cd backend/pipelines/unified_pipeline
 
@@ -523,7 +524,7 @@ jobs:
   data_consolidation:
     name: "Data Consolidation (Gold Layer)"
     runs-on: ubuntu-latest
-    needs: data_parsing
+    needs: [cvr_collection, data_parsing]
     if: ${{ !cancelled() && (inputs.run_only_step == 'none' && !contains(inputs.skip_steps, 'data_consolidation')) }}
 
     steps:
@@ -561,6 +562,7 @@ jobs:
         env:
           LOG_LEVEL: ${{ inputs.log_level || 'INFO' }}
           PYTHONUNBUFFERED: 1
+          PIPELINE_START_TIME: ${{ needs.cvr_collection.outputs.pipeline_timestamp }}
         run: |
           cd backend/pipelines/unified_pipeline
 
