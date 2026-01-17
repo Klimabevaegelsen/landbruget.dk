@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 import duckdb
+import pyarrow as pa
 
 from unified_pipeline.common.base import BaseJobConfig, BaseSource, SilverJobInterface
 from unified_pipeline.util.timing import timed
@@ -202,8 +203,17 @@ class DSTSilver(BaseSource[DSTSilverConfig], SilverJobInterface):
             # First, drop the table if it exists
             self.duckdb_conn.execute(f"DROP TABLE IF EXISTS {table_name}")
 
-            # Create table from the records using DuckDB's ability to infer schema from Python dicts
-            self.duckdb_conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM ?", [records])
+            # Convert records to PyArrow Table (DuckDB requires this format for registration)
+            arrow_table = pa.Table.from_pylist(records)
+
+            # Register the PyArrow table as a view that DuckDB can query
+            self.duckdb_conn.register("temp_records", arrow_table)
+
+            # Create table from the registered records
+            self.duckdb_conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM temp_records")
+
+            # Unregister the temporary view
+            self.duckdb_conn.unregister("temp_records")
 
             self.log.info(f"Successfully loaded {len(records)} records into {table_name}")
             return True

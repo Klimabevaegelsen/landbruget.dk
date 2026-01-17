@@ -122,6 +122,14 @@ class PesticideDisaggregationGoldConfig(BaseJobConfig):
         description="Whether to use multiple CPU cores - True = faster but uses more memory",
     )
 
+    # Spatial clustering configuration (Strategy 4 - Adjacent Fields)
+    # This is resource-intensive and provides minimal additional coverage (~1-2%)
+    # Default is False to prevent memory exhaustion on standard runners
+    enable_spatial_clustering: bool = Field(
+        default=False,
+        description="Whether to use spatial clustering (memory-intensive, minimal benefit)",
+    )
+
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     def apply_cli_filters(self, cli_config) -> None:
