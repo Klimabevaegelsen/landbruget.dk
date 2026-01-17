@@ -20,6 +20,11 @@ on:
         required: false
         default: '1.0'
 
+# Required permissions for posting PR comments
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
   PYTHON_VERSION: '3.11'
   GCS_BUCKET: 'landbrugsdata-raw-data'
