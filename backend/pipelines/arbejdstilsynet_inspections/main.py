@@ -4,10 +4,9 @@ import os
 import sys
 from datetime import datetime
 
-from dotenv import load_dotenv
-
 # Import pipeline metadata system for data tracing
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from dotenv import load_dotenv
 
 import bronze.export
 import silver.transform

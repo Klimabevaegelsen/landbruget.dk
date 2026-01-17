@@ -17,10 +17,10 @@ from datetime import datetime
 from pathlib import Path
 
 import dotenv
-from loguru import logger
 
 # Import pipeline metadata system for data tracing
 from common.pipeline_metadata import MetadataManager as PipelineMetadataManager
+from loguru import logger
 
 PIPELINE_METADATA_AVAILABLE = True
 
