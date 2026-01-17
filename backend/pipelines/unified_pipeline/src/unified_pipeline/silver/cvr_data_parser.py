@@ -452,6 +452,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
         self.log.info("Parsing persons/leadership data from raw JSON...")
 
         # Create persons table with leadership extraction
+        # Note: We filter for leadership_count > 0 BEFORE the generate_series to avoid
+        # UINT64 overflow when computing (0 - 1) in generate_series upper bound
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {persons_table} AS
             WITH raw_data_with_varchar AS (
@@ -459,8 +461,15 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     cvr_number,
                     CAST(raw_json AS VARCHAR) as raw_json_str,
                     raw_json,
-                    fetch_timestamp
+                    fetch_timestamp,
+                    json_array_length(json_extract(CAST(raw_json AS VARCHAR), '$.leadership')) as leadership_count
                 FROM {raw_data_table}
+            ),
+            raw_data_with_leadership AS (
+                -- Filter BEFORE generate_series to avoid UINT64 overflow on (0-1)
+                SELECT *
+                FROM raw_data_with_varchar
+                WHERE leadership_count > 0
             ),
             leadership_flattened AS (
                 SELECT
@@ -468,11 +477,10 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     raw_json_str,
                     fetch_timestamp,
                     idx as leadership_idx
-                FROM raw_data_with_varchar
+                FROM raw_data_with_leadership
                 CROSS JOIN unnest(generate_series(0::BIGINT,
-                    (GREATEST(0, json_array_length(json_extract(raw_json_str, '$.leadership')) - 1))::BIGINT
+                    (leadership_count - 1)::BIGINT
                 )) as t(idx)
-                WHERE json_array_length(json_extract(raw_json_str, '$.leadership')) > 0
             )
             SELECT
                 uuid() as person_uuid,
@@ -504,6 +512,8 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
         self.log.info("Parsing employment data from raw JSON...")
 
         # Create employment table with temporal data extraction
+        # Note: We filter for employment_count > 0 BEFORE the generate_series to avoid
+        # UINT64 overflow when computing (0 - 1) in generate_series upper bound
         self.conn.execute(f"""
             CREATE OR REPLACE TABLE {employment_table} AS
             WITH raw_data_with_varchar AS (
@@ -511,8 +521,15 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     cvr_number,
                     CAST(raw_json AS VARCHAR) as raw_json_str,
                     raw_json,
-                    fetch_timestamp
+                    fetch_timestamp,
+                    json_array_length(json_extract(CAST(raw_json AS VARCHAR), '$.employment')) as employment_count
                 FROM {raw_data_table}
+            ),
+            raw_data_with_employment AS (
+                -- Filter BEFORE generate_series to avoid UINT64 overflow on (0-1)
+                SELECT *
+                FROM raw_data_with_varchar
+                WHERE employment_count > 0
             ),
             employment_flattened AS (
                 SELECT
@@ -520,11 +537,10 @@ class CVRDataParser(BaseSource[CVRDataParserConfig], SilverJobInterface):
                     raw_json_str,
                     fetch_timestamp,
                     idx as employment_idx
-                FROM raw_data_with_varchar
+                FROM raw_data_with_employment
                 CROSS JOIN unnest(generate_series(0::BIGINT,
-                    (GREATEST(0, json_array_length(json_extract(raw_json_str, '$.employment')) - 1))::BIGINT
+                    (employment_count - 1)::BIGINT
                 )) as t(idx)
-                WHERE json_array_length(json_extract(raw_json_str, '$.employment')) > 0
             )
             SELECT
                 uuid() as employment_uuid,
