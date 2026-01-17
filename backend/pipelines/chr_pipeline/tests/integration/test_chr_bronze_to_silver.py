@@ -8,6 +8,7 @@ Tests the full data pipeline from bronze layer to silver layer including:
 """
 
 import json
+from unittest.mock import patch
 
 import duckdb
 import pytest

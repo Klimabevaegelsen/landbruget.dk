@@ -23,7 +23,6 @@ if str(chr_pipeline_dir) not in sys.path:
 # Optional zeep import - only needed for type hints
 try:
     from zeep import Client
-    from zeep.wsdl.definitions import Binding, Operation, Service
 
     ZEEP_AVAILABLE = True
 except ImportError:

@@ -15,7 +15,7 @@ import pytest
 
 # Try to import gold module, skip tests if it fails
 try:
-    from gold import chr_gold_processing
+    import gold.chr_gold_processing  # noqa: F401
 
     GOLD_MODULE_AVAILABLE = True
 except (ImportError, TypeError):
